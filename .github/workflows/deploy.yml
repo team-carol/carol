@@ -2,7 +2,7 @@ name: Deploy to GCP
 
 on:
   push:
-    branches: [main]
+    branches: [master, main]
 
 jobs:
   deploy:
@@ -18,12 +18,10 @@ jobs:
           key: ${{ secrets.GCP_SSH_KEY }}
           script: |
             cd ~/maimai
-            git pull origin main
+            git pull origin master
 
-            # Zero-downtime: build new image, then swap
-            docker compose build bot
-            docker compose up -d --no-deps bot
-            docker compose up -d --no-deps nginx
+            # Zero-downtime: build new bot image, restart
+            docker compose up -d --no-deps --build bot
 
             # Cleanup old images
             docker image prune -f

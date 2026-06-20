@@ -10,6 +10,5 @@ cert.pem
 debug_*.html
 avatar_*.png
 avatar_*.jpg
-nginx/certs/
 data/
 .omo/
