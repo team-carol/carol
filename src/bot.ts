@@ -137,7 +137,7 @@ function songEmbeds(p: NonNullable<ReturnType<typeof getCachedProfile>>, page: n
         { name: "달성률", value: r.achievement, inline: true },
         { name: "플레이일", value: r.date || "-", inline: true },
       );
-    emb.setImage(`${server}/jacket?user=${userId}&idx=${start + i}`);
+    emb.setThumbnail(`${server}/jacket?user=${userId}&idx=${start + i}`);
     return emb;
   });
 }
