@@ -43,8 +43,18 @@ const TCOLOR: Record<string, number> = { normal: 0x808080, bronze: 0xcd7f32, sil
 
 function parseGradeText(gradeImg: string): string {
   if (!gradeImg) return "";
+  const url = gradeImg.toLowerCase();
+  if (url.includes("/course/")) {
+    const name = decodeURIComponent(gradeImg.split("/").pop()?.split(".")[0] || "");
+    return "코스 " + name.replace(/^course_rank_/i, "").substring(0, 6);
+  }
+  if (url.includes("/class/")) {
+    const name = decodeURIComponent(gradeImg.split("/").pop()?.split(".")[0] || "");
+    return "클래스 " + name.replace(/^class_rank_s_/i, "").substring(0, 6);
+  }
   const name = decodeURIComponent(gradeImg.split("/").pop()?.split(".")[0] || "");
-  return name.replace(/^(grade_|class_|dan_)/i, "").toUpperCase();
+  const cleaned = name.replace(/^(grade_|class_|dan_|course_rank_|class_rank_)/i, "");
+  return cleaned.length < 20 ? cleaned.toUpperCase() : "";
 }
 
 function buildAvatarAttachment(userId: string): AttachmentBuilder | null {
@@ -54,11 +64,29 @@ function buildAvatarAttachment(userId: string): AttachmentBuilder | null {
 }
 
 function ratingColor(r: number): number {
-  if (r >= 15000) return 0x8b00ff;
-  if (r >= 14000) return 0xffd700;
-  if (r >= 13000) return 0xc0c0c0;
-  if (r >= 12000) return 0xcd7f32;
-  return 0x808080;
+  if (r >= 15000) return 0x8b00ff;  // 🌈 rainbow
+  if (r >= 14000) return 0xffd700;  // 🟡 gold
+  if (r >= 13000) return 0x8c8c8c;  // ⚪ silver
+  if (r >= 12000) return 0xcd7f32;  // 🟤 bronze
+  if (r >= 10000) return 0xbd5dc7;  // 🟣 purple
+  if (r >= 8000)  return 0xd95656;  // 🔴 red
+  if (r >= 6000)  return 0xf09c3c;  // 🟠 orange
+  if (r >= 4000)  return 0x5fba63;  // 🟢 green
+  if (r >= 2000)  return 0x4d9eea;  // 🔵 blue
+  return 0x95a5a6;                   // ⚪ silver-white
+}
+
+function ratingChar(r: number): string {
+  if (r >= 15000) return "🌈";
+  if (r >= 14000) return "🟡";
+  if (r >= 13000) return "⚪";
+  if (r >= 12000) return "🟤";
+  if (r >= 10000) return "🟣";
+  if (r >= 8000)  return "🔴";
+  if (r >= 6000)  return "🟠";
+  if (r >= 4000)  return "🟢";
+  if (r >= 2000)  return "🔵";
+  return "⚪";
 }
 
 function profileEmb(p: NonNullable<ReturnType<typeof getCachedProfile>>, hasAvatar: boolean) {
@@ -68,7 +96,7 @@ function profileEmb(p: NonNullable<ReturnType<typeof getCachedProfile>>, hasAvat
     .setAuthor({ name: `${TICON[p.trophyClass] || "⚪"} ${p.trophy || "칭호 없음"} (${p.trophyClass})` })
     .setTitle(p.playerName || "이름 없음")
     .setDescription(
-      `★ **${p.rating || 0}**\n` +
+      `${ratingChar(p.rating)} ${p.rating || 0}\n` +
       `🎮 ${p.playCount || 0}회${p.stars ? " ⭐×" + p.stars : ""}${grade ? " | 등급: " + grade : ""}`
     )
     .addFields({ name: "친구 코드", value: p.friendCode || "-", inline: true })
@@ -85,9 +113,8 @@ function contentEmb(p: NonNullable<ReturnType<typeof getCachedProfile>>, view: s
   const emb = new EmbedBuilder().setColor(0x2b2d31).setTitle(view === "recent" ? "🎵 최근 플레이" : "🏆 TOP 5");
   if (records.length === 0) { emb.setDescription("기록 없음"); return emb; }
   emb.setDescription(records.map((r: any, i: number) => {
-    const link = r.jacketUrl ? `[${r.title}](${r.jacketUrl})` : r.title;
     const kind = r.musicKind ? ` \`${r.musicKind}\`` : "";
-    return `\`${i + 1}.\` ${link} \`${r.diff} ${r.level}\`${kind}\n　${r.achievement}${r.date ? " · " + r.date : ""}`;
+    return `\`${i + 1}.\` **${r.title}** \`${r.diff} ${r.level}\`${kind}\n　${r.achievement}${r.date ? " · " + r.date : ""}`;
   }).join("\n\n"));
   return emb;
 }
