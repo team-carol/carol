@@ -37,11 +37,11 @@ Discord → /프로필 → 북마클릿 코드 받음
 ## 빠른 시작
 
 ```bash
-git clone https://github.com/BitByte08/maimaiDISCORD.git
-cd maimaiDISCORD
+git clone https://github.com/BitByte08/mymai.git
+cd mymai
 npm install
 cp config.json.example config.json
-# config.json 편집 (token, clientId, guildId 입력)
+# config.json 편집 (token, clientId 입력)
 npm run build
 npm start
 ```
@@ -52,7 +52,6 @@ npm start
 {
   "token": "DISCORD_BOT_TOKEN",
   "clientId": "APPLICATION_ID",
-  "guildId": "GUILD_ID",        // 없으면 글로벌 커맨드
   "webPort": 3456,               // 웹 서버 포트
   "encryptionKey": "",           // 빈 값이면 자동 생성
   "baseUrl": ""                  // 프로덕션에서만 입력
@@ -78,8 +77,8 @@ npm start
 
 ```bash
 # VM에서
-git clone https://github.com/BitByte08/maimaiDISCORD.git
-cd maimaiDISCOND
+git clone https://github.com/BitByte08/mymai.git
+cd mymai
 # config.json, .env (CF_TUNNEL_TOKEN) 생성
 docker compose pull
 docker compose up -d
