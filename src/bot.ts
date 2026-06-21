@@ -1,8 +1,9 @@
-import { Client, Events, GatewayIntentBits, ChatInputCommandInteraction, REST, Routes } from "discord.js";
+import { Client, Events, GatewayIntentBits, ChatInputCommandInteraction, ButtonInteraction, REST, Routes } from "discord.js";
 import { initEncryption } from "./crypto";
 import { startWebServer, setBaseUrl } from "./web";
-import { closeDb } from "./db";
+import { closeDb, loadUserSession, getCachedProfile } from "./db";
 import { CONFIG, PORT } from "./config";
+import { recentEmbeds } from "./utils/embeds";
 
 import * as profile     from "./commands/profile";
 import * as bookmarklet from "./commands/bookmarklet";
@@ -40,11 +41,30 @@ client.on(Events.InteractionCreate, async (i) => {
     }
     return;
   }
-  if (i.isButton() && i.customId.startsWith("settings:")) {
-    try {
-      await settings.handleButton(i);
-    } catch (e) {
-      console.error("[settings-btn]", e);
+  if (i.isButton()) {
+    if (i.customId.startsWith("settings:")) {
+      try { await settings.handleButton(i); } catch (e) { console.error("[settings-btn]", e); }
+      return;
+    }
+    if (i.customId.startsWith("recent:") || i.customId.startsWith("page:")) {
+      try {
+        const parts = i.customId.split(":");
+        const userId = parts[1];
+        const gameIdx = parseInt(parts[2] ?? "0") || 0;
+        const stored = loadUserSession(userId);
+        if (!stored?.friendCode) { await (i as ButtonInteraction).reply({ content: "프로필을 먼저 등록하세요.", ephemeral: true }); return; }
+        const cached = getCachedProfile(stored.friendCode);
+        if (!cached) { await (i as ButtonInteraction).reply({ content: "프로필을 먼저 등록하세요.", ephemeral: true }); return; }
+        const result = recentEmbeds(cached, userId, PORT, gameIdx);
+        if (i.customId.startsWith("recent:")) {
+          await (i as ButtonInteraction).reply({ ...result, ephemeral: true });
+        } else {
+          await (i as ButtonInteraction).update(result);
+        }
+      } catch (e) {
+        console.error("[recent-btn]", e);
+      }
+      return;
     }
   }
 });

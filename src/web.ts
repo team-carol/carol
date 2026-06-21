@@ -1,7 +1,7 @@
 import * as http from "http";
 import * as fs from "fs";
 import { parseHome, parsePlayerData, parseFriendCode as parseFC, parseRecentRecords, parseTop5 } from "./scraper";
-import { cacheProfile, saveUserSession, getUserSyncToken, findUserBySyncToken, saveAvatarBlob, getAvatarBlob, saveJacket, getJacket } from "./db";
+import { cacheProfile, saveUserSession, getUserSyncToken, findUserBySyncToken, saveAvatarBlob, getAvatarBlob, getSongJacket, saveSongJacket } from "./db";
 
 let baseUrl = "";
 export function setBaseUrl(url: string): void { baseUrl = url; }
@@ -39,30 +39,100 @@ alert('\\uC644\\uB8CC!')
 })()`;
 
 function guidePage(token: string, bookmarklet: string): string {
+  const bmEscaped = bookmarklet.replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/`/g, "\\`");
   return `<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>maimai 북마클릿</title>
+<title>maimai 북마클릿 설치</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:system-ui,sans-serif;background:#0d0d0d;color:#ccc;display:flex;justify-content:center;align-items:center;min-height:100vh;padding:16px}
-.box{background:#1a1a1a;padding:28px;border-radius:16px;width:100%;max-width:480px;border:1px solid #2a2a2a;text-align:center}
-h2{color:#fff;margin-bottom:16px}
-.step{background:#111;border:1px solid #333;border-radius:8px;padding:14px;margin-bottom:12px;text-align:left}
-.step b{color:#fff;display:block;margin-bottom:6px;font-size:14px}
-.step p{color:#888;font-size:13px;line-height:1.5}
-.bm{display:inline-block;background:#1a1a1a;border:2px dashed #555;border-radius:8px;padding:14px 24px;color:#4caf50;font-size:14px;font-weight:600;cursor:grab;text-decoration:none;margin:8px 0}
-.bm:hover{border-color:#4caf50}
-.btn{background:#333;color:#ccc;border:none;border-radius:6px;padding:8px 18px;font-size:13px;cursor:pointer;margin:4px}
-.btn:hover{background:#444}
-.copied{color:#4caf50;font-size:12px;display:none}
+body{font-family:system-ui,sans-serif;background:#0d0d0d;color:#ccc;display:flex;justify-content:center;align-items:flex-start;min-height:100vh;padding:20px 16px 40px}
+.wrap{width:100%;max-width:480px}
+h1{color:#fff;font-size:20px;margin-bottom:20px;text-align:center}
+.card{background:#1a1a1a;border:1px solid #2a2a2a;border-radius:12px;padding:20px;margin-bottom:12px}
+.card h2{color:#fff;font-size:14px;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.card h2 .tag{font-size:11px;background:#333;border-radius:4px;padding:2px 6px;color:#aaa}
+.card p{color:#999;font-size:13px;line-height:1.6;margin-bottom:10px}
+.card p:last-child{margin-bottom:0}
+.bm{display:block;background:#111;border:2px dashed #3a5;border-radius:8px;padding:12px 20px;color:#4caf50;font-size:14px;font-weight:600;cursor:grab;text-decoration:none;text-align:center;margin:10px 0}
+.bm:active{opacity:.7}
+.copy-btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;background:#2e7d32;color:#fff;border:none;border-radius:8px;padding:14px;font-size:15px;font-weight:600;cursor:pointer;margin:10px 0;transition:background .15s}
+.copy-btn:active{background:#1b5e20}
+.copy-ok{color:#4caf50;font-size:13px;text-align:center;min-height:20px;margin-top:4px}
+.steps{counter-reset:s}
+.step{counter-increment:s;display:flex;gap:10px;margin-bottom:10px;font-size:13px;color:#bbb;line-height:1.5}
+.step::before{content:counter(s);min-width:22px;height:22px;background:#333;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;flex-shrink:0;margin-top:1px}
+.tab{display:none}.tab.active{display:block}
+.tabs{display:flex;gap:6px;margin-bottom:16px}
+.tabBtn{flex:1;background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:10px;font-size:13px;color:#999;cursor:pointer}
+.tabBtn.active{border-color:#4caf50;color:#4caf50;background:#0f1f10}
+a{color:#4caf50}
 </style></head><body>
-<div class="box">
-<h2>📋 북마클릿 설치</h2>
-<div class="step"><b>1. 북마클릿 추가</b><p>초록색 링크를 북마크바로 드래그</p>
-<a class="bm" href="${bookmarklet}" draggable="true">maimai</a></div>
-<div class="step"><b>2. 사용</b><p><a href="https://maimaidx-eng.com/maimai-mobile/" target="_blank">maimai DX net</a>에서 북마클릿 클릭</p></div>
-<button class="btn" onclick="navigator.clipboard.writeText('${bookmarklet.replace(/'/g,"\\'")}').then(()=>{document.getElementById('cp').style.display='block'})">📋 복사</button>
-<span class="copied" id="cp">복사 완료!</span>
-</div></body></html>`;
+<div class="wrap">
+<h1>🔖 북마클릿 설치</h1>
+<div style="display:flex;gap:6px;margin-bottom:12px">
+<button class="tabBtn active" id="tbPC" onclick="sw('PC')">💻 PC</button>
+<button class="tabBtn" id="tbMB" onclick="sw('MB')">📱 모바일</button>
+</div>
+
+<div class="tab active" id="tPC">
+<div class="card">
+<h2>1단계 <span class="tag">드래그</span></h2>
+<p>초록색 링크를 브라우저 북마크바로 드래그하세요.</p>
+<a class="bm" href="${bookmarklet}" draggable="true">⭐ maimai</a>
+<p style="font-size:12px;color:#666">북마크바가 없으면 Ctrl+Shift+B 로 표시</p>
+</div>
+<div class="card">
+<h2>2단계 <span class="tag">사용</span></h2>
+<p><a href="https://maimaidx-eng.com/maimai-mobile/" target="_blank">maimai DX net</a>에 로그인된 상태에서 저장한 북마크를 클릭하세요.</p>
+</div>
+</div>
+
+<div class="tab" id="tMB">
+<div class="card">
+<h2>복사 <span class="tag">필수</span></h2>
+<p>아래 버튼으로 북마클릿 코드를 복사하세요.</p>
+<button class="copy-btn" onclick="copyBm()">📋 코드 복사하기</button>
+<div class="copy-ok" id="cpOk"></div>
+</div>
+<div class="card">
+<h2>북마크에 저장</h2>
+<div class="steps">
+<div class="step">브라우저에서 <strong>아무 페이지나</strong> 북마크 저장 (⭐ 버튼 또는 공유 → 북마크 추가)</div>
+<div class="step">북마크 목록을 열고, 방금 저장한 북마크를 <strong>편집</strong></div>
+<div class="step">URL 칸을 모두 지우고, 복사한 코드를 <strong>붙여넣기</strong></div>
+<div class="step">저장 후 <a href="https://maimaidx-eng.com/maimai-mobile/" target="_blank">maimai DX net</a>에서 해당 북마크 실행</div>
+</div>
+</div>
+</div>
+</div>
+<script>
+function sw(t){
+  document.getElementById('tPC').className='tab'+(t==='PC'?' active':'');
+  document.getElementById('tMB').className='tab'+(t==='MB'?' active':'');
+  document.getElementById('tbPC').className='tabBtn'+(t==='PC'?' active':'');
+  document.getElementById('tbMB').className='tabBtn'+(t==='MB'?' active':'');
+}
+function copyBm(){
+  var code='${bmEscaped}';
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(code).then(function(){
+      document.getElementById('cpOk').textContent='✅ 복사 완료!';
+      setTimeout(function(){document.getElementById('cpOk').textContent=''},3000);
+    }).catch(fallback);
+  } else { fallback(); }
+  function fallback(){
+    var ta=document.createElement('textarea');
+    ta.value=code;ta.style.position='fixed';ta.style.opacity='0';
+    document.body.appendChild(ta);ta.focus();ta.select();
+    try{document.execCommand('copy');document.getElementById('cpOk').textContent='✅ 복사 완료!';}
+    catch(e){document.getElementById('cpOk').textContent='❌ 수동 복사 필요';}
+    document.body.removeChild(ta);
+    setTimeout(function(){document.getElementById('cpOk').textContent=''},3000);
+  }
+}
+// 모바일 자동 감지
+if(/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)) sw('MB');
+</script>
+</body></html>`;
 }
 
 export function startWebServer(port: number): void {
@@ -87,12 +157,24 @@ export function startWebServer(port: number): void {
     }
 
     if (req.method === "GET" && url.pathname === "/jacket") {
-      const uid = url.searchParams.get("user") || "";
-      const idx = parseInt(url.searchParams.get("idx") || "0");
-      const data = getJacket(uid, idx);
-      if (data) {
-        res.writeHead(200, { "content-type": "image/png", "cache-control": "max-age=3600" });
-        res.end(data);
+      const musicId = url.searchParams.get("id") || "";
+      if (!musicId) { res.writeHead(400); res.end(); return; }
+      let imgData = getSongJacket(musicId);
+      if (!imgData) {
+        try {
+          const imgUrl = `https://maimaidx-eng.com/maimai-mobile/img/Music/${musicId}.png`;
+          const resp = await fetch(imgUrl);
+          if (resp.ok) {
+            imgData = Buffer.from(await resp.arrayBuffer());
+            saveSongJacket(musicId, imgData);
+          }
+        } catch (e) {
+          console.error("[jacket] fetch failed:", e);
+        }
+      }
+      if (imgData) {
+        res.writeHead(200, { "content-type": "image/png", "cache-control": "max-age=86400" });
+        res.end(imgData);
       } else {
         res.writeHead(404); res.end();
       }
@@ -218,10 +300,19 @@ a{color:#4caf50}
           const m = avatarBase64.match(/^data:image\/\w+;base64,(.+)$/);
           if (m) saveAvatarBlob(userId, m[1]);
         }
-        // 재킷 이미지 base64 → DB 저장
         if (Array.isArray(data.js)) {
-          data.js.forEach((j: any, i: number) => { if (j?.data) saveJacket(userId, i, j.data); });
-          console.log(`[web] jackets saved: ${data.js.length} images`);
+          let saved = 0;
+          data.js.forEach((j: any) => {
+            if (j?.data && j?.url) {
+              const m = (j.url as string).match(/\/img\/Music\/([^.]+)\.png/);
+              if (m) {
+                const b64 = (j.data as string).replace(/^data:image\/\w+;base64,/, "");
+                saveSongJacket(m[1], Buffer.from(b64, "base64"));
+                saved++;
+              }
+            }
+          });
+          console.log(`[web] song jackets saved: ${saved}`);
         }
         console.log(`[web] 저장: ${effective.playerName} ⭐${effective.rating} fc=${fc}`);
         res.writeHead(200); res.end("ok");

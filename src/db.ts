@@ -66,6 +66,12 @@ db.exec(`
     guild_id TEXT PRIMARY KEY,
     auto_role INTEGER DEFAULT 1
   );
+
+  CREATE TABLE IF NOT EXISTS song_jackets (
+    music_id TEXT PRIMARY KEY,
+    data BLOB NOT NULL,
+    created_at INTEGER DEFAULT (strftime('%s','now') * 1000)
+  );
 `);
 
 // ─── Queries ────────────────────────────────────────────────────────────
@@ -214,6 +220,16 @@ export function getJacket(userId: string, idx: number): Buffer | null {
   if (!row?.data) return null;
   const m = row.data.match(/^data:image\/\w+;base64,(.+)$/);
   return m ? Buffer.from(m[1], "base64") : null;
+}
+
+// ─── Song jacket cache (shared across all users, keyed by music ID) ─────────
+export function getSongJacket(musicId: string): Buffer | null {
+  const row = db.prepare("SELECT data FROM song_jackets WHERE music_id = ?").get(musicId) as { data: Buffer } | undefined;
+  return row?.data ?? null;
+}
+
+export function saveSongJacket(musicId: string, data: Buffer): void {
+  db.prepare("INSERT OR REPLACE INTO song_jackets (music_id, data) VALUES (?, ?)").run(musicId, data);
 }
 
 export function getGuildSetting(guildId: string): boolean {
