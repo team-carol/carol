@@ -82,11 +82,13 @@ export function recentEmbeds(
     const kind = r.musicKind ? ` [${r.musicKind}]` : "";
     const musicIdMatch = r.jacketUrl?.match(/\/img\/Music\/([^.]+)\.png/);
     const jacketSrc = musicIdMatch ? `${server}/jacket?id=${musicIdMatch[1]}` : null;
+    const rankStr = [r.fc, r.sync].filter(Boolean).join(" · ");
+    const desc = `\`${r.diff} ${r.level}\`` + (rankStr ? `  ·  **${rankStr}**` : "");
     const emb = new EmbedBuilder()
       .setColor(0x2b2d31)
       .setAuthor({ name: sep("#" + (i + 1), 34) })
       .setTitle(r.title + kind)
-      .setDescription(`\`${r.diff} ${r.level}\``)
+      .setDescription(desc)
       .addFields(
         { name: "달성률", value: r.achievement, inline: true },
         { name: "플레이일", value: r.date || "-", inline: true },

@@ -72,6 +72,20 @@ export interface PlayRecord {
   musicKind: string;
   achievementVal: number;
   track: number;
+  fc: string;
+  sync: string;
+}
+
+const FC_LABELS: Record<string, string> = {
+  fc: "FC", fcp: "FC+", ap: "AP", app: "AP+",
+};
+const SYNC_LABELS: Record<string, string> = {
+  fs: "FS", fsp: "FS+", fsd: "FSD", fsdp: "FSD+",
+};
+
+function iconName(src: string): string {
+  const m = src.match(/playlog\/([^.?]+)/);
+  return m ? m[1] : "";
 }
 
 function parseOneRecord($: cheerio.CheerioAPI, el: any): PlayRecord | null {
@@ -84,14 +98,21 @@ function parseOneRecord($: cheerio.CheerioAPI, el: any): PlayRecord | null {
   const ach = $(el).find(".playlog_achievement_txt").text().trim();
   const achNum = parseFloat(ach.replace(/[^\d.]/g, "")) || 0;
   const diffSrc = $(el).find(".playlog_diff").attr("src") || "";
-  const diff = diffSrc.includes("remaster") ? "Re:M" : diffSrc.includes("master") ? "M" : diffSrc.includes("expert") ? "E" : diffSrc.includes("advanced") ? "A" : "B";
+  const diff = diffSrc.includes("remaster") ? "Re:MASTER"
+    : diffSrc.includes("master") ? "MASTER"
+    : diffSrc.includes("expert") ? "EXPERT"
+    : diffSrc.includes("advanced") ? "ADVANCED"
+    : "BASIC";
   const jacketUrl = absUrl($(el).find(".music_img").attr("src"));
   const kindSrc = $(el).find(".playlog_music_kind_icon").attr("src") || "";
   const musicKind = kindSrc.includes("dx") ? "DX" : kindSrc.includes("standard") ? "STA" : "";
   const date = $(el).find(".playlog_top_container span").eq(1).text().trim();
   const trackText = $(el).find(".playlog_top_container .red.f_b.v_b").text().trim();
   const track = parseInt(trackText.replace(/[^0-9]/g, "")) || 0;
-  return { title, achievement: ach || "?", diff, level, date, jacketUrl, musicKind, achievementVal: achNum, track };
+  const rankImgs = $(el).find("img.h_35.m_5.f_l");
+  const fc = FC_LABELS[iconName(rankImgs.eq(0).attr("src") || "")] || "";
+  const sync = SYNC_LABELS[iconName(rankImgs.eq(1).attr("src") || "")] || "";
+  return { title, achievement: ach || "?", diff, level, date, jacketUrl, musicKind, achievementVal: achNum, track, fc, sync };
 }
 
 export function parseRecentRecords(html: string): PlayRecord[] {
