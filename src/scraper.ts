@@ -133,7 +133,32 @@ export function parseTopSongs(html: string): PlayRecord[] {
 export function parseRatingTarget(html: string): PlayRecord[] {
   const $ = cheerio.load(html);
   const records: PlayRecord[] = [];
-  $(".p_10.t_l.f_0.v_b").each((_, el) => { const r = parseOneRecord($, el); if (r) records.push(r); });
+  const diffMap: Record<string, string> = {
+    "diff_basic.png": "BASIC",
+    "diff_advanced.png": "ADVANCED",
+    "diff_expert.png": "EXPERT",
+    "diff_master.png": "MASTER",
+    "diff_remaster.png": "Re:MASTER",
+  };
+  $("[class*='music_'][class*='_score_back']").each((_, el) => {
+    const block = $(el);
+    const title = block.find(".music_name_block").text().trim();
+    if (!title) return;
+    const level = block.find(".music_lv_block").text().trim();
+    const achievement = block.find(".music_score_block").text().trim();
+    const diffImg = (block.find("img").first().attr("src") || "").split("/").pop() || "";
+    const diff = diffMap[diffImg] || "";
+    const kindImg = (block.find(".music_kind_icon").attr("src") || "").split("/").pop() || "";
+    const musicKind = kindImg.includes("_dx") ? "DX" : kindImg.includes("_standard") ? "STD" : "";
+    const musicId = block.find("input[name='idx']").val() as string | undefined;
+    const jacketUrl = musicId ? `https://maimaidx-eng.com/maimai-mobile/img/Music/${musicId}.png` : "";
+    const achMatch = achievement.match(/(\d+\.\d+)/);
+    const achievementVal = achMatch ? parseFloat(achMatch[1]) : 0;
+    records.push({
+      title, achievement, diff, level, jacketUrl, musicKind, achievementVal,
+      date: "", track: 0, fc: "", sync: "",
+    });
+  });
   return records;
 }
 
