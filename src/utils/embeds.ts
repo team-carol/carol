@@ -96,7 +96,7 @@ export function recentEmbeds(
     const emb = new EmbedBuilder()
       .setColor(0x2b2d31)
       .setAuthor({ name: sep("#" + (i + 1), 34) })
-      .setTitle(truncate(r.title, 18 - kind.length) + kind)
+      .setTitle(truncate(r.title, 15 - kind.length) + kind)
       .setDescription(desc)
       .addFields(
         { name: "달성률", value: r.achievement, inline: true },
@@ -169,7 +169,7 @@ export function rtEmbeds(
     const emb = new EmbedBuilder()
       .setColor(0x2b2d31)
       .setAuthor({ name: sep(`#${rank}`, 34) })
-      .setTitle(truncate(r.title, 18 - kind.length) + kind)
+      .setTitle(truncate(r.title, 15 - kind.length) + kind)
       .setDescription(desc)
       .addFields({ name: "달성률", value: r.achievement, inline: true });
     if (jacketSrc) emb.setThumbnail(jacketSrc);
