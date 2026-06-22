@@ -14,7 +14,7 @@ export function buildBookmarklet(token: string, port: number): string {
 
 const bookmarkletJs = `(async()=>{
 var e=document,s=e.currentScript.src,u=new URL(s),c=u.searchParams.get('code')||'',v=u.origin;
-var x=function(a){return fetch(a).then(function(r){return r.text()})};
+var x=function(a){return fetch(a).then(function(r){return r.text()}).catch(function(){return ''})};
 var q=['/maimai-mobile/home/','/maimai-mobile/playerData/','/maimai-mobile/record/','/maimai-mobile/friend/userFriendCode/','/maimai-mobile/record/musicBest/'];
 var r=await Promise.all(q.map(x));
 var h=r[0],p=r[1],rd=r[2],f=r[3],tb=r[4],a='',js=[];
