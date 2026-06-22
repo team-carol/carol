@@ -143,6 +143,17 @@ export function parseTop5(html: string): PlayRecord[] {
   return Array.from(best.values()).sort((a, b) => b.achievementVal - a.achievementVal).slice(0, 5);
 }
 
+export function mergeTopRecords(recordsList: PlayRecord[][]): PlayRecord[] {
+  const best = new Map<string, PlayRecord>();
+  for (const records of recordsList) {
+    for (const r of records) {
+      const existing = best.get(r.title);
+      if (!existing || r.achievementVal > existing.achievementVal) best.set(r.title, r);
+    }
+  }
+  return Array.from(best.values()).sort((a, b) => b.achievementVal - a.achievementVal);
+}
+
 export function parseSearchResult(html: string): SearchResult {
   const $ = cheerio.load(html);
   const block = $(".see_through_block");
