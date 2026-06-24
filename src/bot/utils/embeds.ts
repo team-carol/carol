@@ -2,10 +2,10 @@ import {
   EmbedBuilder, AttachmentBuilder,
   ButtonBuilder, ButtonStyle, ActionRowBuilder,
 } from "discord.js";
-import { getCachedProfile, getAvatarBlob, getSongJacket, saveSongJacket } from "../db";
-import { getConstant, getJacketFile, levelToNumber, calcSongRating } from "../constants";
+import { getCachedProfile, getAvatarBlob, getSongJacket, saveSongJacket } from "../../db";
+import { getConstant, getJacketFile, levelToNumber, calcSongRating } from "../../constants";
 import { ratingColor } from "./roles";
-import type { PlayRecord } from "../scraper";
+import type { PlayRecord } from "../../scraper";
 
 // 곡 자켓 버퍼: DB 캐시 → maimai net(musicId) → otoge-db(title) 순으로 확보하고 캐시
 export async function jacketBuffer(r: PlayRecord): Promise<Buffer | null> {

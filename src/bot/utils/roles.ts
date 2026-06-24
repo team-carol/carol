@@ -2,7 +2,7 @@ import {
   EmbedBuilder, MessageFlags, ChatInputCommandInteraction,
   PermissionsBitField, GuildMember,
 } from "discord.js";
-import { getCachedProfile, loadUserSession, getGuildSetting } from "../db";
+import { getCachedProfile, loadUserSession, getGuildSetting } from "../../db";
 
 export const RATING_ROLES: [number, string, number][] = [
   [16750, "무지개(극) IV",  0xab30ff],
