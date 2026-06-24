@@ -37,7 +37,7 @@ Docker also needs `.env` with `CF_TUNNEL_TOKEN` (Cloudflare tunnel token).
 ```
 src/bot/index.ts  ←── entry point: Discord client + HTTP server startup
   │
-  ├── bot/commands/   slash command handlers (프로필, 북마클릿, 레이팅기준표, 레이팅표, 설정)
+  ├── bot/commands/   slash command handlers (프로필, 북마클릿, 검색, 레이팅기준표, 레이팅표, 설정)
   └── bot/utils/
         embeds.ts     discord.js EmbedBuilder helpers, jacket fetch logic
         ratingCard.ts satori (JSX-free) + @resvg/resvg-js → PNG; render cached by lastSyncedAt
@@ -80,12 +80,16 @@ try { db.exec("ALTER TABLE profiles ADD COLUMN new_col TEXT DEFAULT ''"); } catc
 Do not use DROP/RENAME; schema is additive only.
 
 Tables:
-- `profiles` — maimai player data; includes `rating_card_blob BLOB` and `rating_card_synced_at INTEGER` for PNG render cache
+- `profiles` — maimai player data; includes `rating_card_blob BLOB` and `rating_card_synced_at INTEGER` for PNG render cache (auto-cleared for profiles not synced in 7+ days)
 - `sessions` — Discord user ↔ friend_code + encrypted cookie + sync_token + avatar_blob
 - `jackets` — per-user indexed recent jacket base64 (not used for rating card)
 - `guild_settings` — per-guild auto-role toggle
 - `song_jackets` — shared song jacket PNGs keyed by music_id / otoge-db filename
 - `constants_cache` — serialized song constant + jacket maps from otoge-db.net, survives restarts
+
+## Rating Card Cache GC
+
+`rating_card_blob` (per-profile PNG) is cleared automatically for profiles whose `last_synced_at` is older than 7 days. Triggered on bot startup and every 24h via `setInterval`. The next `/레이팅표` request re-renders and re-saves. Implemented in [src/db.ts](file:///C:/Users/bitbyte08/Documents/maimai/src/db.ts) (`clearRatingCardCacheForInactive`) and wired in [src/bot/index.ts](file:///C:/Users/bitbyte08/Documents/maimai/src/bot/index.ts) (`runRatingCardGC`).
 
 ## TypeScript
 
@@ -123,7 +127,7 @@ See `docs/DESIGN.md` for the full design token reference. All web UI in `src/web
 
 ## Discord Commands
 
-All slash command names are Korean (`/프로필`, `/북마클릿`, `/레이팅기준표`, `/레이팅표`). The `설정` command handles a guild-level auto-role toggle. Commands are registered globally unless `guildId` is set in config (guild-scope = instant update, useful for dev).
+All slash command names are Korean (`/프로필`, `/북마클릿`, `/검색`, `/레이팅기준표`, `/레이팅표`). The `설정` command handles a guild-level auto-role toggle. `/검색` searches the user's stored clear records by case-insensitive title substring (paginated 5 per page, with jacket thumbnails). Commands are registered globally unless `guildId` is set in config (guild-scope = instant update, useful for dev).
 
 ## Docker & Deployment
 
@@ -151,5 +155,5 @@ Required GitHub secrets: `GCP_HOST`, `GCP_USER`, `GCP_SSH_KEY`.
 
 - **No SEGA credentials** are ever stored. Session cookies come from the user's own browser via bookmarklet; the bot only stores the opaque encrypted blob.
 - `auth.ts` (`MaimaiSession`) is a full HTTP session/login implementation but is **not used** in the current bot flow — bookmarklet push is the only sync mechanism.
-- Button interaction `customId` format is load-bearing: `recent:{userId}:{gameIdx}`, `page:{userId}:{gameIdx}`, `share:{userId}:{gameIdx}:{songIdx}`, `rt:{userId}`, `settings:{...}`. Changing the format requires updating both the builder (commands/utils) and the router in `bot/index.ts`.
+- Button interaction `customId` format is load-bearing: `recent:{userId}:{gameIdx}`, `page:{userId}:{gameIdx}`, `share:{userId}:{gameIdx}:{songIdx}`, `rt:{userId}`, `search:{userId}:{encodedQuery}:{pageIdx}`, `settings:{...}`. Changing the format requires updating both the builder (commands/utils) and the router in `bot/index.ts`. Search query is URL-encoded to safely handle colons and non-ASCII characters.
 - POST `/sync` returns `"no_change"` (HTTP 200) if the incoming playCount matches the cached value, skipping re-parse, re-render, and DB writes.

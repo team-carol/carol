@@ -118,6 +118,11 @@ export function getTopList(p: NonNullable<ReturnType<typeof getCachedProfile>>):
   return Array.isArray(raw) ? raw : [];
 }
 
+export function getClearList(p: NonNullable<ReturnType<typeof getCachedProfile>>): PlayRecord[] {
+  const raw = JSON.parse(p.clearJson || "[]");
+  return Array.isArray(raw) ? raw : [];
+}
+
 export function groupByGame(records: PlayRecord[]): PlayRecord[][] {
   const games: PlayRecord[][] = [];
   let current: PlayRecord[] = [];
@@ -205,6 +210,79 @@ export async function recentEmbeds(
   );
 
   return { embeds, components: [navRow, shareRow], files };
+}
+
+export async function searchResultEmbeds(
+  p: NonNullable<ReturnType<typeof getCachedProfile>>,
+  userId: string,
+  query: string,
+  pageIdx: number,
+): Promise<{ embeds: EmbedBuilder[]; components: ActionRowBuilder<ButtonBuilder>[]; files: AttachmentBuilder[] }> {
+  const records = getClearList(p);
+  const q = query.toLowerCase();
+  const matches = records
+    .filter((r) => r.title.toLowerCase().includes(q))
+    .sort((a, b) => b.achievementVal - a.achievementVal);
+
+  if (matches.length === 0) {
+    return {
+      embeds: [new EmbedBuilder().setColor(0x2b2d31).setDescription(`"${query}" 검색 결과 없음`)],
+      components: [],
+      files: [],
+    };
+  }
+
+  const PAGE_SIZE = 5;
+  const total = matches.length;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const idx = Math.max(0, Math.min(pageIdx, totalPages - 1));
+  const page = matches.slice(idx * PAGE_SIZE, (idx + 1) * PAGE_SIZE);
+  const files: AttachmentBuilder[] = [];
+
+  const embeds = await Promise.all(page.map(async (r, i) => {
+    const kind = r.musicKind ? ` [${r.musicKind}]` : "";
+    const rankStr = [r.fc, r.sync].filter(Boolean).join(" · ");
+    const constant = getConstant(r.title, r.musicKind, r.diff);
+    const lv = constant !== null ? constant.toFixed(1) : r.level;
+    const desc = `\`${r.diff} ${lv}\`` + (rankStr ? `  ·  \`${rankStr}\`` : "");
+    const emb = new EmbedBuilder()
+      .setColor(0x2b2d31)
+      .setAuthor({ name: sep("#" + (idx * PAGE_SIZE + i + 1), 34) })
+      .setTitle(truncateVisual(r.title, 26) + kind)
+      .setDescription(desc)
+      .addFields(
+        { name: "달성률", value: r.achievement, inline: true },
+        { name: "레벨", value: lv, inline: true },
+      );
+    const buf = await jacketBuffer(r);
+    if (buf) {
+      const name = `sjacket${i}.png`;
+      files.push(new AttachmentBuilder(buf, { name }));
+      emb.setThumbnail(`attachment://${name}`);
+    }
+    return emb;
+  }));
+
+  const qEnc = encodeURIComponent(query);
+  const prevBtn = new ButtonBuilder()
+    .setCustomId(`search:${userId}:${qEnc}:${idx - 1}`)
+    .setLabel("◀ 이전")
+    .setStyle(ButtonStyle.Secondary)
+    .setDisabled(idx === 0);
+  const countBtn = new ButtonBuilder()
+    .setCustomId("search_noop")
+    .setLabel(`${idx + 1} / ${totalPages}`)
+    .setStyle(ButtonStyle.Primary)
+    .setDisabled(true);
+  const nextBtn = new ButtonBuilder()
+    .setCustomId(`search:${userId}:${qEnc}:${idx + 1}`)
+    .setLabel("다음 ▶")
+    .setStyle(ButtonStyle.Secondary)
+    .setDisabled(idx === totalPages - 1);
+
+  const navRow = new ActionRowBuilder<ButtonBuilder>().addComponents(prevBtn, countBtn, nextBtn);
+
+  return { embeds, components: [navRow], files };
 }
 
 const DIFF_ABBR: Record<string, string> = {

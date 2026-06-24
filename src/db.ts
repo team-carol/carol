@@ -285,3 +285,18 @@ export function getConstantsCache(): { data: string; updatedAt: number } | null 
 export function saveConstantsCache(data: string): void {
   db.prepare("INSERT OR REPLACE INTO constants_cache (key, data, updated_at) VALUES ('main', ?, ?)").run(data, Date.now());
 }
+
+// ─── rating_card_blob GC ─────────────────────────────────────────────────
+export function getInactiveProfileFriendCodes(thresholdMs: number): string[] {
+  const cutoff = Date.now() - thresholdMs;
+  return (db.prepare(
+    "SELECT friend_code AS friendCode FROM profiles WHERE last_synced_at > 0 AND last_synced_at < ? AND rating_card_blob IS NOT NULL"
+  ).all(cutoff) as { friendCode: string }[]).map((r) => r.friendCode);
+}
+
+export function clearRatingCardCacheForInactive(thresholdMs: number): number {
+  const cutoff = Date.now() - thresholdMs;
+  return db.prepare(
+    "UPDATE profiles SET rating_card_blob = NULL, rating_card_synced_at = 0 WHERE last_synced_at > 0 AND last_synced_at < ? AND rating_card_blob IS NOT NULL"
+  ).run(cutoff).changes;
+}
