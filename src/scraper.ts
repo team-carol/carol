@@ -179,8 +179,9 @@ export function mergeTopRecords(recordsList: PlayRecord[][]): PlayRecord[] {
   const best = new Map<string, PlayRecord>();
   for (const records of recordsList) {
     for (const r of records) {
-      const existing = best.get(r.title);
-      if (!existing || r.achievementVal > existing.achievementVal) best.set(r.title, r);
+      const key = r.title + "|" + r.diff;
+      const existing = best.get(key);
+      if (!existing || r.achievementVal > existing.achievementVal) best.set(key, r);
     }
   }
   return Array.from(best.values()).sort((a, b) => b.achievementVal - a.achievementVal);
