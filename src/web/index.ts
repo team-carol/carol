@@ -260,16 +260,10 @@ a{color:#c084fc}
 
         // ─── Play count guard: skip if nothing changed ──────────────────────
         const existing = getCachedProfile(fc);
-        if (existing && existing.clearJson && existing.clearJson !== "[]") {
-          try {
-            const arr = JSON.parse(existing.clearJson);
-            if (Array.isArray(arr) && arr.every((r: any) => r.fc && r.fc !== "")) {
-              if (existing.playCount === (playCount || 0)) {
-                console.log(`[web] no_change: ${effective.playerName} playCount=${playCount}`);
-                res.writeHead(200); res.end("no_change"); return;
-              }
-            }
-          } catch { /* fall through to re-parse */ }
+        if (existing && existing.clearJson && existing.clearJson !== "[]"
+            && existing.playCount === (playCount || 0)) {
+          console.log(`[web] no_change: ${effective.playerName} playCount=${playCount}`);
+          res.writeHead(200); res.end("no_change"); return;
         }
 
         const recentRecords = parseRecentRecords(recordHtml);
