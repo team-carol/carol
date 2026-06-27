@@ -89,6 +89,8 @@ try { db.exec("ALTER TABLE profiles ADD COLUMN clear_json TEXT DEFAULT '[]'"); }
 try { db.exec("ALTER TABLE profiles ADD COLUMN rating_card_blob BLOB DEFAULT NULL"); } catch (_) {}
 try { db.exec("ALTER TABLE profiles ADD COLUMN rating_card_synced_at INTEGER DEFAULT 0"); } catch (_) {}
 try { db.exec("ALTER TABLE profiles ADD COLUMN rating_card_version INTEGER DEFAULT 0"); } catch (_) {}
+// 프로필 비공개 여부 (기본 1=비공개). 기존 유저도 비공개로 마이그레이션됨.
+try { db.exec("ALTER TABLE sessions ADD COLUMN profile_private INTEGER DEFAULT 1"); } catch (_) {}
 
 // ─── Queries ────────────────────────────────────────────────────────────
 const stmtGet = db.prepare("SELECT friend_code AS friendCode, player_name AS playerName, rating, rating_max AS ratingMax, trophy, trophy_class AS trophyClass, avatar, grade_img AS gradeImg, stars, comment, play_count AS playCount, raw_html AS rawHtml, recent_json AS recentJson, top_json AS topJson, clear_json AS clearJson, last_synced_at AS lastSyncedAt FROM profiles WHERE friend_code = ?");
@@ -264,6 +266,19 @@ export function getGuildSetting(guildId: string): boolean {
 
 export function setGuildSetting(guildId: string, autoRole: boolean): void {
   db.prepare("INSERT OR REPLACE INTO guild_settings (guild_id, auto_role) VALUES (?, ?)").run(guildId, autoRole ? 1 : 0);
+}
+
+// ─── Per-user profile privacy (기본 비공개) ──────────────────────────────
+export function getProfilePrivate(discordUserId: string): boolean {
+  const row = db.prepare("SELECT profile_private FROM sessions WHERE discord_user_id = ?").get(discordUserId) as { profile_private: number | null } | undefined;
+  // 세션이 없거나 값이 없으면 비공개로 간주
+  return row ? row.profile_private !== 0 : true;
+}
+
+// 세션(프로필)이 등록된 유저만 설정 가능. 변경된 행 수를 반환.
+export function setProfilePrivate(discordUserId: string, isPrivate: boolean): number {
+  const info = db.prepare("UPDATE sessions SET profile_private = ? WHERE discord_user_id = ?").run(isPrivate ? 1 : 0, discordUserId);
+  return info.changes;
 }
 
 // ─── Rating card render cache ────────────────────────────────────────────

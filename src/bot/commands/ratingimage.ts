@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, MessageFlags, AttachmentBuilder } from "discord.js";
-import { getCachedProfile, getUserFriendCode, getAvatarBlob } from "../../db";
+import { getCachedProfile, getUserFriendCode, getAvatarBlob, getProfilePrivate } from "../../db";
 import { getTopList } from "../utils/embeds";
 import { renderRatingCard } from "../utils/ratingCard";
 
@@ -13,6 +13,10 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   const target = interaction.options.getUser("user") ?? interaction.user;
   const userId = target.id;
+  if (target.id !== interaction.user.id && getProfilePrivate(target.id)) {
+    await interaction.reply({ content: `<@${target.id}> 님은 프로필을 비공개로 설정했습니다.`, flags: MessageFlags.Ephemeral });
+    return;
+  }
   const friendCode = getUserFriendCode(userId);
   const cached = friendCode ? getCachedProfile(friendCode) : null;
   if (!cached) {

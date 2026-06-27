@@ -14,11 +14,12 @@ import * as bookmarklet  from "./commands/bookmarklet";
 import * as ratingtable  from "./commands/ratingtable";
 import * as ratingimage  from "./commands/ratingimage";
 import * as settings     from "./commands/settings";
+import * as serverSettings from "./commands/serverSettings";
 import * as search       from "./commands/search";
 
 type Command = { data: { toJSON(): object; name: string }; execute: (i: ChatInputCommandInteraction) => Promise<void> };
 
-const COMMANDS: Command[] = [profile, bookmarklet, ratingtable, ratingimage, settings, search];
+const COMMANDS: Command[] = [profile, bookmarklet, ratingtable, ratingimage, settings, serverSettings, search];
 
 const RATING_CARD_GC_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000;
 const RATING_CARD_GC_INTERVAL_MS = 24 * 60 * 60 * 1000;
@@ -67,8 +68,12 @@ client.on(Events.InteractionCreate, async (i) => {
     return;
   }
   if (i.isButton()) {
-    if (i.customId.startsWith("settings:")) {
+    if (i.customId.startsWith("psettings:")) {
       try { await settings.handleButton(i); } catch (e) { console.error("[settings-btn]", e); }
+      return;
+    }
+    if (i.customId.startsWith("serverset:")) {
+      try { await serverSettings.handleButton(i); } catch (e) { console.error("[serverset-btn]", e); }
       return;
     }
     if (i.customId.startsWith("recent:") || i.customId.startsWith("page:")) {

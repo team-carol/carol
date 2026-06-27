@@ -1,52 +1,54 @@
 import {
   SlashCommandBuilder, ChatInputCommandInteraction, EmbedBuilder,
-  MessageFlags, PermissionsBitField, ActionRowBuilder, ButtonBuilder,
-  ButtonStyle, ButtonInteraction,
+  MessageFlags, ActionRowBuilder, ButtonBuilder, ButtonStyle, ButtonInteraction,
 } from "discord.js";
-import { getGuildSetting, setGuildSetting } from "../../db";
+import { getProfilePrivate, setProfilePrivate, getUserFriendCode } from "../../db";
 
 export const data = new SlashCommandBuilder()
   .setName("설정")
-  .setDescription("서버 설정 관리");
+  .setDescription("개인 설정 (프로필 공개 여부)");
 
-function buildSettingsContent(guildId: string) {
-  const autoRole = getGuildSetting(guildId);
+function buildSettingsContent(userId: string) {
+  const isPrivate = getProfilePrivate(userId);
   const embed = new EmbedBuilder()
-    .setTitle("⚙️ 서버 설정")
+    .setTitle("🔒 개인 설정")
     .setColor(0x5865f2)
-    .addFields({ name: "자동 역할 부여", value: autoRole ? "✅ 활성화" : "❌ 비활성화" });
+    .addFields({
+      name: "프로필 공개 여부",
+      value: isPrivate
+        ? "🔒 **비공개** — 다른 사람이 내 프로필/검색/레이팅표를 조회할 수 없습니다."
+        : "🌐 **공개** — 다른 사람이 내 프로필을 조회할 수 있습니다.",
+    });
 
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
-      .setCustomId("settings:autorole:on")
-      .setLabel("활성화")
-      .setStyle(autoRole ? ButtonStyle.Success : ButtonStyle.Secondary)
-      .setDisabled(autoRole),
+      .setCustomId("psettings:visibility:public")
+      .setLabel("공개")
+      .setStyle(!isPrivate ? ButtonStyle.Success : ButtonStyle.Secondary)
+      .setDisabled(!isPrivate),
     new ButtonBuilder()
-      .setCustomId("settings:autorole:off")
-      .setLabel("비활성화")
-      .setStyle(!autoRole ? ButtonStyle.Danger : ButtonStyle.Secondary)
-      .setDisabled(!autoRole),
+      .setCustomId("psettings:visibility:private")
+      .setLabel("비공개")
+      .setStyle(isPrivate ? ButtonStyle.Danger : ButtonStyle.Secondary)
+      .setDisabled(isPrivate),
   );
 
   return { embeds: [embed], components: [row] };
 }
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
-  if (!interaction.guild) {
-    await interaction.reply({ content: "서버에서만 사용 가능합니다.", flags: MessageFlags.Ephemeral });
+  if (!getUserFriendCode(interaction.user.id)) {
+    await interaction.reply({
+      content: "아직 프로필이 등록되지 않았습니다. `/북마클릿` 명령어로 먼저 등록해주세요.",
+      flags: MessageFlags.Ephemeral,
+    });
     return;
   }
-  if (!interaction.memberPermissions?.has(PermissionsBitField.Flags.ManageGuild)) {
-    await interaction.reply({ content: "서버 관리자만 사용 가능합니다.", flags: MessageFlags.Ephemeral });
-    return;
-  }
-  await interaction.reply({ ...buildSettingsContent(interaction.guild.id), flags: MessageFlags.Ephemeral });
+  await interaction.reply({ ...buildSettingsContent(interaction.user.id), flags: MessageFlags.Ephemeral });
 }
 
 export async function handleButton(interaction: ButtonInteraction): Promise<void> {
-  if (!interaction.guild) return;
   const parts = interaction.customId.split(":");
-  setGuildSetting(interaction.guild.id, parts[2] === "on");
-  await interaction.update(buildSettingsContent(interaction.guild.id));
+  setProfilePrivate(interaction.user.id, parts[2] === "private");
+  await interaction.update(buildSettingsContent(interaction.user.id));
 }
