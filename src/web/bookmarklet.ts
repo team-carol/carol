@@ -18,6 +18,7 @@ export function buildBookmarkletJs(extras: Array<{ label: string; code: string }
 }
 
 export const bookmarkletJs = `(async()=>{
+var h=location.hostname;if(h!=='maimaidx.jp'&&h!=='maimaidx-eng.com'){alert('maimai DX NET 페이지에서 실행해주세요.\\nhttps://maimaidx-eng.com/maimai-mobile/');return;}
 var doc=document,s=doc.currentScript.src,u=new URL(s),c=u.searchParams.get('code')||'',v=u.origin;
 var old=doc.getElementById('mm-sync-ov');if(old)old.remove();
 var ov=doc.createElement('div');ov.id='mm-sync-ov';
