@@ -1,15 +1,19 @@
 import * as http from "http";
 import * as fs from "fs";
 import { parseHome, parsePlayerData, parseFriendCode as parseFC, parseRecentRecords, parseTop5, parseTopSongs, parseMusicScore, mergeTopRecords } from "../scraper";
-import { cacheProfile, getCachedProfile, saveUserSession, getUserSyncToken, findUserBySyncToken, saveAvatarBlob, getAvatarBlob, getSongJacket, saveSongJacket, getExtraBookmarklets } from "../db";
+import { cacheProfile, getCachedProfile, saveUserSession, getUserSyncToken, findUserBySyncToken, saveAvatarBlob, getAvatarBlob, getSongJacket, saveSongJacket, getExtraBookmarklets, getProfilePrivate, setProfilePrivate, addExtraBookmarklet, removeExtraBookmarklet } from "../db";
 import { buildBookmarkletJs, setBaseUrl, getBaseUrl, buildBookmarklet } from "./bookmarklet";
+import { settingsPage } from "./settingsPage";
+import { CONFIG } from "../config";
+
+const isDev = !CONFIG.baseUrl;
 
 export { setBaseUrl, getBaseUrl, buildBookmarklet };
 
 function guidePage(token: string, bookmarklet: string): string {
   const bmEscaped = bookmarklet.replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/`/g, "\\`");
   return `<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>maimai 북마클릿 설치</title>
+<title>북마클릿 설치 - carolbot</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
@@ -38,8 +42,9 @@ code{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:13px;backgrou
 @media(max-width:500px){h1{font-size:36px}body{padding:48px 16px}}
 </style></head><body>
 <div class="wrap">
-<p class="mono">maimai discord</p>
+<p class="mono">carolbot</p>
 <h1>북마클릿<br>설치</h1>
+<div style="margin-bottom:24px"><a href="/settings?code=${token}" style="color:#c084fc;font-size:14px;text-decoration:none">⚙️ 설정</a></div>
 <div class="tabs">
 <button class="tabBtn active" id="tbPC" onclick="sw('PC')">💻 PC</button>
 <button class="tabBtn" id="tbMB" onclick="sw('MB')">📱 모바일</button>
@@ -48,7 +53,7 @@ code{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:13px;backgrou
 <div class="card">
 <p class="mono">Step 01</p>
 <p>아래 버튼을 브라우저 북마크바로 드래그하세요.</p>
-<a class="bm" href="${bookmarklet}" draggable="true">⭐ maimai 북마크</a>
+<a class="bm" href="${bookmarklet}" draggable="true">⭐ Carol Bot</a>
 <p style="font-size:13px;color:#666;margin-top:6px">북마크바가 없으면 <code>Ctrl+Shift+B</code></p>
 </div>
 <div class="card">
@@ -66,12 +71,24 @@ code{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:13px;backgrou
 <div class="card">
 <p class="mono">Step 02</p>
 <ol class="steps">
-<li class="step">브라우저에서 <strong>아무 페이지나</strong> 북마크 저장 (⭐ 버튼 또는 공유 → 북마크 추가)</li>
+<li class="step"><strong>아무 페이지</strong>를 북마크에 저장 (⭐ 또는 공유 → 북마크 추가)</li>
 <li class="step">북마크 목록을 열고, 방금 저장한 북마크를 <strong>편집</strong></li>
 <li class="step">URL 칸을 모두 지우고, 복사한 코드를 <strong>붙여넣기</strong></li>
 <li class="step"><a href="https://maimaidx-eng.com/maimai-mobile/" target="_blank">maimai DX net</a>에서 해당 북마크 실행</li>
 </ol>
 </div>
+</div>
+<div style="margin-top:40px;padding-top:32px;border-top:1px solid #2a2a2a">
+<p class="mono">추가 북마클릿</p>
+<p style="margin-bottom:16px">여러 계정이나 서버를 사용하는 경우, 북마클릿을 최대 <strong>5개</strong>까지 추가로 등록할 수 있습니다.</p>
+<div class="card">
+<p style="font-size:15px;line-height:1.7">
+<strong style="color:#fff">추가</strong> — <a href="/settings?code=${token}">설정 페이지</a>에서 이름과 코드를 입력해 등록<br>
+<strong style="color:#fff">삭제</strong> — 설정 페이지의 목록에서 해당 북마클릿 삭제<br>
+<strong style="color:#fff">사용</strong> — 추가한 북마클릿도 동일하게 maimai DX net에서 실행
+</p>
+</div>
+<a href="/settings?code=${token}" style="display:inline-flex;align-items:center;gap:6px;color:#c084fc;font-size:14px;text-decoration:none;margin-top:8px">⚙️ 설정 페이지로 이동 →</a>
 </div>
 </div>
 <script>
@@ -162,7 +179,7 @@ export function startWebServer(port: number): void {
     if (req.method === "GET" && url.pathname === "/privacy") {
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
       res.end(`<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>개인정보처리방침 - maimaiDISCORD</title>
+<title>개인정보처리방침 - carolbot</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:system-ui,sans-serif;background:#0d0d0d;color:#ccc;max-width:720px;margin:40px auto;padding:24px;line-height:1.7}
@@ -192,7 +209,7 @@ a{color:#c084fc}
     if (req.method === "GET" && url.pathname === "/terms") {
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
       res.end(`<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>이용약관 - maimaiDISCORD</title>
+<title>이용약관 - carolbot</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:system-ui,sans-serif;background:#0d0d0d;color:#ccc;max-width:720px;margin:40px auto;padding:24px;line-height:1.7}
@@ -204,7 +221,7 @@ a{color:#c084fc}
 <h1>이용약관</h1>
 <p>최종 수정일: 2026년 6월</p>
 <h2>1. 서비스 설명</h2>
-<p>maimaiDISCORD는 Discord에서 SEGA의 아케이드 리듬 게임 「maimai DX」의 공식 웹사이트(maimai DX net) 프로필을 조회할 수 있는 비공식 팬 메이드 봇입니다.</p>
+<p>carolbot은 Discord에서 SEGA의 아케이드 리듬 게임 「maimai DX」의 공식 웹사이트(maimai DX net) 프로필을 조회할 수 있는 비공식 팬 메이드 봇입니다.</p>
 <h2>2. 저작권</h2>
 <p>본 서비스는 SEGA와 공식적으로 제휴, 후원 또는 승인되지 않았습니다. maimai DX, maimai DX net 및 관련된 모든 게임 자산, 캐릭터, 음악, 이미지, 상표의 저작권 및 모든 권리는 <strong>SEGA Corporation</strong>에 있습니다. 본 봇은 팬 목적으로만 운영됩니다.</p>
 <h2>3. 사용자 책임</h2>
@@ -219,9 +236,100 @@ a{color:#c084fc}
 
     if (req.method === "GET" && url.pathname === "/sync") {
       const token = url.searchParams.get("code") || "";
-      if (!findUserBySyncToken(token)) { res.writeHead(403); res.end("expired"); return; }
+      const userId = findUserBySyncToken(token);
+      if (!userId && !isDev) { res.writeHead(403); res.end("expired"); return; }
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-      res.end(guidePage(token, buildBookmarklet(token, port)));
+      res.end(guidePage(token, userId ? buildBookmarklet(token, port) : "javascript:alert('preview')"));
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/settings") {
+      const token = url.searchParams.get("code") || "";
+      const userId = findUserBySyncToken(token);
+      if (!userId && !isDev) { res.writeHead(403); res.end("expired"); return; }
+      const isPrivate = userId ? getProfilePrivate(userId) : false;
+      const bookmarklets = userId ? getExtraBookmarklets(userId) : [];
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      res.end(settingsPage(token, isPrivate, bookmarklets));
+      return;
+    }
+
+    // ─── Settings API ─────────────────────────────────────────────────────
+    if (req.method === "GET" && url.pathname === "/api/settings") {
+      const token = url.searchParams.get("code") || "";
+      const userId = findUserBySyncToken(token);
+      if (!userId) { res.writeHead(403, { "content-type": "application/json" }); res.end(JSON.stringify({ error: "expired" })); return; }
+      const isPrivate = getProfilePrivate(userId);
+      const bookmarklets = getExtraBookmarklets(userId);
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ private: isPrivate, bookmarklets }));
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/settings/privacy") {
+      const token = url.searchParams.get("code") || "";
+      const userId = findUserBySyncToken(token);
+      if (!userId) { res.writeHead(403, { "content-type": "application/json" }); res.end(JSON.stringify({ error: "expired" })); return; }
+      try {
+        const body = JSON.parse(await readBody(req));
+        const value = !!body.private;
+        setProfilePrivate(userId, value);
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ private: value }));
+      } catch {
+        res.writeHead(400, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: "invalid_body" }));
+      }
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/settings/bookmarklet") {
+      const token = url.searchParams.get("code") || "";
+      const userId = findUserBySyncToken(token);
+      if (!userId) { res.writeHead(403, { "content-type": "application/json" }); res.end(JSON.stringify({ error: "expired" })); return; }
+      try {
+        const body = JSON.parse(await readBody(req));
+        const action: string = body.action;
+        if (action === "add") {
+          const label = (body.label || "").trim();
+          const code = (body.code || "").trim();
+          if (!label || !code) {
+            res.writeHead(400, { "content-type": "application/json" });
+            res.end(JSON.stringify({ error: "missing_fields" }));
+            return;
+          }
+          const existing = getExtraBookmarklets(userId);
+          if (existing.length >= 5) {
+            res.writeHead(400, { "content-type": "application/json" });
+            res.end(JSON.stringify({ error: "max_reached" }));
+            return;
+          }
+          if (existing.some(b => b.label === label)) {
+            res.writeHead(400, { "content-type": "application/json" });
+            res.end(JSON.stringify({ error: "duplicate_label" }));
+            return;
+          }
+          addExtraBookmarklet(userId, label, code);
+        } else if (action === "delete") {
+          const label = (body.label || "").trim();
+          if (!label) {
+            res.writeHead(400, { "content-type": "application/json" });
+            res.end(JSON.stringify({ error: "missing_fields" }));
+            return;
+          }
+          removeExtraBookmarklet(userId, label);
+        } else {
+          res.writeHead(400, { "content-type": "application/json" });
+          res.end(JSON.stringify({ error: "invalid_action" }));
+          return;
+        }
+        const bookmarklets = getExtraBookmarklets(userId);
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ bookmarklets }));
+      } catch {
+        res.writeHead(400, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: "invalid_body" }));
+      }
       return;
     }
 
