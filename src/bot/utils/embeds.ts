@@ -130,7 +130,6 @@ export function profileEmb(
   const stars = p.stars && p.stars !== "0" ? " · ★×" + p.stars : "";
   const emb = new EmbedBuilder()
     .setColor(ratingColor(p.rating))
-    .setAuthor({ name: sep("Profile") })
     .setTitle(p.trophy || "칭호 없음")
     .setDescription(
       `**${p.playerName || "이름 없음"}**  ·  **${p.rating || 0}**\n` +
@@ -215,7 +214,6 @@ export async function recentEmbeds(
         `\`${r.diff} ${lv}\`` + (rankStr ? `  ·  \`${rankStr}\`` : "");
       const emb = new EmbedBuilder()
         .setColor(0x2b2d31)
-        .setAuthor({ name: sep("#" + (i + 1), 34) })
         .setTitle(truncateVisual(r.title, 26) + kind)
         .setDescription(desc)
         .addFields(
@@ -330,7 +328,6 @@ export async function searchResultEmbeds(
       const lines = DIFF_ORDER.flatMap((d) => {
         const r = all.find((x) => x.diff === d);
         const constant = getConstant(title, all[0]?.musicKind, d);
-        // Re:MASTER 채보가 없는 곡(상수·기록 모두 없음)은 행을 생략
         if (d === "Re:MASTER" && constant === null && !r) return [];
         const lv = constant !== null ? constant.toFixed(1) : (r?.level ?? "?");
         const ach =
@@ -356,7 +353,6 @@ export async function searchResultEmbeds(
             sync: "",
           } as PlayRecord),
       );
-      // 유튜브 외부출력 검색 링크: "maimai {곡명} {ST/DX} 外部出力"
       const ytQuery = encodeURIComponent(
         `maimai ${title} ${all[0]?.musicKind || ""} 外部出力`
           .replace(/\s+/g, " ")
@@ -365,9 +361,6 @@ export async function searchResultEmbeds(
       const ytUrl = `https://www.youtube.com/results?search_query=${ytQuery}`;
       const emb = new EmbedBuilder()
         .setColor(0x2b2d31)
-        .setAuthor({
-          name: i === 0 ? sep(`"${query}"에 대한 검색 결과`, 34) : sep("", 34),
-        })
         .setTitle(truncateVisual(title, 26) + kind)
         .setDescription(
           "```\n" + lines.join("\n") + "\n```" + `\n[▶ 외부출력](${ytUrl})`,
@@ -488,7 +481,6 @@ export function rtTableEmbed(
     embeds: [
       new EmbedBuilder()
         .setColor(0x2b2d31)
-        .setAuthor({ name: sep("레이팅 대상곡") })
         .setDescription(desc)
         .setFooter({
           text: `총 ${newRecords.length + otherRecords.length}곡  ·  RS=곡별 레이팅 점수`,
