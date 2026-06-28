@@ -26,6 +26,8 @@ h1{font-size:48px;font-weight:700;color:#fff;letter-spacing:-0.5px;margin-bottom
 .tabs{display:flex;gap:8px;margin-bottom:24px}
 .tabBtn{flex:1;background:#1a1a1a;color:#888;border:1px solid #2a2a2a;border-radius:8px;padding:10px 20px;font-family:inherit;font-size:14px;font-weight:500;cursor:pointer;transition:all .15s}
 .tabBtn.active{background:#9333ea;color:#fff;border-color:#9333ea}
+.settingsLink{display:inline-flex;align-items:center;justify-content:center;gap:6px;background:#111;color:#c084fc;border:1px solid #9333ea;border-radius:8px;padding:10px 16px;font-size:14px;font-weight:500;text-decoration:none;transition:all .15s;white-space:nowrap}
+.settingsLink:hover{background:#1a1a1a;color:#fff;box-shadow:inset 0 0 0 1px #9333ea}
 .card{background:#1a1a1a;border:1px solid #2a2a2a;border-radius:16px;padding:28px;margin-bottom:16px}
 .bm{display:inline-flex;align-items:center;gap:8px;background:#9333ea;color:#fff;border-radius:8px;padding:12px 24px;font-size:15px;font-weight:600;text-decoration:none;cursor:grab;margin:16px 0 6px;transition:opacity .15s}
 .bm:active{opacity:.8}
@@ -39,15 +41,23 @@ a{color:#c084fc}
 .tab{display:none}
 .tab.active{display:block}
 code{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:13px;background:#252525;color:#ccc;padding:2px 6px;border-radius:4px}
-@media(max-width:500px){h1{font-size:36px}body{padding:48px 16px}}
+.extra{margin-top:40px;padding-top:32px;border-top:1px solid #2a2a2a}
+.extra h2{font-size:22px;color:#fff;margin-bottom:10px;letter-spacing:-.2px}
+.extraIntro{font-size:15px;color:#aaa;margin-bottom:16px;line-height:1.6}
+.extraActions{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.extraCard{background:#151515;border:1px solid #2a2a2a;border-radius:12px;padding:16px;text-decoration:none;color:#ccc;transition:all .15s}
+.extraCard:hover{border-color:#9333ea;background:#1a1a1a}
+.extraCard strong{display:block;color:#fff;font-size:15px;margin-bottom:6px}
+.extraCard span{display:block;color:#777;font-size:13px;line-height:1.5}
+@media(max-width:500px){h1{font-size:36px}body{padding:48px 16px}.tabs{gap:6px}.tabBtn,.settingsLink{padding:10px 12px}.card{padding:20px}.extraActions{grid-template-columns:1fr}}
 </style></head><body>
 <div class="wrap">
 <p class="mono">carolbot</p>
 <h1>북마클릿<br>설치</h1>
-<div style="margin-bottom:24px"><a href="/settings?code=${token}" style="color:#c084fc;font-size:14px;text-decoration:none">⚙️ 설정</a></div>
 <div class="tabs">
 <button class="tabBtn active" id="tbPC" onclick="sw('PC')">💻 PC</button>
 <button class="tabBtn" id="tbMB" onclick="sw('MB')">📱 모바일</button>
+<a class="settingsLink" href="/settings?code=${token}">⚙️ 설정</a>
 </div>
 <div class="tab active" id="tPC">
 <div class="card">
@@ -71,24 +81,22 @@ code{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:13px;backgrou
 <div class="card">
 <p class="mono">Step 02</p>
 <ol class="steps">
-<li class="step"><strong>아무 페이지</strong>를 북마크에 저장 (⭐ 또는 공유 → 북마크 추가)</li>
+<li class="step"><strong>빈 페이지를 북마크 저장</strong> (⭐ 또는 공유 → 북마크 추가)</li>
 <li class="step">북마크 목록을 열고, 방금 저장한 북마크를 <strong>편집</strong></li>
 <li class="step">URL 칸을 모두 지우고, 복사한 코드를 <strong>붙여넣기</strong></li>
 <li class="step"><a href="https://maimaidx-eng.com/maimai-mobile/" target="_blank">maimai DX net</a>에서 해당 북마크 실행</li>
 </ol>
 </div>
 </div>
-<div style="margin-top:40px;padding-top:32px;border-top:1px solid #2a2a2a">
+<div class="extra">
 <p class="mono">추가 북마클릿</p>
-<p style="margin-bottom:16px">여러 계정이나 서버를 사용하는 경우, 북마클릿을 최대 <strong>5개</strong>까지 추가로 등록할 수 있습니다.</p>
-<div class="card">
-<p style="font-size:15px;line-height:1.7">
-<strong style="color:#fff">추가</strong> — <a href="/settings?code=${token}">설정 페이지</a>에서 이름과 코드를 입력해 등록<br>
-<strong style="color:#fff">삭제</strong> — 설정 페이지의 목록에서 해당 북마클릿 삭제<br>
-<strong style="color:#fff">사용</strong> — 추가한 북마클릿도 동일하게 maimai DX net에서 실행
-</p>
+<h2>사설 북마클릿 관리</h2>
+<p class="extraIntro">여러 계정이나 서버를 쓰는 경우, 설정 페이지에서 북마클릿을 최대 <strong>5개</strong>까지 추가로 등록할 수 있습니다.</p>
+<div class="extraActions">
+<a class="extraCard" href="/settings?code=${token}"><strong>추가</strong><span>이름과 코드를 입력해 새 북마클릿 등록</span></a>
+<a class="extraCard" href="/settings?code=${token}"><strong>삭제</strong><span>등록된 목록에서 필요 없는 북마클릿 제거</span></a>
+<div class="extraCard"><strong>사용</strong><span>기본 북마클릿처럼 maimai DX net에서 실행</span></div>
 </div>
-<a href="/settings?code=${token}" style="display:inline-flex;align-items:center;gap:6px;color:#c084fc;font-size:14px;text-decoration:none;margin-top:8px">⚙️ 설정 페이지로 이동 →</a>
 </div>
 </div>
 <script>
