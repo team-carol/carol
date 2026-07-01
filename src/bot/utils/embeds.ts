@@ -368,7 +368,7 @@ export async function searchResultEmbeds(
       const emb = new EmbedBuilder()
         .setColor(0x2b2d31)
         .setTitle(truncateVisual(title, 26) + kind)
-        .setAuthor({ name: `\`${query}\` 에 대한 검색 결과` })
+        .setAuthor({ name: `"${query}" 에 대한 검색 결과` })
         .setDescription(
           "```\n" + lines.join("\n") + "\n```" + `\n[▶ 외부출력](${ytUrl})`,
         );
