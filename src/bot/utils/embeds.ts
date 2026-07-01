@@ -367,10 +367,9 @@ export async function searchResultEmbeds(
       const emb = new EmbedBuilder()
         .setColor(0x2b2d31)
         .setTitle(truncateVisual(title, 26) + kind)
+        .setAuthor({ name: `\`${query}\` 에 대한 검색 결과` })
         .setDescription(
-          `\`${query}\` 에 대한 검색 결과\n\n` +
-            "```\n" + lines.join("\n") + "\n```" +
-            `\n[▶ 외부출력](${ytUrl})`,
+          "```\n" + lines.join("\n") + "\n```" + `\n[▶ 외부출력](${ytUrl})`,
         );
       if (buf) {
         const name = `sjacket${i}.png`;
