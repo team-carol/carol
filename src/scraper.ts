@@ -51,7 +51,7 @@ export function parseHome(html: string): Partial<MaimaiProfile> {
 export function parsePlayerData(html: string): { playCount: number } {
   const $ = cheerio.load(html);
   const body = $("body").text();
-  const m = body.match(/(?:total\s*play|play\s*count)[：:\s]*([\d,]+)/i);
+  const m = body.match(/(?:total\s*play|play\s*count|プレイ回数)[：:\s]*([\d,]+)/i);
   return { playCount: m ? Number(m[1].replace(/,/g, "")) : 0 };
 }
 
@@ -121,7 +121,18 @@ export function parseRecentRecords(html: string): PlayRecord[] {
   const $ = cheerio.load(html);
   const records: PlayRecord[] = [];
   $(".p_10.t_l.f_0.v_b").each((_, el) => { const r = parseOneRecord($, el); if (r) records.push(r); });
-  return records;
+  const recent: PlayRecord[] = [];
+  let games = 0;
+  for (const r of records) {
+    if (r.track <= 1) {
+      if (games >= 5) break;
+      games++;
+    } else if (games === 0) {
+      games = 1;
+    }
+    recent.push(r);
+  }
+  return recent;
 }
 
 export function parseTopSongs(html: string): PlayRecord[] {

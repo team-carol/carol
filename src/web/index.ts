@@ -412,13 +412,15 @@ a{color:#c084fc}
         const clearRecords = clearHtmls.length > 0 ? mergeTopRecords(clearHtmls.map((h) => parseMusicScore(h))) : [];
         const topRecords = ratingTargetHtml ? parseMusicScore(ratingTargetHtml) : parseTop5(recordHtml);
         const emptyFc = clearRecords.filter((r) => !r.fc).length;
+        const expectedRecentRecords = Math.min(Math.max(playCount || 1, 1), 5);
         console.log(`[web] recentRecords: ${recentRecords.length} songs, top: ${topRecords.length} (rating target), clear: ${clearRecords.length} (empty fc: ${emptyFc})`);
 
-        if (!effective.playerName || !/^\d{13}$/.test(fc) || recentRecords.length === 0 || clearRecords.length === 0 || topRecords.length === 0) {
+        if (!effective.playerName || !/^\d{13}$/.test(fc) || recentRecords.length < expectedRecentRecords || clearRecords.length === 0 || topRecords.length === 0) {
           console.warn("[web] invalid sync payload", {
             hasName: !!effective.playerName,
             hasFriendCode: /^\d{13}$/.test(fc),
             recent: recentRecords.length,
+            expectedRecent: expectedRecentRecords,
             clear: clearRecords.length,
             top: topRecords.length,
             recordBytes: recordHtml.length,
