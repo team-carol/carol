@@ -1,7 +1,7 @@
 import * as http from "http";
 import * as fs from "fs";
 import { parseHome, parsePlayerData, parseFriendCode as parseFC, parseRecentRecords, parseTop5, parseTopSongs, parseMusicScore, mergeTopRecords } from "../scraper";
-import { cacheProfile, getCachedProfile, saveUserSession, getUserSyncToken, findUserBySyncToken, saveAvatarBlob, getAvatarBlob, getSongJacket, saveSongJacket, getExtraBookmarklets, getProfilePrivate, setProfilePrivate, addExtraBookmarklet, removeExtraBookmarklet, getEnabledBookmarkletPresetIds, setBookmarkletPresetEnabled } from "../db";
+import { cacheProfile, saveUserSession, getUserSyncToken, findUserBySyncToken, saveAvatarBlob, getAvatarBlob, getSongJacket, saveSongJacket, getExtraBookmarklets, getProfilePrivate, setProfilePrivate, addExtraBookmarklet, removeExtraBookmarklet, getEnabledBookmarkletPresetIds, setBookmarkletPresetEnabled } from "../db";
 import { buildBookmarkletJs, setBaseUrl, getBaseUrl, buildBookmarklet, BOOKMARKLET_PRESETS, getBookmarkletPresets } from "./bookmarklet";
 import { settingsPage } from "./settingsPage";
 import { CONFIG } from "../config";
@@ -407,20 +407,27 @@ a{color:#c084fc}
         const fcRaw = parseFC(fcHtml);
         const fc = effective.friendCode || (/^\d{13}$/.test(fcRaw) ? fcRaw : "") || token;
 
-        // ─── Play count guard: skip if nothing changed ──────────────────────
-        const existing = getCachedProfile(fc);
-        if (existing && existing.clearJson && existing.clearJson !== "[]"
-            && existing.playCount === (playCount || 0)) {
-          console.log(`[web] no_change: ${effective.playerName} playCount=${playCount}`);
-          res.writeHead(200); res.end("no_change"); return;
-        }
-
         const recentRecords = parseRecentRecords(recordHtml);
         const clearHtmls = [top4Html, top3Html, top2Html, top1Html, top0Html].filter((h) => h);
         const clearRecords = clearHtmls.length > 0 ? mergeTopRecords(clearHtmls.map((h) => parseMusicScore(h))) : [];
         const topRecords = ratingTargetHtml ? parseMusicScore(ratingTargetHtml) : parseTop5(recordHtml);
         const emptyFc = clearRecords.filter((r) => !r.fc).length;
         console.log(`[web] recentRecords: ${recentRecords.length} songs, top: ${topRecords.length} (rating target), clear: ${clearRecords.length} (empty fc: ${emptyFc})`);
+
+        if (!effective.playerName || !/^\d{13}$/.test(fc) || recentRecords.length === 0 || clearRecords.length === 0 || topRecords.length === 0) {
+          console.warn("[web] invalid sync payload", {
+            hasName: !!effective.playerName,
+            hasFriendCode: /^\d{13}$/.test(fc),
+            recent: recentRecords.length,
+            clear: clearRecords.length,
+            top: topRecords.length,
+            recordBytes: recordHtml.length,
+            clearBytes: clearHtmls.reduce((sum, html) => sum + html.length, 0),
+            ratingTargetBytes: ratingTargetHtml.length,
+          });
+          res.writeHead(400); res.end("invalid_sync_payload");
+          return;
+        }
 
         cacheProfile({
           playerName: effective.playerName || "???", rating: effective.rating || 0,
