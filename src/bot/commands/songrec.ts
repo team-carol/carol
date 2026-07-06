@@ -20,7 +20,7 @@ import {
   isIntlAvailable,
 } from "../../constants";
 import { chartKey } from "../../scraper";
-import type { PlayRecord } from "../../scraper";
+import type { PlayRecord, MaimaiServer } from "../../scraper";
 
 // 목표 랭크 후보 (SSS~SSS+ 비중을 높게)
 const RANKS = [
@@ -60,8 +60,8 @@ function ceilingOffset(topC: number): number {
   return 0.2; // 14.5~14.9 및 15.0 이상(스펙 미정의) 기본값
 }
 
-function chartConstant(r: PlayRecord): number {
-  const c = getConstant(r.title, r.musicKind, r.diff);
+function chartConstant(r: PlayRecord, server: MaimaiServer = "intl"): number {
+  const c = getConstant(r.title, r.musicKind, r.diff, server);
   return c !== null ? c : levelToNumber(r.level);
 }
 
@@ -91,8 +91,12 @@ export function recommendCharts(
   clearRecords: PlayRecord[],
   count = 3,
   opts: RecommendOptions = {},
+  server: MaimaiServer = "intl",
 ): Recommendation[] {
   if (clearRecords.length === 0) return [];
+
+  // 서버별 신곡 하한이 다르므로(내수판=CiRCLE PLUS) 신곡 판정에 server를 고정한다.
+  const isNewTitle = (title: string) => isNewSong(title, server);
 
   const clearMap = new Map<string, PlayRecord>();
   const newRSs: number[] = [];
@@ -101,13 +105,13 @@ export function recommendCharts(
   let topRS = -1;
   for (const r of clearRecords) {
     clearMap.set(chartKey(r), r);
-    const C = chartConstant(r);
+    const C = chartConstant(r, server);
     const rs = calcSongRating(r.achievementVal, C, r.fc);
     if (rs > topRS) {
       topRS = rs;
       topC = C;
     }
-    if (isNewSong(r.title)) newRSs.push(rs);
+    if (isNewTitle(r.title)) newRSs.push(rs);
     else oldRSs.push(rs);
   }
   if (topC <= 0) return [];
@@ -136,7 +140,7 @@ export function recommendCharts(
     if (!isIntlAvailable(chart.title)) continue; // 국제판 미수록 곡 제외
     if (opts.kind && chart.kind !== opts.kind) continue; // ST/DX 필터
     if (opts.diff && chart.diff !== opts.diff) continue; // 난이도 필터
-    const isNew = isNewSong(chart.title);
+    const isNew = isNewTitle(chart.title);
     if (opts.category === "new" && !isNew) continue; // 신곡/구곡 필터
     if (opts.category === "others" && isNew) continue;
     const rec = clearMap.get(`${chart.title}|${chart.kind}|${chart.diff}`);
@@ -146,18 +150,20 @@ export function recommendCharts(
     if (opts.play === "unplayed" && played) continue;
     const fc = rec?.fc ?? "";
     const floor = isNew ? newFloor : oldFloor;
+    // JP 프로필은 JP 상수로 레이팅 계산 (후보 풀 상한은 공용 상수 기준)
+    const level = getConstant(chart.title, chart.kind, chart.diff, server) ?? chart.level;
     const validTargets = RANKS.filter(
       (rank) =>
-        rank.ach > userAch && calcSongRating(rank.ach, chart.level, fc) > floor,
+        rank.ach > userAch && calcSongRating(rank.ach, level, fc) > floor,
     );
     if (validTargets.length === 0) continue;
     candidates.push({
       title: chart.title,
       kind: chart.kind,
       diff: chart.diff,
-      level: chart.level,
+      level,
       currentAch: userAch,
-      currentRS: calcSongRating(userAch, chart.level, fc),
+      currentRS: calcSongRating(userAch, level, fc),
       fc,
       played,
       minTarget: validTargets[0], // 유효 목표 중 가장 낮은 랭크 = 최소 목표
@@ -192,7 +198,7 @@ export function recommendCharts(
     const target = pick.minTarget; // 최소 목표를 그대로 표시
     const targetRS = calcSongRating(target.ach, pick.level, pick.fc);
     // 실제 총 레이팅 변화: 이 채보가 이미 대상이면 현재RS를, 아니면 컷라인을 밀어냄
-    const floor = isNewSong(pick.title) ? newFloor : oldFloor;
+    const floor = isNewTitle(pick.title) ? newFloor : oldFloor;
     const ratingDelta = targetRS - Math.max(pick.currentRS, floor);
     chosen.push({
       title: pick.title,
@@ -205,7 +211,7 @@ export function recommendCharts(
       targetAch: target.ach,
       targetRS,
       ratingDelta,
-      isNew: isNewSong(pick.title),
+      isNew: isNewTitle(pick.title),
       jacketFile: getJacketFile(pick.title),
     });
   }
@@ -306,7 +312,7 @@ export async function execute(
     play: playOpt === "played" || playOpt === "unplayed" ? playOpt : undefined,
     diff: diffOpt ?? undefined,
     category: catOpt === "new" || catOpt === "others" ? catOpt : undefined,
-  });
+  }, cached.server);
   if (recs.length === 0) {
     await interaction.reply({
       content: "추천할 채보를 찾지 못했습니다.",

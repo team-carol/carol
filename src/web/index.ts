@@ -3,6 +3,7 @@ import * as fs from "fs";
 import { parseHome, parsePlayerData, parseFriendCode as parseFC, parseRecentRecords, parseTop5, parseTopSongs, parseMusicScore, mergeTopRecords, getMaimaiBaseUrl } from "../scraper";
 import { cacheProfile, saveUserSession, getUserSyncToken, findUserBySyncToken, saveAvatarBlob, getAvatarBlob, getSongJacket, saveSongJacket, getExtraBookmarklets, getProfilePrivate, setProfilePrivate, addExtraBookmarklet, removeExtraBookmarklet, getEnabledBookmarkletPresetIds, setBookmarkletPresetEnabled, getUserDefaultServer, setUserDefaultServer, isMaimaiServer } from "../db";
 import { buildBookmarkletJs, setBaseUrl, getBaseUrl, buildBookmarklet, BOOKMARKLET_PRESETS, getBookmarkletPresets } from "./bookmarklet";
+import { computeRatingTarget } from "../constants";
 import { settingsPage } from "./settingsPage";
 import { CONFIG } from "../config";
 
@@ -483,7 +484,11 @@ a{color:#c084fc}
         const recentRecords = parseRecentRecords(recordHtml, syncServer);
         const clearHtmls = [top4Html, top3Html, top2Html, top1Html, top0Html].filter((h) => h);
         const clearRecords = clearHtmls.length > 0 ? mergeTopRecords(clearHtmls.map((h) => parseMusicScore(h, syncServer))) : [];
-        const topRecords = ratingTargetHtml ? parseMusicScore(ratingTargetHtml, syncServer) : parseTop5(recordHtml, syncServer);
+        // 내수판(JP)은 레이팅 대상 페이지 수집에 유료 코스가 필요하므로,
+        // 전체 기록에서 레이팅 대상(신곡 15 + 구곡 35)을 직접 추론한다.
+        const topRecords = syncServer === "jp"
+          ? computeRatingTarget(clearRecords, syncServer)
+          : ratingTargetHtml ? parseMusicScore(ratingTargetHtml, syncServer) : parseTop5(recordHtml, syncServer);
         const emptyFc = clearRecords.filter((r) => !r.fc).length;
         const expectedRecentRecords = Math.min(Math.max(playCount || 1, 1), 5);
         console.log(`[web] recentRecords: ${recentRecords.length} songs, top: ${topRecords.length} (rating target), clear: ${clearRecords.length} (empty fc: ${emptyFc})`);
