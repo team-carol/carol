@@ -476,7 +476,9 @@ a{color:#c084fc}
         console.log(`[web] avatar b64: ${avatarBase64 ? avatarBase64.substring(0, 40) + "..." : "(empty)"}`);
         const { playCount, totalPlayCount } = parsePlayerData(playerHtml);
         const fcRaw = parseFC(fcHtml);
-        const fc = effective.friendCode || (/^\d{13}$/.test(fcRaw) ? fcRaw : "") || token;
+        // 친구코드 우선순위: 13자리인 값만 채택. home의 input[name=idx]는
+        // 내수판에서 페이지 인덱스("0")를 반환하므로 13자리 검증을 통과한 값만 사용한다.
+        const fc = [effective.friendCode, fcRaw].find((v) => v && /^\d{13}$/.test(v)) || token;
 
         const recentRecords = parseRecentRecords(recordHtml, syncServer);
         const clearHtmls = [top4Html, top3Html, top2Html, top1Html, top0Html].filter((h) => h);
