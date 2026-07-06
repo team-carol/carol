@@ -1,6 +1,6 @@
 import * as http from "http";
 import * as fs from "fs";
-import { parseHome, parsePlayerData, parseFriendCode as parseFC, parseRecentRecords, parseTop5, parseTopSongs, parseMusicScore, mergeTopRecords } from "../scraper";
+import { parseHome, parsePlayerData, parseFriendCode as parseFC, parseRecentRecords, parseTop5, parseTopSongs, parseMusicScore, mergeTopRecords, getMaimaiBaseUrl } from "../scraper";
 import { cacheProfile, saveUserSession, getUserSyncToken, findUserBySyncToken, saveAvatarBlob, getAvatarBlob, getSongJacket, saveSongJacket, getExtraBookmarklets, getProfilePrivate, setProfilePrivate, addExtraBookmarklet, removeExtraBookmarklet, getEnabledBookmarkletPresetIds, setBookmarkletPresetEnabled, getUserDefaultServer, setUserDefaultServer, isMaimaiServer } from "../db";
 import { buildBookmarkletJs, setBaseUrl, getBaseUrl, buildBookmarklet, BOOKMARKLET_PRESETS, getBookmarkletPresets } from "./bookmarklet";
 import { settingsPage } from "./settingsPage";
@@ -68,11 +68,18 @@ code{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:13px;backgrou
 .extraCard:hover{border-color:#9333ea;background:#1a1a1a}
 .extraCard strong{display:block;color:#fff;font-size:15px;margin-bottom:6px}
 .extraCard span{display:block;color:#777;font-size:13px;line-height:1.5}
+.regionHint{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.regionPill{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid #2a2a2a;border-radius:999px;background:#111;color:#cfcfcf;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;letter-spacing:.4px;text-transform:uppercase}
+.regionPill strong{color:#fff;font-size:11px}
 @media(max-width:500px){h1{font-size:36px}body{padding:48px 16px}.tabs{gap:6px}.tabBtn,.settingsLink{padding:10px 12px}.card{padding:20px}.extraActions{grid-template-columns:1fr}}
 </style></head><body>
 <div class="wrap">
 <p class="mono">carolbot</p>
 <h1>북마클릿<br>설치</h1>
+<div class="regionHint">
+<div class="regionPill"><strong>INTERNATIONAL</strong><span>maimaidx-eng.com</span></div>
+<div class="regionPill"><strong>JP</strong><span>maimaidx.jp</span></div>
+</div>
 <div class="tabs">
 <button class="tabBtn active" id="tbPC" onclick="sw('PC')">💻 PC</button>
 <button class="tabBtn" id="tbMB" onclick="sw('MB')">📱 모바일</button>
@@ -92,7 +99,7 @@ code{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:13px;backgrou
 </div>
 <div class="card">
 <p class="mono">Step 03</p>
-<p><a href="https://maimaidx-eng.com/maimai-mobile/" target="_blank">maimai DX net</a>에 로그인된 상태에서 저장한 북마크를 클릭하세요.</p>
+<p><a href="https://maimaidx-eng.com/maimai-mobile/" target="_blank">maimai DX NET</a> 또는 <a href="https://maimaidx.jp/maimai-mobile/" target="_blank">maimaiでらっくすNET</a>에서 저장한 북마크를 클릭하세요.</p>
 </div>
 </div>
 <div class="tab" id="tMB">
@@ -113,7 +120,7 @@ code{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:13px;backgrou
 <li class="step"><strong>빈 페이지를 북마크 저장</strong> (⭐ 또는 공유 → 북마크 추가)</li>
 <li class="step">북마크 목록을 열고, 방금 저장한 북마크를 <strong>편집</strong></li>
 <li class="step">URL 칸을 모두 지우고, 복사한 코드를 <strong>붙여넣기</strong></li>
-<li class="step"><a href="https://maimaidx-eng.com/maimai-mobile/" target="_blank">maimai DX net</a>에서 해당 북마크 실행</li>
+<li class="step"><a href="https://maimaidx-eng.com/maimai-mobile/" target="_blank">maimai DX NET</a> 또는 <a href="https://maimaidx.jp/maimai-mobile/" target="_blank">maimaiでらっくすNET</a>에서 해당 북마크 실행</li>
 </ol>
 </div>
 </div>
@@ -193,11 +200,13 @@ export function startWebServer(port: number): void {
       let imgData = getSongJacket(musicId);
       if (!imgData) {
         try {
-          const imgUrl = `https://maimaidx-eng.com/maimai-mobile/img/Music/${musicId}.png`;
-          const resp = await fetch(imgUrl);
-          if (resp.ok) {
+          const origins = [getMaimaiBaseUrl("intl"), getMaimaiBaseUrl("jp")];
+          for (const origin of origins) {
+            const resp = await fetch(`${origin}/maimai-mobile/img/Music/${musicId}.png`);
+            if (!resp.ok) continue;
             imgData = Buffer.from(await resp.arrayBuffer());
             saveSongJacket(musicId, imgData);
+            break;
           }
         } catch (e) {
           console.error("[jacket] fetch failed:", e);
@@ -459,9 +468,9 @@ a{color:#c084fc}
       fs.writeFileSync("debug_rating_target.html", ratingTargetHtml, "utf-8");
 
       try {
-        const home = parseHome(homeHtml);
+        const home = parseHome(homeHtml, syncServer);
         const usePd = !home.playerName && playerHtml;
-        const effective = usePd ? parseHome(playerHtml) : home;
+        const effective = usePd ? parseHome(playerHtml, syncServer) : home;
         console.log(`[web] parseHome: name="${effective.playerName}", rating=${effective.rating}, fc=${effective.friendCode}, usePd=${usePd}`);
         console.log(`[web] avatar url: ${effective.avatar?.substring(0, 80) || "(empty)"}`);
         console.log(`[web] avatar b64: ${avatarBase64 ? avatarBase64.substring(0, 40) + "..." : "(empty)"}`);
@@ -469,10 +478,10 @@ a{color:#c084fc}
         const fcRaw = parseFC(fcHtml);
         const fc = effective.friendCode || (/^\d{13}$/.test(fcRaw) ? fcRaw : "") || token;
 
-        const recentRecords = parseRecentRecords(recordHtml);
+        const recentRecords = parseRecentRecords(recordHtml, syncServer);
         const clearHtmls = [top4Html, top3Html, top2Html, top1Html, top0Html].filter((h) => h);
-        const clearRecords = clearHtmls.length > 0 ? mergeTopRecords(clearHtmls.map((h) => parseMusicScore(h))) : [];
-        const topRecords = ratingTargetHtml ? parseMusicScore(ratingTargetHtml) : parseTop5(recordHtml);
+        const clearRecords = clearHtmls.length > 0 ? mergeTopRecords(clearHtmls.map((h) => parseMusicScore(h, syncServer))) : [];
+        const topRecords = ratingTargetHtml ? parseMusicScore(ratingTargetHtml, syncServer) : parseTop5(recordHtml, syncServer);
         const emptyFc = clearRecords.filter((r) => !r.fc).length;
         const expectedRecentRecords = Math.min(Math.max(playCount || 1, 1), 5);
         console.log(`[web] recentRecords: ${recentRecords.length} songs, top: ${topRecords.length} (rating target), clear: ${clearRecords.length} (empty fc: ${emptyFc})`);

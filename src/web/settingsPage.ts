@@ -71,8 +71,8 @@ a{color:#c084fc}
 <div class="card">
 <p class="section-label">기본 서버</p>
 <div class="server-options">
-<button class="server-btn" id="serverIntl" onclick="setDefaultServer('intl')"><strong>국제판</strong><span>maimaidx-eng.com</span></button>
-<button class="server-btn" id="serverJp" onclick="setDefaultServer('jp')"><strong>내수판</strong><span>maimaidx.jp</span></button>
+<button class="server-btn" id="serverIntl" onclick="setDefaultServer('intl')"><strong>INTERNATIONAL</strong><span>maimaidx-eng.com</span></button>
+<button class="server-btn" id="serverJp" onclick="setDefaultServer('jp')"><strong>JP</strong><span>maimaidx.jp</span></button>
 </div>
 <div class="status" id="serverStatus"></div>
 </div>

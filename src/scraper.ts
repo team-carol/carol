@@ -1,5 +1,12 @@
 import * as cheerio from "cheerio";
 
+export type MaimaiServer = "intl" | "jp";
+
+const BASE_URLS: Record<MaimaiServer, string> = {
+  intl: "https://maimaidx-eng.com",
+  jp: "https://maimaidx.jp",
+} as const;
+
 export interface MaimaiProfile {
   playerName: string;
   rating: number;
@@ -20,28 +27,31 @@ export interface SearchResult {
   message?: string;
 }
 
-const BASE = "https://maimaidx-eng.com";
+export function getMaimaiBaseUrl(server: MaimaiServer): string {
+  return BASE_URLS[server];
+}
 
-function absUrl(src: string | undefined): string {
+function absUrl(src: string | undefined, baseUrl: string): string {
   if (!src) return "";
   if (src.startsWith("http")) return src;
   // Strip ALL leading ../ or ./ (e.g. ../../../img/Music/xxx.png → img/Music/xxx.png)
   let clean = src.replace(/^\.\//, "");
   while (clean.startsWith("../")) clean = clean.slice(3);
-  if (clean.startsWith("/")) return BASE + clean;
-  return BASE + "/maimai-mobile/" + clean;
+  if (clean.startsWith("/")) return baseUrl + clean;
+  return baseUrl + "/maimai-mobile/" + clean;
 }
 
-export function parseHome(html: string): Partial<MaimaiProfile> {
+export function parseHome(html: string, server: MaimaiServer = "intl"): Partial<MaimaiProfile> {
   const $ = cheerio.load(html);
+  const baseUrl = getMaimaiBaseUrl(server);
   return {
     playerName: $(".name_block").first().text().trim(),
     rating: Number($(".rating_block").first().text().trim()) || 0,
     ratingMax: Number($(".p_r_5").first().text().trim()) || 0,
-    avatar: absUrl($("img.w_112.f_l").attr("src") || $("img[src*='Icon']").attr("src") || $(".basic_block img").first().attr("src")),
+    avatar: absUrl($("img.w_112.f_l").attr("src") || $("img[src*='Icon']").attr("src") || $(".basic_block img").first().attr("src"), baseUrl),
     trophy: $(".trophy_inner_block span").first().text().trim(),
     trophyClass: ($(".trophy_block").attr("class") || "").split(/\s+/).find(c => c.match(/^trophy_(?!block)/i))?.replace(/^trophy_/i, "").toLowerCase() || "normal",
-    gradeImg: absUrl($("img.h_35[src*='class']").attr("src") || $("img.h_35.f_l").last().attr("src")),
+    gradeImg: absUrl($("img.h_35[src*='class']").attr("src") || $("img.h_35.f_l").last().attr("src"), baseUrl),
     stars: $("img[src*='icon_star']").parent().text().trim().replace(/[^0-9]/g, "") || "0",
     comment: $(".friend_comment_block").text().trim(),
     friendCode: $("input[name=idx]").attr("value"),
@@ -89,7 +99,7 @@ function iconName(src: string): string {
   return m ? m[1] : "";
 }
 
-function parseOneRecord($: cheerio.CheerioAPI, el: any): PlayRecord | null {
+function parseOneRecord($: cheerio.CheerioAPI, el: any, baseUrl: string): PlayRecord | null {
   const block = $(el).find(".basic_block").first();
   const level = block.find(".playlog_level_icon").text().trim();
   const clone = block.clone();
@@ -106,7 +116,7 @@ function parseOneRecord($: cheerio.CheerioAPI, el: any): PlayRecord | null {
     : diffSrc.includes("expert") ? "EXPERT"
     : diffSrc.includes("advanced") ? "ADVANCED"
     : "BASIC";
-  const jacketUrl = absUrl($(el).find(".music_img").attr("src"));
+  const jacketUrl = absUrl($(el).find(".music_img").attr("src"), baseUrl);
   const kindSrc = $(el).find(".playlog_music_kind_icon").attr("src") || "";
   const kindFile = kindSrc.split("/").pop() || "";
   const musicKind = kindFile.includes("_dx") ? "DX" : kindFile.includes("_standard") ? "ST" : "";
@@ -119,10 +129,11 @@ function parseOneRecord($: cheerio.CheerioAPI, el: any): PlayRecord | null {
   return { title, achievement: ach || "?", diff, level, date, jacketUrl, musicKind, achievementVal: achNum, track, fc, sync };
 }
 
-export function parseRecentRecords(html: string): PlayRecord[] {
+export function parseRecentRecords(html: string, server: MaimaiServer = "intl"): PlayRecord[] {
   const $ = cheerio.load(html);
+  const baseUrl = getMaimaiBaseUrl(server);
   const records: PlayRecord[] = [];
-  $(".p_10.t_l.f_0.v_b").each((_, el) => { const r = parseOneRecord($, el); if (r) records.push(r); });
+  $(".p_10.t_l.f_0.v_b").each((_, el) => { const r = parseOneRecord($, el, baseUrl); if (r) records.push(r); });
   const recent: PlayRecord[] = [];
   let games = 0;
   for (const r of records) {
@@ -135,15 +146,17 @@ export function parseRecentRecords(html: string): PlayRecord[] {
   return recent;
 }
 
-export function parseTopSongs(html: string): PlayRecord[] {
+export function parseTopSongs(html: string, server: MaimaiServer = "intl"): PlayRecord[] {
   const $ = cheerio.load(html);
+  const baseUrl = getMaimaiBaseUrl(server);
   const records: PlayRecord[] = [];
-  $(".p_10.t_l.f_0.v_b").each((_, el) => { const r = parseOneRecord($, el); if (r) records.push(r); });
+  $(".p_10.t_l.f_0.v_b").each((_, el) => { const r = parseOneRecord($, el, baseUrl); if (r) records.push(r); });
   return records;
 }
 
-export function parseMusicScore(html: string): PlayRecord[] {
+export function parseMusicScore(html: string, server: MaimaiServer = "intl"): PlayRecord[] {
   const $ = cheerio.load(html);
+  const baseUrl = getMaimaiBaseUrl(server);
   const records: PlayRecord[] = [];
   const diffMap: Record<string, string> = {
     "diff_basic.png": "BASIC",
@@ -171,7 +184,7 @@ export function parseMusicScore(html: string): PlayRecord[] {
     const kindImg = (kindEl.attr("src") || "").split("/").pop() || "";
     const musicKind = kindImg.includes("_dx") ? "DX" : kindImg.includes("_standard") ? "ST" : "";
     const musicId = block.find("input[name='idx']").val() as string | undefined;
-    const jacketUrl = musicId ? `https://maimaidx-eng.com/maimai-mobile/img/Music/${musicId}.png` : "";
+    const jacketUrl = musicId ? `${baseUrl}/maimai-mobile/img/Music/${musicId}.png` : "";
     const achMatch = achievement.match(/(\d+\.\d+)/);
     const achievementVal = achMatch ? parseFloat(achMatch[1]) : 0;
     let fc = "";
@@ -192,10 +205,11 @@ export function parseMusicScore(html: string): PlayRecord[] {
   return records;
 }
 
-export function parseTop5(html: string): PlayRecord[] {
+export function parseTop5(html: string, server: MaimaiServer = "intl"): PlayRecord[] {
   const $ = cheerio.load(html);
+  const baseUrl = getMaimaiBaseUrl(server);
   const records: PlayRecord[] = [];
-  $(".p_10.t_l.f_0.v_b").each((_, el) => { const r = parseOneRecord($, el); if (r) records.push(r); });
+  $(".p_10.t_l.f_0.v_b").each((_, el) => { const r = parseOneRecord($, el, baseUrl); if (r) records.push(r); });
   const best = new Map<string, PlayRecord>();
   for (const r of records) {
     const key = r.title + "|" + r.diff + "|" + r.level;
@@ -260,8 +274,9 @@ export function mergeTopRecords(recordsList: PlayRecord[][]): PlayRecord[] {
   return Array.from(best.values()).sort((a, b) => b.achievementVal - a.achievementVal);
 }
 
-export function parseSearchResult(html: string): SearchResult {
+export function parseSearchResult(html: string, server: MaimaiServer = "intl"): SearchResult {
   const $ = cheerio.load(html);
+  const baseUrl = getMaimaiBaseUrl(server);
   const block = $(".see_through_block");
   if (!block.length) return { found: false, message: "검색 결과 없음" };
   if (block.text().includes("WRONG CODE")) return { found: false, message: "잘못된 코드" };
@@ -270,8 +285,8 @@ export function parseSearchResult(html: string): SearchResult {
     playerName: $(".name_block", block).text().trim(),
     rating: Number($(".rating_block", block).text().trim()) || 0,
     ratingMax: 0,
-    gradeImg: absUrl($("img.h_35", block).attr("src")),
-    avatar: absUrl($("img.w_112", block).attr("src") || $("img", block).first().attr("src")),
+    gradeImg: absUrl($("img.h_35", block).attr("src"), baseUrl),
+    avatar: absUrl($("img.w_112", block).attr("src") || $("img", block).first().attr("src"), baseUrl),
     trophy: $(".trophy_inner_block span", block).text().trim(),
     trophyClass: ($(".trophy_block", block).attr("class") || "").split(/\s+/).find(c => c.match(/^trophy_(?!block)/i))?.replace(/^trophy_/i, "").toLowerCase() || "normal",
     stars: "0",

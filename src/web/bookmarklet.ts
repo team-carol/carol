@@ -55,7 +55,7 @@ export function buildBookmarkletJs(extras: Array<{ label: string; code: string; 
 }
 
 export const bookmarkletJs = `(async()=>{
-var h=location.hostname,server=h==='maimaidx.jp'?'jp':(h==='maimaidx-eng.com'?'intl':'');if(!server){alert('maimai DX NET 페이지에서 실행해주세요.\\nhttps://maimaidx-eng.com/maimai-mobile/');return;}
+var h=location.hostname,server=h==='maimaidx.jp'?'jp':(h==='maimaidx-eng.com'?'intl':'');if(!server){alert('maimai DX NET 페이지에서 실행해주세요.');return;}
 var doc=document,cur=doc.currentScript,s=cur.src,u=new URL(s),c=u.searchParams.get('code')||'',v=u.origin;if(cur&&cur.parentNode)cur.parentNode.removeChild(cur);try{if(performance&&performance.clearResourceTimings)performance.clearResourceTimings();}catch(_pe){}
 var old=doc.getElementById('mm-sync-ov');if(old)old.remove();
 var ov=doc.createElement('div');ov.id='mm-sync-ov';

@@ -11,6 +11,7 @@ import {
   getSongJacket,
   saveSongJacket,
 } from "../../db";
+import { getMaimaiBaseUrl } from "../../scraper";
 import {
   getConstant,
   getJacketFile,
@@ -30,10 +31,9 @@ export async function jacketBuffer(r: PlayRecord): Promise<Buffer | null> {
     const cached = getSongJacket(musicId);
     if (cached) return cached;
     try {
-      const res = await fetch(
-        `https://maimaidx-eng.com/maimai-mobile/img/Music/${musicId}.png`,
-      );
-      if (res.ok) {
+      for (const origin of [getMaimaiBaseUrl("intl"), getMaimaiBaseUrl("jp")]) {
+        const res = await fetch(`${origin}/maimai-mobile/img/Music/${musicId}.png`);
+        if (!res.ok) continue;
         const b = Buffer.from(await res.arrayBuffer());
         saveSongJacket(musicId, b);
         return b;
