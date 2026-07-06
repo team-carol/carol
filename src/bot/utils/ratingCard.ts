@@ -391,7 +391,7 @@ export async function renderRatingCard(
   avatarBuf: Buffer | null,
 ): Promise<Buffer> {
   // ─── Render cache: return cached PNG if profile and card version unchanged ─
-  const cached = getRatingCardCache(profile.friendCode);
+  const cached = getRatingCardCache(profile.profileKey);
   if (
     cached &&
     cached.syncedAt === profile.lastSyncedAt &&
@@ -614,7 +614,7 @@ export async function renderRatingCard(
 
   // ─── Persist render cache ─────────────────────────────────────────────────
   saveRatingCardCache(
-    profile.friendCode,
+    profile.profileKey,
     buf,
     profile.lastSyncedAt,
     CARD_VERSION,

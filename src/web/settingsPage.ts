@@ -1,9 +1,9 @@
-import type { ExtraBookmarklet } from "../db";
+import type { ExtraBookmarklet, MaimaiServer } from "../db";
 import { BOOKMARKLET_PRESETS } from "./bookmarklet";
 
-export function settingsPage(token: string, isPrivate: boolean, enabledPresetIds: string[], bookmarklets: ExtraBookmarklet[]): string {
+export function settingsPage(token: string, isPrivate: boolean, enabledPresetIds: string[], bookmarklets: ExtraBookmarklet[], defaultServer: MaimaiServer): string {
   const presets = BOOKMARKLET_PRESETS.map((preset) => ({ ...preset, enabled: enabledPresetIds.includes(preset.id) }));
-  const dataJson = JSON.stringify({ private: isPrivate, presets, bookmarklets })
+  const dataJson = JSON.stringify({ private: isPrivate, presets, bookmarklets, defaultServer })
     .replace(/</g, "\\u003c").replace(/>/g, "\\u003e");
   const tokenJson = JSON.stringify(token);
 
@@ -33,6 +33,11 @@ h1{font-size:48px;font-weight:700;color:#fff;letter-spacing:-0.5px;margin-bottom
 .toggle .slider::before{content:'';position:absolute;height:20px;width:20px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.2s}
 .toggle input:checked+.slider{background:#9333ea}
 .toggle input:checked+.slider::before{transform:translateX(22px)}
+.server-options{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.server-btn{background:#111;border:1px solid #2a2a2a;border-radius:8px;padding:12px 14px;color:#ccc;font-family:inherit;text-align:left;cursor:pointer;transition:all .15s}
+.server-btn strong{display:block;color:#fff;font-size:14px;margin-bottom:2px}
+.server-btn span{display:block;color:#666;font-size:12px}
+.server-btn.active{border-color:#9333ea;background:#20142f;box-shadow:inset 0 0 0 1px rgba(147,51,234,.35)}
 .bm-list{list-style:none}
 .bm-item{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid #252525}
 .bm-item:last-child{border-bottom:none}
@@ -57,11 +62,20 @@ h1{font-size:48px;font-weight:700;color:#fff;letter-spacing:-0.5px;margin-bottom
 .count{font-weight:400;color:#555}
 a{color:#c084fc}
 @media(max-width:500px){h1{font-size:36px}body{padding:48px 16px}.card{padding:20px}}
+@media(max-width:420px){.server-options{grid-template-columns:1fr}}
 </style></head><body>
 <div class="wrap">
 <p class="mono">carolbot</p>
 <h1>설정</h1>
 <div class="nav"><a href="/sync?code=${token}">\u2190 북마클릿 설치</a></div>
+<div class="card">
+<p class="section-label">기본 서버</p>
+<div class="server-options">
+<button class="server-btn" id="serverIntl" onclick="setDefaultServer('intl')"><strong>국제판</strong><span>maimaidx-eng.com</span></button>
+<button class="server-btn" id="serverJp" onclick="setDefaultServer('jp')"><strong>내수판</strong><span>maimaidx.jp</span></button>
+</div>
+<div class="status" id="serverStatus"></div>
+</div>
 <div class="card">
 <p class="section-label">프로필 공개 여부</p>
 <div class="toggle-row">
@@ -95,10 +109,26 @@ var DATA=${dataJson};
 var MAX_BM=5;
 
 (function init(){
+  renderDefaultServer();
   renderPrivacy();
   renderPresetList();
   renderBmList();
 })();
+
+function renderDefaultServer(){
+  document.getElementById('serverIntl').className='server-btn'+(DATA.defaultServer==='intl'?' active':'');
+  document.getElementById('serverJp').className='server-btn'+(DATA.defaultServer==='jp'?' active':'');
+}
+
+function setDefaultServer(server){
+  var prev=DATA.defaultServer;
+  DATA.defaultServer=server;
+  renderDefaultServer();
+  fetch('/api/settings/default-server?code='+TOKEN,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({server:server})})
+  .then(function(r){if(!r.ok)throw new Error(r.status);return r.json();})
+  .then(function(){showStatus('serverStatus','ok','저장됨');})
+  .catch(function(){DATA.defaultServer=prev;renderDefaultServer();showStatus('serverStatus','err','저장 실패');});
+}
 
 function renderPrivacy(){
   var cb=document.getElementById('privToggle');

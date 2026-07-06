@@ -1,7 +1,7 @@
 import * as http from "http";
 import * as fs from "fs";
 import { parseHome, parsePlayerData, parseFriendCode as parseFC, parseRecentRecords, parseTop5, parseTopSongs, parseMusicScore, mergeTopRecords } from "../scraper";
-import { cacheProfile, saveUserSession, getUserSyncToken, findUserBySyncToken, saveAvatarBlob, getAvatarBlob, getSongJacket, saveSongJacket, getExtraBookmarklets, getProfilePrivate, setProfilePrivate, addExtraBookmarklet, removeExtraBookmarklet, getEnabledBookmarkletPresetIds, setBookmarkletPresetEnabled } from "../db";
+import { cacheProfile, saveUserSession, getUserSyncToken, findUserBySyncToken, saveAvatarBlob, getAvatarBlob, getSongJacket, saveSongJacket, getExtraBookmarklets, getProfilePrivate, setProfilePrivate, addExtraBookmarklet, removeExtraBookmarklet, getEnabledBookmarkletPresetIds, setBookmarkletPresetEnabled, getUserDefaultServer, setUserDefaultServer, isMaimaiServer } from "../db";
 import { buildBookmarkletJs, setBaseUrl, getBaseUrl, buildBookmarklet, BOOKMARKLET_PRESETS, getBookmarkletPresets } from "./bookmarklet";
 import { settingsPage } from "./settingsPage";
 import { CONFIG } from "../config";
@@ -299,8 +299,9 @@ a{color:#c084fc}
       const isPrivate = userId ? getProfilePrivate(userId) : false;
       const presetIds = userId ? getEnabledBookmarkletPresetIds(userId) : [];
       const bookmarklets = userId ? getExtraBookmarklets(userId) : [];
+      const defaultServer = userId ? getUserDefaultServer(userId) : "intl";
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-      res.end(settingsPage(token, isPrivate, presetIds, bookmarklets));
+      res.end(settingsPage(token, isPrivate, presetIds, bookmarklets, defaultServer));
       return;
     }
 
@@ -312,8 +313,9 @@ a{color:#c084fc}
       const isPrivate = getProfilePrivate(userId);
       const presets = getEnabledBookmarkletPresetIds(userId);
       const bookmarklets = getExtraBookmarklets(userId);
+      const defaultServer = getUserDefaultServer(userId);
       res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({ private: isPrivate, presets, bookmarklets }));
+      res.end(JSON.stringify({ private: isPrivate, presets, bookmarklets, defaultServer }));
       return;
     }
 
@@ -327,6 +329,28 @@ a{color:#c084fc}
         setProfilePrivate(userId, value);
         res.writeHead(200, { "content-type": "application/json" });
         res.end(JSON.stringify({ private: value }));
+      } catch {
+        res.writeHead(400, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: "invalid_body" }));
+      }
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/settings/default-server") {
+      const token = url.searchParams.get("code") || "";
+      const userId = findUserBySyncToken(token);
+      if (!userId) { res.writeHead(403, { "content-type": "application/json" }); res.end(JSON.stringify({ error: "expired" })); return; }
+      try {
+        const body = JSON.parse(await readBody(req));
+        const server = typeof body.server === "string" ? body.server : "";
+        if (!isMaimaiServer(server)) {
+          res.writeHead(400, { "content-type": "application/json" });
+          res.end(JSON.stringify({ error: "invalid_server" }));
+          return;
+        }
+        setUserDefaultServer(userId, server);
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ defaultServer: server }));
       } catch {
         res.writeHead(400, { "content-type": "application/json" });
         res.end(JSON.stringify({ error: "invalid_body" }));
@@ -415,6 +439,7 @@ a{color:#c084fc}
 
       const raw = await readBody(req);
       const data = JSON.parse(raw);
+      const syncServer = typeof data.server === "string" && isMaimaiServer(data.server) ? data.server : "intl";
       const homeHtml: string = data.h || "";
       const playerHtml: string = data.p || "";
       const fcHtml: string = data.f || "";
@@ -426,7 +451,7 @@ a{color:#c084fc}
       const top0Html: string = data.tb0 || "";
       const ratingTargetHtml: string = data.rt || "";
       const avatarBase64: string = data.a || "";
-      console.log(`[web] user=${userId.slice(-6)}, home=${homeHtml.length}B, player=${playerHtml.length}B, record=${recordHtml.length}B, fc=${fcHtml.length}B, top4=${top4Html.length}B, top3=${top3Html.length}B, top2=${top2Html.length}B, top1=${top1Html.length}B, top0=${top0Html.length}B, rt=${ratingTargetHtml.length}B`);
+      console.log(`[web] user=${userId.slice(-6)}, server=${syncServer}, home=${homeHtml.length}B, player=${playerHtml.length}B, record=${recordHtml.length}B, fc=${fcHtml.length}B, top4=${top4Html.length}B, top3=${top3Html.length}B, top2=${top2Html.length}B, top1=${top1Html.length}B, top0=${top0Html.length}B, rt=${ratingTargetHtml.length}B`);
       fs.writeFileSync("debug_home.html", homeHtml, "utf-8");
       fs.writeFileSync("debug_pd.html", playerHtml, "utf-8");
       fs.writeFileSync("debug_fc.html", fcHtml, "utf-8");
@@ -468,14 +493,14 @@ a{color:#c084fc}
           return;
         }
 
-        cacheProfile({
+        const savedProfileKey = cacheProfile({
           playerName: effective.playerName || "???", rating: effective.rating || 0,
           ratingMax: effective.ratingMax || 0, gradeImg: effective.gradeImg || "",
           avatar: effective.avatar || "", trophy: effective.trophy || "",
           trophyClass: effective.trophyClass || "normal", stars: effective.stars || "0",
           playCount: playCount || 0, comment: effective.comment || "", friendCode: fc,
-        }, playCount || 0, homeHtml, JSON.stringify(recentRecords), JSON.stringify(topRecords), JSON.stringify(clearRecords));
-        saveUserSession(userId, "{}", fc);
+        }, playCount || 0, homeHtml, JSON.stringify(recentRecords), JSON.stringify(topRecords), JSON.stringify(clearRecords), syncServer);
+        saveUserSession(userId, "{}", savedProfileKey, syncServer);
 
         // base64 아바타 → DB에 저장
         if (avatarBase64 && avatarBase64.startsWith("data:")) {
@@ -484,11 +509,11 @@ a{color:#c084fc}
         }
         if (Array.isArray(data.js)) {
           let saved = 0;
-          data.js.forEach((j: any) => {
-            if (j?.data && j?.url) {
-              const m = (j.url as string).match(/\/img\/Music\/([^.]+)\.png/);
+          data.js.forEach((j: unknown) => {
+            if (j && typeof j === "object" && "data" in j && "url" in j && typeof j.data === "string" && typeof j.url === "string") {
+              const m = j.url.match(/\/img\/Music\/([^.]+)\.png/);
               if (m) {
-                const b64 = (j.data as string).replace(/^data:image\/\w+;base64,/, "");
+                const b64 = j.data.replace(/^data:image\/\w+;base64,/, "");
                 saveSongJacket(m[1], Buffer.from(b64, "base64"));
                 saved++;
               }
@@ -496,7 +521,7 @@ a{color:#c084fc}
           });
           console.log(`[web] song jackets saved: ${saved}`);
         }
-        console.log(`[web] 저장: ${effective.playerName} ⭐${effective.rating} fc=${fc}`);
+        console.log(`[web] 저장: ${effective.playerName} ⭐${effective.rating} server=${syncServer} fc=${fc}`);
         res.writeHead(200); res.end("ok");
       } catch (e) {
         console.error("[web] 동기화 실패:", e);

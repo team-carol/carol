@@ -6,6 +6,8 @@ import * as crypto from "crypto";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 export interface CachedProfile {
+  profileKey: string;
+  server: MaimaiServer;
   friendCode: string;
   playerName: string;
   rating: number;
@@ -22,6 +24,17 @@ export interface CachedProfile {
   recentJson: string;
   topJson: string;
   clearJson: string;
+}
+
+export const MAIMAI_SERVERS = ["intl", "jp"] as const;
+export type MaimaiServer = (typeof MAIMAI_SERVERS)[number];
+
+export function isMaimaiServer(value: string): value is MaimaiServer {
+  return MAIMAI_SERVERS.includes(value as MaimaiServer);
+}
+
+export function profileKey(server: MaimaiServer, friendCode: string): string {
+  return `${server}:${friendCode}`;
 }
 
 // ─── DB Setup ───────────────────────────────────────────────────────────
@@ -89,16 +102,24 @@ try { db.exec("ALTER TABLE profiles ADD COLUMN clear_json TEXT DEFAULT '[]'"); }
 try { db.exec("ALTER TABLE profiles ADD COLUMN rating_card_blob BLOB DEFAULT NULL"); } catch (_) {}
 try { db.exec("ALTER TABLE profiles ADD COLUMN rating_card_synced_at INTEGER DEFAULT 0"); } catch (_) {}
 try { db.exec("ALTER TABLE profiles ADD COLUMN rating_card_version INTEGER DEFAULT 0"); } catch (_) {}
+try { db.exec("ALTER TABLE profiles ADD COLUMN server_region TEXT DEFAULT 'intl'"); } catch (_) {}
+try { db.exec("ALTER TABLE profiles ADD COLUMN display_friend_code TEXT DEFAULT ''"); } catch (_) {}
 try { db.exec("ALTER TABLE sessions ADD COLUMN profile_private INTEGER DEFAULT 0"); } catch (_) {}
 try { db.exec("ALTER TABLE sessions ADD COLUMN extra_bookmarklets TEXT DEFAULT '[]'"); } catch (_) {}
 try { db.exec("ALTER TABLE sessions ADD COLUMN preset_bookmarklets TEXT DEFAULT '[]'"); } catch (_) {}
+try { db.exec("ALTER TABLE sessions ADD COLUMN default_server TEXT DEFAULT 'intl'"); } catch (_) {}
+try { db.exec("ALTER TABLE sessions ADD COLUMN friend_code_intl TEXT DEFAULT ''"); } catch (_) {}
+try { db.exec("ALTER TABLE sessions ADD COLUMN friend_code_jp TEXT DEFAULT ''"); } catch (_) {}
 
 // ─── Queries ────────────────────────────────────────────────────────────
-const stmtGet = db.prepare("SELECT friend_code AS friendCode, player_name AS playerName, rating, rating_max AS ratingMax, trophy, trophy_class AS trophyClass, avatar, grade_img AS gradeImg, stars, comment, play_count AS playCount, raw_html AS rawHtml, recent_json AS recentJson, top_json AS topJson, clear_json AS clearJson, last_synced_at AS lastSyncedAt FROM profiles WHERE friend_code = ?");
+const profileSelect = "friend_code AS profileKey, COALESCE(NULLIF(display_friend_code, ''), friend_code) AS friendCode, COALESCE(server_region, 'intl') AS server, player_name AS playerName, rating, rating_max AS ratingMax, trophy, trophy_class AS trophyClass, avatar, grade_img AS gradeImg, stars, comment, play_count AS playCount, raw_html AS rawHtml, recent_json AS recentJson, top_json AS topJson, clear_json AS clearJson, last_synced_at AS lastSyncedAt";
+const stmtGet = db.prepare(`SELECT ${profileSelect} FROM profiles WHERE friend_code = ?`);
 const stmtUpsert = db.prepare(`
-  INSERT INTO profiles (friend_code, player_name, rating, rating_max, trophy, trophy_class, avatar, grade_img, stars, comment, play_count, raw_html, recent_json, top_json, clear_json, last_synced_at)
-  VALUES (@friendCode, @playerName, @rating, @ratingMax, @trophy, @trophyClass, @avatar, @gradeImg, @stars, @comment, @playCount, @rawHtml, @recentJson, @topJson, @clearJson, @lastSyncedAt)
+  INSERT INTO profiles (friend_code, display_friend_code, server_region, player_name, rating, rating_max, trophy, trophy_class, avatar, grade_img, stars, comment, play_count, raw_html, recent_json, top_json, clear_json, last_synced_at)
+  VALUES (@profileKey, @friendCode, @server, @playerName, @rating, @ratingMax, @trophy, @trophyClass, @avatar, @gradeImg, @stars, @comment, @playCount, @rawHtml, @recentJson, @topJson, @clearJson, @lastSyncedAt)
   ON CONFLICT(friend_code) DO UPDATE SET
+    display_friend_code = excluded.display_friend_code,
+    server_region = excluded.server_region,
     player_name = excluded.player_name,
     rating = excluded.rating,
     rating_max = excluded.rating_max,
@@ -118,9 +139,13 @@ const stmtUpsert = db.prepare(`
 const stmtDelete = db.prepare("DELETE FROM profiles WHERE friend_code = ?");
 
 // ─── Public API ─────────────────────────────────────────────────────────
-export function cacheProfile(profile: MaimaiProfile, playCount: number, rawHtml: string, recentJson = "[]", topJson = "[]", clearJson = "[]"): void {
+export function cacheProfile(profile: MaimaiProfile, playCount: number, rawHtml: string, recentJson = "[]", topJson = "[]", clearJson = "[]", server: MaimaiServer = "intl"): string {
+  const friendCode = profile.friendCode ?? "me";
+  const key = profileKey(server, friendCode);
   const data: CachedProfile = {
-    friendCode: profile.friendCode ?? "me",
+    profileKey: key,
+    server,
+    friendCode,
     playerName: profile.playerName,
     rating: profile.rating,
     ratingMax: profile.ratingMax,
@@ -138,15 +163,20 @@ export function cacheProfile(profile: MaimaiProfile, playCount: number, rawHtml:
     lastSyncedAt: Date.now(),
   };
   stmtUpsert.run(data);
+  return key;
 }
 
 export function getCachedProfile(friendCode: string): CachedProfile | null {
   const row = stmtGet.get(friendCode) as CachedProfile | undefined;
+  if (!row && /^\d{13}$/.test(friendCode)) {
+    const intlRow = stmtGet.get(profileKey("intl", friendCode)) as CachedProfile | undefined;
+    return intlRow ?? null;
+  }
   return row ?? null;
 }
 
 export function getAllCachedProfiles(): CachedProfile[] {
-  return db.prepare("SELECT friend_code AS friendCode, player_name AS playerName, rating, rating_max AS ratingMax, trophy, trophy_class AS trophyClass, avatar, grade_img AS gradeImg, stars, comment, play_count AS playCount, raw_html AS rawHtml, last_synced_at AS lastSyncedAt FROM profiles ORDER BY last_synced_at DESC").all() as CachedProfile[];
+  return db.prepare(`SELECT ${profileSelect} FROM profiles ORDER BY last_synced_at DESC`).all() as CachedProfile[];
 }
 
 export function deleteCachedProfile(friendCode: string): void {
@@ -173,21 +203,44 @@ interface StoredSession {
   discord_user_id: string;
   cookie_json: string;
   friend_code: string;
+  friend_code_intl: string;
+  friend_code_jp: string;
+  default_server: string;
   sync_token: string;
   updated_at: number;
 }
 
-export function saveUserSession(discordUserId: string, cookieJson: string, friendCode = ""): void {
-  console.log(`[db] 세션 저장: user=${discordUserId.slice(-6)}, fc=${friendCode || "(없음)"}`);
+function friendCodeColumn(server: MaimaiServer): "friend_code_intl" | "friend_code_jp" {
+  return server === "intl" ? "friend_code_intl" : "friend_code_jp";
+}
+
+function selectedFriendCode(row: Pick<StoredSession, "friend_code" | "friend_code_intl" | "friend_code_jp" | "default_server">): string {
+  const server = isMaimaiServer(row.default_server) ? row.default_server : "intl";
+  const selected = server === "intl" ? row.friend_code_intl : row.friend_code_jp;
+  return selected || row.friend_code;
+}
+
+export function saveUserSession(discordUserId: string, cookieJson: string, friendCode = "", server: MaimaiServer = "intl"): void {
+  console.log(`[db] 세션 저장: user=${discordUserId.slice(-6)}, server=${server}, fc=${friendCode || "(없음)"}`);
   const encrypted = encrypt(cookieJson);
+  const column = friendCodeColumn(server);
   db.prepare(`
-    INSERT INTO sessions (discord_user_id, cookie_json, friend_code, profile_private, updated_at)
-    VALUES (?, ?, ?, 0, ?)
+    INSERT INTO sessions (discord_user_id, cookie_json, friend_code, ${column}, default_server, profile_private, updated_at)
+    VALUES (?, ?, ?, ?, ?, 0, ?)
     ON CONFLICT(discord_user_id) DO UPDATE SET
       cookie_json = excluded.cookie_json,
-      friend_code = COALESCE(NULLIF(excluded.friend_code, ''), sessions.friend_code),
+      ${column} = COALESCE(NULLIF(excluded.${column}, ''), sessions.${column}),
+      default_server = CASE
+        WHEN COALESCE(sessions.friend_code, '') = '' THEN excluded.default_server
+        ELSE sessions.default_server
+      END,
+      friend_code = CASE
+        WHEN COALESCE(sessions.friend_code, '') = '' OR sessions.default_server = excluded.default_server
+          THEN COALESCE(NULLIF(excluded.friend_code, ''), sessions.friend_code)
+        ELSE sessions.friend_code
+      END,
       updated_at = excluded.updated_at
-  `).run(discordUserId, encrypted, friendCode, Date.now());
+  `).run(discordUserId, encrypted, friendCode, friendCode, server, Date.now());
 }
 
 export function loadUserSession(discordUserId: string): { friendCode: string } | null {
@@ -196,7 +249,7 @@ export function loadUserSession(discordUserId: string): { friendCode: string } |
   if (!row) return null;
   try {
     const decrypted = decrypt(row.cookie_json);
-    const fc = row.friend_code;
+    const fc = selectedFriendCode(row);
     console.log(`[db] 복호화 성공, fc=${fc}`);
     return { friendCode: fc };
   } catch (e) {
@@ -206,8 +259,26 @@ export function loadUserSession(discordUserId: string): { friendCode: string } |
 }
 
 export function getUserFriendCode(discordUserId: string): string | null {
-  const row = db.prepare("SELECT friend_code FROM sessions WHERE discord_user_id = ?").get(discordUserId) as { friend_code: string } | undefined;
-  return row?.friend_code || null;
+  const row = db.prepare("SELECT friend_code, friend_code_intl, friend_code_jp, default_server FROM sessions WHERE discord_user_id = ?").get(discordUserId) as Pick<StoredSession, "friend_code" | "friend_code_intl" | "friend_code_jp" | "default_server"> | undefined;
+  return row ? selectedFriendCode(row) || null : null;
+}
+
+export function getUserDefaultServer(discordUserId: string): MaimaiServer {
+  const row = db.prepare("SELECT default_server FROM sessions WHERE discord_user_id = ?").get(discordUserId) as { default_server: string | null } | undefined;
+  return row?.default_server && isMaimaiServer(row.default_server) ? row.default_server : "intl";
+}
+
+export function setUserDefaultServer(discordUserId: string, server: MaimaiServer): number {
+  const column = friendCodeColumn(server);
+  const info = db.prepare(`
+    INSERT INTO sessions (discord_user_id, cookie_json, default_server, friend_code, profile_private, updated_at)
+    VALUES (?, '{}', ?, '', 0, ?)
+    ON CONFLICT(discord_user_id) DO UPDATE SET
+      default_server = excluded.default_server,
+      friend_code = COALESCE(NULLIF(sessions.${column}, ''), sessions.friend_code),
+      updated_at = excluded.updated_at
+  `).run(discordUserId, server, Date.now());
+  return info.changes;
 }
 
 // ─── Persistent sync token per user ─────────────────────────────────────
