@@ -123,7 +123,9 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     if (verOpt && getSongVersionName(c.title) !== verOpt) return false;
     if (plusOpt && isSongPlus(c.title) !== (plusOpt === "plus")) return false;
     if (playOpt) {
-      const played = clearMap!.has(`${c.title}|${c.kind}|${c.diff}`);
+      // clearJson엔 미플레이(ach=0) 엔트리도 있으므로 달성률 > 0 을 플레이로 판정
+      const rec = clearMap!.get(`${c.title}|${c.kind}|${c.diff}`);
+      const played = !!rec && rec.achievementVal > 0;
       if (playOpt === "Y" && !played) return false;
       if (playOpt === "N" && played) return false;
     }
@@ -157,8 +159,8 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       .addFields(
         { name: "채보", value: `\`${c.diff}\`  ·  상수 \`${c.level.toFixed(1)}\``, inline: true },
       );
-    if (rec) {
-      const ach = rec.achievementVal > 0 ? rec.achievementVal.toFixed(4) + "%" : rec.achievement;
+    if (rec && rec.achievementVal > 0) {
+      const ach = rec.achievementVal.toFixed(4) + "%";
       emb.addFields({ name: "내 기록", value: `${ach}${rec.fc ? "  ·  " + rec.fc : ""}`, inline: true });
     }
     if (i === 0) emb.setAuthor({ name: header });
