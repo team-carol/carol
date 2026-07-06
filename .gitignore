@@ -16,3 +16,4 @@ scripts/test-card.ts
 fonts/
 data/
 .omo/
+.DS_Store

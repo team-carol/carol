@@ -1,4 +1,5 @@
 import { getConstantsCache, saveConstantsCache } from "./db";
+import type { PlayRecord, MaimaiServer } from "./scraper";
 
 interface SongEntry {
   title: string;
@@ -31,6 +32,9 @@ const INTL_URL = "https://otoge-db.net/maimai/data/music-ex-intl.json";
 const JP_URL = "https://otoge-db.net/maimai/data/music-ex.json";
 
 let constantMap: Map<string, number> = new Map();
+// 내수판(JP) 상수 맵. otoge-db의 _i(내부 상수)는 국제판/JP 리밸런스로 값이 달라질 수 있어,
+// JP 데이터(music-ex.json)의 상수를 별도로 보관해 JP 프로필 레이팅 계산에 사용한다.
+let jpConstantMap: Map<string, number> = new Map();
 let jacketMap: Map<string, string> = new Map();
 // 곡 → otoge-db version 코드 (예: "26000" → 26000). 신곡/구곡 판정용.
 let versionMap: Map<string, number> = new Map();
@@ -55,7 +59,8 @@ export const GENRES = [
 // 넓게 포함해 국제판/JP 어느 쪽 수록이든 신곡으로 잡히게 한다.
 // 버전 코드는 시작값 + 세부 웨이브(예: PRiSM PLUS = 25500~25599)이므로 범위로 판정.
 // (시작 코드: 25500 PRiSM PLUS, 26000 CiRCLE, 26500 CiRCLE PLUS, 27000 다음 세대 ...)
-const NEW_SONG_MIN_VERSION = 25500; // PRiSM PLUS 시작 (포함)
+const NEW_SONG_MIN_VERSION = 25500; // 국제판 신곡 하한: PRiSM PLUS 시작 (포함, 국제판이 반 세대 뒤라 넓게 잡음)
+const NEW_SONG_MIN_VERSION_JP = 26000; // 내수판 신곡 하한: CiRCLE 시작 (내수판 현재 = CiRCLE PLUS이므로 CiRCLE+CiRCLE PLUS만 신곡)
 const NEW_SONG_MAX_VERSION = 27000; // 다음 세대 시작 (미포함) = CiRCLE PLUS까지 신곡
 
 const FORTUNE_MIN_CONSTANT = 14.6;
@@ -90,6 +95,18 @@ function ingest(data: SongEntry[]): void {
       const dxKey = `${song.title}|DX|${diff}`;
       if (!isNaN(v) && v > 0 && !constantMap.has(stKey)) constantMap.set(stKey, v);
       if (!isNaN(dv) && dv > 0 && !constantMap.has(dxKey)) constantMap.set(dxKey, dv);
+    }
+  }
+}
+
+// JP 상수 맵 전용 수집 (music-ex.json의 _i 값을 권위 있게 채움)
+function ingestJpConstants(data: SongEntry[]): void {
+  for (const song of data) {
+    for (const [diff, [stField, dxField]] of Object.entries(DIFF_FIELDS)) {
+      const v = parseFloat((song[stField] as string | undefined) ?? "");
+      const dv = parseFloat((song[dxField] as string | undefined) ?? "");
+      if (!isNaN(v) && v > 0) jpConstantMap.set(`${song.title}|ST|${diff}`, v);
+      if (!isNaN(dv) && dv > 0) jpConstantMap.set(`${song.title}|DX|${diff}`, dv);
     }
   }
 }
@@ -146,6 +163,7 @@ interface ConstantsCache {
   versions?: [string, number][];
   intl?: string[];
   genres?: [string, string][];
+  jpConstants?: [string, number][];
 }
 
 // 캐시 복원. version/intl/genre 데이터가 없는 구버전 캐시면 hasMeta=false 반환.
@@ -153,10 +171,11 @@ function applyCache(data: string): { hasMeta: boolean } {
   const parsed = JSON.parse(data) as ConstantsCache;
   constantMap = new Map(parsed.constants);
   jacketMap = new Map(parsed.jackets);
-  const hasMeta = !!parsed.versions && !!parsed.intl && !!parsed.genres;
+  const hasMeta = !!parsed.versions && !!parsed.intl && !!parsed.genres && !!parsed.jpConstants;
   versionMap = parsed.versions ? new Map(parsed.versions) : new Map();
   intlTitles = parsed.intl ? new Set(parsed.intl) : new Set();
   genreMap = parsed.genres ? new Map(parsed.genres) : new Map();
+  jpConstantMap = parsed.jpConstants ? new Map(parsed.jpConstants) : new Map();
   rebuildDailyFortuneSongs();
   return { hasMeta };
 }
@@ -178,6 +197,7 @@ export async function loadConstants(): Promise<void> {
   try {
     const intl = await fetchSongs(INTL_URL);
     constantMap = new Map();
+    jpConstantMap = new Map();
     jacketMap = new Map();
     versionMap = new Map();
     genreMap = new Map();
@@ -191,18 +211,20 @@ export async function loadConstants(): Promise<void> {
       const jp = await fetchSongs(JP_URL);
       const before = constantMap.size;
       ingest(jp);
+      ingestJpConstants(jp); // JP 상수 맵 (JP 프로필 레이팅 계산용)
       jpAdded = constantMap.size - before;
     } catch (e) {
       console.error("[constants] JP 보충 로드 실패:", e);
     }
 
-    console.log(`[constants] 국제판 ${intl.length}곡 (상수 ${intlCount}개) + JP 보충 ${jpAdded}개, 자켓 ${jacketMap.size}개, version ${versionMap.size}개, 국제판수록 ${intlTitles.size}개`);
+    console.log(`[constants] 국제판 ${intl.length}곡 (상수 ${intlCount}개) + JP 보충 ${jpAdded}개, JP상수 ${jpConstantMap.size}개, 자켓 ${jacketMap.size}개, version ${versionMap.size}개, 국제판수록 ${intlTitles.size}개`);
     saveConstantsCache(JSON.stringify({
       constants: Array.from(constantMap.entries()),
       jackets: Array.from(jacketMap.entries()),
       versions: Array.from(versionMap.entries()),
       intl: Array.from(intlTitles),
       genres: Array.from(genreMap.entries()),
+      jpConstants: Array.from(jpConstantMap.entries()),
     } satisfies ConstantsCache));
     rebuildDailyFortuneSongs();
   } catch (e) {
@@ -229,9 +251,12 @@ export function getSongVersion(title: string): number | null {
 }
 
 // 레이팅 신곡(현재+이전 버전) 여부. version 데이터가 없으면 구곡으로 취급.
-export function isNewSong(title: string): boolean {
+// 서버별 현재 세대가 달라 신곡 하한이 다르다(내수판=CiRCLE PLUS, 국제판=CiRCLE).
+export function isNewSong(title: string, server: MaimaiServer = "intl"): boolean {
   const v = versionMap.get(title);
-  return v !== undefined && v >= NEW_SONG_MIN_VERSION && v < NEW_SONG_MAX_VERSION;
+  if (v === undefined) return false;
+  const min = server === "jp" ? NEW_SONG_MIN_VERSION_JP : NEW_SONG_MIN_VERSION;
+  return v >= min && v < NEW_SONG_MAX_VERSION;
 }
 
 // 버전 세대 [세대 시작코드, PLUS 시작코드, 세대명]. PLUS 여부는 별도로 판정.
@@ -354,12 +379,19 @@ export function getDailyFortuneSong(userId: string, date: Date = new Date()): Da
   return dailyFortuneSongs[index] ?? null;
 }
 
-export function getConstant(title: string, musicKind: string, diff: string): number | null {
+export function getConstant(title: string, musicKind: string, diff: string, server: MaimaiServer = "intl"): number | null {
   const kind = musicKind === "DX" ? "DX" : "ST";
+  const altKind = kind === "DX" ? "ST" : "DX";
+  // JP 프로필은 JP 상수 우선, 없으면 국제판 상수로 폴백
+  if (server === "jp") {
+    const jv = jpConstantMap.get(`${title}|${kind}|${diff}`)
+      ?? jpConstantMap.get(`${title}|${altKind}|${diff}`);
+    if (jv !== undefined) return jv;
+  }
   const val = constantMap.get(`${title}|${kind}|${diff}`);
   if (val !== undefined) return val;
   // DX/ST 구분 없이 어느 쪽이든 있으면 fallback
-  const alt = constantMap.get(`${title}|${kind === "DX" ? "ST" : "DX"}|${diff}`);
+  const alt = constantMap.get(`${title}|${altKind}|${diff}`);
   return alt ?? null;
 }
 
@@ -399,4 +431,21 @@ export function calcSongRating(achievementVal: number, level: number, fc?: strin
   const capped = Math.min(achInt, 1005000);
   const apBonus = fc === "AP" || fc === "AP+" ? 1 : 0;
   return Math.floor((level * capped / 1000000) * coeff) + apBonus;
+}
+
+// 내수판(JP)은 레이팅 대상 페이지 수집에 유료(베이직) 코스가 필요하므로,
+// 전체 기록(clearRecords)에서 레이팅 대상을 직접 추론한다.
+// 신곡 15개 + 구곡 35개(각각 RS 내림차순). 표시부는 위치가 아니라 isNewSong으로
+// 재분류하므로 두 그룹의 순서 자체에는 의존하지 않는다.
+export function computeRatingTarget(clearRecords: PlayRecord[], server: MaimaiServer = "intl"): PlayRecord[] {
+  const rated = clearRecords
+    .filter((r) => r.achievementVal > 0)
+    .map((r) => {
+      const c = getConstant(r.title, r.musicKind, r.diff, server) ?? levelToNumber(r.level);
+      return { rec: r, rs: calcSongRating(r.achievementVal, c, r.fc), isNew: isNewSong(r.title, server) };
+    });
+  const byRs = (a: { rs: number }, b: { rs: number }) => b.rs - a.rs;
+  const news = rated.filter((x) => x.isNew).sort(byRs).slice(0, 15).map((x) => x.rec);
+  const olds = rated.filter((x) => !x.isNew).sort(byRs).slice(0, 35).map((x) => x.rec);
+  return [...news, ...olds];
 }

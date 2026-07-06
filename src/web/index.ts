@@ -1,8 +1,9 @@
 import * as http from "http";
 import * as fs from "fs";
-import { parseHome, parsePlayerData, parseFriendCode as parseFC, parseRecentRecords, parseTop5, parseTopSongs, parseMusicScore, mergeTopRecords } from "../scraper";
-import { cacheProfile, saveUserSession, getUserSyncToken, findUserBySyncToken, saveAvatarBlob, getAvatarBlob, getSongJacket, saveSongJacket, getExtraBookmarklets, getProfilePrivate, setProfilePrivate, addExtraBookmarklet, removeExtraBookmarklet, getEnabledBookmarkletPresetIds, setBookmarkletPresetEnabled } from "../db";
+import { parseHome, parsePlayerData, parseFriendCode as parseFC, parseRecentRecords, parseTop5, parseTopSongs, parseMusicScore, mergeTopRecords, getMaimaiBaseUrl } from "../scraper";
+import { cacheProfile, saveUserSession, getUserSyncToken, findUserBySyncToken, saveAvatarBlob, getAvatarBlob, getSongJacket, saveSongJacket, getExtraBookmarklets, getProfilePrivate, setProfilePrivate, addExtraBookmarklet, removeExtraBookmarklet, getEnabledBookmarkletPresetIds, setBookmarkletPresetEnabled, getUserDefaultServer, setUserDefaultServer, isMaimaiServer } from "../db";
 import { buildBookmarkletJs, setBaseUrl, getBaseUrl, buildBookmarklet, BOOKMARKLET_PRESETS, getBookmarkletPresets } from "./bookmarklet";
+import { computeRatingTarget } from "../constants";
 import { settingsPage } from "./settingsPage";
 import { CONFIG } from "../config";
 
@@ -68,11 +69,18 @@ code{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:13px;backgrou
 .extraCard:hover{border-color:#9333ea;background:#1a1a1a}
 .extraCard strong{display:block;color:#fff;font-size:15px;margin-bottom:6px}
 .extraCard span{display:block;color:#777;font-size:13px;line-height:1.5}
+.regionHint{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.regionPill{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid #2a2a2a;border-radius:999px;background:#111;color:#cfcfcf;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;letter-spacing:.4px;text-transform:uppercase}
+.regionPill strong{color:#fff;font-size:11px}
 @media(max-width:500px){h1{font-size:36px}body{padding:48px 16px}.tabs{gap:6px}.tabBtn,.settingsLink{padding:10px 12px}.card{padding:20px}.extraActions{grid-template-columns:1fr}}
 </style></head><body>
 <div class="wrap">
 <p class="mono">carolbot</p>
 <h1>북마클릿<br>설치</h1>
+<div class="regionHint">
+<div class="regionPill"><strong>INTERNATIONAL</strong><span>maimaidx-eng.com</span></div>
+<div class="regionPill"><strong>JP</strong><span>maimaidx.jp</span></div>
+</div>
 <div class="tabs">
 <button class="tabBtn active" id="tbPC" onclick="sw('PC')">💻 PC</button>
 <button class="tabBtn" id="tbMB" onclick="sw('MB')">📱 모바일</button>
@@ -92,7 +100,7 @@ code{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:13px;backgrou
 </div>
 <div class="card">
 <p class="mono">Step 03</p>
-<p><a href="https://maimaidx-eng.com/maimai-mobile/" target="_blank">maimai DX net</a>에 로그인된 상태에서 저장한 북마크를 클릭하세요.</p>
+<p><a href="https://maimaidx-eng.com/maimai-mobile/" target="_blank">maimai DX NET</a> 또는 <a href="https://maimaidx.jp/maimai-mobile/" target="_blank">maimaiでらっくすNET</a>에서 저장한 북마크를 클릭하세요.</p>
 </div>
 </div>
 <div class="tab" id="tMB">
@@ -113,7 +121,7 @@ code{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:13px;backgrou
 <li class="step"><strong>빈 페이지를 북마크 저장</strong> (⭐ 또는 공유 → 북마크 추가)</li>
 <li class="step">북마크 목록을 열고, 방금 저장한 북마크를 <strong>편집</strong></li>
 <li class="step">URL 칸을 모두 지우고, 복사한 코드를 <strong>붙여넣기</strong></li>
-<li class="step"><a href="https://maimaidx-eng.com/maimai-mobile/" target="_blank">maimai DX net</a>에서 해당 북마크 실행</li>
+<li class="step"><a href="https://maimaidx-eng.com/maimai-mobile/" target="_blank">maimai DX NET</a> 또는 <a href="https://maimaidx.jp/maimai-mobile/" target="_blank">maimaiでらっくすNET</a>에서 해당 북마크 실행</li>
 </ol>
 </div>
 </div>
@@ -193,11 +201,13 @@ export function startWebServer(port: number): void {
       let imgData = getSongJacket(musicId);
       if (!imgData) {
         try {
-          const imgUrl = `https://maimaidx-eng.com/maimai-mobile/img/Music/${musicId}.png`;
-          const resp = await fetch(imgUrl);
-          if (resp.ok) {
+          const origins = [getMaimaiBaseUrl("intl"), getMaimaiBaseUrl("jp")];
+          for (const origin of origins) {
+            const resp = await fetch(`${origin}/maimai-mobile/img/Music/${musicId}.png`);
+            if (!resp.ok) continue;
             imgData = Buffer.from(await resp.arrayBuffer());
             saveSongJacket(musicId, imgData);
+            break;
           }
         } catch (e) {
           console.error("[jacket] fetch failed:", e);
@@ -299,8 +309,9 @@ a{color:#c084fc}
       const isPrivate = userId ? getProfilePrivate(userId) : false;
       const presetIds = userId ? getEnabledBookmarkletPresetIds(userId) : [];
       const bookmarklets = userId ? getExtraBookmarklets(userId) : [];
+      const defaultServer = userId ? getUserDefaultServer(userId) : "intl";
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-      res.end(settingsPage(token, isPrivate, presetIds, bookmarklets));
+      res.end(settingsPage(token, isPrivate, presetIds, bookmarklets, defaultServer));
       return;
     }
 
@@ -312,8 +323,9 @@ a{color:#c084fc}
       const isPrivate = getProfilePrivate(userId);
       const presets = getEnabledBookmarkletPresetIds(userId);
       const bookmarklets = getExtraBookmarklets(userId);
+      const defaultServer = getUserDefaultServer(userId);
       res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({ private: isPrivate, presets, bookmarklets }));
+      res.end(JSON.stringify({ private: isPrivate, presets, bookmarklets, defaultServer }));
       return;
     }
 
@@ -327,6 +339,28 @@ a{color:#c084fc}
         setProfilePrivate(userId, value);
         res.writeHead(200, { "content-type": "application/json" });
         res.end(JSON.stringify({ private: value }));
+      } catch {
+        res.writeHead(400, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: "invalid_body" }));
+      }
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/settings/default-server") {
+      const token = url.searchParams.get("code") || "";
+      const userId = findUserBySyncToken(token);
+      if (!userId) { res.writeHead(403, { "content-type": "application/json" }); res.end(JSON.stringify({ error: "expired" })); return; }
+      try {
+        const body = JSON.parse(await readBody(req));
+        const server = typeof body.server === "string" ? body.server : "";
+        if (!isMaimaiServer(server)) {
+          res.writeHead(400, { "content-type": "application/json" });
+          res.end(JSON.stringify({ error: "invalid_server" }));
+          return;
+        }
+        setUserDefaultServer(userId, server);
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ defaultServer: server }));
       } catch {
         res.writeHead(400, { "content-type": "application/json" });
         res.end(JSON.stringify({ error: "invalid_body" }));
@@ -415,6 +449,7 @@ a{color:#c084fc}
 
       const raw = await readBody(req);
       const data = JSON.parse(raw);
+      const syncServer = typeof data.server === "string" && isMaimaiServer(data.server) ? data.server : "intl";
       const homeHtml: string = data.h || "";
       const playerHtml: string = data.p || "";
       const fcHtml: string = data.f || "";
@@ -426,7 +461,7 @@ a{color:#c084fc}
       const top0Html: string = data.tb0 || "";
       const ratingTargetHtml: string = data.rt || "";
       const avatarBase64: string = data.a || "";
-      console.log(`[web] user=${userId.slice(-6)}, home=${homeHtml.length}B, player=${playerHtml.length}B, record=${recordHtml.length}B, fc=${fcHtml.length}B, top4=${top4Html.length}B, top3=${top3Html.length}B, top2=${top2Html.length}B, top1=${top1Html.length}B, top0=${top0Html.length}B, rt=${ratingTargetHtml.length}B`);
+      console.log(`[web] user=${userId.slice(-6)}, server=${syncServer}, home=${homeHtml.length}B, player=${playerHtml.length}B, record=${recordHtml.length}B, fc=${fcHtml.length}B, top4=${top4Html.length}B, top3=${top3Html.length}B, top2=${top2Html.length}B, top1=${top1Html.length}B, top0=${top0Html.length}B, rt=${ratingTargetHtml.length}B`);
       fs.writeFileSync("debug_home.html", homeHtml, "utf-8");
       fs.writeFileSync("debug_pd.html", playerHtml, "utf-8");
       fs.writeFileSync("debug_fc.html", fcHtml, "utf-8");
@@ -434,20 +469,26 @@ a{color:#c084fc}
       fs.writeFileSync("debug_rating_target.html", ratingTargetHtml, "utf-8");
 
       try {
-        const home = parseHome(homeHtml);
+        const home = parseHome(homeHtml, syncServer);
         const usePd = !home.playerName && playerHtml;
-        const effective = usePd ? parseHome(playerHtml) : home;
+        const effective = usePd ? parseHome(playerHtml, syncServer) : home;
         console.log(`[web] parseHome: name="${effective.playerName}", rating=${effective.rating}, fc=${effective.friendCode}, usePd=${usePd}`);
         console.log(`[web] avatar url: ${effective.avatar?.substring(0, 80) || "(empty)"}`);
         console.log(`[web] avatar b64: ${avatarBase64 ? avatarBase64.substring(0, 40) + "..." : "(empty)"}`);
-        const { playCount } = parsePlayerData(playerHtml);
+        const { playCount, totalPlayCount } = parsePlayerData(playerHtml);
         const fcRaw = parseFC(fcHtml);
-        const fc = effective.friendCode || (/^\d{13}$/.test(fcRaw) ? fcRaw : "") || token;
+        // 친구코드 우선순위: 13자리인 값만 채택. home의 input[name=idx]는
+        // 내수판에서 페이지 인덱스("0")를 반환하므로 13자리 검증을 통과한 값만 사용한다.
+        const fc = [effective.friendCode, fcRaw].find((v) => v && /^\d{13}$/.test(v)) || token;
 
-        const recentRecords = parseRecentRecords(recordHtml);
+        const recentRecords = parseRecentRecords(recordHtml, syncServer);
         const clearHtmls = [top4Html, top3Html, top2Html, top1Html, top0Html].filter((h) => h);
-        const clearRecords = clearHtmls.length > 0 ? mergeTopRecords(clearHtmls.map((h) => parseMusicScore(h))) : [];
-        const topRecords = ratingTargetHtml ? parseMusicScore(ratingTargetHtml) : parseTop5(recordHtml);
+        const clearRecords = clearHtmls.length > 0 ? mergeTopRecords(clearHtmls.map((h) => parseMusicScore(h, syncServer))) : [];
+        // 내수판(JP)은 레이팅 대상 페이지 수집에 유료 코스가 필요하므로,
+        // 전체 기록에서 레이팅 대상(신곡 15 + 구곡 35)을 직접 추론한다.
+        const topRecords = syncServer === "jp"
+          ? computeRatingTarget(clearRecords, syncServer)
+          : ratingTargetHtml ? parseMusicScore(ratingTargetHtml, syncServer) : parseTop5(recordHtml, syncServer);
         const emptyFc = clearRecords.filter((r) => !r.fc).length;
         const expectedRecentRecords = Math.min(Math.max(playCount || 1, 1), 5);
         console.log(`[web] recentRecords: ${recentRecords.length} songs, top: ${topRecords.length} (rating target), clear: ${clearRecords.length} (empty fc: ${emptyFc})`);
@@ -468,14 +509,14 @@ a{color:#c084fc}
           return;
         }
 
-        cacheProfile({
+        const savedProfileKey = cacheProfile({
           playerName: effective.playerName || "???", rating: effective.rating || 0,
           ratingMax: effective.ratingMax || 0, gradeImg: effective.gradeImg || "",
           avatar: effective.avatar || "", trophy: effective.trophy || "",
           trophyClass: effective.trophyClass || "normal", stars: effective.stars || "0",
-          playCount: playCount || 0, comment: effective.comment || "", friendCode: fc,
-        }, playCount || 0, homeHtml, JSON.stringify(recentRecords), JSON.stringify(topRecords), JSON.stringify(clearRecords));
-        saveUserSession(userId, "{}", fc);
+          playCount: playCount || 0, totalPlayCount: totalPlayCount || 0, comment: effective.comment || "", friendCode: fc,
+        }, playCount || 0, homeHtml, JSON.stringify(recentRecords), JSON.stringify(topRecords), JSON.stringify(clearRecords), syncServer);
+        saveUserSession(userId, "{}", savedProfileKey, syncServer);
 
         // base64 아바타 → DB에 저장
         if (avatarBase64 && avatarBase64.startsWith("data:")) {
@@ -484,11 +525,11 @@ a{color:#c084fc}
         }
         if (Array.isArray(data.js)) {
           let saved = 0;
-          data.js.forEach((j: any) => {
-            if (j?.data && j?.url) {
-              const m = (j.url as string).match(/\/img\/Music\/([^.]+)\.png/);
+          data.js.forEach((j: unknown) => {
+            if (j && typeof j === "object" && "data" in j && "url" in j && typeof j.data === "string" && typeof j.url === "string") {
+              const m = j.url.match(/\/img\/Music\/([^.]+)\.png/);
               if (m) {
-                const b64 = (j.data as string).replace(/^data:image\/\w+;base64,/, "");
+                const b64 = j.data.replace(/^data:image\/\w+;base64,/, "");
                 saveSongJacket(m[1], Buffer.from(b64, "base64"));
                 saved++;
               }
@@ -496,7 +537,7 @@ a{color:#c084fc}
           });
           console.log(`[web] song jackets saved: ${saved}`);
         }
-        console.log(`[web] 저장: ${effective.playerName} ⭐${effective.rating} fc=${fc}`);
+        console.log(`[web] 저장: ${effective.playerName} ⭐${effective.rating} server=${syncServer} fc=${fc}`);
         res.writeHead(200); res.end("ok");
       } catch (e) {
         console.error("[web] 동기화 실패:", e);

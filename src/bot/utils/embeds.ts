@@ -11,16 +11,18 @@ import {
   getSongJacket,
   saveSongJacket,
 } from "../../db";
+import { getMaimaiBaseUrl } from "../../scraper";
 import {
   getConstant,
   getJacketFile,
   levelToNumber,
   calcSongRating,
+  isNewSong,
 } from "../../constants";
 import { aliasMatches, normalizeQuery } from "../../aliases";
 import { ratingColor } from "./roles";
 import { buildMarkMap, buildKindResolver, chartKey } from "../../scraper";
-import type { PlayRecord, ChartMarks } from "../../scraper";
+import type { PlayRecord, ChartMarks, MaimaiServer } from "../../scraper";
 
 // 곡 자켓 버퍼: DB 캐시 → maimai net(musicId) → otoge-db(title) 순으로 확보하고 캐시
 export async function jacketBuffer(r: PlayRecord): Promise<Buffer | null> {
@@ -30,10 +32,9 @@ export async function jacketBuffer(r: PlayRecord): Promise<Buffer | null> {
     const cached = getSongJacket(musicId);
     if (cached) return cached;
     try {
-      const res = await fetch(
-        `https://maimaidx-eng.com/maimai-mobile/img/Music/${musicId}.png`,
-      );
-      if (res.ok) {
+      for (const origin of [getMaimaiBaseUrl("intl"), getMaimaiBaseUrl("jp")]) {
+        const res = await fetch(`${origin}/maimai-mobile/img/Music/${musicId}.png`);
+        if (!res.ok) continue;
         const b = Buffer.from(await res.arrayBuffer());
         saveSongJacket(musicId, b);
         return b;
@@ -109,8 +110,8 @@ function truncateVisual(s: string, maxWidth: number): string {
 
 // 곡별 레이팅 점수 (상수 → 정수 상수, 없으면 레벨 근사)
 // fc: AP 보너스 판정용 마크. 미지정 시 레코드 자체의 r.fc 사용.
-function songRating(r: PlayRecord, fc?: string): number {
-  const constant = getConstant(r.title, r.musicKind, r.diff);
+function songRating(r: PlayRecord, fc?: string, server: MaimaiServer = "intl"): number {
+  const constant = getConstant(r.title, r.musicKind, r.diff, server);
   const lvNum = constant !== null ? constant : levelToNumber(r.level);
   return calcSongRating(r.achievementVal, lvNum, fc ?? r.fc);
 }
@@ -133,7 +134,7 @@ export function profileEmb(
     .setTitle(p.trophy || "칭호 없음")
     .setDescription(
       `**${p.playerName || "이름 없음"}**  ·  **${p.rating || 0}**\n` +
-        `플레이 ${p.playCount || 0}회${stars}`,
+        `플레이 ${p.playCount || 0}/${p.totalPlayCount || 0}회${stars}`,
     )
     .setFooter({
       text: `마지막 동기화: ${new Date(p.lastSyncedAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}`,
@@ -209,7 +210,7 @@ export async function recentEmbeds(
     game.map(async (r, i) => {
       const kind = r.musicKind ? ` [${r.musicKind}]` : "";
       const rankStr = [r.fc, r.sync].filter(Boolean).join(" · ");
-      const constant = getConstant(r.title, r.musicKind, r.diff);
+      const constant = getConstant(r.title, r.musicKind, r.diff, p.server);
       const lv = constant !== null ? constant.toFixed(1) : r.level;
       const desc =
         `\`${r.diff} ${lv}\`` + (rankStr ? `  ·  \`${rankStr}\`` : "");
@@ -362,7 +363,7 @@ export async function searchResultEmbeds(
       const kind = all[0]?.musicKind ? ` [${all[0].musicKind}]` : "";
       const lines = DIFF_ORDER.flatMap((d) => {
         const r = all.find((x) => x.diff === d);
-        const constant = getConstant(title, all[0]?.musicKind, d);
+        const constant = getConstant(title, all[0]?.musicKind, d, p.server);
         if (d === "Re:MASTER" && constant === null && !r) return [];
         const lv = constant !== null ? constant.toFixed(1) : (r?.level ?? "?");
         const ach =
@@ -452,16 +453,17 @@ function formatRtRow(
   r: PlayRecord,
   rank: number,
   markMap?: Map<string, ChartMarks>,
+  server: MaimaiServer = "intl",
 ): string {
   const rankStr = String(rank).padStart(2);
   const diff = DIFF_ABBR[r.diff] ?? "???";
   const kind = (r.musicKind || "  ").padEnd(2);
-  const constant = getConstant(r.title, r.musicKind, r.diff);
+  const constant = getConstant(r.title, r.musicKind, r.diff, server);
   const lv = (constant !== null ? constant.toFixed(1) : r.level).padEnd(4);
   const ach = (
     r.achievementVal > 0 ? r.achievementVal.toFixed(4) + "%" : r.achievement
   ).padStart(9);
-  const rs = String(songRating(r, markMap?.get(chartKey(r))?.fc)).padStart(3);
+  const rs = String(songRating(r, markMap?.get(chartKey(r))?.fc, server)).padStart(3);
   const title = truncateVisual(r.title, 26);
   return `${rankStr} ${diff} ${kind} ${lv} ${ach}  ${rs}  ${title}`;
 }
@@ -484,16 +486,18 @@ export function rtTableEmbed(
     };
   }
 
-  const newRecords = records.slice(0, 15);
-  const otherRecords = records.slice(15, 50);
+  // 위치가 아니라 버전(신곡 판정)으로 분류 — 곡추천과 동일한 isNewSong 사용.
+  // (서버별 신곡 범위가 다르고, 대상곡이 15/35 미만이면 위치 기반은 오분류됨)
+  const newRecords = records.filter((r) => isNewSong(r.title, p.server)).slice(0, 15);
+  const otherRecords = records.filter((r) => !isNewSong(r.title, p.server)).slice(0, 35);
 
   // 레이팅 대상 페이지엔 FC/AP 마크가 없고 ST/DX도 부정확할 수 있어 clear 기록으로 보정
   const clearList = getClearList(p);
   const markMap = buildMarkMap(clearList);
   const resolveKind = buildKindResolver(clearList);
   const fix = (r: PlayRecord): PlayRecord => ({ ...r, musicKind: resolveKind(r) });
-  const newRows = newRecords.map((r, i) => formatRtRow(fix(r), i + 1, markMap));
-  const otherRows = otherRecords.map((r, i) => formatRtRow(fix(r), i + 1, markMap));
+  const newRows = newRecords.map((r, i) => formatRtRow(fix(r), i + 1, markMap, p.server));
+  const otherRows = otherRecords.map((r, i) => formatRtRow(fix(r), i + 1, markMap, p.server));
 
   // 구분선 길이를 가장 긴 행(보통 ASCII 곡명)에 맞춰 표 너비와 일치시킴
   const maxW = Math.max(

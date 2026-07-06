@@ -1,6 +1,6 @@
 import satori from "satori";
 import { Resvg } from "@resvg/resvg-js";
-import type { PlayRecord, ChartMarks } from "../../scraper";
+import type { PlayRecord, ChartMarks, MaimaiServer } from "../../scraper";
 import { buildMarkMap, buildKindResolver, chartKey } from "../../scraper";
 import type { CachedProfile } from "../../db";
 import {
@@ -14,6 +14,7 @@ import {
   levelToNumber,
   calcSongRating,
   getJacketFile,
+  isNewSong,
 } from "../../constants";
 import { loadFonts } from "../../fonts";
 
@@ -102,8 +103,8 @@ interface CardVM {
   jacketFile: string | null;
 }
 
-function toVM(r: PlayRecord, markMap?: Map<string, ChartMarks>): CardVM {
-  const constant = getConstant(r.title, r.musicKind, r.diff);
+function toVM(r: PlayRecord, markMap?: Map<string, ChartMarks>, server: MaimaiServer = "intl"): CardVM {
+  const constant = getConstant(r.title, r.musicKind, r.diff, server);
   const lvNum = constant !== null ? constant : levelToNumber(r.level);
   // 레이팅 대상 페이지엔 FC/AP·Sync 아이콘이 없어 clear 기록의 마크를 우선 사용
   const marks = markMap?.get(chartKey(r));
@@ -391,7 +392,7 @@ export async function renderRatingCard(
   avatarBuf: Buffer | null,
 ): Promise<Buffer> {
   // ─── Render cache: return cached PNG if profile and card version unchanged ─
-  const cached = getRatingCardCache(profile.friendCode);
+  const cached = getRatingCardCache(profile.profileKey);
   if (
     cached &&
     cached.syncedAt === profile.lastSyncedAt &&
@@ -418,8 +419,15 @@ export async function renderRatingCard(
     musicKind: resolveKind(r),
   });
 
-  const newVms = records.slice(0, 15).map((r) => toVM(fix(r), markMap));
-  const otherVms = records.slice(15, 50).map((r) => toVM(fix(r), markMap));
+  // 위치가 아니라 버전(신곡 판정)으로 분류 — 곡추천과 동일한 isNewSong 사용.
+  const newVms = records
+    .filter((r) => isNewSong(r.title, profile.server))
+    .slice(0, 15)
+    .map((r) => toVM(fix(r), markMap, profile.server));
+  const otherVms = records
+    .filter((r) => !isNewSong(r.title, profile.server))
+    .slice(0, 35)
+    .map((r) => toVM(fix(r), markMap, profile.server));
   // 헤더에는 프로필에 저장된 실제 레이팅을 표시
   const totalRs =
     profile.rating || newVms.concat(otherVms).reduce((s, v) => s + v.rs, 0);
@@ -614,7 +622,7 @@ export async function renderRatingCard(
 
   // ─── Persist render cache ─────────────────────────────────────────────────
   saveRatingCardCache(
-    profile.friendCode,
+    profile.profileKey,
     buf,
     profile.lastSyncedAt,
     CARD_VERSION,
