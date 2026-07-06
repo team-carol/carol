@@ -17,6 +17,7 @@ export interface MaimaiProfile {
   trophyClass: string;
   stars: string;
   playCount: number;
+  totalPlayCount?: number;
   friendCode?: string;
   comment?: string;
 }
@@ -58,11 +59,26 @@ export function parseHome(html: string, server: MaimaiServer = "intl"): Partial<
   };
 }
 
-export function parsePlayerData(html: string): { playCount: number } {
+// 플레이 카운트: "現バージョンプレイ回数：N回<br>…累計プレイ回数：M回" (국제판은 영문 라벨).
+// 현 버전 / 누적 두 수치를 함께 수집한다.
+export function parsePlayerData(html: string): { playCount: number; totalPlayCount: number } {
   const $ = cheerio.load(html);
+  // 플레이 회수 라벨을 포함한 leaf div를 찾아 등장 순서대로 [현 버전, 누적] 추출
+  let pcText = "";
+  $("div").each((_, el) => {
+    const $el = $(el);
+    if ($el.children("div").length === 0 && /プレイ回数|play\s*count/i.test($el.text())) {
+      pcText = $el.text();
+      return false;
+    }
+  });
+  const nums = (pcText.match(/[\d,]+/g) || []).map((s) => Number(s.replace(/,/g, "")));
+  if (nums.length >= 2) return { playCount: nums[0], totalPlayCount: nums[1] };
+  // 폴백: 라벨 매칭 실패 시 body 전체에서 첫 수치를 현/누적 공통으로 사용
   const body = $("body").text();
   const m = body.match(/(?:total\s*play|play\s*count|プレイ回数)[：:\s]*([\d,]+)/i);
-  return { playCount: m ? Number(m[1].replace(/,/g, "")) : 0 };
+  const one = m ? Number(m[1].replace(/,/g, "")) : (nums[0] ?? 0);
+  return { playCount: one, totalPlayCount: one };
 }
 
 export function parseFriendCode(html: string): string {

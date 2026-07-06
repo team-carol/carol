@@ -133,7 +133,7 @@ export function profileEmb(
     .setTitle(p.trophy || "칭호 없음")
     .setDescription(
       `**${p.playerName || "이름 없음"}**  ·  **${p.rating || 0}**\n` +
-        `플레이 ${p.playCount || 0}회${stars}`,
+        `플레이 ${p.playCount || 0}/${p.totalPlayCount || 0}회${stars}`,
     )
     .setFooter({
       text: `마지막 동기화: ${new Date(p.lastSyncedAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}`,

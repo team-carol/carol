@@ -474,7 +474,7 @@ a{color:#c084fc}
         console.log(`[web] parseHome: name="${effective.playerName}", rating=${effective.rating}, fc=${effective.friendCode}, usePd=${usePd}`);
         console.log(`[web] avatar url: ${effective.avatar?.substring(0, 80) || "(empty)"}`);
         console.log(`[web] avatar b64: ${avatarBase64 ? avatarBase64.substring(0, 40) + "..." : "(empty)"}`);
-        const { playCount } = parsePlayerData(playerHtml);
+        const { playCount, totalPlayCount } = parsePlayerData(playerHtml);
         const fcRaw = parseFC(fcHtml);
         const fc = effective.friendCode || (/^\d{13}$/.test(fcRaw) ? fcRaw : "") || token;
 
@@ -507,7 +507,7 @@ a{color:#c084fc}
           ratingMax: effective.ratingMax || 0, gradeImg: effective.gradeImg || "",
           avatar: effective.avatar || "", trophy: effective.trophy || "",
           trophyClass: effective.trophyClass || "normal", stars: effective.stars || "0",
-          playCount: playCount || 0, comment: effective.comment || "", friendCode: fc,
+          playCount: playCount || 0, totalPlayCount: totalPlayCount || 0, comment: effective.comment || "", friendCode: fc,
         }, playCount || 0, homeHtml, JSON.stringify(recentRecords), JSON.stringify(topRecords), JSON.stringify(clearRecords), syncServer);
         saveUserSession(userId, "{}", savedProfileKey, syncServer);
 

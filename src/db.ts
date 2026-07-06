@@ -19,6 +19,7 @@ export interface CachedProfile {
   stars: string;
   comment: string;
   playCount: number;
+  totalPlayCount: number;
   rawHtml: string;
   lastSyncedAt: number;
   recentJson: string;
@@ -104,6 +105,7 @@ try { db.exec("ALTER TABLE profiles ADD COLUMN rating_card_synced_at INTEGER DEF
 try { db.exec("ALTER TABLE profiles ADD COLUMN rating_card_version INTEGER DEFAULT 0"); } catch (_) {}
 try { db.exec("ALTER TABLE profiles ADD COLUMN server_region TEXT DEFAULT 'intl'"); } catch (_) {}
 try { db.exec("ALTER TABLE profiles ADD COLUMN display_friend_code TEXT DEFAULT ''"); } catch (_) {}
+try { db.exec("ALTER TABLE profiles ADD COLUMN total_play_count INTEGER DEFAULT 0"); } catch (_) {}
 try { db.exec("ALTER TABLE sessions ADD COLUMN profile_private INTEGER DEFAULT 0"); } catch (_) {}
 try { db.exec("ALTER TABLE sessions ADD COLUMN extra_bookmarklets TEXT DEFAULT '[]'"); } catch (_) {}
 try { db.exec("ALTER TABLE sessions ADD COLUMN preset_bookmarklets TEXT DEFAULT '[]'"); } catch (_) {}
@@ -112,11 +114,11 @@ try { db.exec("ALTER TABLE sessions ADD COLUMN friend_code_intl TEXT DEFAULT ''"
 try { db.exec("ALTER TABLE sessions ADD COLUMN friend_code_jp TEXT DEFAULT ''"); } catch (_) {}
 
 // ─── Queries ────────────────────────────────────────────────────────────
-const profileSelect = "friend_code AS profileKey, COALESCE(NULLIF(display_friend_code, ''), friend_code) AS friendCode, COALESCE(server_region, 'intl') AS server, player_name AS playerName, rating, rating_max AS ratingMax, trophy, trophy_class AS trophyClass, avatar, grade_img AS gradeImg, stars, comment, play_count AS playCount, raw_html AS rawHtml, recent_json AS recentJson, top_json AS topJson, clear_json AS clearJson, last_synced_at AS lastSyncedAt";
+const profileSelect = "friend_code AS profileKey, COALESCE(NULLIF(display_friend_code, ''), friend_code) AS friendCode, COALESCE(server_region, 'intl') AS server, player_name AS playerName, rating, rating_max AS ratingMax, trophy, trophy_class AS trophyClass, avatar, grade_img AS gradeImg, stars, comment, play_count AS playCount, COALESCE(total_play_count, 0) AS totalPlayCount, raw_html AS rawHtml, recent_json AS recentJson, top_json AS topJson, clear_json AS clearJson, last_synced_at AS lastSyncedAt";
 const stmtGet = db.prepare(`SELECT ${profileSelect} FROM profiles WHERE friend_code = ?`);
 const stmtUpsert = db.prepare(`
-  INSERT INTO profiles (friend_code, display_friend_code, server_region, player_name, rating, rating_max, trophy, trophy_class, avatar, grade_img, stars, comment, play_count, raw_html, recent_json, top_json, clear_json, last_synced_at)
-  VALUES (@profileKey, @friendCode, @server, @playerName, @rating, @ratingMax, @trophy, @trophyClass, @avatar, @gradeImg, @stars, @comment, @playCount, @rawHtml, @recentJson, @topJson, @clearJson, @lastSyncedAt)
+  INSERT INTO profiles (friend_code, display_friend_code, server_region, player_name, rating, rating_max, trophy, trophy_class, avatar, grade_img, stars, comment, play_count, total_play_count, raw_html, recent_json, top_json, clear_json, last_synced_at)
+  VALUES (@profileKey, @friendCode, @server, @playerName, @rating, @ratingMax, @trophy, @trophyClass, @avatar, @gradeImg, @stars, @comment, @playCount, @totalPlayCount, @rawHtml, @recentJson, @topJson, @clearJson, @lastSyncedAt)
   ON CONFLICT(friend_code) DO UPDATE SET
     display_friend_code = excluded.display_friend_code,
     server_region = excluded.server_region,
@@ -130,6 +132,7 @@ const stmtUpsert = db.prepare(`
     stars = excluded.stars,
     comment = excluded.comment,
     play_count = excluded.play_count,
+    total_play_count = excluded.total_play_count,
     raw_html = excluded.raw_html,
     recent_json = excluded.recent_json,
     top_json = excluded.top_json,
@@ -156,6 +159,7 @@ export function cacheProfile(profile: MaimaiProfile, playCount: number, rawHtml:
     stars: profile.stars,
     comment: profile.comment ?? "",
     playCount,
+    totalPlayCount: profile.totalPlayCount ?? playCount,
     rawHtml,
     recentJson,
     topJson,
