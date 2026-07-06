@@ -5,6 +5,7 @@ interface SongEntry {
   image_url?: string;
   version?: string;
   intl?: string; // "1" = 국제판 수록, "0" = 미수록
+  catcode?: string; // 장르명 (예: "POPS＆アニメ")
   lev_bas_i?: string;
   lev_adv_i?: string;
   lev_exp_i?: string;
@@ -35,6 +36,19 @@ let jacketMap: Map<string, string> = new Map();
 let versionMap: Map<string, number> = new Map();
 // 국제판(intl="1") 수록 곡 제목 집합. 곡추천에서 미수록 곡을 제외하는 데 사용.
 let intlTitles: Set<string> = new Set();
+// 곡 → 장르(catcode)
+let genreMap: Map<string, string> = new Map();
+
+// maimai 장르 목록 (랜덤 명령어 장르 선택지)
+export const GENRES = [
+  "POPS＆アニメ",
+  "niconico＆ボーカロイド",
+  "東方Project",
+  "ゲーム＆バラエティ",
+  "maimai",
+  "オンゲキ＆CHUNITHM",
+  "宴会場",
+];
 
 // 레이팅 "신곡" 버전 범위. version은 JP 버전이라 국제판과 반 버전 어긋날 수 있어
 // (예: Galaxy Blaster는 JP CiRCLE PLUS(26500)지만 국제판은 CiRCLE), CiRCLE PLUS까지
@@ -68,6 +82,7 @@ function ingest(data: SongEntry[]): void {
       const v = parseInt(song.version, 10);
       if (!isNaN(v)) versionMap.set(song.title, v);
     }
+    if (song.catcode && !genreMap.has(song.title)) genreMap.set(song.title, song.catcode);
     for (const [diff, [stField, dxField]] of Object.entries(DIFF_FIELDS)) {
       const v = parseFloat((song[stField] as string | undefined) ?? "");
       const dv = parseFloat((song[dxField] as string | undefined) ?? "");
@@ -130,16 +145,18 @@ interface ConstantsCache {
   jackets: [string, string][];
   versions?: [string, number][];
   intl?: string[];
+  genres?: [string, string][];
 }
 
-// 캐시 복원. version/intl 데이터가 없는 구버전 캐시면 hasMeta=false 반환.
+// 캐시 복원. version/intl/genre 데이터가 없는 구버전 캐시면 hasMeta=false 반환.
 function applyCache(data: string): { hasMeta: boolean } {
   const parsed = JSON.parse(data) as ConstantsCache;
   constantMap = new Map(parsed.constants);
   jacketMap = new Map(parsed.jackets);
-  const hasMeta = !!parsed.versions && !!parsed.intl;
+  const hasMeta = !!parsed.versions && !!parsed.intl && !!parsed.genres;
   versionMap = parsed.versions ? new Map(parsed.versions) : new Map();
   intlTitles = parsed.intl ? new Set(parsed.intl) : new Set();
+  genreMap = parsed.genres ? new Map(parsed.genres) : new Map();
   rebuildDailyFortuneSongs();
   return { hasMeta };
 }
@@ -163,6 +180,7 @@ export async function loadConstants(): Promise<void> {
     constantMap = new Map();
     jacketMap = new Map();
     versionMap = new Map();
+    genreMap = new Map();
     // 국제판 수록(intl="1") 곡만 집합에 담음 (JP 보충곡·미수록곡 제외)
     intlTitles = new Set(intl.filter((s) => s.intl === "1").map((s) => s.title));
     ingest(intl);
@@ -184,6 +202,7 @@ export async function loadConstants(): Promise<void> {
       jackets: Array.from(jacketMap.entries()),
       versions: Array.from(versionMap.entries()),
       intl: Array.from(intlTitles),
+      genres: Array.from(genreMap.entries()),
     } satisfies ConstantsCache));
     rebuildDailyFortuneSongs();
   } catch (e) {
@@ -215,9 +234,58 @@ export function isNewSong(title: string): boolean {
   return v !== undefined && v >= NEW_SONG_MIN_VERSION && v < NEW_SONG_MAX_VERSION;
 }
 
+// 버전 세대 [세대 시작코드, PLUS 시작코드, 세대명]. PLUS 여부는 별도로 판정.
+// (선택지 25개 제한 때문에 버전 옵션은 세대만, PLUS는 별도 옵션으로 분리)
+const VERSION_GENERATIONS: [number, number, string][] = [
+  [10000, 11000, "maimai"],
+  [12000, 13000, "GreeN"],
+  [14000, 15000, "ORANGE"],
+  [16000, 17000, "PiNK"],
+  [18000, 18500, "MURASAKi"],
+  [19000, 19500, "MiLK"],
+  [19900, 99999, "FiNALE"], // PLUS 없음
+  [20000, 20500, "でらっくす"],
+  [21000, 21500, "Splash"],
+  [22000, 22500, "UNiVERSE"],
+  [23000, 23500, "FESTiVAL"],
+  [24000, 24500, "BUDDiES"],
+  [25000, 25500, "PRiSM"],
+  [26000, 26500, "CiRCLE"],
+];
+export const VERSION_NAMES = VERSION_GENERATIONS.map(([, , n]) => n);
+
+function findGeneration(v: number): [number, number, string] | null {
+  let found: [number, number, string] | null = null;
+  for (const g of VERSION_GENERATIONS) {
+    if (v >= g[0]) found = g;
+    else break;
+  }
+  return found;
+}
+
+// 곡의 수록 버전(세대명). version 데이터 없으면 null.
+export function getSongVersionName(title: string): string | null {
+  const v = versionMap.get(title);
+  if (v === undefined) return null;
+  return findGeneration(v)?.[2] ?? null;
+}
+
+// 곡이 해당 세대의 PLUS 버전인지 여부.
+export function isSongPlus(title: string): boolean {
+  const v = versionMap.get(title);
+  if (v === undefined) return false;
+  const g = findGeneration(v);
+  return g ? v >= g[1] : false;
+}
+
 // 국제판 수록 여부. 데이터가 없으면(구버전 캐시) 제외하지 않도록 true 반환.
 export function isIntlAvailable(title: string): boolean {
   return intlTitles.size === 0 || intlTitles.has(title);
+}
+
+// 곡 장르(catcode). 없으면 null.
+export function getSongGenre(title: string): string | null {
+  return genreMap.get(title) ?? null;
 }
 
 export interface ChartInfo {
@@ -237,6 +305,25 @@ export function getChartsUnderConstant(max: number): ChartInfo[] {
     charts.push({ title, kind: kindRaw === "DX" ? "DX" : "ST", diff, level });
   }
   return charts;
+}
+
+// 상수가 [min, max] 범위인 채보 목록
+export function getChartsInConstantRange(min: number, max: number): ChartInfo[] {
+  const charts: ChartInfo[] = [];
+  for (const [key, level] of constantMap.entries()) {
+    if (level < min || level > max) continue;
+    const [title, kindRaw, diff] = key.split("|");
+    if (!title || !kindRaw || !diff) continue;
+    charts.push({ title, kind: kindRaw === "DX" ? "DX" : "ST", diff, level });
+  }
+  return charts;
+}
+
+// 상수 → 표기 레벨 (X.0~X.5 → "X", X.6~X.9 → "X+")
+export function constantToDisplayLevel(c: number): string {
+  const floor = Math.floor(c);
+  const tenths = Math.round((c - floor) * 10);
+  return tenths >= 6 ? `${floor}+` : `${floor}`;
 }
 
 function seoulDateKey(date: Date): string {

@@ -19,10 +19,11 @@ import * as serverSettings from "./commands/serverSettings";
 import * as search       from "./commands/search";
 import * as status       from "./commands/status";
 import * as songrec      from "./commands/songrec";
+import * as random       from "./commands/random";
 
 type Command = { data: { toJSON(): object; name: string }; execute: (i: ChatInputCommandInteraction) => Promise<void> };
 
-const COMMANDS: Command[] = [profile, bookmarklet, ratingtable, ratingimage, fortune, settings, serverSettings, search, status, songrec];
+const COMMANDS: Command[] = [profile, bookmarklet, ratingtable, ratingimage, fortune, settings, serverSettings, search, status, songrec, random];
 
 const RATING_CARD_GC_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000;
 const RATING_CARD_GC_INTERVAL_MS = 24 * 60 * 60 * 1000;
