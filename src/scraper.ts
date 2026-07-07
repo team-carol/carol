@@ -331,14 +331,7 @@ function firstMatchingLine(lines: readonly string[], pattern: RegExp): string {
 function parseMapPercent(text: string): number | null {
   const percent = text.match(/(\d+(?:\.\d+)?)\s*%/);
   if (percent) return Number(percent[1]);
-
-  const fraction = text.match(/(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)/);
-  if (!fraction) return null;
-
-  const current = Number(fraction[1]);
-  const total = Number(fraction[2]);
-  if (!Number.isFinite(current) || !Number.isFinite(total) || total <= 0) return null;
-  return Math.max(0, Math.min(100, (current / total) * 100));
+  return null;
 }
 
 function mapAreaName(lines: readonly string[]): string {
@@ -348,24 +341,29 @@ function mapAreaName(lines: readonly string[]): string {
     && !ignored.test(line)
     && !/%/.test(line)
     && !/(km|ｍ|miles?|マイル|マス|칸)/i.test(line)
-  ) ?? "이름 없는 지역";
+  ) ?? "이름 없는 지방";
 }
 
-function mapCandidateBlocks($: cheerio.CheerioAPI): AnyNode[] {
-  const selectors = [
-    "[class*='map']",
-    "[class*='area']",
-    "[class*='event']",
-    ".see_through_block",
-    ".basic_block",
-  ].join(",");
+function mapRowBlocks($: cheerio.CheerioAPI, kind: MapAreaKind): AnyNode[] {
+  const selectors = kind === "event"
+    ? [
+        "div.eventmap_container.p_5.p_b_10.f_0",
+        "div[class*='eventmap_container'][class*='f_0']",
+      ]
+    : [
+        "div.m_10.m_t_0.f_0",
+        "div[class*='m_10'][class*='m_t_0'][class*='f_0']",
+      ];
   const blocks: AnyNode[] = [];
-  $(selectors).each((_, el) => {
-    const text = compactText($(el).text());
-    if (text.length < 8 || text.length > 1200) return;
-    if (!/(area|event|map|ちほ|進行|距離|あと|km|%|reward|보상|달성|진행)/i.test(text)) return;
-    blocks.push(el);
-  });
+  for (const selector of selectors) {
+    $(selector).each((_, el) => {
+      const text = compactText($(el).text());
+      if (text.length < 8 || text.length > 2000) return;
+      if (!/(ちほ|event period|km|next reward|gift|reward|보상|거리|進行|달성|map)/i.test(text)) return;
+      blocks.push(el);
+    });
+    if (blocks.length > 0) break;
+  }
   return blocks;
 }
 
@@ -375,23 +373,25 @@ export function parseMapAreas(html: string, kind: MapAreaKind, server: MaimaiSer
   const seen = new Set<string>();
   const areas: MapArea[] = [];
 
-  for (const block of mapCandidateBlocks($)) {
-    const lines = textLines($, block);
-    const rawText = compactText(lines.join(" "));
+  for (const row of mapRowBlocks($, kind)) {
+    const rowLines = textLines($, row);
+    const rawText = compactText(rowLines.join(" "));
+    const rowText = compactText($(row).text());
     if (!rawText || seen.has(rawText)) continue;
     seen.add(rawText);
 
-    const progressText = firstMatchingLine(lines, /(\d+(?:\.\d+)?\s*%|\d+(?:\.\d+)?\s*\/\s*\d+(?:\.\d+)?)/);
-    const distanceText = firstMatchingLine(lines, /(あと|remaining|남은|거리|distance|km|ｍ|miles?|マイル|マス|칸)/i);
-    const rewardText = firstMatchingLine(lines, /(reward|보상|報酬|獲得|ゲット|ticket|티켓|icon|plate|칭호|nameplate)/i);
-    const imageUrl = absUrl($(block).find("img").first().attr("src"), baseUrl);
+    const name = compactText($(row).find(".map_name_block span").first().text()) || mapAreaName(rowLines);
+    const progressText = rowText.match(/(\d+(?:\.\d+)?\s*%)/)?.[0] ?? "";
+    const distanceText = rowText.match(/(?:NEXT REWARD\s*)?(?:\d[\d,]*(?:\.\d+)?)\s*(?:Km|km|ｍ|miles?|マイル|マス|칸)/i)?.[0] ?? "";
+    const rewardText = rowText.match(/(?:NEXT REWARD\s*\d[\d,]*(?:\.\d+)?\s*(?:Km|km|ｍ|miles?|マイル|マス|칸)|A gift will be given for the first time play!|reward|보상|報酬|獲得|ゲット|ticket|티켓|icon|plate|칭호|nameplate)/i)?.[0] ?? "";
+    const imageUrl = absUrl($(row).find("img").first().attr("src"), baseUrl);
     const progressPercent = parseMapPercent(progressText || rawText);
 
-    if (!progressText && !distanceText && progressPercent === null) continue;
+    if (!name && !progressText && !distanceText && progressPercent === null) continue;
 
     areas.push({
       kind,
-      name: mapAreaName(lines),
+      name: name || "이름 없는 지방",
       progressText,
       progressPercent,
       distanceText,
