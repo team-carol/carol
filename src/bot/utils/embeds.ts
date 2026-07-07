@@ -296,7 +296,7 @@ function areaKindLabel(kind: MapArea["kind"]): string {
   return kind === "event" ? "이벤트 지방" : "일반 지방";
 }
 
-const MAP_PAGE_SIZE = 5;
+export const MAP_PAGE_SIZE = 5;
 
 function progressBar(percent: number | null): string {
   if (percent === null) return "";
@@ -314,6 +314,24 @@ function mapAreaDescription(area: MapArea): string {
   ].filter((line) => line.length > 0);
   if (lines.length > 0) return lines.join("\n");
   return truncateVisual(area.rawText, 180);
+}
+
+function buildMapAreaCard(
+  p: NonNullable<ReturnType<typeof getCachedProfile>>,
+  area: MapArea,
+  absoluteIdx: number,
+  totalAreas: number,
+): EmbedBuilder {
+  const emb = new EmbedBuilder()
+    .setColor(area.kind === "event" ? 0x9333ea : 0x2b2d31)
+    .setTitle(truncateVisual(area.name || "이름 없는 지방", 32))
+    .setAuthor({ name: areaKindLabel(area.kind) })
+    .setDescription(mapAreaDescription(area))
+    .setFooter({
+      text: `${p.server === "jp" ? "JP" : "INTERNATIONAL"}  ·  ${absoluteIdx + 1} / ${totalAreas}  ·  마지막 동기화: ${new Date(p.lastSyncedAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}`,
+    });
+  if (area.imageUrl) emb.setImage(area.imageUrl);
+  return emb;
 }
 
 export function mapAreaEmbed(
@@ -337,20 +355,8 @@ export function mapAreaEmbed(
   const idx = Math.max(0, Math.min(pageIdx, totalPages - 1));
   const start = idx * MAP_PAGE_SIZE;
   const pageAreas = areas.slice(start, start + MAP_PAGE_SIZE);
-  const emb = new EmbedBuilder()
-    .setColor(0x2b2d31)
-    .setTitle("지방 진행도")
-    .setDescription("한 번에 5개씩 표시합니다.")
-    .setFooter({
-      text: `${p.server === "jp" ? "JP" : "INTERNATIONAL"}  ·  ${idx + 1} / ${totalPages}  ·  ${start + 1}-${Math.min(start + MAP_PAGE_SIZE, areas.length)} / ${areas.length}  ·  마지막 동기화: ${new Date(p.lastSyncedAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}`,
-    });
-  if (pageAreas[0]?.imageUrl) emb.setThumbnail(pageAreas[0].imageUrl);
-  emb.addFields(
-    pageAreas.map((area) => ({
-      name: `${areaKindLabel(area.kind)} · ${truncateVisual(area.name || "이름 없는 지방", 28)}`,
-      value: mapAreaDescription(area),
-      inline: false,
-    })),
+  const embeds = pageAreas.map((area, offset) =>
+    buildMapAreaCard(p, area, start + offset, areas.length),
   );
 
   const prevBtn = new ButtonBuilder()
@@ -368,15 +374,18 @@ export function mapAreaEmbed(
     .setLabel("다음 ▶")
     .setStyle(ButtonStyle.Secondary)
     .setDisabled(idx === totalPages - 1);
-  const shareBtn = new ButtonBuilder()
-    .setCustomId(`mapshare:${userId}:${idx}`)
-    .setLabel("공유")
-    .setStyle(ButtonStyle.Success);
+  const shareButtons = pageAreas.map((area, offset) =>
+    new ButtonBuilder()
+      .setCustomId(`mapshare:${userId}:${start + offset}`)
+      .setLabel(`#${start + offset + 1} 공유`)
+      .setStyle(area.kind === "event" ? ButtonStyle.Success : ButtonStyle.Secondary),
+  );
 
   return {
-    embeds: [emb],
+    embeds,
     components: [
-      new ActionRowBuilder<ButtonBuilder>().addComponents(prevBtn, countBtn, nextBtn, shareBtn),
+      new ActionRowBuilder<ButtonBuilder>().addComponents(prevBtn, countBtn, nextBtn),
+      ...(shareButtons.length > 0 ? [new ActionRowBuilder<ButtonBuilder>().addComponents(...shareButtons)] : []),
     ],
   };
 }
