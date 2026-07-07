@@ -22,7 +22,7 @@ import {
 import { aliasMatches, normalizeQuery } from "../../aliases";
 import { ratingColor } from "./roles";
 import { buildMarkMap, buildKindResolver, chartKey } from "../../scraper";
-import type { PlayRecord, ChartMarks, MaimaiServer } from "../../scraper";
+import type { PlayRecord, ChartMarks, MaimaiServer, MapArea } from "../../scraper";
 
 // 곡 자켓 버퍼: DB 캐시 → maimai net(musicId) → otoge-db(title) 순으로 확보하고 캐시
 export async function jacketBuffer(r: PlayRecord): Promise<Buffer | null> {
@@ -129,6 +129,7 @@ export function profileEmb(
   hasAvatar: boolean,
 ) {
   const stars = p.stars && p.stars !== "0" ? " · ★×" + p.stars : "";
+  const serverLabel = p.server === "jp" ? "JP" : "INTERNATIONAL";
   const emb = new EmbedBuilder()
     .setColor(ratingColor(p.rating))
     .setTitle(p.trophy || "칭호 없음")
@@ -137,7 +138,7 @@ export function profileEmb(
         `플레이 ${p.playCount || 0}/${p.totalPlayCount || 0}회${stars}`,
     )
     .setFooter({
-      text: `마지막 동기화: ${new Date(p.lastSyncedAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}`,
+      text: `서버: ${serverLabel}  ·  마지막 동기화: ${new Date(p.lastSyncedAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}`,
     });
   if (hasAvatar) emb.setThumbnail("attachment://avatar.png");
   return emb;
@@ -162,6 +163,26 @@ export function getClearList(
 ): PlayRecord[] {
   const raw = JSON.parse(p.clearJson || "[]");
   return Array.isArray(raw) ? raw : [];
+}
+
+function isMapArea(value: unknown): value is MapArea {
+  if (!value || typeof value !== "object") return false;
+  const area = value as Partial<MapArea>;
+  return (area.kind === "normal" || area.kind === "event")
+    && typeof area.name === "string"
+    && typeof area.progressText === "string"
+    && (typeof area.progressPercent === "number" || area.progressPercent === null)
+    && typeof area.distanceText === "string"
+    && typeof area.rewardText === "string"
+    && typeof area.imageUrl === "string"
+    && typeof area.rawText === "string";
+}
+
+export function getMapAreaList(
+  p: NonNullable<ReturnType<typeof getCachedProfile>>,
+): MapArea[] {
+  const raw = JSON.parse(p.mapJson || "[]");
+  return Array.isArray(raw) ? raw.filter(isMapArea) : [];
 }
 
 export function groupByGame(records: PlayRecord[]): PlayRecord[][] {
@@ -269,6 +290,85 @@ export async function recentEmbeds(
   );
 
   return { embeds, components: [navRow, shareRow], files };
+}
+
+function areaKindLabel(kind: MapArea["kind"]): string {
+  return kind === "event" ? "이벤트 지역" : "일반 지역";
+}
+
+function progressBar(percent: number | null): string {
+  if (percent === null) return "";
+  const clamped = Math.max(0, Math.min(100, percent));
+  const filled = Math.round(clamped / 10);
+  return "█".repeat(filled) + "░".repeat(10 - filled) + ` ${clamped.toFixed(1)}%`;
+}
+
+function mapAreaDescription(area: MapArea): string {
+  const lines = [
+    progressBar(area.progressPercent),
+    area.progressText ? `진행도: ${area.progressText}` : "",
+    area.distanceText ? `거리: ${area.distanceText}` : "",
+    area.rewardText ? `보상: ${area.rewardText}` : "",
+  ].filter((line) => line.length > 0);
+  if (lines.length > 0) return lines.join("\n");
+  return truncateVisual(area.rawText, 180);
+}
+
+export function mapAreaEmbed(
+  p: NonNullable<ReturnType<typeof getCachedProfile>>,
+  userId: string,
+  areaIdx: number,
+): { embeds: EmbedBuilder[]; components: ActionRowBuilder<ButtonBuilder>[] } {
+  const areas = getMapAreaList(p);
+  if (areas.length === 0) {
+    return {
+      embeds: [
+        new EmbedBuilder()
+          .setColor(0x2b2d31)
+          .setDescription("지역 진행도 없음\n북마클릿을 다시 실행하면 업데이트됩니다."),
+      ],
+      components: [],
+    };
+  }
+
+  const idx = Math.max(0, Math.min(areaIdx, areas.length - 1));
+  const area = areas[idx];
+  const emb = new EmbedBuilder()
+    .setColor(area.kind === "event" ? 0x9333ea : 0x2b2d31)
+    .setTitle(truncateVisual(area.name, 32))
+    .setAuthor({ name: areaKindLabel(area.kind) })
+    .setDescription(mapAreaDescription(area))
+    .setFooter({
+      text: `${p.server === "jp" ? "JP" : "INTERNATIONAL"}  ·  ${idx + 1} / ${areas.length}  ·  마지막 동기화: ${new Date(p.lastSyncedAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}`,
+    });
+  if (area.imageUrl) emb.setThumbnail(area.imageUrl);
+
+  const prevBtn = new ButtonBuilder()
+    .setCustomId(`map:${userId}:${idx - 1}`)
+    .setLabel("◀ 이전")
+    .setStyle(ButtonStyle.Secondary)
+    .setDisabled(idx === 0);
+  const countBtn = new ButtonBuilder()
+    .setCustomId("map_noop")
+    .setLabel(`${idx + 1} / ${areas.length}`)
+    .setStyle(ButtonStyle.Primary)
+    .setDisabled(true);
+  const nextBtn = new ButtonBuilder()
+    .setCustomId(`map:${userId}:${idx + 1}`)
+    .setLabel("다음 ▶")
+    .setStyle(ButtonStyle.Secondary)
+    .setDisabled(idx === areas.length - 1);
+  const shareBtn = new ButtonBuilder()
+    .setCustomId(`mapshare:${userId}:${idx}`)
+    .setLabel("공유")
+    .setStyle(ButtonStyle.Success);
+
+  return {
+    embeds: [emb],
+    components: [
+      new ActionRowBuilder<ButtonBuilder>().addComponents(prevBtn, countBtn, nextBtn, shareBtn),
+    ],
+  };
 }
 
 // 검색 페이징 컨텍스트: 버튼 customId는 100자 제한이 있어 (일본어/한글 곡명은
@@ -544,9 +644,14 @@ export function buildProfileReply(
     .setCustomId(`rt:${userId}`)
     .setLabel("레이팅 대상곡")
     .setStyle(ButtonStyle.Primary);
+  const mapBtn = new ButtonBuilder()
+    .setCustomId(`mapopen:${userId}`)
+    .setLabel("지역 진행도")
+    .setStyle(ButtonStyle.Secondary);
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
     recentBtn,
     topBtn,
+    mapBtn,
   );
   return {
     embeds: [profileEmb(cached, !!avatar)],

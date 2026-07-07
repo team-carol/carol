@@ -3,7 +3,7 @@ import { initEncryption } from "../crypto";
 import { startWebServer, setBaseUrl } from "../web";
 import { closeDb, loadUserSession, getCachedProfile, clearRatingCardCacheForInactive } from "../db";
 import { CONFIG, PORT } from "../config";
-import { recentEmbeds, rtTableEmbed, searchResultEmbeds, getSearchCtx } from "./utils/embeds";
+import { recentEmbeds, rtTableEmbed, searchResultEmbeds, getSearchCtx, mapAreaEmbed } from "./utils/embeds";
 
 import { loadConstants } from "../constants";
 import { loadAliases } from "../aliases";
@@ -20,10 +20,11 @@ import * as search       from "./commands/search";
 import * as status       from "./commands/status";
 import * as songrec      from "./commands/songrec";
 import * as random       from "./commands/random";
+import * as areaMap      from "./commands/map";
 
 type Command = { data: { toJSON(): object; name: string }; execute: (i: ChatInputCommandInteraction) => Promise<void> };
 
-const COMMANDS: Command[] = [profile, bookmarklet, ratingtable, ratingimage, fortune, settings, serverSettings, search, status, songrec, random];
+const COMMANDS: Command[] = [profile, bookmarklet, ratingtable, ratingimage, fortune, settings, serverSettings, search, status, songrec, random, areaMap];
 
 const RATING_CARD_GC_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000;
 const RATING_CARD_GC_INTERVAL_MS = 24 * 60 * 60 * 1000;
@@ -128,6 +129,57 @@ client.on(Events.InteractionCreate, async (i) => {
         await (i as ButtonInteraction).reply({ ...rtTableEmbed(cached), ephemeral: true });
       } catch (e) {
         console.error("[rt-btn]", e);
+      }
+      return;
+    }
+    if (i.customId.startsWith("mapopen:")) {
+      try {
+        const parts = i.customId.split(":");
+        const userId = parts[1];
+        if (userId !== i.user.id) { await (i as ButtonInteraction).reply({ content: "본인 지역 진행도만 열 수 있습니다.", ephemeral: true }); return; }
+        const stored = loadUserSession(userId);
+        if (!stored?.friendCode) { await (i as ButtonInteraction).reply({ content: "프로필을 먼저 등록하세요.", ephemeral: true }); return; }
+        const cached = getCachedProfile(stored.friendCode);
+        if (!cached) { await (i as ButtonInteraction).reply({ content: "프로필을 먼저 등록하세요.", ephemeral: true }); return; }
+        await (i as ButtonInteraction).reply({ ...mapAreaEmbed(cached, userId, 0), ephemeral: true });
+      } catch (e) {
+        console.error("[mapopen-btn]", e);
+      }
+      return;
+    }
+    if (i.customId.startsWith("map:")) {
+      try {
+        const parts = i.customId.split(":");
+        const userId = parts[1];
+        const areaIdx = parseInt(parts[2] ?? "0") || 0;
+        if (userId !== i.user.id) { await (i as ButtonInteraction).reply({ content: "본인 지역 진행도만 볼 수 있습니다.", ephemeral: true }); return; }
+        const stored = loadUserSession(userId);
+        if (!stored?.friendCode) { await (i as ButtonInteraction).reply({ content: "프로필을 먼저 등록하세요.", ephemeral: true }); return; }
+        const cached = getCachedProfile(stored.friendCode);
+        if (!cached) { await (i as ButtonInteraction).reply({ content: "프로필을 먼저 등록하세요.", ephemeral: true }); return; }
+        await (i as ButtonInteraction).update(mapAreaEmbed(cached, userId, areaIdx));
+      } catch (e) {
+        console.error("[map-btn]", e);
+      }
+      return;
+    }
+    if (i.customId.startsWith("mapshare:")) {
+      try {
+        const parts = i.customId.split(":");
+        const userId = parts[1];
+        const areaIdx = parseInt(parts[2] ?? "0") || 0;
+        if (userId !== i.user.id) { await (i as ButtonInteraction).reply({ content: "본인 지역 진행도만 공유할 수 있습니다.", ephemeral: true }); return; }
+        const stored = loadUserSession(userId);
+        if (!stored?.friendCode) { await (i as ButtonInteraction).reply({ content: "프로필을 찾을 수 없습니다.", ephemeral: true }); return; }
+        const cached = getCachedProfile(stored.friendCode);
+        if (!cached) { await (i as ButtonInteraction).reply({ content: "프로필을 찾을 수 없습니다.", ephemeral: true }); return; }
+        const result = mapAreaEmbed(cached, userId, areaIdx);
+        const emb = result.embeds[0];
+        if (!emb) { await (i as ButtonInteraction).reply({ content: "지역 진행도를 찾을 수 없습니다.", ephemeral: true }); return; }
+        emb.setFooter({ text: `${cached.playerName}의 지역 진행도  ·  공유: ${i.user.username}` });
+        await (i as ButtonInteraction).reply({ embeds: [emb] });
+      } catch (e) {
+        console.error("[mapshare-btn]", e);
       }
       return;
     }
