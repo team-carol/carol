@@ -220,8 +220,7 @@ function friendCodeColumn(server: MaimaiServer): "friend_code_intl" | "friend_co
 
 function selectedFriendCode(row: Pick<StoredSession, "friend_code" | "friend_code_intl" | "friend_code_jp" | "default_server">): string {
   const server = isMaimaiServer(row.default_server) ? row.default_server : "intl";
-  const selected = server === "intl" ? row.friend_code_intl : row.friend_code_jp;
-  return selected || row.friend_code;
+  return server === "intl" ? row.friend_code_intl : row.friend_code_jp;
 }
 
 export function saveUserSession(discordUserId: string, cookieJson: string, friendCode = "", server: MaimaiServer = "intl"): void {
@@ -279,7 +278,7 @@ export function setUserDefaultServer(discordUserId: string, server: MaimaiServer
     VALUES (?, '{}', ?, '', 0, ?)
     ON CONFLICT(discord_user_id) DO UPDATE SET
       default_server = excluded.default_server,
-      friend_code = COALESCE(NULLIF(sessions.${column}, ''), sessions.friend_code),
+      friend_code = COALESCE(NULLIF(sessions.${column}, ''), ''),
       updated_at = excluded.updated_at
   `).run(discordUserId, server, Date.now());
   return info.changes;

@@ -129,6 +129,7 @@ export function profileEmb(
   hasAvatar: boolean,
 ) {
   const stars = p.stars && p.stars !== "0" ? " · ★×" + p.stars : "";
+  const serverLabel = p.server === "jp" ? "JP" : "INTERNATIONAL";
   const emb = new EmbedBuilder()
     .setColor(ratingColor(p.rating))
     .setTitle(p.trophy || "칭호 없음")
@@ -137,7 +138,7 @@ export function profileEmb(
         `플레이 ${p.playCount || 0}/${p.totalPlayCount || 0}회${stars}`,
     )
     .setFooter({
-      text: `마지막 동기화: ${new Date(p.lastSyncedAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}`,
+      text: `서버: ${serverLabel}  ·  마지막 동기화: ${new Date(p.lastSyncedAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}`,
     });
   if (hasAvatar) emb.setThumbnail("attachment://avatar.png");
   return emb;

@@ -2,7 +2,7 @@ import {
   SlashCommandBuilder, ChatInputCommandInteraction, EmbedBuilder,
   MessageFlags, ActionRowBuilder, ButtonBuilder, ButtonStyle,
 } from "discord.js";
-import { getUserFriendCode, getUserSyncToken } from "../../db";
+import { getUserFriendCode, getUserSyncToken, getUserDefaultServer } from "../../db";
 import { getBaseUrl } from "../../web";
 import { PORT } from "../../config";
 
@@ -14,10 +14,15 @@ function buildSettingsContent(userId: string) {
   const baseUrl = getBaseUrl(PORT);
   const settingsUrl = `${baseUrl}/settings?code=${getUserSyncToken(userId)}`;
   const termsUrl = `${baseUrl}/terms`;
+  const server = getUserDefaultServer(userId) === "jp" ? "JP" : "INTERNATIONAL";
   const embed = new EmbedBuilder()
     .setTitle("⚙️ 웹 설정")
     .setColor(0x5865f2)
     .addFields(
+      {
+        name: "현재 서버",
+        value: server,
+      },
       {
         name: "설정 페이지에서 관리",
         value: "프로필 공개 여부, 프리셋 북마클릿, 추가 북마클릿을 웹에서 관리할 수 있습니다.",
