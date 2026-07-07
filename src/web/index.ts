@@ -298,7 +298,7 @@ a{color:#c084fc}
       const userId = findUserBySyncToken(token);
       if (!userId && !isDev) { res.writeHead(403); res.end("expired"); return; }
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-      res.end(guidePage(token, userId ? buildBookmarklet(token, port) : "javascript:alert('preview')"));
+      res.end(guidePage(token, userId ? buildBookmarklet(token, port) : buildBookmarklet("preview", port)));
       return;
     }
 
@@ -445,7 +445,9 @@ a{color:#c084fc}
     if (req.method === "POST" && url.pathname === "/sync") {
       const token = url.searchParams.get("code") || "";
       const userId = findUserBySyncToken(token);
-      if (!userId) { res.writeHead(403); res.end("expired"); return; }
+      const isPreview = isDev && token === "preview" && !userId;
+      if (!userId && !isPreview) { res.writeHead(403); res.end("expired"); return; }
+      const syncUserId = userId || "preview";
 
       const raw = await readBody(req);
       const data = JSON.parse(raw);
@@ -460,13 +462,19 @@ a{color:#c084fc}
       const top1Html: string = data.tb1 || "";
       const top0Html: string = data.tb0 || "";
       const ratingTargetHtml: string = data.rt || "";
+      const mapHtml: string = data.m || "";
+      const eventMapHtml: string = data.em || "";
       const avatarBase64: string = data.a || "";
-      console.log(`[web] user=${userId.slice(-6)}, server=${syncServer}, home=${homeHtml.length}B, player=${playerHtml.length}B, record=${recordHtml.length}B, fc=${fcHtml.length}B, top4=${top4Html.length}B, top3=${top3Html.length}B, top2=${top2Html.length}B, top1=${top1Html.length}B, top0=${top0Html.length}B, rt=${ratingTargetHtml.length}B`);
-      fs.writeFileSync("debug_home.html", homeHtml, "utf-8");
-      fs.writeFileSync("debug_pd.html", playerHtml, "utf-8");
-      fs.writeFileSync("debug_fc.html", fcHtml, "utf-8");
-      fs.writeFileSync("debug_record.html", recordHtml, "utf-8");
-      fs.writeFileSync("debug_rating_target.html", ratingTargetHtml, "utf-8");
+      console.log(`[web] user=${syncUserId.slice(-6)}, server=${syncServer}, home=${homeHtml.length}B, player=${playerHtml.length}B, record=${recordHtml.length}B, fc=${fcHtml.length}B, top4=${top4Html.length}B, top3=${top3Html.length}B, top2=${top2Html.length}B, top1=${top1Html.length}B, top0=${top0Html.length}B, map=${mapHtml.length}B, eventMap=${eventMapHtml.length}B, rt=${ratingTargetHtml.length}B`);
+      if (isDev) {
+        fs.writeFileSync("debug_home.html", homeHtml, "utf-8");
+        fs.writeFileSync("debug_pd.html", playerHtml, "utf-8");
+        fs.writeFileSync("debug_fc.html", fcHtml, "utf-8");
+        fs.writeFileSync("debug_record.html", recordHtml, "utf-8");
+        fs.writeFileSync("debug_rating_target.html", ratingTargetHtml, "utf-8");
+        fs.writeFileSync("debug_map.html", mapHtml, "utf-8");
+        fs.writeFileSync("debug_event_map.html", eventMapHtml, "utf-8");
+      }
 
       try {
         const home = parseHome(homeHtml, syncServer);
@@ -509,19 +517,25 @@ a{color:#c084fc}
           return;
         }
 
+        if (isPreview) {
+          res.writeHead(200);
+          res.end("preview_ok");
+          return;
+        }
+
         const savedProfileKey = cacheProfile({
           playerName: effective.playerName || "???", rating: effective.rating || 0,
           ratingMax: effective.ratingMax || 0, gradeImg: effective.gradeImg || "",
           avatar: effective.avatar || "", trophy: effective.trophy || "",
           trophyClass: effective.trophyClass || "normal", stars: effective.stars || "0",
           playCount: playCount || 0, totalPlayCount: totalPlayCount || 0, comment: effective.comment || "", friendCode: fc,
-        }, playCount || 0, homeHtml, JSON.stringify(recentRecords), JSON.stringify(topRecords), JSON.stringify(clearRecords), syncServer);
-        saveUserSession(userId, "{}", savedProfileKey, syncServer);
+        }, playCount || 0, homeHtml, JSON.stringify(recentRecords), JSON.stringify(topRecords), JSON.stringify(clearRecords), syncServer, JSON.stringify([]));
+        saveUserSession(syncUserId, "{}", savedProfileKey, syncServer);
 
         // base64 아바타 → DB에 저장
         if (avatarBase64 && avatarBase64.startsWith("data:")) {
           const m = avatarBase64.match(/^data:image\/\w+;base64,(.+)$/);
-          if (m) saveAvatarBlob(userId, m[1]);
+          if (m) saveAvatarBlob(syncUserId, m[1]);
         }
         if (Array.isArray(data.js)) {
           let saved = 0;
