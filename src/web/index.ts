@@ -1,7 +1,7 @@
 import * as http from "http";
 import * as fs from "fs";
 import { parseHome, parsePlayerData, parseFriendCode as parseFC, parseRecentRecords, parseTop5, parseTopSongs, parseMusicScore, mergeTopRecords, getMaimaiBaseUrl, parseMapAreas } from "../scraper";
-import { cacheProfile, saveUserSession, getUserSyncToken, findUserBySyncToken, saveAvatarBlob, getAvatarBlob, getSongJacket, saveSongJacket, getExtraBookmarklets, getProfilePrivate, setProfilePrivate, addExtraBookmarklet, removeExtraBookmarklet, getEnabledBookmarkletPresetIds, setBookmarkletPresetEnabled, getUserDefaultServer, setUserDefaultServer, isMaimaiServer } from "../db";
+import { cacheProfile, saveUserSession, getUserSyncToken, findUserBySyncToken, saveAvatarBlob, getAvatarBlob, getSongJacket, saveSongJacket, getExtraBookmarklets, getProfilePrivate, setProfilePrivate, addExtraBookmarklet, removeExtraBookmarklet, getEnabledBookmarkletPresetIds, setBookmarkletPresetEnabled, getUserDefaultServer, setUserDefaultServer, isMaimaiServer, getMapImage, saveMapImage } from "../db";
 import { buildBookmarkletJs, setBaseUrl, getBaseUrl, buildBookmarklet, BOOKMARKLET_PRESETS, getBookmarkletPresets } from "./bookmarklet";
 import { computeRatingTarget } from "../constants";
 import { settingsPage } from "./settingsPage";
@@ -28,6 +28,23 @@ function discordInviteUrl(): string | null {
     scope: "applications.commands bot",
   });
   return `${DISCORD_INVITE_BASE_URL}?${params.toString()}`;
+}
+
+async function cacheMapImages(areas: readonly { imageUrl: string }[], server: string): Promise<number> {
+  const uniqueUrls = Array.from(new Set(areas.map((area) => area.imageUrl).filter((url) => url.length > 0)));
+  let saved = 0;
+  for (const imageUrl of uniqueUrls) {
+    if (getMapImage(imageUrl)) continue;
+    try {
+      const resp = await fetch(imageUrl);
+      if (!resp.ok) continue;
+      saveMapImage(imageUrl, Buffer.from(await resp.arrayBuffer()));
+      saved++;
+    } catch (e) {
+      console.warn(`[web] map image fetch failed (${server}): ${imageUrl}`, e instanceof Error ? e.message : e);
+    }
+  }
+  return saved;
 }
 
 function guidePage(token: string, bookmarklet: string): string {
@@ -528,6 +545,9 @@ a{color:#c084fc}
           playCount: playCount || 0, totalPlayCount: totalPlayCount || 0, comment: effective.comment || "", friendCode: fc,
         }, playCount || 0, homeHtml, JSON.stringify(recentRecords), JSON.stringify(topRecords), JSON.stringify(clearRecords), syncServer, JSON.stringify(mapAreas));
         saveUserSession(syncUserId, "{}", savedProfileKey, syncServer);
+
+        const savedMapImages = await cacheMapImages(mapAreas, syncServer);
+        console.log(`[web] map images saved: ${savedMapImages}`);
 
         // base64 아바타 → DB에 저장
         if (avatarBase64 && avatarBase64.startsWith("data:")) {
