@@ -69,18 +69,11 @@ code{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:13px;backgrou
 .extraCard:hover{border-color:#9333ea;background:#1a1a1a}
 .extraCard strong{display:block;color:#fff;font-size:15px;margin-bottom:6px}
 .extraCard span{display:block;color:#777;font-size:13px;line-height:1.5}
-.regionHint{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
-.regionPill{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid #2a2a2a;border-radius:999px;background:#111;color:#cfcfcf;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;letter-spacing:.4px;text-transform:uppercase}
-.regionPill strong{color:#fff;font-size:11px}
 @media(max-width:500px){h1{font-size:36px}body{padding:48px 16px}.tabs{gap:6px}.tabBtn,.settingsLink{padding:10px 12px}.card{padding:20px}.extraActions{grid-template-columns:1fr}}
 </style></head><body>
 <div class="wrap">
 <p class="mono">carolbot</p>
 <h1>북마클릿<br>설치</h1>
-<div class="regionHint">
-<div class="regionPill"><strong>INTERNATIONAL</strong><span>maimaidx-eng.com</span></div>
-<div class="regionPill"><strong>JP</strong><span>maimaidx.jp</span></div>
-</div>
 <div class="tabs">
 <button class="tabBtn active" id="tbPC" onclick="sw('PC')">💻 PC</button>
 <button class="tabBtn" id="tbMB" onclick="sw('MB')">📱 모바일</button>
