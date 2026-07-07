@@ -136,7 +136,7 @@ client.on(Events.InteractionCreate, async (i) => {
       try {
         const parts = i.customId.split(":");
         const userId = parts[1];
-        if (userId !== i.user.id) { await (i as ButtonInteraction).reply({ content: "본인 지역 진행도만 열 수 있습니다.", ephemeral: true }); return; }
+        if (userId !== i.user.id) { await (i as ButtonInteraction).reply({ content: "본인 지방 진행도만 열 수 있습니다.", ephemeral: true }); return; }
         const stored = loadUserSession(userId);
         if (!stored?.friendCode) { await (i as ButtonInteraction).reply({ content: "프로필을 먼저 등록하세요.", ephemeral: true }); return; }
         const cached = getCachedProfile(stored.friendCode);
@@ -151,13 +151,13 @@ client.on(Events.InteractionCreate, async (i) => {
       try {
         const parts = i.customId.split(":");
         const userId = parts[1];
-        const areaIdx = parseInt(parts[2] ?? "0") || 0;
-        if (userId !== i.user.id) { await (i as ButtonInteraction).reply({ content: "본인 지역 진행도만 볼 수 있습니다.", ephemeral: true }); return; }
+        const pageIdx = parseInt(parts[2] ?? "0") || 0;
+        if (userId !== i.user.id) { await (i as ButtonInteraction).reply({ content: "본인 지방 진행도만 볼 수 있습니다.", ephemeral: true }); return; }
         const stored = loadUserSession(userId);
         if (!stored?.friendCode) { await (i as ButtonInteraction).reply({ content: "프로필을 먼저 등록하세요.", ephemeral: true }); return; }
         const cached = getCachedProfile(stored.friendCode);
         if (!cached) { await (i as ButtonInteraction).reply({ content: "프로필을 먼저 등록하세요.", ephemeral: true }); return; }
-        await (i as ButtonInteraction).update(mapAreaEmbed(cached, userId, areaIdx));
+        await (i as ButtonInteraction).update(mapAreaEmbed(cached, userId, pageIdx));
       } catch (e) {
         console.error("[map-btn]", e);
       }
@@ -167,16 +167,16 @@ client.on(Events.InteractionCreate, async (i) => {
       try {
         const parts = i.customId.split(":");
         const userId = parts[1];
-        const areaIdx = parseInt(parts[2] ?? "0") || 0;
-        if (userId !== i.user.id) { await (i as ButtonInteraction).reply({ content: "본인 지역 진행도만 공유할 수 있습니다.", ephemeral: true }); return; }
+        const pageIdx = parseInt(parts[2] ?? "0") || 0;
+        if (userId !== i.user.id) { await (i as ButtonInteraction).reply({ content: "본인 지방 진행도만 공유할 수 있습니다.", ephemeral: true }); return; }
         const stored = loadUserSession(userId);
         if (!stored?.friendCode) { await (i as ButtonInteraction).reply({ content: "프로필을 찾을 수 없습니다.", ephemeral: true }); return; }
         const cached = getCachedProfile(stored.friendCode);
         if (!cached) { await (i as ButtonInteraction).reply({ content: "프로필을 찾을 수 없습니다.", ephemeral: true }); return; }
-        const result = mapAreaEmbed(cached, userId, areaIdx);
+        const result = mapAreaEmbed(cached, userId, pageIdx);
         const emb = result.embeds[0];
-        if (!emb) { await (i as ButtonInteraction).reply({ content: "지역 진행도를 찾을 수 없습니다.", ephemeral: true }); return; }
-        emb.setFooter({ text: `${cached.playerName}의 지역 진행도  ·  공유: ${i.user.username}` });
+        if (!emb) { await (i as ButtonInteraction).reply({ content: "지방 진행도를 찾을 수 없습니다.", ephemeral: true }); return; }
+        emb.setFooter({ text: `${cached.playerName}의 지방 진행도  ·  공유: ${i.user.username}` });
         await (i as ButtonInteraction).reply({ embeds: [emb] });
       } catch (e) {
         console.error("[mapshare-btn]", e);

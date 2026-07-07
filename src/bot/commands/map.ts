@@ -3,8 +3,8 @@ import { getCachedProfile, getUserFriendCode } from "../../db";
 import { mapAreaEmbed } from "../utils/embeds";
 
 export const data = new SlashCommandBuilder()
-  .setName("지역")
-  .setDescription("내 maimai DX 지역 진행도 보기");
+  .setName("지방")
+  .setDescription("내 maimai DX 지방 진행도 보기");
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   const friendCode = getUserFriendCode(interaction.user.id);

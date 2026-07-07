@@ -293,8 +293,10 @@ export async function recentEmbeds(
 }
 
 function areaKindLabel(kind: MapArea["kind"]): string {
-  return kind === "event" ? "이벤트 지역" : "일반 지역";
+  return kind === "event" ? "이벤트 지방" : "일반 지방";
 }
+
+const MAP_PAGE_SIZE = 5;
 
 function progressBar(percent: number | null): string {
   if (percent === null) return "";
@@ -317,7 +319,7 @@ function mapAreaDescription(area: MapArea): string {
 export function mapAreaEmbed(
   p: NonNullable<ReturnType<typeof getCachedProfile>>,
   userId: string,
-  areaIdx: number,
+  pageIdx: number,
 ): { embeds: EmbedBuilder[]; components: ActionRowBuilder<ButtonBuilder>[] } {
   const areas = getMapAreaList(p);
   if (areas.length === 0) {
@@ -325,23 +327,31 @@ export function mapAreaEmbed(
       embeds: [
         new EmbedBuilder()
           .setColor(0x2b2d31)
-          .setDescription("지역 진행도 없음\n북마클릿을 다시 실행하면 업데이트됩니다."),
+          .setDescription("지방 진행도 없음\n북마클릿을 다시 실행하면 업데이트됩니다."),
       ],
       components: [],
     };
   }
 
-  const idx = Math.max(0, Math.min(areaIdx, areas.length - 1));
-  const area = areas[idx];
+  const totalPages = Math.max(1, Math.ceil(areas.length / MAP_PAGE_SIZE));
+  const idx = Math.max(0, Math.min(pageIdx, totalPages - 1));
+  const start = idx * MAP_PAGE_SIZE;
+  const pageAreas = areas.slice(start, start + MAP_PAGE_SIZE);
   const emb = new EmbedBuilder()
-    .setColor(area.kind === "event" ? 0x9333ea : 0x2b2d31)
-    .setTitle(truncateVisual(area.name, 32))
-    .setAuthor({ name: areaKindLabel(area.kind) })
-    .setDescription(mapAreaDescription(area))
+    .setColor(0x2b2d31)
+    .setTitle("지방 진행도")
+    .setDescription("한 번에 5개씩 표시합니다.")
     .setFooter({
-      text: `${p.server === "jp" ? "JP" : "INTERNATIONAL"}  ·  ${idx + 1} / ${areas.length}  ·  마지막 동기화: ${new Date(p.lastSyncedAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}`,
+      text: `${p.server === "jp" ? "JP" : "INTERNATIONAL"}  ·  ${idx + 1} / ${totalPages}  ·  ${start + 1}-${Math.min(start + MAP_PAGE_SIZE, areas.length)} / ${areas.length}  ·  마지막 동기화: ${new Date(p.lastSyncedAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}`,
     });
-  if (area.imageUrl) emb.setThumbnail(area.imageUrl);
+  if (pageAreas[0]?.imageUrl) emb.setThumbnail(pageAreas[0].imageUrl);
+  emb.addFields(
+    pageAreas.map((area) => ({
+      name: `${areaKindLabel(area.kind)} · ${truncateVisual(area.name || "이름 없는 지방", 28)}`,
+      value: mapAreaDescription(area),
+      inline: false,
+    })),
+  );
 
   const prevBtn = new ButtonBuilder()
     .setCustomId(`map:${userId}:${idx - 1}`)
@@ -350,14 +360,14 @@ export function mapAreaEmbed(
     .setDisabled(idx === 0);
   const countBtn = new ButtonBuilder()
     .setCustomId("map_noop")
-    .setLabel(`${idx + 1} / ${areas.length}`)
+    .setLabel(`${idx + 1} / ${totalPages}`)
     .setStyle(ButtonStyle.Primary)
     .setDisabled(true);
   const nextBtn = new ButtonBuilder()
     .setCustomId(`map:${userId}:${idx + 1}`)
     .setLabel("다음 ▶")
     .setStyle(ButtonStyle.Secondary)
-    .setDisabled(idx === areas.length - 1);
+    .setDisabled(idx === totalPages - 1);
   const shareBtn = new ButtonBuilder()
     .setCustomId(`mapshare:${userId}:${idx}`)
     .setLabel("공유")
@@ -646,7 +656,7 @@ export function buildProfileReply(
     .setStyle(ButtonStyle.Primary);
   const mapBtn = new ButtonBuilder()
     .setCustomId(`mapopen:${userId}`)
-    .setLabel("지역 진행도")
+    .setLabel("지방 진행도")
     .setStyle(ButtonStyle.Secondary);
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
     recentBtn,
