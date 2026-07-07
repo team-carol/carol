@@ -26,7 +26,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   }
 
   await interaction.reply({
-    ...mapAreaEmbed(cached, interaction.user.id, 0),
+    ...(await mapAreaEmbed(cached, interaction.user.id, 0)),
     flags: MessageFlags.Ephemeral,
   });
 }

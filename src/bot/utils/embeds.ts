@@ -9,7 +9,9 @@ import {
   getCachedProfile,
   getAvatarBlob,
   getSongJacket,
+  getMapImage,
   saveSongJacket,
+  saveMapImage,
 } from "../../db";
 import { getMaimaiBaseUrl } from "../../scraper";
 import {
@@ -321,6 +323,7 @@ function buildMapAreaCard(
   area: MapArea,
   absoluteIdx: number,
   totalAreas: number,
+  imageRef: string,
 ): EmbedBuilder {
   const emb = new EmbedBuilder()
     .setColor(area.kind === "event" ? 0x9333ea : 0x2b2d31)
@@ -330,15 +333,16 @@ function buildMapAreaCard(
     .setFooter({
       text: `${p.server === "jp" ? "JP" : "INTERNATIONAL"}  ·  ${absoluteIdx + 1} / ${totalAreas}  ·  마지막 동기화: ${new Date(p.lastSyncedAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}`,
     });
-  if (area.imageUrl) emb.setImage(area.imageUrl);
+  if (imageRef) emb.setImage(imageRef);
+  else if (area.imageUrl) emb.setImage(area.imageUrl);
   return emb;
 }
 
-export function mapAreaEmbed(
+export async function mapAreaEmbed(
   p: NonNullable<ReturnType<typeof getCachedProfile>>,
   userId: string,
   pageIdx: number,
-): { embeds: EmbedBuilder[]; components: ActionRowBuilder<ButtonBuilder>[] } {
+): Promise<{ embeds: EmbedBuilder[]; components: ActionRowBuilder<ButtonBuilder>[]; files: AttachmentBuilder[] }> {
   const areas = getMapAreaList(p);
   if (areas.length === 0) {
     return {
@@ -348,6 +352,7 @@ export function mapAreaEmbed(
           .setDescription("지방 진행도 없음\n북마클릿을 다시 실행하면 업데이트됩니다."),
       ],
       components: [],
+      files: [],
     };
   }
 
@@ -355,9 +360,38 @@ export function mapAreaEmbed(
   const idx = Math.max(0, Math.min(pageIdx, totalPages - 1));
   const start = idx * MAP_PAGE_SIZE;
   const pageAreas = areas.slice(start, start + MAP_PAGE_SIZE);
-  const embeds = pageAreas.map((area, offset) =>
-    buildMapAreaCard(p, area, start + offset, areas.length),
-  );
+  const imageBuffers: Array<Buffer | null> = [];
+  for (const area of pageAreas) {
+    if (!area.imageUrl) {
+      imageBuffers.push(null);
+      continue;
+    }
+    const cached = getMapImage(area.imageUrl);
+    if (cached) {
+      imageBuffers.push(cached);
+      continue;
+    }
+    try {
+      const res = await fetch(area.imageUrl);
+      if (!res.ok) {
+        imageBuffers.push(null);
+        continue;
+      }
+      const buf = Buffer.from(await res.arrayBuffer());
+      saveMapImage(area.imageUrl, buf);
+      imageBuffers.push(buf);
+    } catch {
+      imageBuffers.push(null);
+    }
+  }
+  const files: AttachmentBuilder[] = [];
+  const embeds = pageAreas.map((area, offset) => {
+    const buf = imageBuffers[offset] ?? null;
+    const fileName = buf ? `map${start + offset}.png` : "";
+    if (buf) files.push(new AttachmentBuilder(buf, { name: fileName }));
+    const imageRef = buf ? `attachment://${fileName}` : "";
+    return buildMapAreaCard(p, area, start + offset, areas.length, imageRef);
+  });
 
   const prevBtn = new ButtonBuilder()
     .setCustomId(`map:${userId}:${idx - 1}`)
@@ -377,8 +411,8 @@ export function mapAreaEmbed(
   const shareButtons = pageAreas.map((area, offset) =>
     new ButtonBuilder()
       .setCustomId(`mapshare:${userId}:${start + offset}`)
-      .setLabel(`#${start + offset + 1} 공유`)
-      .setStyle(area.kind === "event" ? ButtonStyle.Success : ButtonStyle.Secondary),
+      .setLabel(`공유 · ${truncateVisual(area.name || "지방", 10)}`)
+      .setStyle(ButtonStyle.Success),
   );
 
   return {
@@ -387,6 +421,7 @@ export function mapAreaEmbed(
       new ActionRowBuilder<ButtonBuilder>().addComponents(prevBtn, countBtn, nextBtn),
       ...(shareButtons.length > 0 ? [new ActionRowBuilder<ButtonBuilder>().addComponents(...shareButtons)] : []),
     ],
+    files,
   };
 }
 

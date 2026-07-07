@@ -92,6 +92,12 @@ db.exec(`
     created_at INTEGER DEFAULT (strftime('%s','now') * 1000)
   );
 
+  CREATE TABLE IF NOT EXISTS map_images (
+    image_url TEXT PRIMARY KEY,
+    data BLOB NOT NULL,
+    created_at INTEGER DEFAULT (strftime('%s','now') * 1000)
+  );
+
   CREATE TABLE IF NOT EXISTS constants_cache (
     key TEXT PRIMARY KEY,
     data TEXT NOT NULL,
@@ -336,6 +342,15 @@ export function getSongJacket(musicId: string): Buffer | null {
 
 export function saveSongJacket(musicId: string, data: Buffer): void {
   db.prepare("INSERT OR REPLACE INTO song_jackets (music_id, data) VALUES (?, ?)").run(musicId, data);
+}
+
+export function getMapImage(imageUrl: string): Buffer | null {
+  const row = db.prepare("SELECT data FROM map_images WHERE image_url = ?").get(imageUrl) as { data: Buffer } | undefined;
+  return row?.data ?? null;
+}
+
+export function saveMapImage(imageUrl: string, data: Buffer): void {
+  db.prepare("INSERT OR REPLACE INTO map_images (image_url, data) VALUES (?, ?)").run(imageUrl, data);
 }
 
 export function getGuildSetting(guildId: string): boolean {
