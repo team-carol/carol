@@ -11,7 +11,6 @@ import {
   getSongJacket,
   getMapImage,
   saveSongJacket,
-  saveMapImage,
 } from "../../db";
 import { getMaimaiBaseUrl } from "../../scraper";
 import {
@@ -333,8 +332,7 @@ function buildMapAreaCard(
     .setFooter({
       text: `${p.server === "jp" ? "JP" : "INTERNATIONAL"}  ·  ${absoluteIdx + 1} / ${totalAreas}  ·  마지막 동기화: ${new Date(p.lastSyncedAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}`,
     });
-  if (imageRef) emb.setImage(imageRef);
-  else if (area.imageUrl) emb.setImage(area.imageUrl);
+  if (imageRef) emb.setThumbnail(imageRef);
   return emb;
 }
 
@@ -360,33 +358,9 @@ export async function mapAreaEmbed(
   const idx = Math.max(0, Math.min(pageIdx, totalPages - 1));
   const start = idx * MAP_PAGE_SIZE;
   const pageAreas = areas.slice(start, start + MAP_PAGE_SIZE);
-  const imageBuffers: Array<Buffer | null> = [];
-  for (const area of pageAreas) {
-    if (!area.imageUrl) {
-      imageBuffers.push(null);
-      continue;
-    }
-    const cached = getMapImage(area.imageUrl);
-    if (cached) {
-      imageBuffers.push(cached);
-      continue;
-    }
-    try {
-      const res = await fetch(area.imageUrl);
-      if (!res.ok) {
-        imageBuffers.push(null);
-        continue;
-      }
-      const buf = Buffer.from(await res.arrayBuffer());
-      saveMapImage(area.imageUrl, buf);
-      imageBuffers.push(buf);
-    } catch {
-      imageBuffers.push(null);
-    }
-  }
   const files: AttachmentBuilder[] = [];
   const embeds = pageAreas.map((area, offset) => {
-    const buf = imageBuffers[offset] ?? null;
+    const buf = area.imageUrl ? getMapImage(area.imageUrl) : null;
     const fileName = buf ? `map${start + offset}.png` : "";
     if (buf) files.push(new AttachmentBuilder(buf, { name: fileName }));
     const imageRef = buf ? `attachment://${fileName}` : "";
