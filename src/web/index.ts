@@ -1,6 +1,6 @@
 import * as http from "http";
 import * as fs from "fs";
-import { parseHome, parsePlayerData, parseFriendCode as parseFC, parseRecentRecords, parseTop5, parseTopSongs, parseMusicScore, mergeTopRecords, getMaimaiBaseUrl } from "../scraper";
+import { parseHome, parsePlayerData, parseFriendCode as parseFC, parseRecentRecords, parseTop5, parseTopSongs, parseMusicScore, mergeTopRecords, getMaimaiBaseUrl, parseMapAreas } from "../scraper";
 import { cacheProfile, saveUserSession, getUserSyncToken, findUserBySyncToken, saveAvatarBlob, getAvatarBlob, getSongJacket, saveSongJacket, getExtraBookmarklets, getProfilePrivate, setProfilePrivate, addExtraBookmarklet, removeExtraBookmarklet, getEnabledBookmarkletPresetIds, setBookmarkletPresetEnabled, getUserDefaultServer, setUserDefaultServer, isMaimaiServer } from "../db";
 import { buildBookmarkletJs, setBaseUrl, getBaseUrl, buildBookmarklet, BOOKMARKLET_PRESETS, getBookmarkletPresets } from "./bookmarklet";
 import { computeRatingTarget } from "../constants";
@@ -497,9 +497,13 @@ a{color:#c084fc}
         const topRecords = syncServer === "jp"
           ? computeRatingTarget(clearRecords, syncServer)
           : ratingTargetHtml ? parseMusicScore(ratingTargetHtml, syncServer) : parseTop5(recordHtml, syncServer);
+        const mapAreas = [
+          ...parseMapAreas(mapHtml, "normal", syncServer),
+          ...parseMapAreas(eventMapHtml, "event", syncServer),
+        ];
         const emptyFc = clearRecords.filter((r) => !r.fc).length;
         const expectedRecentRecords = Math.min(Math.max(playCount || 1, 1), 5);
-        console.log(`[web] recentRecords: ${recentRecords.length} songs, top: ${topRecords.length} (rating target), clear: ${clearRecords.length} (empty fc: ${emptyFc})`);
+        console.log(`[web] recentRecords: ${recentRecords.length} songs, top: ${topRecords.length} (rating target), clear: ${clearRecords.length} (empty fc: ${emptyFc}), mapAreas: ${mapAreas.length}`);
 
         if (!effective.playerName || !/^\d{13}$/.test(fc) || recentRecords.length < expectedRecentRecords || clearRecords.length === 0 || topRecords.length === 0) {
           console.warn("[web] invalid sync payload", {
@@ -529,7 +533,7 @@ a{color:#c084fc}
           avatar: effective.avatar || "", trophy: effective.trophy || "",
           trophyClass: effective.trophyClass || "normal", stars: effective.stars || "0",
           playCount: playCount || 0, totalPlayCount: totalPlayCount || 0, comment: effective.comment || "", friendCode: fc,
-        }, playCount || 0, homeHtml, JSON.stringify(recentRecords), JSON.stringify(topRecords), JSON.stringify(clearRecords), syncServer, JSON.stringify([]));
+        }, playCount || 0, homeHtml, JSON.stringify(recentRecords), JSON.stringify(topRecords), JSON.stringify(clearRecords), syncServer, JSON.stringify(mapAreas));
         saveUserSession(syncUserId, "{}", savedProfileKey, syncServer);
 
         // base64 아바타 → DB에 저장

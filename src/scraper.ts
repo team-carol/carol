@@ -1,4 +1,5 @@
 import * as cheerio from "cheerio";
+import type { AnyNode } from "domhandler";
 
 export type MaimaiServer = "intl" | "jp";
 
@@ -100,6 +101,19 @@ export interface PlayRecord {
   track: number;
   fc: string;
   sync: string;
+}
+
+export type MapAreaKind = "normal" | "event";
+
+export interface MapArea {
+  readonly kind: MapAreaKind;
+  readonly name: string;
+  readonly progressText: string;
+  readonly progressPercent: number | null;
+  readonly distanceText: string;
+  readonly rewardText: string;
+  readonly imageUrl: string;
+  readonly rawText: string;
 }
 
 const FC_LABELS: Record<string, string> = {
@@ -288,6 +302,125 @@ export function mergeTopRecords(recordsList: PlayRecord[][]): PlayRecord[] {
     }
   }
   return Array.from(best.values()).sort((a, b) => b.achievementVal - a.achievementVal);
+}
+
+function compactText(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function textLines($: cheerio.CheerioAPI, el: AnyNode | undefined): string[] {
+  if (!el) return [];
+  const lines: string[] = [];
+  $(el).find("*").addBack().each((_, node) => {
+    const block = $(node);
+    if (block.children().length > 0) return;
+    const text = compactText(block.text());
+    if (text) lines.push(text);
+  });
+  if (lines.length > 0) return Array.from(new Set(lines));
+  return $(el).text()
+    .split(/\r?\n/)
+    .map(compactText)
+    .filter((line) => line.length > 0);
+}
+
+function firstMatchingLine(lines: readonly string[], pattern: RegExp): string {
+  return lines.find((line) => pattern.test(line)) ?? "";
+}
+
+function parseMapPercent(text: string): number | null {
+  const percent = text.match(/(\d+(?:\.\d+)?)\s*%/);
+  if (percent) return Number(percent[1]);
+
+  const fraction = text.match(/(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)/);
+  if (!fraction) return null;
+
+  const current = Number(fraction[1]);
+  const total = Number(fraction[2]);
+  if (!Number.isFinite(current) || !Number.isFinite(total) || total <= 0) return null;
+  return Math.max(0, Math.min(100, (current / total) * 100));
+}
+
+function mapAreaName(lines: readonly string[]): string {
+  const ignored = /^(area|event|map|progress|진행|달성|보상|reward|あと|remaining|남은)/i;
+  return lines.find((line) =>
+    line.length <= 80
+    && !ignored.test(line)
+    && !/%/.test(line)
+    && !/(km|ｍ|miles?|マイル|マス|칸)/i.test(line)
+  ) ?? "이름 없는 지역";
+}
+
+function mapCandidateBlocks($: cheerio.CheerioAPI): AnyNode[] {
+  const selectors = [
+    "[class*='map']",
+    "[class*='area']",
+    "[class*='event']",
+    ".see_through_block",
+    ".basic_block",
+  ].join(",");
+  const blocks: AnyNode[] = [];
+  $(selectors).each((_, el) => {
+    const text = compactText($(el).text());
+    if (text.length < 8 || text.length > 1200) return;
+    if (!/(area|event|map|ちほ|進行|距離|あと|km|%|reward|보상|달성|진행)/i.test(text)) return;
+    blocks.push(el);
+  });
+  return blocks;
+}
+
+export function parseMapAreas(html: string, kind: MapAreaKind, server: MaimaiServer = "intl"): MapArea[] {
+  const $ = cheerio.load(html);
+  const baseUrl = getMaimaiBaseUrl(server);
+  const seen = new Set<string>();
+  const areas: MapArea[] = [];
+
+  for (const block of mapCandidateBlocks($)) {
+    const lines = textLines($, block);
+    const rawText = compactText(lines.join(" "));
+    if (!rawText || seen.has(rawText)) continue;
+    seen.add(rawText);
+
+    const progressText = firstMatchingLine(lines, /(\d+(?:\.\d+)?\s*%|\d+(?:\.\d+)?\s*\/\s*\d+(?:\.\d+)?)/);
+    const distanceText = firstMatchingLine(lines, /(あと|remaining|남은|거리|distance|km|ｍ|miles?|マイル|マス|칸)/i);
+    const rewardText = firstMatchingLine(lines, /(reward|보상|報酬|獲得|ゲット|ticket|티켓|icon|plate|칭호|nameplate)/i);
+    const imageUrl = absUrl($(block).find("img").first().attr("src"), baseUrl);
+    const progressPercent = parseMapPercent(progressText || rawText);
+
+    if (!progressText && !distanceText && progressPercent === null) continue;
+
+    areas.push({
+      kind,
+      name: mapAreaName(lines),
+      progressText,
+      progressPercent,
+      distanceText,
+      rewardText,
+      imageUrl,
+      rawText,
+    });
+  }
+
+  if (areas.length > 0) return areas;
+
+  const bodyLines = textLines($, $("body").get(0) ?? $.root().get(0));
+  const rawText = compactText(bodyLines.join(" "));
+  if (!rawText) return [];
+  const progressText = firstMatchingLine(bodyLines, /(\d+(?:\.\d+)?\s*%|\d+(?:\.\d+)?\s*\/\s*\d+(?:\.\d+)?)/);
+  const distanceText = firstMatchingLine(bodyLines, /(あと|remaining|남은|거리|distance|km|ｍ|miles?|マイル|マス|칸)/i);
+  const progressPercent = parseMapPercent(progressText || rawText);
+  if (!progressText && !distanceText && progressPercent === null) return [];
+
+  return [{
+    kind,
+    name: mapAreaName(bodyLines),
+    progressText,
+    progressPercent,
+    distanceText,
+    rewardText: firstMatchingLine(bodyLines, /(reward|보상|報酬|獲得|ゲット|ticket|티켓|icon|plate|칭호|nameplate)/i),
+    imageUrl: absUrl($("body img").first().attr("src"), baseUrl),
+    rawText,
+  }];
 }
 
 export function parseSearchResult(html: string, server: MaimaiServer = "intl"): SearchResult {
