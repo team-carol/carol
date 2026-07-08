@@ -79,6 +79,12 @@ client.on(Events.InteractionCreate, async (i) => {
     }
     return;
   }
+  if (i.isModalSubmit()) {
+    if (i.customId.startsWith("report:modal:")) {
+      try { await report.handleModal(i); } catch (e) { console.error("[report-modal]", e); }
+    }
+    return;
+  }
   if (i.isButton()) {
     if (i.customId.startsWith("report:")) {
       try { await report.handleButton(i); } catch (e) { console.error("[report-btn]", e); }

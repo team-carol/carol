@@ -5,12 +5,16 @@ import {
   InteractionContextType,
   ChatInputCommandInteraction,
   MessageContextMenuCommandInteraction,
+  ModalSubmitInteraction,
   ButtonInteraction,
   EmbedBuilder,
   MessageFlags,
   ButtonBuilder,
   ButtonStyle,
   ActionRowBuilder,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
 } from "discord.js";
 import { randomUUID } from "crypto";
 import { CONFIG } from "../../config";
@@ -26,36 +30,61 @@ import {
 export const data = new SlashCommandBuilder()
   .setName("문의")
   .setDescription("버그·문의를 GitHub 이슈로 등록합니다")
-  .setContexts(InteractionContextType.Guild, InteractionContextType.BotDM, InteractionContextType.PrivateChannel)
-  .addStringOption((o) =>
-    o.setName("내용").setDescription("제보 내용").setRequired(true).setMaxLength(4000),
-  );
+  .setContexts(InteractionContextType.Guild, InteractionContextType.BotDM, InteractionContextType.PrivateChannel);
 
 export const contextData = new ContextMenuCommandBuilder()
   .setName("이슈로 등록")
   .setType(ApplicationCommandType.Message)
   .setContexts(InteractionContextType.Guild, InteractionContextType.BotDM, InteractionContextType.PrivateChannel);
 
-// 미리보기(draft) → [생성] 사이 임시 보관. 토큰 키, 10분 TTL.
+const PENDING_TTL_MS = 10 * 60 * 1000;
+
+// 미리보기(draft) → [생성] 사이 임시 보관. 토큰 키.
 interface PendingReport {
   ctx: ReportContext;
   draft: Draft;
   reporterId: string;
   expiresAt: number;
 }
-const PENDING_TTL_MS = 10 * 60 * 1000;
 const pendingReports = new Map<string, PendingReport>();
+
+// 컨텍스트 메뉴 모달 표시 → 제출 사이 임시 보관(제출엔 원본 메시지가 안 실려옴).
+interface PendingContext {
+  messageUrl: string;
+  guildId: string;
+  channelId: string;
+  attachments: string[];
+  expiresAt: number;
+}
+const pendingContexts = new Map<string, PendingContext>();
 
 setInterval(() => {
   const now = Date.now();
-  for (const [token, p] of pendingReports) {
-    if (p.expiresAt <= now) pendingReports.delete(token);
-  }
+  for (const [token, p] of pendingReports) if (p.expiresAt <= now) pendingReports.delete(token);
+  for (const [token, p] of pendingContexts) if (p.expiresAt <= now) pendingContexts.delete(token);
 }, 5 * 60 * 1000).unref?.();
 
 /** DM에는 guildId가 없으므로 대표 guildId로 폴백. 항상 숫자 스노플레이크 → 계약 형식 충족. */
-function resolveGuildId(interaction: ChatInputCommandInteraction | MessageContextMenuCommandInteraction): string {
-  return interaction.guildId ?? CONFIG.carolIssueGuildId ?? interaction.channelId;
+function resolveGuildId(
+  interaction: ChatInputCommandInteraction | MessageContextMenuCommandInteraction | ModalSubmitInteraction,
+): string {
+  return interaction.guildId ?? CONFIG.carolIssueGuildId ?? interaction.channelId!;
+}
+
+/** 본문 입력 모달. customId로 슬래시("new")/컨텍스트(토큰) 경로를 구분. */
+function buildModal(customId: string, prefill?: string): ModalBuilder {
+  const input = new TextInputBuilder()
+    .setCustomId("content")
+    .setLabel("제보 내용")
+    .setStyle(TextInputStyle.Paragraph)
+    .setRequired(true)
+    .setMinLength(1)
+    .setMaxLength(4000);
+  if (prefill) input.setValue(prefill.slice(0, 4000));
+  return new ModalBuilder()
+    .setCustomId(customId)
+    .setTitle("문의 작성")
+    .addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(input));
 }
 
 function buildPreview(token: string, draft: Draft): {
@@ -88,10 +117,8 @@ function buildPreview(token: string, draft: Draft): {
   return { embeds: [embed], components: [row] };
 }
 
-async function startReport(
-  interaction: ChatInputCommandInteraction | MessageContextMenuCommandInteraction,
-  ctx: ReportContext,
-): Promise<void> {
+/** 모달 제출 이후: draft 생성 → 미리보기 + [생성]/[취소]. */
+async function startReport(interaction: ModalSubmitInteraction, ctx: ReportContext): Promise<void> {
   let draft: Draft;
   try {
     draft = await postDraft(ctx);
@@ -112,21 +139,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     await interaction.reply({ content: "제보 기능이 설정되지 않았습니다. 관리자에게 문의해주세요.", flags: MessageFlags.Ephemeral });
     return;
   }
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
-  const gid = resolveGuildId(interaction);
-  const reply = await interaction.fetchReply();
-  const messageUrl = `https://discord.com/channels/${gid}/${interaction.channelId}/${reply.id}`;
-
-  await startReport(interaction, {
-    content: interaction.options.getString("내용", true),
-    reporterId: interaction.user.id,
-    reporterName: interaction.user.username,
-    guildId: gid,
-    channelId: interaction.channelId,
-    messageUrl,
-    attachments: [],
-  });
+  await interaction.showModal(buildModal("report:modal:new"));
 }
 
 export async function executeMessage(interaction: MessageContextMenuCommandInteraction): Promise<void> {
@@ -134,27 +147,56 @@ export async function executeMessage(interaction: MessageContextMenuCommandInter
     await interaction.reply({ content: "제보 기능이 설정되지 않았습니다. 관리자에게 문의해주세요.", flags: MessageFlags.Ephemeral });
     return;
   }
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
-  const msg = interaction.targetMessage;
-  const content = msg.content?.trim();
-  if (!content) {
-    await interaction.editReply({ content: "텍스트가 없는 메시지입니다. `/문의` 로 직접 작성해주세요." });
-    return;
-  }
-
   const gid = resolveGuildId(interaction);
-  const messageUrl = `https://discord.com/channels/${gid}/${interaction.channelId}/${msg.id}`;
-
-  await startReport(interaction, {
-    content,
-    reporterId: interaction.user.id,
-    reporterName: interaction.user.username,
+  const msg = interaction.targetMessage;
+  const token = randomUUID();
+  pendingContexts.set(token, {
+    messageUrl: `https://discord.com/channels/${gid}/${interaction.channelId}/${msg.id}`,
     guildId: gid,
     channelId: interaction.channelId,
-    messageUrl,
     attachments: [...msg.attachments.values()].map((a) => a.url),
+    expiresAt: Date.now() + PENDING_TTL_MS,
   });
+  await interaction.showModal(buildModal(`report:modal:${token}`, msg.content ?? ""));
+}
+
+export async function handleModal(interaction: ModalSubmitInteraction): Promise<void> {
+  const token = interaction.customId.split(":")[2];
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  const content = interaction.fields.getTextInputValue("content");
+
+  let ctx: ReportContext;
+  if (token === "new") {
+    const gid = resolveGuildId(interaction);
+    const reply = await interaction.fetchReply();
+    ctx = {
+      content,
+      reporterId: interaction.user.id,
+      reporterName: interaction.user.username,
+      guildId: gid,
+      channelId: interaction.channelId!,
+      messageUrl: `https://discord.com/channels/${gid}/${interaction.channelId}/${reply.id}`,
+      attachments: [],
+    };
+  } else {
+    const pc = pendingContexts.get(token);
+    if (!pc) {
+      await interaction.editReply({ content: "요청이 만료되었습니다. 다시 시도해주세요." });
+      return;
+    }
+    pendingContexts.delete(token);
+    ctx = {
+      content,
+      reporterId: interaction.user.id,
+      reporterName: interaction.user.username,
+      guildId: pc.guildId,
+      channelId: pc.channelId,
+      messageUrl: pc.messageUrl,
+      attachments: pc.attachments,
+    };
+  }
+
+  await startReport(interaction, ctx);
 }
 
 export async function handleButton(interaction: ButtonInteraction): Promise<void> {
