@@ -119,8 +119,9 @@ function songRating(r: PlayRecord, fc?: string, server: MaimaiServer = "intl"): 
 
 export function buildAvatarAttachment(
   userId: string,
+  server: MaimaiServer,
 ): AttachmentBuilder | null {
-  const buf = getAvatarBlob(userId);
+  const buf = getAvatarBlob(userId, server);
   if (!buf) return null;
   return new AttachmentBuilder(buf, { name: "avatar.png" });
 }
@@ -663,7 +664,7 @@ export function buildProfileReply(
   cached: NonNullable<ReturnType<typeof getCachedProfile>>,
   userId: string,
 ) {
-  const avatar = buildAvatarAttachment(userId);
+  const avatar = buildAvatarAttachment(userId, cached.server);
   const recentBtn = new ButtonBuilder()
     .setCustomId(`recent:${userId}`)
     .setLabel("최근 플레이")

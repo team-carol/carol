@@ -120,6 +120,8 @@ try { db.exec("ALTER TABLE sessions ADD COLUMN preset_bookmarklets TEXT DEFAULT 
 try { db.exec("ALTER TABLE sessions ADD COLUMN default_server TEXT DEFAULT 'intl'"); } catch (_) {}
 try { db.exec("ALTER TABLE sessions ADD COLUMN friend_code_intl TEXT DEFAULT ''"); } catch (_) {}
 try { db.exec("ALTER TABLE sessions ADD COLUMN friend_code_jp TEXT DEFAULT ''"); } catch (_) {}
+try { db.exec("ALTER TABLE sessions ADD COLUMN avatar_blob_intl TEXT DEFAULT ''"); } catch (_) {}
+try { db.exec("ALTER TABLE sessions ADD COLUMN avatar_blob_jp TEXT DEFAULT ''"); } catch (_) {}
 
 // ─── Queries ────────────────────────────────────────────────────────────
 const profileSelect = "friend_code AS profileKey, COALESCE(NULLIF(display_friend_code, ''), friend_code) AS friendCode, COALESCE(server_region, 'intl') AS server, player_name AS playerName, rating, rating_max AS ratingMax, trophy, trophy_class AS trophyClass, avatar, grade_img AS gradeImg, stars, comment, play_count AS playCount, COALESCE(total_play_count, 0) AS totalPlayCount, raw_html AS rawHtml, recent_json AS recentJson, top_json AS topJson, clear_json AS clearJson, COALESCE(map_json, '[]') AS mapJson, last_synced_at AS lastSyncedAt";
@@ -219,6 +221,9 @@ interface StoredSession {
   friend_code: string;
   friend_code_intl: string;
   friend_code_jp: string;
+  avatar_blob: string;
+  avatar_blob_intl: string;
+  avatar_blob_jp: string;
   default_server: string;
   sync_token: string;
   updated_at: number;
@@ -228,9 +233,22 @@ function friendCodeColumn(server: MaimaiServer): "friend_code_intl" | "friend_co
   return server === "intl" ? "friend_code_intl" : "friend_code_jp";
 }
 
+function avatarBlobColumn(server: MaimaiServer): "avatar_blob_intl" | "avatar_blob_jp" {
+  return server === "intl" ? "avatar_blob_intl" : "avatar_blob_jp";
+}
+
 function selectedFriendCode(row: Pick<StoredSession, "friend_code" | "friend_code_intl" | "friend_code_jp" | "default_server">): string {
   const server = isMaimaiServer(row.default_server) ? row.default_server : "intl";
   return server === "intl" ? row.friend_code_intl : row.friend_code_jp;
+}
+
+function selectedAvatarBlob(
+  row: Pick<StoredSession, "avatar_blob" | "avatar_blob_intl" | "avatar_blob_jp" | "default_server">,
+  server?: MaimaiServer,
+): string {
+  const activeServer = server ?? (isMaimaiServer(row.default_server) ? row.default_server : "intl");
+  const serverAvatar = activeServer === "intl" ? row.avatar_blob_intl : row.avatar_blob_jp;
+  return serverAvatar || row.avatar_blob || "";
 }
 
 export function saveUserSession(discordUserId: string, cookieJson: string, friendCode = "", server: MaimaiServer = "intl"): void {
@@ -312,14 +330,24 @@ export function findUserBySyncToken(token: string): string | null {
   return row?.discord_user_id ?? null;
 }
 
-export function saveAvatarBlob(userId: string, base64: string): void {
-  db.prepare("UPDATE sessions SET avatar_blob = ? WHERE discord_user_id = ?").run(base64, userId);
+export function saveAvatarBlob(userId: string, server: MaimaiServer, base64: string): void {
+  const column = avatarBlobColumn(server);
+  db.prepare(`
+    INSERT INTO sessions (discord_user_id, cookie_json, avatar_blob, ${column}, profile_private, updated_at)
+    VALUES (?, '{}', ?, ?, 0, ?)
+    ON CONFLICT(discord_user_id) DO UPDATE SET
+      avatar_blob = excluded.avatar_blob,
+      ${column} = excluded.${column},
+      updated_at = excluded.updated_at
+  `).run(userId, base64, base64, Date.now());
 }
 
-export function getAvatarBlob(userId: string): Buffer | null {
-  const row = db.prepare("SELECT avatar_blob FROM sessions WHERE discord_user_id = ?").get(userId) as { avatar_blob: string } | undefined;
-  if (!row?.avatar_blob) return null;
-  return Buffer.from(row.avatar_blob, "base64");
+export function getAvatarBlob(userId: string, server?: MaimaiServer): Buffer | null {
+  const row = db.prepare("SELECT avatar_blob, avatar_blob_intl, avatar_blob_jp, default_server FROM sessions WHERE discord_user_id = ?").get(userId) as Pick<StoredSession, "avatar_blob" | "avatar_blob_intl" | "avatar_blob_jp" | "default_server"> | undefined;
+  if (!row) return null;
+  const avatarBlob = selectedAvatarBlob(row, server);
+  if (!avatarBlob) return null;
+  return Buffer.from(avatarBlob, "base64");
 }
 
 // ─── Jacket image storage ───────────────────────────────────────────────
