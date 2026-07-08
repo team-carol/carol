@@ -23,7 +23,7 @@ function shuffle<T>(arr: T[]): T[] {
   return a;
 }
 
-export const data = new SlashCommandBuilder()
+export const data: SlashCommandBuilder = new SlashCommandBuilder()
   .setName("랜덤")
   .setDescription("조건에 맞는 곡을 랜덤 추천")
   .addNumberOption((o) =>

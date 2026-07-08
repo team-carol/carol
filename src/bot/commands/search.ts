@@ -10,7 +10,7 @@ import {
 } from "../../db";
 import { searchResultEmbeds } from "../utils/embeds";
 
-export const data = new SlashCommandBuilder()
+export const data: SlashCommandBuilder = new SlashCommandBuilder()
   .setName("검색")
   .setDescription("내 클리어 기록에서 곡을 검색")
   .addStringOption((opt) =>
