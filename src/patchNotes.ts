@@ -1,8 +1,14 @@
+import * as http from "http";
 import * as https from "https";
 import type { IncomingMessage } from "http";
+import { CONFIG } from "./config";
 
 const DEFAULT_PATCH_NOTES_ACCOUNT = "carolbot_maimai";
-const DEFAULT_PATCH_NOTES_FEED_URL = `https://nitter.net/${DEFAULT_PATCH_NOTES_ACCOUNT}/rss`;
+// 기본 소스: docker compose 내부의 self-hosted XRSS 서비스(공식 트위터 트윗을 RSS로 제공).
+// 리트윗/답글/인용은 제외해 계정 본인 게시글(패치노트)만 노출.
+const DEFAULT_PATCH_NOTES_FEED_URL =
+  `http://xrss:8000/feed.xml?usernames=${DEFAULT_PATCH_NOTES_ACCOUNT}` +
+  "&include_replies=false&include_retweets=false&include_quotes=false";
 const XCANCEL_WHITELIST_TITLE = "RSS reader not yet whitelisted!";
 
 export interface PatchNoteEntry {
@@ -19,6 +25,8 @@ export interface PatchNotesFeed {
 }
 
 function patchNotesUrl(): string | null {
+  const override = CONFIG.patchNotesRssUrl;
+  if (typeof override === "string" && override.trim()) return override.trim();
   return DEFAULT_PATCH_NOTES_FEED_URL;
 }
 
@@ -125,10 +133,12 @@ export function isTransientPatchNotesRequestError(error: unknown): boolean {
 
 function requestTextOnce(url: string): Promise<{ statusCode: number; body: string }> {
   return new Promise((resolve, reject) => {
-    const req = https.get(url, {
+    // XRSS는 내부 http://, 외부 오버라이드는 https:// 일 수 있어 프로토콜별 모듈 선택
+    const client = url.startsWith("http://") ? http : https;
+    const req = client.get(url, {
       headers: {
         accept: "application/rss+xml, application/atom+xml, application/xml, text/xml;q=0.9, */*;q=0.1",
-        "user-agent": "Mozilla/5.0 (compatible; carolbot/0.6; +https://nitter.net)",
+        "user-agent": "Mozilla/5.0 (compatible; carolbot/0.6)",
       },
     }, (res: IncomingMessage) => {
       let body = "";

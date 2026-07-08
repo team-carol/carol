@@ -6,10 +6,47 @@ services:
     volumes:
       - ./data:/app/data
       - ./config.json:/app/config.json:ro
+    depends_on:
+      xrss:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3456/',r=>{process.exit(r.statusCode===404?0:1)}).on('error',()=>process.exit(1))"]
       interval: 30s
       timeout: 5s
+      retries: 3
+
+  # 공식 트위터(@carolbot_maimai) 트윗을 RSS로 제공하는 self-hosted 서비스 (패치노트 소스)
+  xrss:
+    image: vdematos/xrss:latest
+    container_name: carol-xrss
+    restart: unless-stopped
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - TWITTER_USERNAME=${TWITTER_USERNAME}
+      - TWITTER_EMAIL=${TWITTER_EMAIL}
+      - TWITTER_PASSWORD=${TWITTER_PASSWORD}
+      # 2FA 계정만 필요 (없으면 비워두면 됨)
+      - TWITTER_TOTP_SECRET=${TWITTER_TOTP_SECRET:-}
+    depends_on:
+      redis:
+        condition: service_healthy
+    # 포트는 호스트로 노출하지 않음 — 봇이 compose 네트워크(http://xrss:8000)로만 접근
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/docs')"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  redis:
+    image: redis:alpine
+    container_name: carol-redis
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
       retries: 3
 
   cloudflared:
@@ -21,3 +58,6 @@ services:
       - TUNNEL_TOKEN=${CF_TUNNEL_TOKEN}
     depends_on:
       - bot
+
+volumes:
+  redis_data:
