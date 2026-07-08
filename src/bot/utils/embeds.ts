@@ -492,7 +492,9 @@ export async function searchResultEmbeds(
       const kind = all[0]?.musicKind ? ` [${all[0].musicKind}]` : "";
       const lines = DIFF_ORDER.flatMap((d) => {
         const r = all.find((x) => x.diff === d);
-        const constant = getConstant(title, all[0]?.musicKind, d, p.server);
+        // 검색은 이미 ST/DX로 분리돼 있으므로 exact(상호 폴백 없음)로 조회.
+        // (예: ST에만 Re:MASTER가 있는 곡의 DX 카드에 Re:MASTER가 뜨는 문제 방지)
+        const constant = getConstant(title, all[0]?.musicKind, d, p.server, true);
         if (d === "Re:MASTER" && constant === null && !r) return [];
         const lv = constant !== null ? constant.toFixed(1) : (r?.level ?? "?");
         const ach =
