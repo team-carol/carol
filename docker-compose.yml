@@ -6,25 +6,10 @@ services:
     volumes:
       - ./data:/app/data
       - ./config.json:/app/config.json:ro
-    depends_on:
-      redis:
-        condition: service_healthy
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3456/',r=>{process.exit(r.statusCode===404?0:1)}).on('error',()=>process.exit(1))"]
       interval: 30s
       timeout: 5s
-      retries: 3
-
-  redis:
-    image: redis:alpine
-    container_name: carol-redis
-    restart: unless-stopped
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 30s
-      timeout: 10s
       retries: 3
 
   cloudflared:
@@ -36,6 +21,3 @@ services:
       - TUNNEL_TOKEN=${CF_TUNNEL_TOKEN}
     depends_on:
       - bot
-
-volumes:
-  redis_data:
