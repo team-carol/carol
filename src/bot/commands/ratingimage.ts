@@ -33,7 +33,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   }
   await interaction.deferReply();
   try {
-    const png = await renderRatingCard(cached, records, getAvatarBlob(userId));
+    const png = await renderRatingCard(cached, records, getAvatarBlob(userId, cached.server));
     await interaction.editReply({
       files: [new AttachmentBuilder(png, { name: "rating.png" })],
     });

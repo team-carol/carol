@@ -19,6 +19,7 @@ import {
   levelToNumber,
   calcSongRating,
   isNewSong,
+  getRegionExclusive,
 } from "../../constants";
 import { aliasMatches, normalizeQuery } from "../../aliases";
 import { ratingColor } from "./roles";
@@ -119,8 +120,9 @@ function songRating(r: PlayRecord, fc?: string, server: MaimaiServer = "intl"): 
 
 export function buildAvatarAttachment(
   userId: string,
+  server: MaimaiServer,
 ): AttachmentBuilder | null {
-  const buf = getAvatarBlob(userId);
+  const buf = getAvatarBlob(userId, server);
   if (!buf) return null;
   return new AttachmentBuilder(buf, { name: "avatar.png" });
 }
@@ -491,7 +493,9 @@ export async function searchResultEmbeds(
       const kind = all[0]?.musicKind ? ` [${all[0].musicKind}]` : "";
       const lines = DIFF_ORDER.flatMap((d) => {
         const r = all.find((x) => x.diff === d);
-        const constant = getConstant(title, all[0]?.musicKind, d, p.server);
+        // 검색은 이미 ST/DX로 분리돼 있으므로 exact(상호 폴백 없음)로 조회.
+        // (예: ST에만 Re:MASTER가 있는 곡의 DX 카드에 Re:MASTER가 뜨는 문제 방지)
+        const constant = getConstant(title, all[0]?.musicKind, d, p.server, true);
         if (d === "Re:MASTER" && constant === null && !r) return [];
         const lv = constant !== null ? constant.toFixed(1) : (r?.level ?? "?");
         const ach =
@@ -523,12 +527,21 @@ export async function searchResultEmbeds(
           .trim(),
       );
       const ytUrl = `https://www.youtube.com/results?search_query=${ytQuery}`;
+      // 현재 검색 대상 서버 라벨 (기본 서버 프로필만 출력하므로 그 서버를 표기).
+      // 제목이 아닌 점수표 위 한 줄에 두고, 한 서버 전용 곡이면 "전용"으로 구분.
+      const verLabel = p.server === "jp" ? "japan ver." : "intl ver.";
+      const regionLine =
+        (getRegionExclusive(title) ? `${verLabel} 전용` : verLabel) + "\n";
       const emb = new EmbedBuilder()
         .setColor(0x2b2d31)
         .setTitle(truncateVisual(title, 26) + kind)
         .setAuthor({ name: `"${query}"${typeLabel} 에 대한 검색 결과` })
         .setDescription(
-          "```\n" + lines.join("\n") + "\n```" + `\n[▶ 외부출력](${ytUrl})`,
+          regionLine +
+            "```\n" +
+            lines.join("\n") +
+            "\n```" +
+            `\n[▶ 외부출력](${ytUrl})`,
         );
       if (buf) {
         const name = `sjacket${i}.png`;
@@ -663,7 +676,7 @@ export function buildProfileReply(
   cached: NonNullable<ReturnType<typeof getCachedProfile>>,
   userId: string,
 ) {
-  const avatar = buildAvatarAttachment(userId);
+  const avatar = buildAvatarAttachment(userId, cached.server);
   const recentBtn = new ButtonBuilder()
     .setCustomId(`recent:${userId}`)
     .setLabel("최근 플레이")

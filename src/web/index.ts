@@ -195,7 +195,9 @@ export function startWebServer(port: number): void {
 
     if (req.method === "GET" && url.pathname === "/avatar") {
       const uid = url.searchParams.get("user") || "";
-      const data = getAvatarBlob(uid);
+      const serverParam = url.searchParams.get("server") || "";
+      const server = isMaimaiServer(serverParam) ? serverParam : undefined;
+      const data = getAvatarBlob(uid, server);
       if (data) {
         res.writeHead(200, { "content-type": "image/png", "cache-control": "max-age=3600" });
         res.end(data);
@@ -552,7 +554,7 @@ a{color:#c084fc}
         // base64 아바타 → DB에 저장
         if (avatarBase64 && avatarBase64.startsWith("data:")) {
           const m = avatarBase64.match(/^data:image\/\w+;base64,(.+)$/);
-          if (m) saveAvatarBlob(syncUserId, m[1]);
+          if (m) saveAvatarBlob(syncUserId, syncServer, m[1]);
         }
         if (Array.isArray(data.js)) {
           let saved = 0;

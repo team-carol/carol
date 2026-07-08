@@ -75,10 +75,10 @@ export async function handleRole(interaction: ChatInputCommandInteraction, userI
     let targetRole = interaction.guild.roles.cache.find((r) => r.name === roleInfo.name);
     if (!targetRole) {
       targetRole = await interaction.guild.roles.create({
-        name: roleInfo.name, color: roleInfo.color, reason: "maimai 레이팅 자동 역할",
+        name: roleInfo.name, colors: { primaryColor: roleInfo.color }, reason: "maimai 레이팅 자동 역할",
       });
-    } else if (targetRole.color !== roleInfo.color) {
-      await targetRole.setColor(roleInfo.color);
+    } else if (targetRole.colors.primaryColor !== roleInfo.color) {
+      await targetRole.setColors({ primaryColor: roleInfo.color });
     }
 
     if (targetRole.position >= botMember.roles.highest.position) {
@@ -124,7 +124,7 @@ export function autoRole(interaction: ChatInputCommandInteraction, rating: numbe
     await member.roles.remove(allTierRoles);
     let targetRole = guild.roles.cache.find((r) => r.name === roleInfo.name);
     if (!targetRole) {
-      targetRole = await guild.roles.create({ name: roleInfo.name, color: roleInfo.color, reason: "maimai 레이팅 자동 역할" });
+      targetRole = await guild.roles.create({ name: roleInfo.name, colors: { primaryColor: roleInfo.color }, reason: "maimai 레이팅 자동 역할" });
     }
     if (targetRole.position < botMember.roles.highest.position) {
       await member.roles.add(targetRole);
