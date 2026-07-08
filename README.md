@@ -60,13 +60,18 @@ npm start
   "encryptionKey": "",           // 빈 값이면 자동 생성
   "baseUrl": "",                 // 프로덕션에서만 입력
   "discordInviteUrl": "",        // 선택: /invite 리다이렉트 대상
-  "databaseUrl": ""              // 선택: NeonDB 곡 별칭 DB
+  "databaseUrl": "",             // 선택: NeonDB 곡 별칭 DB
+  "carolIssueBaseUrl": "",       // 선택: carol-issue 제보 연동 주소
+  "carolSharedSecret": "",       // 선택: carol-issue와 동일한 공유 secret
+  "carolIssueGuildId": ""        // 선택: DM 제보용 대표 guildId
 }
 ```
 
 - `baseUrl`: 비워두면 `http://localhost:{webPort}`를 사용합니다. Cloudflare Tunnel 등으로 배포하면 공개 HTTPS URL을 입력하세요.
 - `discordInviteUrl`: 비워두면 `/invite`가 `clientId`로 기본 초대 링크를 생성합니다. 기본 권한은 `permissions=2415938560`, `integration_type=0`, `scope=applications.commands+bot`입니다. 권한 값을 직접 조정한 긴 OAuth2 URL이 있다면 여기에 넣으면 됩니다.
 - `databaseUrl`: 비워두면 곡 별칭 기능 없이 SQLite 기반 프로필 캐시만 사용합니다.
+- `carolIssueBaseUrl` / `carolSharedSecret`: [carol-issue](https://github.com/team-carol) 제보 연동. 둘 다 채워야 `/문의`·"이슈로 등록"이 활성화됩니다. secret은 carol-issue의 `CAROL_SHARED_SECRET`과 동일해야 합니다.
+- `carolIssueGuildId`: DM에서 제보 시 payload `guildId` 폴백값. 비워두면 DM 채널 ID로 폴백합니다.
 
 ## 웹 경로
 
@@ -90,6 +95,9 @@ npm start
 | `/서버설정` | 서버 자동 역할 설정 관리 (관리자 전용) |
 | `/검색 title [user]` | 클리어 기록에서 곡명 검색 |
 | `/상태` | 봇 및 서버 상태 확인 |
+| `/문의 내용` | 버그·문의를 GitHub 이슈로 등록 (미리보기 후 생성) |
+
+> 메시지 우클릭 → 앱 → **"이슈로 등록"** 컨텍스트 메뉴로도 제보할 수 있습니다. `/문의`·"이슈로 등록"은 `carolIssueBaseUrl`/`carolSharedSecret`이 설정된 경우에만 동작합니다.
 
 ## 사용 방법
 
