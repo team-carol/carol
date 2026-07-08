@@ -218,7 +218,7 @@ export function recommendCharts(
   return chosen;
 }
 
-export const data: SlashCommandBuilder = new SlashCommandBuilder()
+export const data = new SlashCommandBuilder()
   .setName("곡추천")
   .setDescription("레이팅 대상곡 기반으로 점수 올리기 좋은 채보 3개 추천")
   .addStringOption((opt) =>
