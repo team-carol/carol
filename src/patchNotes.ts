@@ -1,3 +1,6 @@
+import * as https from "https";
+import type { IncomingMessage } from "http";
+
 const DEFAULT_PATCH_NOTES_ACCOUNT = "carolbot_maimai";
 const DEFAULT_PATCH_NOTES_FEED_URL = `https://nitter.net/${DEFAULT_PATCH_NOTES_ACCOUNT}/rss`;
 const XCANCEL_WHITELIST_TITLE = "RSS reader not yet whitelisted!";
@@ -107,24 +110,41 @@ function parseFeed(xml: string): PatchNoteEntry[] {
   return dedupeEntries(parseAtomEntries(xml));
 }
 
+function requestText(url: string): Promise<{ statusCode: number; body: string }> {
+  return new Promise((resolve, reject) => {
+    const req = https.get(url, {
+      headers: {
+        accept: "application/rss+xml, application/atom+xml, application/xml, text/xml;q=0.9, */*;q=0.1",
+        "user-agent": "Mozilla/5.0 (compatible; carolbot/0.6; +https://nitter.net)",
+      },
+    }, (res: IncomingMessage) => {
+      let body = "";
+      res.setEncoding("utf8");
+      res.on("data", (chunk: string) => { body += chunk; });
+      res.on("end", () => {
+        resolve({ statusCode: res.statusCode ?? 0, body });
+      });
+    });
+
+    req.setTimeout(8000, () => {
+      req.destroy(new Error("patch_notes_feed_timeout"));
+    });
+    req.on("error", reject);
+  });
+}
+
 export async function fetchPatchNotes(limit: number): Promise<PatchNotesFeed> {
   const url = patchNotesUrl();
   if (!url) {
     throw new Error("patch_notes_feed_missing");
   }
 
-  const response = await fetch(url, {
-    headers: {
-      accept: "application/rss+xml, application/atom+xml, application/xml, text/xml;q=0.9, */*;q=0.1",
-      "user-agent": "Mozilla/5.0 (compatible; carolbot/0.6; +https://nitter.net)",
-    },
-    signal: AbortSignal.timeout(8000),
-  });
-  if (!response.ok) {
-    throw new Error(`patch_notes_feed_http_${response.status}`);
+  const response = await requestText(url);
+  if (response.statusCode < 200 || response.statusCode >= 300) {
+    throw new Error(`patch_notes_feed_http_${response.statusCode}`);
   }
 
-  const xml = await response.text();
+  const xml = response.body;
   const entries = parseFeed(xml).slice(0, limit);
   if (entries[0]?.title === XCANCEL_WHITELIST_TITLE) {
     throw new Error("patch_notes_feed_whitelist_required");
