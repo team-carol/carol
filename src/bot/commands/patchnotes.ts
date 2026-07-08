@@ -2,13 +2,12 @@ import {
   SlashCommandBuilder,
   ChatInputCommandInteraction,
   EmbedBuilder,
-  MessageFlags,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
   ButtonInteraction,
 } from "discord.js";
-import { fetchPatchNotes, hasPatchNotesFeed, type PatchNotesFeed } from "../../patchNotes";
+import { fetchPatchNotes, type PatchNotesFeed } from "../../patchNotes";
 
 const PAGE_SIZE = 1;
 const MAX_ITEMS = 5;
@@ -68,14 +67,6 @@ function buildPatchNotesReply(feed: PatchNotesFeed, requestedPage: number) {
 }
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
-  if (!hasPatchNotesFeed()) {
-    await interaction.reply({
-      content: "패치노트 RSS가 아직 설정되지 않았습니다. `config.json`에 `patchNotesRssUrl`을 추가해주세요.",
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
-  }
-
   await interaction.deferReply();
 
   try {
