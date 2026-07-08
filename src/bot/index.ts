@@ -21,10 +21,11 @@ import * as status       from "./commands/status";
 import * as songrec      from "./commands/songrec";
 import * as random       from "./commands/random";
 import * as areaMap      from "./commands/map";
+import * as report       from "./commands/report";
 
 type Command = { data: { toJSON(): object; name: string }; execute: (i: ChatInputCommandInteraction) => Promise<void> };
 
-const COMMANDS: Command[] = [profile, bookmarklet, ratingtable, ratingimage, fortune, settings, serverSettings, search, status, songrec, random, areaMap];
+const COMMANDS: Command[] = [profile, bookmarklet, ratingtable, ratingimage, fortune, settings, serverSettings, search, status, songrec, random, areaMap, report];
 const EPHEMERAL_REPLY = { flags: MessageFlags.Ephemeral } as const;
 
 const RATING_CARD_GC_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000;
@@ -51,7 +52,7 @@ client.once(Events.ClientReady, async (c) => {
   const route = CONFIG.guildId
     ? Routes.applicationGuildCommands(CONFIG.clientId, CONFIG.guildId)
     : Routes.applicationCommands(CONFIG.clientId);
-  await rest.put(route, { body: COMMANDS.map((cmd) => cmd.data.toJSON()) });
+  await rest.put(route, { body: [...COMMANDS.map((cmd) => cmd.data.toJSON()), report.contextData.toJSON()] });
   await loadConstants();
   setInterval(() => loadConstants(), 24 * 60 * 60 * 1000);
   loadAliases().catch((e) => console.error("[aliases] 초기 로드 실패:", e));
@@ -73,7 +74,23 @@ client.on(Events.InteractionCreate, async (i) => {
     }
     return;
   }
+  if (i.isMessageContextMenuCommand()) {
+    if (i.commandName === report.contextData.name) {
+      try { await report.executeMessage(i); } catch (e) { console.error("[ctxmenu:이슈로 등록]", e); }
+    }
+    return;
+  }
+  if (i.isModalSubmit()) {
+    if (i.customId.startsWith("report:modal:")) {
+      try { await report.handleModal(i); } catch (e) { console.error("[report-modal]", e); }
+    }
+    return;
+  }
   if (i.isButton()) {
+    if (i.customId.startsWith("report:")) {
+      try { await report.handleButton(i); } catch (e) { console.error("[report-btn]", e); }
+      return;
+    }
     if (i.customId.startsWith("serverset:")) {
       try { await serverSettings.handleButton(i); } catch (e) { console.error("[serverset-btn]", e); }
       return;
