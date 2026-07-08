@@ -40,6 +40,8 @@ let jacketMap: Map<string, string> = new Map();
 let versionMap: Map<string, number> = new Map();
 // 국제판(intl="1") 수록 곡 제목 집합. 곡추천에서 미수록 곡을 제외하는 데 사용.
 let intlTitles: Set<string> = new Set();
+// 내수판(JP) 수록 곡 제목 집합(music-ex.json 전곡). 지역 전용 곡 판정에 사용.
+let jpTitles: Set<string> = new Set();
 // 곡 → 장르(catcode)
 let genreMap: Map<string, string> = new Map();
 
@@ -164,6 +166,7 @@ interface ConstantsCache {
   intl?: string[];
   genres?: [string, string][];
   jpConstants?: [string, number][];
+  jpTitles?: string[];
 }
 
 // 캐시 복원. version/intl/genre 데이터가 없는 구버전 캐시면 hasMeta=false 반환.
@@ -171,11 +174,12 @@ function applyCache(data: string): { hasMeta: boolean } {
   const parsed = JSON.parse(data) as ConstantsCache;
   constantMap = new Map(parsed.constants);
   jacketMap = new Map(parsed.jackets);
-  const hasMeta = !!parsed.versions && !!parsed.intl && !!parsed.genres && !!parsed.jpConstants;
+  const hasMeta = !!parsed.versions && !!parsed.intl && !!parsed.genres && !!parsed.jpConstants && !!parsed.jpTitles;
   versionMap = parsed.versions ? new Map(parsed.versions) : new Map();
   intlTitles = parsed.intl ? new Set(parsed.intl) : new Set();
   genreMap = parsed.genres ? new Map(parsed.genres) : new Map();
   jpConstantMap = parsed.jpConstants ? new Map(parsed.jpConstants) : new Map();
+  jpTitles = parsed.jpTitles ? new Set(parsed.jpTitles) : new Set();
   rebuildDailyFortuneSongs();
   return { hasMeta };
 }
@@ -201,6 +205,7 @@ export async function loadConstants(): Promise<void> {
     jacketMap = new Map();
     versionMap = new Map();
     genreMap = new Map();
+    jpTitles = new Set();
     // 국제판 수록(intl="1") 곡만 집합에 담음 (JP 보충곡·미수록곡 제외)
     intlTitles = new Set(intl.filter((s) => s.intl === "1").map((s) => s.title));
     ingest(intl);
@@ -212,6 +217,7 @@ export async function loadConstants(): Promise<void> {
       const before = constantMap.size;
       ingest(jp);
       ingestJpConstants(jp); // JP 상수 맵 (JP 프로필 레이팅 계산용)
+      jpTitles = new Set(jp.map((s) => s.title)); // JP 수록 곡 집합 (지역 전용 판정용)
       jpAdded = constantMap.size - before;
     } catch (e) {
       console.error("[constants] JP 보충 로드 실패:", e);
@@ -225,6 +231,7 @@ export async function loadConstants(): Promise<void> {
       intl: Array.from(intlTitles),
       genres: Array.from(genreMap.entries()),
       jpConstants: Array.from(jpConstantMap.entries()),
+      jpTitles: Array.from(jpTitles),
     } satisfies ConstantsCache));
     rebuildDailyFortuneSongs();
   } catch (e) {
@@ -306,6 +313,22 @@ export function isSongPlus(title: string): boolean {
 // 국제판 수록 여부. 데이터가 없으면(구버전 캐시) 제외하지 않도록 true 반환.
 export function isIntlAvailable(title: string): boolean {
   return intlTitles.size === 0 || intlTitles.has(title);
+}
+
+// 내수판 수록 여부. 데이터 없으면 true 반환(오탐 방지).
+export function isJpAvailable(title: string): boolean {
+  return jpTitles.size === 0 || jpTitles.has(title);
+}
+
+// 지역 전용 곡 판정: "jp"(내수판 전용) / "intl"(국제판 전용) / null(양쪽 or 판정불가).
+// 두 집합 중 하나라도 비어있으면(구버전 캐시) null 반환해 오탐 방지.
+export function getRegionExclusive(title: string): "jp" | "intl" | null {
+  if (intlTitles.size === 0 || jpTitles.size === 0) return null;
+  const inIntl = intlTitles.has(title);
+  const inJp = jpTitles.has(title);
+  if (inIntl && !inJp) return "intl";
+  if (inJp && !inIntl) return "jp";
+  return null;
 }
 
 // 곡 장르(catcode). 없으면 null.

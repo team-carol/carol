@@ -21,11 +21,10 @@ import * as status       from "./commands/status";
 import * as songrec      from "./commands/songrec";
 import * as random       from "./commands/random";
 import * as areaMap      from "./commands/map";
-import * as patchnotes   from "./commands/patchnotes";
 
 type Command = { data: { toJSON(): object; name: string }; execute: (i: ChatInputCommandInteraction) => Promise<void> };
 
-const COMMANDS: Command[] = [profile, bookmarklet, ratingtable, ratingimage, fortune, settings, serverSettings, search, status, songrec, random, areaMap, patchnotes];
+const COMMANDS: Command[] = [profile, bookmarklet, ratingtable, ratingimage, fortune, settings, serverSettings, search, status, songrec, random, areaMap];
 const EPHEMERAL_REPLY = { flags: MessageFlags.Ephemeral } as const;
 
 const RATING_CARD_GC_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000;
@@ -204,14 +203,6 @@ client.on(Events.InteractionCreate, async (i) => {
         await (i as ButtonInteraction).update(result);
       } catch (e) {
         console.error("[search-btn]", e);
-      }
-      return;
-    }
-    if (i.customId.startsWith("patchnotes:")) {
-      try {
-        await patchnotes.handleButton(i as ButtonInteraction);
-      } catch (e) {
-        console.error("[patchnotes-btn]", e);
       }
       return;
     }

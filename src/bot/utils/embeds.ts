@@ -19,6 +19,7 @@ import {
   levelToNumber,
   calcSongRating,
   isNewSong,
+  getRegionExclusive,
 } from "../../constants";
 import { aliasMatches, normalizeQuery } from "../../aliases";
 import { ratingColor } from "./roles";
@@ -526,12 +527,21 @@ export async function searchResultEmbeds(
           .trim(),
       );
       const ytUrl = `https://www.youtube.com/results?search_query=${ytQuery}`;
+      // 현재 검색 대상 서버 라벨 (기본 서버 프로필만 출력하므로 그 서버를 표기).
+      // 제목이 아닌 점수표 위 한 줄에 두고, 한 서버 전용 곡이면 "전용"으로 구분.
+      const verLabel = p.server === "jp" ? "japan ver." : "intl ver.";
+      const regionLine =
+        (getRegionExclusive(title) ? `${verLabel} 전용` : verLabel) + "\n";
       const emb = new EmbedBuilder()
         .setColor(0x2b2d31)
         .setTitle(truncateVisual(title, 26) + kind)
         .setAuthor({ name: `"${query}"${typeLabel} 에 대한 검색 결과` })
         .setDescription(
-          "```\n" + lines.join("\n") + "\n```" + `\n[▶ 외부출력](${ytUrl})`,
+          regionLine +
+            "```\n" +
+            lines.join("\n") +
+            "\n```" +
+            `\n[▶ 외부출력](${ytUrl})`,
         );
       if (buf) {
         const name = `sjacket${i}.png`;
