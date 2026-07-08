@@ -87,7 +87,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   } catch (error) {
     console.error("[패치노트]", error);
     const content = error instanceof Error && error.message === "patch_notes_feed_whitelist_required"
-      ? "기본 X RSS 공급자(xcancel)가 이 서버를 아직 화이트리스트하지 않았습니다. 다른 RSS URL을 `config.json`의 `patchNotesRssUrl`에 넣거나, xcancel 화이트리스트가 필요합니다."
+      ? "기본 패치노트 RSS 소스(`https://nitter.net/carolbot_maimai/rss`)가 이 서버에서 차단되었습니다. 현재 소스는 코드에 고정되어 있으니, 서버에서 해당 RSS 응답이 정상인지 확인해주세요."
       : "패치노트를 불러오지 못했습니다. RSS URL과 응답 형식을 확인해주세요.";
     await interaction.editReply({ content });
   }
