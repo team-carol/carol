@@ -5,5 +5,8 @@
   "encryptionKey": "optional-32-char-string-auto-generated-if-empty",
   "baseUrl": "https://maimai.yourdomain.com",
   "discordInviteUrl": "https://discord.com/oauth2/authorize?client_id=YOUR_DISCORD_APPLICATION_ID&permissions=2415938560&integration_type=0&scope=applications.commands+bot",
-  "databaseUrl": "postgresql://USER:PASSWORD@HOST/DB?sslmode=require (optional NeonDB for song aliases)"
+  "databaseUrl": "postgresql://USER:PASSWORD@HOST/DB?sslmode=require (optional NeonDB for song aliases)",
+  "carolIssueBaseUrl": "https://carol-issue.example (제보 연동 대상 주소, 없으면 /문의 비활성)",
+  "carolSharedSecret": "carol-issue와 동일한 공유 secret (hex)",
+  "carolIssueGuildId": "DM 제보용 대표 guildId (선택, 없으면 DM 채널 ID로 폴백)"
 }
