@@ -7,7 +7,7 @@ import {
   ButtonStyle,
   ButtonInteraction,
 } from "discord.js";
-import { fetchPatchNotes, type PatchNotesFeed } from "../../patchNotes";
+import { fetchPatchNotes, isTransientPatchNotesRequestError, type PatchNotesFeed } from "../../patchNotes";
 
 const PAGE_SIZE = 1;
 const MAX_ITEMS = 5;
@@ -88,6 +88,8 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     console.error("[패치노트]", error);
     const content = error instanceof Error && error.message === "patch_notes_feed_whitelist_required"
       ? "기본 패치노트 RSS 소스(`https://nitter.net/carolbot_maimai/rss`)가 이 서버에서 차단되었습니다. 현재 소스는 코드에 고정되어 있으니, 서버에서 해당 RSS 응답이 정상인지 확인해주세요."
+      : isTransientPatchNotesRequestError(error)
+        ? "패치노트 RSS 서버와의 연결이 잠시 끊겼습니다. 잠시 후 다시 시도해주세요."
       : "패치노트를 불러오지 못했습니다. RSS URL과 응답 형식을 확인해주세요.";
     await interaction.editReply({ content });
   }

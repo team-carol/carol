@@ -111,6 +111,19 @@ function parseFeed(xml: string): PatchNoteEntry[] {
 }
 
 function requestText(url: string): Promise<{ statusCode: number; body: string }> {
+  return requestTextOnce(url).catch(async (error: unknown) => {
+    if (!isTransientPatchNotesRequestError(error)) throw error;
+    return requestTextOnce(url);
+  });
+}
+
+export function isTransientPatchNotesRequestError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const code = typeof (error as { code?: unknown }).code === "string" ? (error as { code?: string }).code : undefined;
+  return error.message === "socket hang up" || code === "ECONNRESET" || code === "ETIMEDOUT" || code === "EAI_AGAIN";
+}
+
+function requestTextOnce(url: string): Promise<{ statusCode: number; body: string }> {
   return new Promise((resolve, reject) => {
     const req = https.get(url, {
       headers: {
