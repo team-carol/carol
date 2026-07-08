@@ -58,6 +58,9 @@ interface PendingContext {
 }
 const pendingContexts = new Map<string, PendingContext>();
 
+// 현재 postIssue 진행 중인 토큰. 중복 생성·생성중 취소 경합을 막는다.
+const inFlight = new Set<string>();
+
 setInterval(() => {
   const now = Date.now();
   for (const [token, p] of pendingReports) if (p.expiresAt <= now) pendingReports.delete(token);
@@ -67,8 +70,9 @@ setInterval(() => {
 /** DM에는 guildId가 없으므로 대표 guildId로 폴백. 항상 숫자 스노플레이크 → 계약 형식 충족. */
 function resolveGuildId(
   interaction: ChatInputCommandInteraction | MessageContextMenuCommandInteraction | ModalSubmitInteraction,
+  channelId: string,
 ): string {
-  return interaction.guildId ?? CONFIG.carolIssueGuildId ?? interaction.channelId!;
+  return interaction.guildId ?? CONFIG.carolIssueGuildId ?? channelId;
 }
 
 /** 본문 입력 + 선택 파일 업로드 모달. customId로 슬래시("new")/컨텍스트(토큰) 경로를 구분. */
@@ -115,8 +119,8 @@ function buildPreview(token: string, draft: Draft): {
     .setColor(draft.needsMoreInfo ? 0xf59e0b : 0x9333ea)
     .setDescription(draft.summary || "(요약 없음)")
     .addFields(
-      { name: "유형", value: draft.type, inline: true },
-      { name: "우선순위", value: draft.priority, inline: true },
+      { name: "유형", value: draft.type || "-", inline: true },
+      { name: "우선순위", value: draft.priority || "-", inline: true },
       { name: "라벨", value: draft.labels.length ? draft.labels.join(", ") : "-", inline: true },
     )
     .setFooter({ text: "아래에서 생성하면 team-carol/carol 저장소에 이슈가 등록됩니다." });
@@ -166,13 +170,18 @@ export async function executeMessage(interaction: MessageContextMenuCommandInter
     await interaction.reply({ content: "제보 기능이 설정되지 않았습니다. 관리자에게 문의해주세요.", flags: MessageFlags.Ephemeral });
     return;
   }
-  const gid = resolveGuildId(interaction);
+  const channelId = interaction.channelId;
+  if (!channelId) {
+    await interaction.reply({ content: "채널 정보를 확인할 수 없습니다. 서버 채널에서 다시 시도해주세요.", flags: MessageFlags.Ephemeral });
+    return;
+  }
+  const gid = resolveGuildId(interaction, channelId);
   const msg = interaction.targetMessage;
   const token = randomUUID();
   pendingContexts.set(token, {
-    messageUrl: `https://discord.com/channels/${gid}/${interaction.channelId}/${msg.id}`,
+    messageUrl: `https://discord.com/channels/${gid}/${channelId}/${msg.id}`,
     guildId: gid,
-    channelId: interaction.channelId,
+    channelId,
     attachments: [...msg.attachments.values()].map((a) => a.url),
     expiresAt: Date.now() + PENDING_TTL_MS,
   });
@@ -182,41 +191,56 @@ export async function executeMessage(interaction: MessageContextMenuCommandInter
 export async function handleModal(interaction: ModalSubmitInteraction): Promise<void> {
   const token = interaction.customId.split(":")[2];
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  const content = interaction.fields.getTextInputValue("content");
-  const uploaded = extractUploadedUrls(interaction);
-
-  let ctx: ReportContext;
-  if (token === "new") {
-    const gid = resolveGuildId(interaction);
-    const reply = await interaction.fetchReply();
-    ctx = {
-      content,
-      reporterId: interaction.user.id,
-      reporterName: interaction.user.username,
-      guildId: gid,
-      channelId: interaction.channelId!,
-      messageUrl: `https://discord.com/channels/${gid}/${interaction.channelId}/${reply.id}`,
-      attachments: uploaded,
-    };
-  } else {
-    const pc = pendingContexts.get(token);
-    if (!pc) {
-      await interaction.editReply({ content: "요청이 만료되었습니다. 다시 시도해주세요." });
+  try {
+    const channelId = interaction.channelId;
+    if (!channelId) {
+      await interaction.editReply({ content: "채널 정보를 확인할 수 없습니다. 서버 채널에서 다시 시도해주세요." });
       return;
     }
-    pendingContexts.delete(token);
-    ctx = {
-      content,
-      reporterId: interaction.user.id,
-      reporterName: interaction.user.username,
-      guildId: pc.guildId,
-      channelId: pc.channelId,
-      messageUrl: pc.messageUrl,
-      attachments: [...pc.attachments, ...uploaded].slice(0, 50),
-    };
-  }
+    const content = interaction.fields.getTextInputValue("content");
+    const uploaded = extractUploadedUrls(interaction);
 
-  await startReport(interaction, ctx);
+    let ctx: ReportContext;
+    if (token === "new") {
+      const gid = resolveGuildId(interaction, channelId);
+      // ephemeral 응답에는 안정적 메시지 id가 없으므로 interaction.id(스노플레이크)를 사용.
+      // 형식 검증만 필요한 messageUrl 계약을 충족하며, 불필요한 fetchReply REST 호출을 없앤다.
+      ctx = {
+        content,
+        reporterId: interaction.user.id,
+        reporterName: interaction.user.username,
+        guildId: gid,
+        channelId,
+        messageUrl: `https://discord.com/channels/${gid}/${channelId}/${interaction.id}`,
+        attachments: uploaded,
+      };
+    } else {
+      const pc = pendingContexts.get(token);
+      if (!pc) {
+        await interaction.editReply({ content: "요청이 만료되었습니다. 다시 시도해주세요." });
+        return;
+      }
+      pendingContexts.delete(token);
+      ctx = {
+        content,
+        reporterId: interaction.user.id,
+        reporterName: interaction.user.username,
+        guildId: pc.guildId,
+        channelId: pc.channelId,
+        messageUrl: pc.messageUrl,
+        attachments: [...pc.attachments, ...uploaded].slice(0, 50),
+      };
+    }
+
+    await startReport(interaction, ctx);
+  } catch (e) {
+    console.error("[report:modal]", e);
+    try {
+      await interaction.editReply({ content: "오류가 발생했습니다. 잠시 후 다시 시도해주세요." });
+    } catch {
+      /* editReply 자체 실패 시 로깅으로 종료 */
+    }
+  }
 }
 
 export async function handleButton(interaction: ButtonInteraction): Promise<void> {
@@ -233,12 +257,21 @@ export async function handleButton(interaction: ButtonInteraction): Promise<void
   }
 
   if (action === "cancel") {
+    if (inFlight.has(token)) {
+      await interaction.reply({ content: "생성 처리 중이라 취소할 수 없습니다.", flags: MessageFlags.Ephemeral });
+      return;
+    }
     pendingReports.delete(token);
     await interaction.update({ content: "제보가 취소되었습니다.", embeds: [], components: [] });
     return;
   }
 
   if (action === "create") {
+    if (inFlight.has(token)) {
+      await interaction.deferUpdate(); // 중복 클릭 — 이미 처리 중이므로 무시
+      return;
+    }
+    inFlight.add(token);
     await interaction.deferUpdate();
     try {
       const { issueUrl } = await postIssue(pending.ctx, pending.draft);
@@ -250,7 +283,10 @@ export async function handleButton(interaction: ButtonInteraction): Promise<void
     } catch (e) {
       const { text, alert } = userMessageForError(e);
       if (alert) console.error("[report:create]", e);
-      await interaction.editReply({ content: text, embeds: [], components: [] });
+      // pending 유지 + 버튼 재렌더 → 같은 미리보기에서 재시도 가능.
+      await interaction.editReply({ content: `${text}\n다시 시도하려면 아래 [이슈 생성]을 눌러주세요.`, ...buildPreview(token, pending.draft) });
+    } finally {
+      inFlight.delete(token);
     }
     return;
   }
