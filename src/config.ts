@@ -7,6 +7,8 @@ export const CONFIG = require("../config.json") as {
   baseUrl?: string;
   discordInviteUrl?: string;
   databaseUrl?: string;
+  patchNotesRssUrl?: string;
+  patchNotesDisplayName?: string;
 };
 
 export const PORT = CONFIG.webPort ?? 3456;
