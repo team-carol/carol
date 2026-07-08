@@ -13,8 +13,8 @@ import {
   ButtonStyle,
   ActionRowBuilder,
   ModalBuilder,
-  TextInputBuilder,
   TextInputStyle,
+  ComponentType,
 } from "discord.js";
 import { randomUUID } from "crypto";
 import { CONFIG } from "../../config";
@@ -71,20 +71,39 @@ function resolveGuildId(
   return interaction.guildId ?? CONFIG.carolIssueGuildId ?? interaction.channelId!;
 }
 
-/** 본문 입력 모달. customId로 슬래시("new")/컨텍스트(토큰) 경로를 구분. */
+/** 본문 입력 + 선택 파일 업로드 모달. customId로 슬래시("new")/컨텍스트(토큰) 경로를 구분. */
 function buildModal(customId: string, prefill?: string): ModalBuilder {
-  const input = new TextInputBuilder()
-    .setCustomId("content")
-    .setLabel("제보 내용")
-    .setStyle(TextInputStyle.Paragraph)
-    .setRequired(true)
-    .setMinLength(1)
-    .setMaxLength(4000);
-  if (prefill) input.setValue(prefill.slice(0, 4000));
   return new ModalBuilder()
     .setCustomId(customId)
     .setTitle("문의 작성")
-    .addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(input));
+    .addLabelComponents(
+      (label) =>
+        label.setLabel("제보 내용").setTextInputComponent((ti) => {
+          ti.setCustomId("content")
+            .setStyle(TextInputStyle.Paragraph)
+            .setRequired(true)
+            .setMinLength(1)
+            .setMaxLength(4000);
+          if (prefill) ti.setValue(prefill.slice(0, 4000));
+          return ti;
+        }),
+      (label) =>
+        label
+          .setLabel("사진·영상 첨부 (선택)")
+          .setFileUploadComponent((fu) =>
+            fu.setCustomId("media").setMinValues(0).setMaxValues(10).setRequired(false),
+          ),
+    );
+}
+
+/** 모달 제출에서 업로드된 첨부 URL을 추출(없으면 빈 배열). */
+function extractUploadedUrls(interaction: ModalSubmitInteraction): string[] {
+  try {
+    const field = interaction.fields.getField("media", ComponentType.FileUpload);
+    return [...field.attachments.values()].map((a) => a.url);
+  } catch {
+    return [];
+  }
 }
 
 function buildPreview(token: string, draft: Draft): {
@@ -164,6 +183,7 @@ export async function handleModal(interaction: ModalSubmitInteraction): Promise<
   const token = interaction.customId.split(":")[2];
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const content = interaction.fields.getTextInputValue("content");
+  const uploaded = extractUploadedUrls(interaction);
 
   let ctx: ReportContext;
   if (token === "new") {
@@ -176,7 +196,7 @@ export async function handleModal(interaction: ModalSubmitInteraction): Promise<
       guildId: gid,
       channelId: interaction.channelId!,
       messageUrl: `https://discord.com/channels/${gid}/${interaction.channelId}/${reply.id}`,
-      attachments: [],
+      attachments: uploaded,
     };
   } else {
     const pc = pendingContexts.get(token);
@@ -192,7 +212,7 @@ export async function handleModal(interaction: ModalSubmitInteraction): Promise<
       guildId: pc.guildId,
       channelId: pc.channelId,
       messageUrl: pc.messageUrl,
-      attachments: pc.attachments,
+      attachments: [...pc.attachments, ...uploaded].slice(0, 50),
     };
   }
 
