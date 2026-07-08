@@ -5,7 +5,5 @@
   "encryptionKey": "optional-32-char-string-auto-generated-if-empty",
   "baseUrl": "https://maimai.yourdomain.com",
   "discordInviteUrl": "https://discord.com/oauth2/authorize?client_id=YOUR_DISCORD_APPLICATION_ID&permissions=2415938560&integration_type=0&scope=applications.commands+bot",
-  "databaseUrl": "postgresql://USER:PASSWORD@HOST/DB?sslmode=require (optional NeonDB for song aliases)",
-  "patchNotesRssUrl": "https://your-rss-feed.example.com/account.xml",
-  "patchNotesDisplayName": "우리 패치노트"
+  "databaseUrl": "postgresql://USER:PASSWORD@HOST/DB?sslmode=require (optional NeonDB for song aliases)"
 }

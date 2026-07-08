@@ -1,5 +1,3 @@
-import { CONFIG } from "./config";
-
 const DEFAULT_PATCH_NOTES_ACCOUNT = "carolbot_maimai";
 const DEFAULT_PATCH_NOTES_FEED_URL = `https://nitter.net/${DEFAULT_PATCH_NOTES_ACCOUNT}/rss`;
 const XCANCEL_WHITELIST_TITLE = "RSS reader not yet whitelisted!";
@@ -18,17 +16,15 @@ export interface PatchNotesFeed {
 }
 
 function patchNotesUrl(): string | null {
-  const value = CONFIG.patchNotesRssUrl?.trim();
-  return value ? value : DEFAULT_PATCH_NOTES_FEED_URL;
+  return DEFAULT_PATCH_NOTES_FEED_URL;
 }
 
 export function hasPatchNotesFeed(): boolean {
-  return patchNotesUrl() !== null;
+  return true;
 }
 
 export function patchNotesFeedLabel(): string {
-  const value = CONFIG.patchNotesDisplayName?.trim();
-  return value ? value : "패치노트";
+  return "패치노트";
 }
 
 function normalizedText(value: string): string {

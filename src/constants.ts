@@ -379,20 +379,19 @@ export function getDailyFortuneSong(userId: string, date: Date = new Date()): Da
   return dailyFortuneSongs[index] ?? null;
 }
 
-export function getConstant(title: string, musicKind: string, diff: string, server: MaimaiServer = "intl"): number | null {
+// exact=true면 DX↔ST 상호 폴백을 하지 않는다(해당 채보의 실제 존재 여부 확인용).
+// server="jp"면 JP 상수 우선, 없으면 국제판 상수로 폴백(같은 kind 내에서).
+export function getConstant(title: string, musicKind: string, diff: string, server: MaimaiServer = "intl", exact = false): number | null {
   const kind = musicKind === "DX" ? "DX" : "ST";
   const altKind = kind === "DX" ? "ST" : "DX";
-  // JP 프로필은 JP 상수 우선, 없으면 국제판 상수로 폴백
-  if (server === "jp") {
-    const jv = jpConstantMap.get(`${title}|${kind}|${diff}`)
-      ?? jpConstantMap.get(`${title}|${altKind}|${diff}`);
-    if (jv !== undefined) return jv;
-  }
-  const val = constantMap.get(`${title}|${kind}|${diff}`);
+  const lookup = (k: string): number | undefined =>
+    (server === "jp" ? jpConstantMap.get(`${title}|${k}|${diff}`) : undefined)
+      ?? constantMap.get(`${title}|${k}|${diff}`);
+  const val = lookup(kind);
   if (val !== undefined) return val;
+  if (exact) return null;
   // DX/ST 구분 없이 어느 쪽이든 있으면 fallback
-  const alt = constantMap.get(`${title}|${altKind}|${diff}`);
-  return alt ?? null;
+  return lookup(altKind) ?? null;
 }
 
 // 표시용 레벨 문자열("14+")을 숫자 근사값으로 변환 (상수 없을 때 fallback)
