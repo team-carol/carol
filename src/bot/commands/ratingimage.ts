@@ -3,7 +3,7 @@ import { getCachedProfile, getUserFriendCode, getAvatarBlob, getProfilePrivate }
 import { getTopList } from "../utils/embeds";
 import { renderRatingCard } from "../utils/ratingCard";
 
-export const data: SlashCommandBuilder = new SlashCommandBuilder()
+export const data = new SlashCommandBuilder()
   .setName("레이팅표")
   .setDescription("레이팅 대상곡을 이미지로 표시 (생략 시 본인)")
   .addUserOption((opt) =>
