@@ -3,7 +3,7 @@ import { getCachedProfile, getUserFriendCode, getProfilePrivate } from "../../db
 import { buildProfileReply } from "../utils/embeds";
 import { autoRole } from "../utils/roles";
 
-export const data = new SlashCommandBuilder()
+export const data: SlashCommandBuilder = new SlashCommandBuilder()
   .setName("프로필")
   .setDescription("maimai DX 프로필 보기 (생략 시 본인)")
   .addUserOption((opt) =>
