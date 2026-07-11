@@ -419,15 +419,18 @@ export async function renderRatingCard(
     musicKind: resolveKind(r),
   });
 
-  // 위치가 아니라 버전(신곡 판정)으로 분류 — 곡추천과 동일한 isNewSong 사용.
-  const newVms = records
-    .filter((r) => isNewSong(r.title, profile.server))
-    .slice(0, 15)
-    .map((r) => toVM(fix(r), markMap, profile.server));
-  const otherVms = records
-    .filter((r) => !isNewSong(r.title, profile.server))
-    .slice(0, 35)
-    .map((r) => toVM(fix(r), markMap, profile.server));
+  // 국제판: maimai net 파싱 순서(신곡 15 + 구곡 35)를 그대로 신뢰.
+  // JP: 전체 기록에서 직접 산출하므로 버전(isNewSong)으로 분류(15/35 미만 오분류 방지).
+  const newRecords =
+    profile.server === "jp"
+      ? records.filter((r) => isNewSong(r.title, "jp")).slice(0, 15)
+      : records.slice(0, 15);
+  const otherRecords =
+    profile.server === "jp"
+      ? records.filter((r) => !isNewSong(r.title, "jp")).slice(0, 35)
+      : records.slice(15, 50);
+  const newVms = newRecords.map((r) => toVM(fix(r), markMap, profile.server));
+  const otherVms = otherRecords.map((r) => toVM(fix(r), markMap, profile.server));
   // 헤더에는 프로필에 저장된 실제 레이팅을 표시
   const totalRs =
     profile.rating || newVms.concat(otherVms).reduce((s, v) => s + v.rs, 0);
