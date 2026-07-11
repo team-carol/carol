@@ -627,10 +627,17 @@ export function rtTableEmbed(
     };
   }
 
-  // 위치가 아니라 버전(신곡 판정)으로 분류 — 곡추천과 동일한 isNewSong 사용.
-  // (서버별 신곡 범위가 다르고, 대상곡이 15/35 미만이면 위치 기반은 오분류됨)
-  const newRecords = records.filter((r) => isNewSong(r.title, p.server)).slice(0, 15);
-  const otherRecords = records.filter((r) => !isNewSong(r.title, p.server)).slice(0, 35);
+  // 국제판: maimai net 레이팅 대상 페이지에서 파싱한 순서(신곡 15 + 구곡 35)를 그대로 신뢰.
+  // JP: 유료 페이지라 전체 기록에서 직접 산출하며, 대상곡이 15/35 미만이면 위치 기반이
+  //     오분류되므로 버전(isNewSong)으로 분류.
+  const newRecords =
+    p.server === "jp"
+      ? records.filter((r) => isNewSong(r.title, "jp")).slice(0, 15)
+      : records.slice(0, 15);
+  const otherRecords =
+    p.server === "jp"
+      ? records.filter((r) => !isNewSong(r.title, "jp")).slice(0, 35)
+      : records.slice(15, 50);
 
   // 레이팅 대상 페이지엔 FC/AP 마크가 없고 ST/DX도 부정확할 수 있어 clear 기록으로 보정
   const clearList = getClearList(p);
