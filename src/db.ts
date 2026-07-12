@@ -28,6 +28,16 @@ export interface CachedProfile {
   mapJson: string;
 }
 
+export interface DailyAchievementRecord {
+  profileKey: string;
+  playDay: string;
+  chartKey: string;
+  recordJson: string;
+  achievementVal: number;
+  playedAt: number;
+  updatedAt: number;
+}
+
 export const MAIMAI_SERVERS = ["intl", "jp"] as const;
 export type MaimaiServer = (typeof MAIMAI_SERVERS)[number];
 
@@ -103,6 +113,17 @@ db.exec(`
     data TEXT NOT NULL,
     updated_at INTEGER DEFAULT 0
   );
+
+  CREATE TABLE IF NOT EXISTS daily_achievements (
+    profile_key TEXT NOT NULL,
+    play_day TEXT NOT NULL,
+    chart_key TEXT NOT NULL,
+    record_json TEXT NOT NULL,
+    achievement_val REAL DEFAULT 0,
+    played_at INTEGER DEFAULT 0,
+    updated_at INTEGER DEFAULT (strftime('%s','now') * 1000),
+    PRIMARY KEY (profile_key, play_day, chart_key)
+  );
 `);
 
 try { db.exec("ALTER TABLE profiles ADD COLUMN top_json TEXT DEFAULT '[]'"); } catch (_) {}
@@ -122,6 +143,7 @@ try { db.exec("ALTER TABLE sessions ADD COLUMN friend_code_intl TEXT DEFAULT ''"
 try { db.exec("ALTER TABLE sessions ADD COLUMN friend_code_jp TEXT DEFAULT ''"); } catch (_) {}
 try { db.exec("ALTER TABLE sessions ADD COLUMN avatar_blob_intl TEXT DEFAULT ''"); } catch (_) {}
 try { db.exec("ALTER TABLE sessions ADD COLUMN avatar_blob_jp TEXT DEFAULT ''"); } catch (_) {}
+try { db.exec("ALTER TABLE daily_achievements ADD COLUMN played_at INTEGER DEFAULT 0"); } catch (_) {}
 
 // ─── Queries ────────────────────────────────────────────────────────────
 const profileSelect = "friend_code AS profileKey, COALESCE(NULLIF(display_friend_code, ''), friend_code) AS friendCode, COALESCE(server_region, 'intl') AS server, player_name AS playerName, rating, rating_max AS ratingMax, trophy, trophy_class AS trophyClass, avatar, grade_img AS gradeImg, stars, comment, play_count AS playCount, COALESCE(total_play_count, 0) AS totalPlayCount, raw_html AS rawHtml, recent_json AS recentJson, top_json AS topJson, clear_json AS clearJson, COALESCE(map_json, '[]') AS mapJson, last_synced_at AS lastSyncedAt";
@@ -151,6 +173,21 @@ const stmtUpsert = db.prepare(`
     last_synced_at = excluded.last_synced_at
 `);
 const stmtDelete = db.prepare("DELETE FROM profiles WHERE friend_code = ?");
+const stmtUpsertDailyAchievement = db.prepare(`
+  INSERT INTO daily_achievements (profile_key, play_day, chart_key, record_json, achievement_val, played_at, updated_at)
+  VALUES (@profileKey, @playDay, @chartKey, @recordJson, @achievementVal, @playedAt, @updatedAt)
+  ON CONFLICT(profile_key, play_day, chart_key) DO UPDATE SET
+    record_json = CASE
+      WHEN excluded.achievement_val >= daily_achievements.achievement_val THEN excluded.record_json
+      ELSE daily_achievements.record_json
+    END,
+    achievement_val = MAX(daily_achievements.achievement_val, excluded.achievement_val),
+    played_at = CASE
+      WHEN excluded.achievement_val >= daily_achievements.achievement_val THEN excluded.played_at
+      ELSE daily_achievements.played_at
+    END,
+    updated_at = excluded.updated_at
+`);
 
 // ─── Public API ─────────────────────────────────────────────────────────
 export function cacheProfile(profile: MaimaiProfile, playCount: number, rawHtml: string, recentJson = "[]", topJson = "[]", clearJson = "[]", server: MaimaiServer = "intl", mapJson = "[]"): string {
@@ -197,6 +234,36 @@ export function getAllCachedProfiles(): CachedProfile[] {
 
 export function deleteCachedProfile(friendCode: string): void {
   stmtDelete.run(friendCode);
+}
+
+export function saveDailyAchievement(
+  profileKeyValue: string,
+  playDay: string,
+  chartKeyValue: string,
+  recordJson: string,
+  achievementVal: number,
+  playedAt: number,
+): void {
+  stmtUpsertDailyAchievement.run({
+    profileKey: profileKeyValue,
+    playDay,
+    chartKey: chartKeyValue,
+    recordJson,
+    achievementVal,
+    playedAt,
+    updatedAt: Date.now(),
+  });
+}
+
+export function getDailyAchievements(profileKeyValue: string, playDay: string): DailyAchievementRecord[] {
+  return db.prepare(`
+    SELECT profile_key AS profileKey, play_day AS playDay, chart_key AS chartKey,
+      record_json AS recordJson, achievement_val AS achievementVal,
+      played_at AS playedAt, updated_at AS updatedAt
+    FROM daily_achievements
+    WHERE profile_key = ? AND play_day = ?
+    ORDER BY achievement_val DESC, played_at DESC
+  `).all(profileKeyValue, playDay) as DailyAchievementRecord[];
 }
 
 export function getLastSync(friendCode: string): number | null {
