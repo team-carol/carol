@@ -1,7 +1,7 @@
 import * as http from "http";
 import * as fs from "fs";
-import { parseHome, parsePlayerData, parseFriendCode as parseFC, parseRecentRecords, parseTop5, parseTopSongs, parseMusicScore, mergeTopRecords, getMaimaiBaseUrl, parseMapAreas, chartKey } from "../scraper";
-import { cacheProfile, saveUserSession, getUserSyncToken, findUserBySyncToken, saveAvatarBlob, getAvatarBlob, getSongJacket, saveSongJacket, getExtraBookmarklets, getProfilePrivate, setProfilePrivate, addExtraBookmarklet, removeExtraBookmarklet, getEnabledBookmarkletPresetIds, setBookmarkletPresetEnabled, getUserDefaultServer, setUserDefaultServer, isMaimaiServer, getMapImage, saveMapImage, saveDailyAchievement } from "../db";
+import { parseHome, parsePlayerData, parseFriendCode as parseFC, parseRecentRecords, parseTop5, parseTopSongs, parseMusicScore, mergeTopRecords, getMaimaiBaseUrl, parseMapAreas, chartKey, parsePlaylogDetail } from "../scraper";
+import { cacheProfile, saveUserSession, getUserSyncToken, findUserBySyncToken, saveAvatarBlob, getAvatarBlob, getSongJacket, saveSongJacket, getExtraBookmarklets, getProfilePrivate, setProfilePrivate, addExtraBookmarklet, removeExtraBookmarklet, getEnabledBookmarkletPresetIds, setBookmarkletPresetEnabled, getUserDefaultServer, setUserDefaultServer, isMaimaiServer, getMapImage, saveMapImage, saveDailyAchievement, pruneDailyAchievements } from "../db";
 import { buildBookmarkletJs, setBaseUrl, getBaseUrl, buildBookmarklet, BOOKMARKLET_PRESETS, getBookmarkletPresets } from "./bookmarklet";
 import { computeRatingTarget } from "../constants";
 import { settingsPage } from "./settingsPage";
@@ -478,6 +478,7 @@ a{color:#c084fc}
       const mapHtml: string = data.m || "";
       const eventMapHtml: string = data.em || "";
       const avatarBase64: string = data.a || "";
+      const detailPayloads = Array.isArray(data.dt) ? data.dt : [];
       console.log(`[web] user=${syncUserId.slice(-6)}, server=${syncServer}, home=${homeHtml.length}B, player=${playerHtml.length}B, record=${recordHtml.length}B, fc=${fcHtml.length}B, top4=${top4Html.length}B, top3=${top3Html.length}B, top2=${top2Html.length}B, top1=${top1Html.length}B, top0=${top0Html.length}B, map=${mapHtml.length}B, eventMap=${eventMapHtml.length}B, rt=${ratingTargetHtml.length}B`);
       if (isDev) {
         fs.writeFileSync("debug_home.html", homeHtml, "utf-8");
@@ -487,6 +488,12 @@ a{color:#c084fc}
         fs.writeFileSync("debug_rating_target.html", ratingTargetHtml, "utf-8");
         fs.writeFileSync("debug_map.html", mapHtml, "utf-8");
         fs.writeFileSync("debug_event_map.html", eventMapHtml, "utf-8");
+        detailPayloads.forEach((detail: unknown, idx: number) => {
+          if (!detail || typeof detail !== "object") return;
+          const html = "html" in detail && typeof detail.html === "string" ? detail.html : "";
+          if (!html) return;
+          fs.writeFileSync(`debug_detail_${idx}.html`, html, "utf-8");
+        });
       }
 
       try {
@@ -503,6 +510,18 @@ a{color:#c084fc}
         const fc = [effective.friendCode, fcRaw].find((v) => v && /^\d{13}$/.test(v)) || token;
 
         const recentRecords = parseRecentRecords(recordHtml, syncServer);
+        const detailMap = new Map<string, string>();
+        for (const detail of detailPayloads) {
+          if (!detail || typeof detail !== "object") continue;
+          const idx = "idx" in detail && typeof detail.idx === "string" ? detail.idx : "";
+          const html = "html" in detail && typeof detail.html === "string" ? detail.html : "";
+          if (!idx || !html) continue;
+          detailMap.set(idx, html);
+        }
+        const enrichedRecentRecords = recentRecords.map((record) => {
+          const detailHtml = record.detailIdx ? detailMap.get(record.detailIdx) : undefined;
+          return detailHtml ? { ...record, ...parsePlaylogDetail(detailHtml) } : record;
+        });
         const clearHtmls = [top4Html, top3Html, top2Html, top1Html, top0Html].filter((h) => h);
         const clearRecords = clearHtmls.length > 0 ? mergeTopRecords(clearHtmls.map((h) => parseMusicScore(h, syncServer))) : [];
         // 내수판(JP)은 레이팅 대상 페이지 수집에 유료 코스가 필요하므로,
@@ -516,13 +535,13 @@ a{color:#c084fc}
         ];
         const emptyFc = clearRecords.filter((r) => !r.fc).length;
         const expectedRecentRecords = Math.min(Math.max(playCount || 1, 1), 5);
-        console.log(`[web] recentRecords: ${recentRecords.length} songs, top: ${topRecords.length} (rating target), clear: ${clearRecords.length} (empty fc: ${emptyFc}), mapAreas: ${mapAreas.length}`);
+        console.log(`[web] recentRecords: ${enrichedRecentRecords.length} songs, top: ${topRecords.length} (rating target), clear: ${clearRecords.length} (empty fc: ${emptyFc}), mapAreas: ${mapAreas.length}, detailPayloads: ${detailMap.size}`);
 
-        if (!effective.playerName || !/^\d{13}$/.test(fc) || recentRecords.length < expectedRecentRecords || clearRecords.length === 0 || topRecords.length === 0) {
+        if (!effective.playerName || !/^\d{13}$/.test(fc) || enrichedRecentRecords.length < expectedRecentRecords || clearRecords.length === 0 || topRecords.length === 0) {
           console.warn("[web] invalid sync payload", {
             hasName: !!effective.playerName,
             hasFriendCode: /^\d{13}$/.test(fc),
-            recent: recentRecords.length,
+            recent: enrichedRecentRecords.length,
             expectedRecent: expectedRecentRecords,
             clear: clearRecords.length,
             top: topRecords.length,
@@ -546,9 +565,9 @@ a{color:#c084fc}
           avatar: effective.avatar || "", trophy: effective.trophy || "",
           trophyClass: effective.trophyClass || "normal", stars: effective.stars || "0",
           playCount: playCount || 0, totalPlayCount: totalPlayCount || 0, comment: effective.comment || "", friendCode: fc,
-        }, playCount || 0, homeHtml, JSON.stringify(recentRecords), JSON.stringify(topRecords), JSON.stringify(clearRecords), syncServer, JSON.stringify(mapAreas));
+        }, playCount || 0, homeHtml, JSON.stringify(enrichedRecentRecords), JSON.stringify(topRecords), JSON.stringify(clearRecords), syncServer, JSON.stringify(mapAreas));
         const fallbackPlayDay = koreaPlayDayKey(new Date());
-        for (const record of recentRecords) {
+        for (const record of enrichedRecentRecords) {
           if (!record.isNewScore) continue;
           saveDailyAchievement(
             savedProfileKey,
@@ -559,6 +578,8 @@ a{color:#c084fc}
             recordPlayedAt(record.date),
           );
         }
+        const pruned = pruneDailyAchievements(7);
+        if (pruned > 0) console.log(`[web] daily achievements pruned: ${pruned}`);
         saveUserSession(syncUserId, "{}", savedProfileKey, syncServer);
 
         const savedMapImages = await cacheMapImages(mapAreas, syncServer);
