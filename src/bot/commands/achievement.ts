@@ -1,6 +1,6 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, MessageFlags, AttachmentBuilder } from "discord.js";
 import { getAvatarBlob, getCachedProfile, getDailyAchievements, getProfilePrivate, getUserFriendCode } from "../../db";
-import { koreaPlayDayKey, parseDailyAchievementRows } from "../../achievements";
+import { attachAchievementGains, koreaPlayDayKey, parseDailyAchievementRows } from "../../achievements";
 import { renderAchievementCard } from "../utils/achievementCard";
 
 export const data = new SlashCommandBuilder()
@@ -42,7 +42,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     const playDay = requestedDay && isPlayDayKey(requestedDay)
       ? requestedDay
       : koreaPlayDayKey(new Date());
-    const records = parseDailyAchievementRows(getDailyAchievements(cached.profileKey, playDay));
+    const records = attachAchievementGains(cached.profileKey, parseDailyAchievementRows(getDailyAchievements(cached.profileKey, playDay)));
     if (records.length === 0) {
       await interaction.reply({
         content: requestedDay
