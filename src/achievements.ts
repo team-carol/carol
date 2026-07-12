@@ -52,6 +52,8 @@ export function parseDailyAchievementRows(rows: readonly DailyAchievementRecord[
       const track = parsed["track"];
       const fc = parsed["fc"];
       const sync = parsed["sync"];
+      const detailIdx = parsed["detailIdx"];
+      const ratingUp = parsed["ratingUp"];
       records.push({
         title,
         achievement: typeof achievement === "string" ? achievement : `${row.achievementVal.toFixed(4)}%`,
@@ -64,6 +66,8 @@ export function parseDailyAchievementRows(rows: readonly DailyAchievementRecord[
         track: typeof track === "number" ? track : 0,
         fc: typeof fc === "string" ? fc : "",
         sync: typeof sync === "string" ? sync : "",
+        detailIdx: typeof detailIdx === "string" ? detailIdx : undefined,
+        ratingUp: typeof ratingUp === "number" ? ratingUp : undefined,
         isNewScore: true,
       });
     } catch (error) {

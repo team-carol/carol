@@ -5,10 +5,20 @@ import { renderAchievementCard } from "../utils/achievementCard";
 
 export const data = new SlashCommandBuilder()
   .setName("성과")
-  .setDescription("오늘 새롭게 달성한 스코어를 이미지로 표시 (한국시간 오전 4시 기준)")
+  .setDescription("새롭게 달성한 스코어를 이미지로 표시 (한국시간 오전 4시 기준)")
   .addUserOption((opt) =>
     opt.setName("user").setDescription("조회할 유저 (생략 시 본인)").setRequired(false),
+  )
+  .addStringOption((opt) =>
+    opt
+      .setName("date")
+      .setDescription("조회할 날짜 (YYYY-MM-DD, 생략 시 오늘)")
+      .setRequired(false),
   );
+
+function isPlayDayKey(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   const target = interaction.options.getUser("user") ?? interaction.user;
@@ -28,11 +38,16 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   }
 
   try {
-    const playDay = koreaPlayDayKey(new Date());
+    const requestedDay = interaction.options.getString("date") ?? "";
+    const playDay = requestedDay && isPlayDayKey(requestedDay)
+      ? requestedDay
+      : koreaPlayDayKey(new Date());
     const records = parseDailyAchievementRows(getDailyAchievements(cached.profileKey, playDay));
     if (records.length === 0) {
       await interaction.reply({
-        content: "오늘 새로 달성한 스코어가 없습니다. PNG는 만들지 않았습니다.",
+        content: requestedDay
+          ? `${playDay}에 새로 달성한 스코어가 없습니다.`
+          : "오늘 새로 달성한 스코어가 없습니다.",
         flags: MessageFlags.Ephemeral,
       });
       return;

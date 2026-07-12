@@ -101,6 +101,8 @@ export interface PlayRecord {
   track: number;
   fc: string;
   sync: string;
+  detailIdx?: string;
+  ratingUp?: number;
   isNewScore?: boolean;
 }
 
@@ -176,7 +178,31 @@ function parseOneRecord($: cheerio.CheerioAPI, el: AnyNode, baseUrl: string): Pl
   const rankImgs = $(el).find("img.h_35.m_5.f_l");
   const fc = FC_LABELS[iconName(rankImgs.eq(0).attr("src") || "")] || "";
   const sync = SYNC_LABELS[iconName(rankImgs.eq(1).attr("src") || "")] || "";
-  return { title, achievement: ach || "?", diff, level, date, jacketUrl, musicKind, achievementVal: achNum, track, fc, sync, isNewScore: hasNewScoreMarker($, el) };
+  const detailIdx = $(el).find("form[action*='playlogDetail'] input[name='idx']").val();
+  return {
+    title,
+    achievement: ach || "?",
+    diff,
+    level,
+    date,
+    jacketUrl,
+    musicKind,
+    achievementVal: achNum,
+    track,
+    fc,
+    sync,
+    detailIdx: typeof detailIdx === "string" ? detailIdx : undefined,
+    isNewScore: hasNewScoreMarker($, el),
+  };
+}
+
+export function parsePlaylogDetail(html: string): { ratingUp?: number } {
+  const $ = cheerio.load(html);
+  const text = $(".playlog_rating_detail_block").text().replace(/\s+/g, " ");
+  const match = text.match(/\(\+(\d+)\)/);
+  return {
+    ratingUp: match ? Number(match[1]) : undefined,
+  };
 }
 
 export function parseRecentRecords(html: string, server: MaimaiServer = "intl"): PlayRecord[] {
