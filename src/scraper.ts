@@ -101,6 +101,7 @@ export interface PlayRecord {
   track: number;
   fc: string;
   sync: string;
+  isNewScore?: boolean;
 }
 
 export type MapAreaKind = "normal" | "event";
@@ -129,7 +130,26 @@ function iconName(src: string): string {
   return m ? m[1] : "";
 }
 
-function parseOneRecord($: cheerio.CheerioAPI, el: any, baseUrl: string): PlayRecord | null {
+function hasNewScoreMarker($: cheerio.CheerioAPI, el: AnyNode): boolean {
+  const attrs: string[] = [];
+  $(el).find("img, span, div").each((_, node) => {
+    const elem = $(node);
+    attrs.push(
+      elem.attr("src") ?? "",
+      elem.attr("alt") ?? "",
+      elem.attr("title") ?? "",
+      elem.attr("class") ?? "",
+    );
+  });
+  const attrText = attrs.join(" ").toLowerCase();
+  if (/(new[\s_-]*(score|record)|score[\s_-]*new|record[\s_-]*new|newrecord)/i.test(attrText)) {
+    return true;
+  }
+  const labelText = $(el).text().replace(/\s+/g, " ").trim();
+  return /(?:\bnew\s*(?:score|record)\b|신기록|新記録)/i.test(labelText);
+}
+
+function parseOneRecord($: cheerio.CheerioAPI, el: AnyNode, baseUrl: string): PlayRecord | null {
   const block = $(el).find(".basic_block").first();
   const level = block.find(".playlog_level_icon").text().trim();
   const clone = block.clone();
@@ -156,7 +176,7 @@ function parseOneRecord($: cheerio.CheerioAPI, el: any, baseUrl: string): PlayRe
   const rankImgs = $(el).find("img.h_35.m_5.f_l");
   const fc = FC_LABELS[iconName(rankImgs.eq(0).attr("src") || "")] || "";
   const sync = SYNC_LABELS[iconName(rankImgs.eq(1).attr("src") || "")] || "";
-  return { title, achievement: ach || "?", diff, level, date, jacketUrl, musicKind, achievementVal: achNum, track, fc, sync };
+  return { title, achievement: ach || "?", diff, level, date, jacketUrl, musicKind, achievementVal: achNum, track, fc, sync, isNewScore: hasNewScoreMarker($, el) };
 }
 
 export function parseRecentRecords(html: string, server: MaimaiServer = "intl"): PlayRecord[] {
