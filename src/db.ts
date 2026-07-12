@@ -255,6 +255,21 @@ export function saveDailyAchievement(
   });
 }
 
+function koreaPlayDayKeyFromDate(date: Date): string {
+  const shifted = new Date(date.getTime() + 5 * 60 * 60 * 1000);
+  const year = shifted.getUTCFullYear();
+  const month = String(shifted.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(shifted.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+export function pruneDailyAchievements(retainDays = 7): number {
+  const safeRetainDays = Math.max(1, Math.floor(retainDays));
+  const cutoffDate = new Date(Date.now() - (safeRetainDays - 1) * 24 * 60 * 60 * 1000);
+  const cutoffKey = koreaPlayDayKeyFromDate(cutoffDate);
+  return db.prepare("DELETE FROM daily_achievements WHERE play_day < ?").run(cutoffKey).changes;
+}
+
 export function getDailyAchievements(profileKeyValue: string, playDay: string): DailyAchievementRecord[] {
   return db.prepare(`
     SELECT profile_key AS profileKey, play_day AS playDay, chart_key AS chartKey,

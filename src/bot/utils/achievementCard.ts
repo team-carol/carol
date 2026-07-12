@@ -2,7 +2,7 @@ import satori from "satori";
 import { Resvg } from "@resvg/resvg-js";
 import type { CachedProfile } from "../../db";
 import type { PlayRecord } from "../../scraper";
-import { calcSongRating, getConstant } from "../../constants";
+import { calcSongRating, getConstant, levelToNumber } from "../../constants";
 import { loadFonts } from "../../fonts";
 
 const ACCENT = "#9333ea";
@@ -12,7 +12,7 @@ const TEXT = "#cccccc";
 const MUTED = "#888888";
 const CANVAS = "#0d0d0d";
 const HEADER_HEIGHT = 160;
-const RECORD_ROW_HEIGHT = 84;
+const RECORD_ROW_HEIGHT = 92;
 const ROW_GAP = 8;
 const EMPTY_BODY_HEIGHT = 230;
 
@@ -77,12 +77,6 @@ async function jacketDataUrl(jacketUrl: string): Promise<string | null> {
   }
 }
 
-function songRs(record: PlayRecord, server: CachedProfile["server"]): number {
-  const constant = getConstant(record.title, record.musicKind, record.diff, server);
-  const level = constant ?? (Number(record.level.replace("+", ".7")) || 0);
-  return calcSongRating(record.achievementVal, level, record.fc);
-}
-
 function stat(label: string, value: string, color = "#ffffff"): El {
   return el("div", { display: "flex", flexDirection: "column", gap: 2 }, [
     el("span", { color: MUTED, fontSize: 9, fontWeight: 700 }, label),
@@ -90,48 +84,84 @@ function stat(label: string, value: string, color = "#ffffff"): El {
   ]);
 }
 
+function songRating(record: PlayRecord, server: CachedProfile["server"]): number {
+  const constant = getConstant(record.title, record.musicKind, record.diff, server);
+  const level = constant ?? levelToNumber(record.level);
+  return calcSongRating(record.achievementVal, level, record.fc);
+}
+
 function recordRow(record: PlayRecord, rank: number, profile: CachedProfile, jacket: string | null): El {
   const diffColor = DIFF_COLOR[record.diff] ?? MUTED;
   const marks = [record.fc, record.sync].filter((mark) => mark.length > 0);
-  const rs = songRs(record, profile.server);
+  const ratingGain = typeof record.ratingUp === "number" && record.ratingUp > 0
+    ? `+${record.ratingUp}`
+    : "0";
+  const constant = getConstant(record.title, record.musicKind, record.diff, profile.server);
+  const constantLabel = constant !== null ? constant.toFixed(1) : record.level;
+  const chartRating = songRating(record, profile.server);
   return el(
     "div",
     {
       display: "flex",
-      alignItems: "center",
+      alignItems: "stretch",
       gap: 12,
       background: SURFACE,
       border: `1px solid ${BORDER}`,
       borderRadius: 2,
       padding: 0,
+      minHeight: RECORD_ROW_HEIGHT,
       width: "100%",
       overflow: "hidden",
     },
     [
       el("div", { width: 6, alignSelf: "stretch", background: diffColor, flexShrink: 0 }),
+      jacket
+        ? image(jacket, {
+            width: 64,
+            height: 64,
+            objectFit: "cover",
+            alignSelf: "center",
+            marginLeft: 8,
+            borderRadius: 4,
+            flexShrink: 0,
+          })
+        : el("div", {
+            width: 64,
+            height: 64,
+            alignSelf: "center",
+            marginLeft: 8,
+            background: "#151515",
+            border: `1px solid ${BORDER}`,
+            borderRadius: 4,
+            flexShrink: 0,
+          }),
       el(
         "div",
         {
           display: "flex",
-          flexDirection: "row",
-          alignItems: "center",
-          gap: 12,
+          flexDirection: "column",
+          justifyContent: "center",
           flex: 1,
           minWidth: 0,
-          padding: "10px 12px 10px 12px",
+          padding: "9px 12px 9px 0",
         },
         [
-          el("div", { display: "flex", flexDirection: "column", flex: 1, minWidth: 0 }, [
-            el("span", { color: "#fff", fontSize: 15, fontWeight: 800, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, record.title),
-            el("span", { color: TEXT, fontSize: 10, marginTop: 3 }, `${record.diff} ${record.level} · ${record.musicKind || "?"} · ${record.date || "-"}`),
+          el("div", { display: "flex", alignItems: "baseline", gap: 8, minWidth: 0 }, [
+            el("span", { color: "#fff", fontSize: 15, fontWeight: 800, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", flex: 1 }, record.title),
+            el("span", { color: MUTED, fontSize: 9, fontWeight: 700, flexShrink: 0 }, `#${rank}`),
           ]),
-          el("div", { display: "flex", alignItems: "baseline", gap: 8 }, [
-            el("span", { color: "#fff", fontSize: 18, fontWeight: 800 }, record.achievementVal > 0 ? `${record.achievementVal.toFixed(4)}%` : record.achievement),
-            el("span", { color: ACCENT, fontSize: 13, fontWeight: 800 }, `RS ${rs}`),
+          el("span", { color: TEXT, fontSize: 10, marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, `${record.diff} ${constantLabel} · ${record.musicKind || "?"} · ${record.date || "-"}`),
+          el("div", { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginTop: 8 }, [
+            el("div", { display: "flex", alignItems: "baseline", gap: 8 }, [
+              el("span", { color: "#fff", fontSize: 18, fontWeight: 800, lineHeight: 1 }, record.achievementVal > 0 ? `${record.achievementVal.toFixed(4)}%` : record.achievement),
+            ]),
+            el("div", { display: "flex", alignItems: "baseline", gap: 8 }, [
+              el("span", { color: ACCENT, fontSize: 13, fontWeight: 800 }, `${chartRating}(${ratingGain})`),
+              el("div", { display: "flex", gap: 4, width: 76, justifyContent: "flex-end" }, marks.map((mark) =>
+                el("span", { color: MARK_COLOR[mark] ?? "rgba(255,255,255,0.7)", fontSize: 10, fontWeight: 800 }, mark),
+              )),
+            ]),
           ]),
-          el("div", { display: "flex", gap: 4, width: 76, justifyContent: "flex-end" }, marks.map((mark) =>
-            el("span", { color: MARK_COLOR[mark] ?? "rgba(255,255,255,0.7)", fontSize: 10, fontWeight: 800 }, mark),
-          )),
         ],
       ),
     ],
@@ -176,8 +206,15 @@ export async function renderAchievementCard(
 ): Promise<Buffer> {
   const fonts = await loadFonts();
   const topRecords = records.slice().sort((a, b) => b.achievementVal - a.achievementVal);
-  const totalRs = topRecords.reduce((sum, record) => sum + songRs(record, profile.server), 0);
+  const totalRatingGain = topRecords.reduce((sum, record) => sum + Math.max(0, record.ratingUp ?? 0), 0);
   const avatarUrl = avatarBuf ? `data:image/png;base64,${avatarBuf.toString("base64")}` : "";
+  const jacketUrls = new Map<string, string | null>();
+  await Promise.all(
+    topRecords.map(async (record) => {
+      if (!record.jacketUrl || jacketUrls.has(record.jacketUrl)) return;
+      jacketUrls.set(record.jacketUrl, await jacketDataUrl(record.jacketUrl));
+    }),
+  );
   const width = 920;
   const root = el(
     "div",
@@ -208,7 +245,7 @@ export async function renderAchievementCard(
         ]),
         el("div", { display: "flex", gap: 26 }, [
           stat("COUNT", String(topRecords.length), ACCENT),
-          stat("GAINED RS", `+${totalRs}`, ACCENT),
+          stat("RATING UP", `+${totalRatingGain}`, ACCENT),
         ]),
       ]),
       el(
@@ -219,15 +256,19 @@ export async function renderAchievementCard(
           gap: ROW_GAP,
           marginTop: 18,
         },
-        topRecords.length > 0 ? topRecords.map((record, index) => recordRow(record, index + 1, profile, null)) : emptyState(),
+        topRecords.length > 0
+          ? topRecords.map((record, index) =>
+              recordRow(record, index + 1, profile, jacketUrls.get(record.jacketUrl) ?? null),
+            )
+          : emptyState(),
       ),
     ],
   );
 
   const bodyHeight = topRecords.length > 0
-    ? topRecords.length * RECORD_ROW_HEIGHT + Math.max(0, topRecords.length - 1) * ROW_GAP
+    ? topRecords.length * RECORD_ROW_HEIGHT + Math.max(0, topRecords.length - 1) * ROW_GAP + 16
     : EMPTY_BODY_HEIGHT;
-  const height = HEADER_HEIGHT + bodyHeight;
+  const height = HEADER_HEIGHT + bodyHeight + 8;
   const svg = await satori(root, { width, height, fonts });
   return Buffer.from(new Resvg(svg, { fitTo: { mode: "width", value: width * 2 } }).render().asPng());
 }
