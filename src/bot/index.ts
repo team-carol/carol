@@ -13,6 +13,7 @@ import * as profile      from "./commands/profile";
 import * as bookmarklet  from "./commands/bookmarklet";
 import * as ratingtable  from "./commands/ratingtable";
 import * as ratingimage  from "./commands/ratingimage";
+import * as achievement  from "./commands/achievement";
 import * as fortune      from "./commands/fortune";
 import * as settings     from "./commands/settings";
 import * as serverSettings from "./commands/serverSettings";
@@ -25,7 +26,7 @@ import * as report       from "./commands/report";
 
 type Command = { data: { toJSON(): object; name: string }; execute: (i: ChatInputCommandInteraction) => Promise<void> };
 
-const COMMANDS: Command[] = [profile, bookmarklet, ratingtable, ratingimage, fortune, settings, serverSettings, search, status, songrec, random, areaMap, report];
+const COMMANDS: Command[] = [profile, bookmarklet, ratingtable, ratingimage, achievement, fortune, settings, serverSettings, search, status, songrec, random, areaMap, report];
 const EPHEMERAL_REPLY = { flags: MessageFlags.Ephemeral } as const;
 
 const RATING_CARD_GC_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000;
