@@ -1,5 +1,7 @@
+import { getPreviousDailyAchievementVal } from "./db";
 import type { DailyAchievementRecord } from "./db";
 import type { PlayRecord } from "./scraper";
+import { chartKey } from "./scraper";
 
 function pad2(value: number): string {
   return String(value).padStart(2, "0");
@@ -68,6 +70,8 @@ export function parseDailyAchievementRows(rows: readonly DailyAchievementRecord[
         sync: typeof sync === "string" ? sync : "",
         detailIdx: typeof detailIdx === "string" ? detailIdx : undefined,
         ratingUp: typeof ratingUp === "number" ? ratingUp : undefined,
+        playedAt: row.playedAt,
+        updatedAt: row.updatedAt,
         isNewScore: true,
       });
     } catch (error) {
@@ -76,4 +80,16 @@ export function parseDailyAchievementRows(rows: readonly DailyAchievementRecord[
     }
   }
   return records;
+}
+
+export function attachAchievementGains(profileKey: string, records: readonly PlayRecord[]): PlayRecord[] {
+  return records.map((record) => {
+    const updatedAt = record.updatedAt ?? 0;
+    const previousBest = updatedAt > 0 ? getPreviousDailyAchievementVal(profileKey, chartKey(record), updatedAt) : null;
+    const achievementGain = previousBest === null ? 0 : Math.max(0, record.achievementVal - previousBest);
+    return {
+      ...record,
+      achievementGain,
+    };
+  });
 }
