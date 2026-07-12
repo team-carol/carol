@@ -90,12 +90,15 @@ function songRating(record: PlayRecord, server: CachedProfile["server"]): number
   return calcSongRating(record.achievementVal, level, record.fc);
 }
 
-function recordRow(record: PlayRecord, rank: number, profile: CachedProfile, jacket: string | null): El {
+function recordRow(record: PlayRecord, rank: number, profile: CachedProfile, jacket: string | null, playDay: string): El {
   const diffColor = DIFF_COLOR[record.diff] ?? MUTED;
   const marks = [record.fc, record.sync].filter((mark) => mark.length > 0);
   const ratingGain = typeof record.ratingUp === "number" && record.ratingUp > 0
     ? `+${record.ratingUp}`
     : "0";
+  const achievementGain = typeof record.achievementGain === "number"
+    ? `(+${record.achievementGain.toFixed(4)}%)`
+    : "";
   const constant = getConstant(record.title, record.musicKind, record.diff, profile.server);
   const constantLabel = constant !== null ? constant.toFixed(1) : record.level;
   const chartRating = songRating(record, profile.server);
@@ -150,10 +153,10 @@ function recordRow(record: PlayRecord, rank: number, profile: CachedProfile, jac
             el("span", { color: "#fff", fontSize: 15, fontWeight: 800, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", flex: 1 }, record.title),
             el("span", { color: MUTED, fontSize: 9, fontWeight: 700, flexShrink: 0 }, `#${rank}`),
           ]),
-          el("span", { color: TEXT, fontSize: 10, marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, `${record.diff} ${constantLabel} · ${record.musicKind || "?"} · ${record.date || "-"}`),
+          el("span", { color: TEXT, fontSize: 10, marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, `${record.diff} ${constantLabel} · ${record.musicKind || "?"} · ${playDay}`),
           el("div", { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginTop: 8 }, [
             el("div", { display: "flex", alignItems: "baseline", gap: 8 }, [
-              el("span", { color: "#fff", fontSize: 18, fontWeight: 800, lineHeight: 1 }, record.achievementVal > 0 ? `${record.achievementVal.toFixed(4)}%` : record.achievement),
+              el("span", { color: "#fff", fontSize: 18, fontWeight: 800, lineHeight: 1 }, record.achievementVal > 0 ? `${record.achievementVal.toFixed(4)}%${achievementGain}` : record.achievement),
             ]),
             el("div", { display: "flex", alignItems: "baseline", gap: 8 }, [
               el("span", { color: ACCENT, fontSize: 13, fontWeight: 800 }, `${chartRating}(${ratingGain})`),
@@ -258,7 +261,7 @@ export async function renderAchievementCard(
         },
         topRecords.length > 0
           ? topRecords.map((record, index) =>
-              recordRow(record, index + 1, profile, jacketUrls.get(record.jacketUrl) ?? null),
+              recordRow(record, index + 1, profile, jacketUrls.get(record.jacketUrl) ?? null, playDay),
             )
           : emptyState(),
       ),

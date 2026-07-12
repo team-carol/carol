@@ -38,6 +38,16 @@ export interface DailyAchievementRecord {
   updatedAt: number;
 }
 
+export interface DailyAchievementSnapshotRecord {
+  profileKey: string;
+  playDay: string;
+  chartKey: string;
+  recordJson: string;
+  achievementVal: number;
+  playedAt: number;
+  updatedAt: number;
+}
+
 export const MAIMAI_SERVERS = ["intl", "jp"] as const;
 export type MaimaiServer = (typeof MAIMAI_SERVERS)[number];
 
@@ -124,6 +134,17 @@ db.exec(`
     updated_at INTEGER DEFAULT (strftime('%s','now') * 1000),
     PRIMARY KEY (profile_key, play_day, chart_key)
   );
+
+  CREATE TABLE IF NOT EXISTS daily_achievement_snapshots (
+    profile_key TEXT NOT NULL,
+    play_day TEXT NOT NULL,
+    chart_key TEXT NOT NULL,
+    record_json TEXT NOT NULL,
+    achievement_val REAL DEFAULT 0,
+    played_at INTEGER DEFAULT 0,
+    updated_at INTEGER DEFAULT (strftime('%s','now') * 1000),
+    PRIMARY KEY (profile_key, play_day, chart_key, updated_at)
+  );
 `);
 
 try { db.exec("ALTER TABLE profiles ADD COLUMN top_json TEXT DEFAULT '[]'"); } catch (_) {}
@@ -144,6 +165,7 @@ try { db.exec("ALTER TABLE sessions ADD COLUMN friend_code_jp TEXT DEFAULT ''");
 try { db.exec("ALTER TABLE sessions ADD COLUMN avatar_blob_intl TEXT DEFAULT ''"); } catch (_) {}
 try { db.exec("ALTER TABLE sessions ADD COLUMN avatar_blob_jp TEXT DEFAULT ''"); } catch (_) {}
 try { db.exec("ALTER TABLE daily_achievements ADD COLUMN played_at INTEGER DEFAULT 0"); } catch (_) {}
+try { db.exec("ALTER TABLE daily_achievement_snapshots ADD COLUMN played_at INTEGER DEFAULT 0"); } catch (_) {}
 
 // ─── Queries ────────────────────────────────────────────────────────────
 const profileSelect = "friend_code AS profileKey, COALESCE(NULLIF(display_friend_code, ''), friend_code) AS friendCode, COALESCE(server_region, 'intl') AS server, player_name AS playerName, rating, rating_max AS ratingMax, trophy, trophy_class AS trophyClass, avatar, grade_img AS gradeImg, stars, comment, play_count AS playCount, COALESCE(total_play_count, 0) AS totalPlayCount, raw_html AS rawHtml, recent_json AS recentJson, top_json AS topJson, clear_json AS clearJson, COALESCE(map_json, '[]') AS mapJson, last_synced_at AS lastSyncedAt";
@@ -186,6 +208,14 @@ const stmtUpsertDailyAchievement = db.prepare(`
       WHEN excluded.achievement_val >= daily_achievements.achievement_val THEN excluded.played_at
       ELSE daily_achievements.played_at
     END,
+    updated_at = excluded.updated_at
+`);
+const stmtUpsertDailyAchievementSnapshot = db.prepare(`
+  INSERT INTO daily_achievement_snapshots (profile_key, play_day, chart_key, record_json, achievement_val, played_at, updated_at)
+  VALUES (@profileKey, @playDay, @chartKey, @recordJson, @achievementVal, @playedAt, @updatedAt)
+  ON CONFLICT(profile_key, play_day, chart_key, updated_at) DO UPDATE SET
+    record_json = excluded.record_json,
+    achievement_val = excluded.achievement_val,
     updated_at = excluded.updated_at
 `);
 
@@ -243,6 +273,7 @@ export function saveDailyAchievement(
   recordJson: string,
   achievementVal: number,
   playedAt: number,
+  updatedAt = Date.now(),
 ): void {
   stmtUpsertDailyAchievement.run({
     profileKey: profileKeyValue,
@@ -251,7 +282,27 @@ export function saveDailyAchievement(
     recordJson,
     achievementVal,
     playedAt,
-    updatedAt: Date.now(),
+    updatedAt,
+  });
+}
+
+export function saveDailyAchievementSnapshot(
+  profileKeyValue: string,
+  playDay: string,
+  chartKeyValue: string,
+  recordJson: string,
+  achievementVal: number,
+  playedAt: number,
+  updatedAt = Date.now(),
+): void {
+  stmtUpsertDailyAchievementSnapshot.run({
+    profileKey: profileKeyValue,
+    playDay,
+    chartKey: chartKeyValue,
+    recordJson,
+    achievementVal,
+    playedAt,
+    updatedAt,
   });
 }
 
@@ -267,7 +318,9 @@ export function pruneDailyAchievements(retainDays = 7): number {
   const safeRetainDays = Math.max(1, Math.floor(retainDays));
   const cutoffDate = new Date(Date.now() - (safeRetainDays - 1) * 24 * 60 * 60 * 1000);
   const cutoffKey = koreaPlayDayKeyFromDate(cutoffDate);
-  return db.prepare("DELETE FROM daily_achievements WHERE play_day < ?").run(cutoffKey).changes;
+  const prunedAchievements = db.prepare("DELETE FROM daily_achievements WHERE play_day < ?").run(cutoffKey).changes;
+  const prunedSnapshots = db.prepare("DELETE FROM daily_achievement_snapshots WHERE play_day < ?").run(cutoffKey).changes;
+  return prunedAchievements + prunedSnapshots;
 }
 
 export function getDailyAchievements(profileKeyValue: string, playDay: string): DailyAchievementRecord[] {
@@ -279,6 +332,15 @@ export function getDailyAchievements(profileKeyValue: string, playDay: string): 
     WHERE profile_key = ? AND play_day = ?
     ORDER BY achievement_val DESC, played_at DESC
   `).all(profileKeyValue, playDay) as DailyAchievementRecord[];
+}
+
+export function getPreviousDailyAchievementVal(profileKeyValue: string, chartKeyValue: string, updatedAt: number): number | null {
+  const row = db.prepare(`
+    SELECT MAX(achievement_val) AS achievementVal
+    FROM daily_achievement_snapshots
+    WHERE profile_key = ? AND chart_key = ? AND updated_at < ?
+  `).get(profileKeyValue, chartKeyValue, updatedAt) as { achievementVal?: number | null } | undefined;
+  return typeof row?.achievementVal === "number" ? row.achievementVal : null;
 }
 
 export function getLastSync(friendCode: string): number | null {

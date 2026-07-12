@@ -103,6 +103,9 @@ export interface PlayRecord {
   sync: string;
   detailIdx?: string;
   ratingUp?: number;
+  achievementGain?: number;
+  playedAt?: number;
+  updatedAt?: number;
   isNewScore?: boolean;
 }
 
