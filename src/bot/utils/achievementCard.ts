@@ -4,6 +4,7 @@ import type { CachedProfile } from "../../db";
 import type { PlayRecord } from "../../scraper";
 import { calcSongRating, getConstant, levelToNumber } from "../../constants";
 import { loadFonts } from "../../fonts";
+import { displayTitle } from "../../aliases";
 
 const ACCENT = "#9333ea";
 const SURFACE = "#1a1a1a";
@@ -90,7 +91,7 @@ function songRating(record: PlayRecord, server: CachedProfile["server"]): number
   return calcSongRating(record.achievementVal, level, record.fc);
 }
 
-function recordRow(record: PlayRecord, rank: number, profile: CachedProfile, jacket: string | null): El {
+function recordRow(record: PlayRecord, rank: number, profile: CachedProfile, jacket: string | null, translate = false): El {
   const diffColor = DIFF_COLOR[record.diff] ?? MUTED;
   const marks = [record.fc, record.sync].filter((mark) => mark.length > 0);
   const ratingGain = typeof record.ratingUp === "number" && record.ratingUp > 0
@@ -147,7 +148,7 @@ function recordRow(record: PlayRecord, rank: number, profile: CachedProfile, jac
         },
         [
           el("div", { display: "flex", alignItems: "baseline", gap: 8, minWidth: 0 }, [
-            el("span", { color: "#fff", fontSize: 15, fontWeight: 800, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", flex: 1 }, record.title),
+            el("span", { color: "#fff", fontSize: 15, fontWeight: 800, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", flex: 1 }, displayTitle(record.title, translate)),
             el("span", { color: MUTED, fontSize: 9, fontWeight: 700, flexShrink: 0 }, `#${rank}`),
           ]),
           el("span", { color: TEXT, fontSize: 10, marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, `${record.diff} ${constantLabel} · ${record.musicKind || "?"} · ${record.date || "-"}`),
@@ -203,6 +204,7 @@ export async function renderAchievementCard(
   records: readonly PlayRecord[],
   playDay: string,
   avatarBuf: Buffer | null,
+  translate = false,
 ): Promise<Buffer> {
   const fonts = await loadFonts();
   const topRecords = records.slice().sort((a, b) => b.achievementVal - a.achievementVal);
@@ -258,7 +260,7 @@ export async function renderAchievementCard(
         },
         topRecords.length > 0
           ? topRecords.map((record, index) =>
-              recordRow(record, index + 1, profile, jacketUrls.get(record.jacketUrl) ?? null),
+              recordRow(record, index + 1, profile, jacketUrls.get(record.jacketUrl) ?? null, translate),
             )
           : emptyState(),
       ),

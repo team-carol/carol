@@ -1,7 +1,7 @@
 import { Client, Events, GatewayIntentBits, ChatInputCommandInteraction, ButtonInteraction, REST, Routes, MessageFlags } from "discord.js";
 import { initEncryption } from "../crypto";
 import { startWebServer, setBaseUrl } from "../web";
-import { closeDb, loadUserSession, getCachedProfile, clearRatingCardCacheForInactive } from "../db";
+import { closeDb, loadUserSession, getCachedProfile, clearRatingCardCacheForInactive, getTranslateTitles } from "../db";
 import { CONFIG, PORT } from "../config";
 import { recentEmbeds, rtTableEmbed, searchResultEmbeds, getSearchCtx, mapAreaEmbed } from "./utils/embeds";
 
@@ -145,7 +145,7 @@ client.on(Events.InteractionCreate, async (i) => {
         if (!stored?.friendCode) { await (i as ButtonInteraction).reply({ content: "프로필을 먼저 등록하세요.", ...EPHEMERAL_REPLY }); return; }
         const cached = getCachedProfile(stored.friendCode);
         if (!cached) { await (i as ButtonInteraction).reply({ content: "프로필을 먼저 등록하세요.", ...EPHEMERAL_REPLY }); return; }
-        await (i as ButtonInteraction).reply({ ...rtTableEmbed(cached), ...EPHEMERAL_REPLY });
+        await (i as ButtonInteraction).reply({ ...rtTableEmbed(cached, getTranslateTitles(userId)), ...EPHEMERAL_REPLY });
       } catch (e) {
         console.error("[rt-btn]", e);
       }

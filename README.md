@@ -69,7 +69,7 @@ npm start
 
 - `baseUrl`: 비워두면 `http://localhost:{webPort}`를 사용합니다. Cloudflare Tunnel 등으로 배포하면 공개 HTTPS URL을 입력하세요.
 - `discordInviteUrl`: 비워두면 `/invite`가 `clientId`로 기본 초대 링크를 생성합니다. 기본 권한은 `permissions=2415938560`, `integration_type=0`, `scope=applications.commands+bot`입니다. 권한 값을 직접 조정한 긴 OAuth2 URL이 있다면 여기에 넣으면 됩니다.
-- `aliasAdminGuildId`: `/별명` 명령으로 곡 별명 관리 웹페이지를 열 수 있는 서버(guild) ID입니다. 비워두면 어디서도 `/별명`이 비활성화됩니다. 곡 별명 데이터는 SQLite(`song_aliases` 테이블)에 저장되며, 최초 실행 시 번들된 시드(`src/data/aliasSeed.ts`)로 자동 채워집니다.
+- `aliasAdminGuildId`: `/별명` 명령으로 곡 별명 관리 웹페이지를 열 수 있는 서버(guild) ID입니다. 비워두면 어디서도 `/별명`이 비활성화됩니다. 곡 별명 데이터는 SQLite(`song_aliases` 테이블)에 저장되며, 최초 실행 시 번들된 시드(`src/data/aliasSeed.ts`)로 자동 채워집니다. 관리 페이지에서 별명 하나를 곡의 **한국어 번역**으로 지정할 수 있고, 사용자는 `/설정`에서 "곡 제목 한국어 번역"을 켜면 일본어·한자로만 된 곡 제목이 지정된 번역으로 표시됩니다(최근 플레이·검색·레이팅표·이미지 등 제목이 나오는 모든 곳).
 - `carolIssueBaseUrl` / `carolSharedSecret`: [carol-issue](https://github.com/team-carol) 제보 연동. 둘 다 채워야 `/문의`·"이슈로 등록"이 활성화됩니다. secret은 carol-issue의 `CAROL_SHARED_SECRET`과 동일해야 합니다.
 - `carolIssueGuildId`: DM에서 제보 시 payload `guildId` 폴백값. 비워두면 DM 채널 ID로 폴백합니다.
 

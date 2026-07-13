@@ -130,11 +130,14 @@ db.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     title TEXT NOT NULL,
     alias TEXT NOT NULL,
+    is_translation INTEGER DEFAULT 0,
     created_at INTEGER DEFAULT (strftime('%s','now') * 1000),
     UNIQUE(title, alias)
   );
   CREATE INDEX IF NOT EXISTS idx_song_aliases_title ON song_aliases(title);
 `);
+try { db.exec("ALTER TABLE song_aliases ADD COLUMN is_translation INTEGER DEFAULT 0"); } catch (_) {}
+try { db.exec("ALTER TABLE sessions ADD COLUMN translate_titles INTEGER DEFAULT 0"); } catch (_) {}
 
 try { db.exec("ALTER TABLE profiles ADD COLUMN top_json TEXT DEFAULT '[]'"); } catch (_) {}
 try { db.exec("ALTER TABLE profiles ADD COLUMN clear_json TEXT DEFAULT '[]'"); } catch (_) {}
@@ -552,22 +555,59 @@ export interface SongAliasRow {
   id: number;
   title: string;
   alias: string;
+  isTranslation: boolean;
+}
+
+function mapAliasRow(r: { id: number; title: string; alias: string; is_translation: number }): SongAliasRow {
+  return { id: r.id, title: r.title, alias: r.alias, isTranslation: r.is_translation === 1 };
 }
 
 export function getAllAliases(): SongAliasRow[] {
-  return db.prepare("SELECT id, title, alias FROM song_aliases ORDER BY title ASC, alias ASC").all() as SongAliasRow[];
+  return (db.prepare("SELECT id, title, alias, is_translation FROM song_aliases ORDER BY title ASC, alias ASC").all() as { id: number; title: string; alias: string; is_translation: number }[]).map(mapAliasRow);
+}
+
+// 번역으로 지정된 별명만 (곡명 → 번역 별명)
+export function getTranslationAliases(): { title: string; alias: string }[] {
+  return db.prepare("SELECT title, alias FROM song_aliases WHERE is_translation = 1").all() as { title: string; alias: string }[];
 }
 
 // 별명 추가. 성공 시 생성된 행, (title, alias) 중복이면 null 반환.
 export function addAlias(title: string, alias: string): SongAliasRow | null {
   const info = db.prepare("INSERT OR IGNORE INTO song_aliases (title, alias) VALUES (?, ?)").run(title, alias);
   if (info.changes === 0) return null;
-  return { id: Number(info.lastInsertRowid), title, alias };
+  return { id: Number(info.lastInsertRowid), title, alias, isTranslation: false };
 }
 
 // 별명 삭제. 삭제된 행이 있으면 true.
 export function deleteAlias(id: number): boolean {
   return db.prepare("DELETE FROM song_aliases WHERE id = ?").run(id).changes > 0;
+}
+
+// 특정 별명을 해당 곡의 한국어 번역으로 지정(on=true) 또는 해제(on=false).
+// 지정 시 같은 곡의 다른 별명 지정은 자동 해제(곡당 1개). 대상 곡명을 반환, id가 없으면 null.
+export function setAliasTranslation(id: number, on: boolean): string | null {
+  const row = db.prepare("SELECT title FROM song_aliases WHERE id = ?").get(id) as { title: string } | undefined;
+  if (!row) return null;
+  const tx = db.transaction(() => {
+    if (on) db.prepare("UPDATE song_aliases SET is_translation = 0 WHERE title = ?").run(row.title);
+    db.prepare("UPDATE song_aliases SET is_translation = ? WHERE id = ?").run(on ? 1 : 0, id);
+  });
+  tx();
+  return row.title;
+}
+
+// ─── 사용자별 제목 번역 표시 설정 ─────────────────────────────────────────
+export function getTranslateTitles(discordUserId: string): boolean {
+  const row = db.prepare("SELECT translate_titles FROM sessions WHERE discord_user_id = ?").get(discordUserId) as { translate_titles: number | null } | undefined;
+  return row?.translate_titles === 1;
+}
+
+export function setTranslateTitles(discordUserId: string, value: boolean): void {
+  db.prepare(`
+    INSERT INTO sessions (discord_user_id, cookie_json, translate_titles, profile_private, updated_at)
+    VALUES (?, '{}', ?, 0, ?)
+    ON CONFLICT(discord_user_id) DO UPDATE SET translate_titles = excluded.translate_titles
+  `).run(discordUserId, value ? 1 : 0, Date.now());
 }
 
 // ─── Extra bookmarklets per user ────────────────────────────────────────

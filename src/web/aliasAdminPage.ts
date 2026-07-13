@@ -40,9 +40,16 @@ select{width:auto;margin-left:auto;cursor:pointer;font-weight:600;font-size:12px
 .rhead .lbl{font-size:10px;color:#777;margin-bottom:3px}
 .rhead .name{font-size:13px;font-weight:700;color:#fff;word-break:break-all}
 .aliases{flex:1;overflow-y:auto;padding:6px 0}
-.alias{display:flex;align-items:center;justify-content:space-between;padding:8px 16px;border-bottom:1px solid #202020}
-.alias .v{font-size:13px;color:#e5e5e5;word-break:break-all}
-.del{padding:2px 10px;background:none;border:1px solid #2a2a2a;color:#999;font-family:inherit;font-size:11px;cursor:pointer;border-radius:5px;flex-shrink:0;margin-left:8px}
+.alias{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 16px;border-bottom:1px solid #202020}
+.alias.istr{background:#141c17}
+.alias .v{font-size:13px;color:#e5e5e5;word-break:break-all;min-width:0}
+.trbadge{font-size:9px;font-weight:800;color:#0d0d0d;background:#34d399;padding:1px 5px;border-radius:3px;margin-left:6px;vertical-align:middle}
+.kobadge{font-size:9px;font-weight:800;color:#0d0d0d;background:#34d399;padding:1px 4px;border-radius:3px;flex-shrink:0}
+.arow{display:flex;gap:6px;flex-shrink:0}
+.tr{padding:2px 10px;background:none;border:1px solid #2a2a2a;color:#999;font-family:inherit;font-size:11px;cursor:pointer;border-radius:5px}
+.tr:hover{border-color:#34d399;color:#34d399}
+.tr.on{background:#34d399;border-color:#34d399;color:#0d0d0d;font-weight:700}
+.del{padding:2px 10px;background:none;border:1px solid #2a2a2a;color:#999;font-family:inherit;font-size:11px;cursor:pointer;border-radius:5px}
 .del:hover{border-color:#e53e3e;color:#e53e3e}
 .addbar{padding:12px 16px;border-top:1px solid #2a2a2a}
 .err{font-size:11px;color:#e53e3e;margin-bottom:6px;min-height:0}
@@ -86,9 +93,11 @@ let selected = null, jpOnly = false, sortKey = "title";
 const $ = (id) => document.getElementById(id);
 
 function countMap(){ const m = new Map(); for(const a of ALIASES) m.set(a.title,(m.get(a.title)||0)+1); return m; }
+function translatedSet(){ const s = new Set(); for(const a of ALIASES) if(a.isTranslation) s.add(a.title); return s; }
 
 function renderSongs(){
   const cm = countMap();
+  const trSet = translatedSet();
   const q = $("q").value.trim().toLowerCase();
   let list = SONGS.filter(s => (!jpOnly || s.region === "jp") && (!q || s.title.toLowerCase().includes(q)));
   list = list.slice().sort((a,b)=>{
@@ -102,11 +111,12 @@ function renderSongs(){
   el.innerHTML = list.map(s=>{
     const c = cm.get(s.title)||0;
     const badge = s.region==="jp" ? '<span class="badge">JP</span>' : '';
+    const trMark = trSet.has(s.title) ? '<span class="kobadge">번역</span>' : '';
     const meta = [];
     if(sortKey==="version" && s.versionName) meta.push('<span>'+esc(s.versionName)+'</span>');
     if(c>0) meta.push('<span>별명 '+c+'개</span>');
     return '<div class="song'+(selected===s.title?' sel':'')+'" data-t="'+esc(s.title)+'">'
-      +'<div class="t">'+badge+'<span class="title">'+esc(s.title)+'</span></div>'
+      +'<div class="t">'+badge+trMark+'<span class="title">'+esc(s.title)+'</span></div>'
       +(meta.length?'<div class="meta">'+meta.join('')+'</div>':'')+'</div>';
   }).join('');
   el.querySelectorAll('.song').forEach(n=>n.onclick=()=>{ selected=n.dataset.t; renderSongs(); renderRight(); });
@@ -117,7 +127,11 @@ function renderRight(){
   if(!selected){ pane.innerHTML='<div class="placeholder">왼쪽에서 곡을 선택하세요</div>'; return; }
   const mine = ALIASES.filter(a=>a.title===selected);
   const items = mine.length
-    ? mine.map(a=>'<div class="alias"><span class="v">'+esc(a.alias)+'</span><button class="del" data-id="'+a.id+'">삭제</button></div>').join('')
+    ? mine.map(a=>'<div class="alias'+(a.isTranslation?' istr':'')+'"><span class="v">'+esc(a.alias)+(a.isTranslation?' <span class="trbadge">번역</span>':'')+'</span>'
+        +'<div class="arow">'
+        +'<button class="tr'+(a.isTranslation?' on':'')+'" data-id="'+a.id+'" data-on="'+(a.isTranslation?'0':'1')+'">'+(a.isTranslation?'번역 해제':'번역 지정')+'</button>'
+        +'<button class="del" data-id="'+a.id+'">삭제</button>'
+        +'</div></div>').join('')
     : '<div class="empty">등록된 별명이 없습니다</div>';
   pane.innerHTML =
     '<div class="rhead"><div class="lbl">선택된 곡</div><div class="name">'+esc(selected)+'</div></div>'
@@ -126,6 +140,7 @@ function renderRight(){
     +'<input id="newAlias" placeholder="새 별명 입력"><button class="add" id="addBtn" disabled>추가</button>'
     +'</div></div>';
   pane.querySelectorAll('.del').forEach(n=>n.onclick=()=>del(parseInt(n.dataset.id,10)));
+  pane.querySelectorAll('.tr').forEach(n=>n.onclick=()=>setTranslation(parseInt(n.dataset.id,10), n.dataset.on==='1'));
   const inp = $("newAlias"), btn = $("addBtn");
   inp.oninput = ()=>{ btn.disabled = !inp.value.trim(); };
   inp.onkeydown = (e)=>{ if(e.key==="Enter") add(); };
@@ -155,6 +170,19 @@ async function del(id){
       method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id })
     });
     if((await res.json()).ok){ ALIASES = ALIASES.filter(a=>a.id!==id); renderSongs(); renderRight(); }
+  }catch{}
+}
+
+async function setTranslation(id, on){
+  try{
+    const res = await fetch('/api/admin/aliases/translation?code='+encodeURIComponent(TOKEN),{
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id, on })
+    });
+    if(!(await res.json()).ok) return;
+    // 곡당 1개: 지정 시 같은 곡의 다른 별명 지정 해제
+    for(const a of ALIASES){ if(a.title===selected) a.isTranslation=false; }
+    if(on){ const t=ALIASES.find(a=>a.id===id); if(t) t.isTranslation=true; }
+    renderSongs(); renderRight();
   }catch{}
 }
 
