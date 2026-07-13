@@ -2,9 +2,13 @@ import * as http from "http";
 import * as fs from "fs";
 import { parseHome, parsePlayerData, parseFriendCode as parseFC, parseRecentRecords, parsePlaylogHistory, parseTop5, parseTopSongs, parseMusicScore, mergeTopRecords, getMaimaiBaseUrl, parseMapAreas, chartKey, parsePlaylogDetail } from "../scraper";
 import { cacheProfile, saveUserSession, getUserSyncToken, findUserBySyncToken, saveAvatarBlob, getAvatarBlob, getSongJacket, saveSongJacket, getExtraBookmarklets, getProfilePrivate, setProfilePrivate, addExtraBookmarklet, removeExtraBookmarklet, getEnabledBookmarkletPresetIds, setBookmarkletPresetEnabled, getUserDefaultServer, setUserDefaultServer, isMaimaiServer, getMapImage, saveMapImage, saveDailyAchievement, saveDailyAchievementSnapshot } from "../db";
+import { getAllAliases, addAlias, deleteAlias, setAliasTranslation, getTranslateTitles, setTranslateTitles } from "../db";
 import { buildBookmarkletJs, setBaseUrl, getBaseUrl, buildBookmarklet, BOOKMARKLET_PRESETS, getBookmarkletPresets } from "./bookmarklet";
-import { computeRatingTarget } from "../constants";
+import { computeRatingTarget, getAllSongTitles } from "../constants";
 import { settingsPage } from "./settingsPage";
+import { aliasAdminPage } from "./aliasAdminPage";
+import { isValidAdminToken } from "./adminAuth";
+import { loadAliases } from "../aliases";
 import { CONFIG } from "../config";
 import { koreaPlayDayKey, playDayKeyFromRecordDate, recordPlayedAt } from "../achievements";
 
@@ -323,8 +327,97 @@ a{color:#c084fc}
       const presetIds = userId ? getEnabledBookmarkletPresetIds(userId) : [];
       const bookmarklets = userId ? getExtraBookmarklets(userId) : [];
       const defaultServer = userId ? getUserDefaultServer(userId) : "intl";
+      const translate = userId ? getTranslateTitles(userId) : false;
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-      res.end(settingsPage(token, isPrivate, presetIds, bookmarklets, defaultServer));
+      res.end(settingsPage(token, isPrivate, presetIds, bookmarklets, defaultServer, translate));
+      return;
+    }
+
+    // ─── 곡 별명 관리 (관리자, /별명 명령으로 발급한 토큰 필요) ──────────────
+    if (req.method === "GET" && url.pathname === "/admin/aliases") {
+      const token = url.searchParams.get("code") || "";
+      if (!isValidAdminToken(token)) { res.writeHead(403); res.end("expired"); return; }
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      res.end(aliasAdminPage(token, getAllSongTitles(), getAllAliases()));
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/admin/aliases") {
+      const token = url.searchParams.get("code") || "";
+      if (!isValidAdminToken(token)) { res.writeHead(403, { "content-type": "application/json" }); res.end(JSON.stringify({ ok: false, error: "expired" })); return; }
+      try {
+        const body = JSON.parse(await readBody(req));
+        const title = typeof body.title === "string" ? body.title : "";
+        const alias = (typeof body.alias === "string" ? body.alias : "").trim();
+        if (!title || !alias) {
+          res.writeHead(400, { "content-type": "application/json" });
+          res.end(JSON.stringify({ ok: false, error: "곡과 별명을 모두 입력하세요" }));
+          return;
+        }
+        const created = addAlias(title, alias);
+        if (!created) {
+          res.writeHead(409, { "content-type": "application/json" });
+          res.end(JSON.stringify({ ok: false, error: "이미 존재하는 별명입니다" }));
+          return;
+        }
+        loadAliases();
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: true, alias: created }));
+      } catch {
+        res.writeHead(400, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: false, error: "invalid_body" }));
+      }
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/admin/aliases/delete") {
+      const token = url.searchParams.get("code") || "";
+      if (!isValidAdminToken(token)) { res.writeHead(403, { "content-type": "application/json" }); res.end(JSON.stringify({ ok: false, error: "expired" })); return; }
+      try {
+        const body = JSON.parse(await readBody(req));
+        const id = typeof body.id === "number" ? body.id : parseInt(body.id, 10);
+        if (!Number.isInteger(id)) {
+          res.writeHead(400, { "content-type": "application/json" });
+          res.end(JSON.stringify({ ok: false, error: "invalid_id" }));
+          return;
+        }
+        const removed = deleteAlias(id);
+        if (removed) loadAliases();
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: removed }));
+      } catch {
+        res.writeHead(400, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: false, error: "invalid_body" }));
+      }
+      return;
+    }
+
+    // 별명을 해당 곡의 한국어 번역으로 지정/해제 (곡당 1개)
+    if (req.method === "POST" && url.pathname === "/api/admin/aliases/translation") {
+      const token = url.searchParams.get("code") || "";
+      if (!isValidAdminToken(token)) { res.writeHead(403, { "content-type": "application/json" }); res.end(JSON.stringify({ ok: false, error: "expired" })); return; }
+      try {
+        const body = JSON.parse(await readBody(req));
+        const id = typeof body.id === "number" ? body.id : parseInt(body.id, 10);
+        const on = !!body.on;
+        if (!Number.isInteger(id)) {
+          res.writeHead(400, { "content-type": "application/json" });
+          res.end(JSON.stringify({ ok: false, error: "invalid_id" }));
+          return;
+        }
+        const title = setAliasTranslation(id, on);
+        if (title === null) {
+          res.writeHead(404, { "content-type": "application/json" });
+          res.end(JSON.stringify({ ok: false, error: "not_found" }));
+          return;
+        }
+        loadAliases();
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: true, title, on }));
+      } catch {
+        res.writeHead(400, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: false, error: "invalid_body" }));
+      }
       return;
     }
 
@@ -337,8 +430,26 @@ a{color:#c084fc}
       const presets = getEnabledBookmarkletPresetIds(userId);
       const bookmarklets = getExtraBookmarklets(userId);
       const defaultServer = getUserDefaultServer(userId);
+      const translate = getTranslateTitles(userId);
       res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({ private: isPrivate, presets, bookmarklets, defaultServer }));
+      res.end(JSON.stringify({ private: isPrivate, presets, bookmarklets, defaultServer, translate }));
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/settings/translate") {
+      const token = url.searchParams.get("code") || "";
+      const userId = findUserBySyncToken(token);
+      if (!userId) { res.writeHead(403, { "content-type": "application/json" }); res.end(JSON.stringify({ error: "expired" })); return; }
+      try {
+        const body = JSON.parse(await readBody(req));
+        const value = !!body.translate;
+        setTranslateTitles(userId, value);
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ translate: value }));
+      } catch {
+        res.writeHead(400, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: "invalid_body" }));
+      }
       return;
     }
 

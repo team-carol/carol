@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, MessageFlags, AttachmentBuilder } from "discord.js";
-import { getCachedProfile, getUserFriendCode, getAvatarBlob, getProfilePrivate } from "../../db";
+import { getCachedProfile, getUserFriendCode, getAvatarBlob, getProfilePrivate, getTranslateTitles } from "../../db";
 import { getTopList } from "../utils/embeds";
 import { renderRatingCard } from "../utils/ratingCard";
 
@@ -33,7 +33,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   }
   await interaction.deferReply();
   try {
-    const png = await renderRatingCard(cached, records, getAvatarBlob(userId, cached.server));
+    const png = await renderRatingCard(cached, records, getAvatarBlob(userId, cached.server), getTranslateTitles(interaction.user.id));
     await interaction.editReply({
       files: [new AttachmentBuilder(png, { name: "rating.png" })],
     });

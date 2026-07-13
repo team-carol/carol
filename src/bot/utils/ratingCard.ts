@@ -17,6 +17,7 @@ import {
   isNewSong,
 } from "../../constants";
 import { loadFonts } from "../../fonts";
+import { displayTitle } from "../../aliases";
 
 // ─── Design tokens (ported from mailog) ──────────────────────────────────
 const CARD_W = 110;
@@ -103,7 +104,7 @@ interface CardVM {
   jacketFile: string | null;
 }
 
-function toVM(r: PlayRecord, markMap?: Map<string, ChartMarks>, server: MaimaiServer = "intl"): CardVM {
+function toVM(r: PlayRecord, markMap?: Map<string, ChartMarks>, server: MaimaiServer = "intl", translate = false): CardVM {
   const constant = getConstant(r.title, r.musicKind, r.diff, server);
   const lvNum = constant !== null ? constant : levelToNumber(r.level);
   // 레이팅 대상 페이지엔 FC/AP·Sync 아이콘이 없어 clear 기록의 마크를 우선 사용
@@ -111,7 +112,7 @@ function toVM(r: PlayRecord, markMap?: Map<string, ChartMarks>, server: MaimaiSe
   const fc = marks?.fc ?? r.fc;
   const rs = calcSongRating(r.achievementVal, lvNum, fc);
   return {
-    title: r.title,
+    title: displayTitle(r.title, translate),
     ach:
       r.achievementVal > 0 ? r.achievementVal.toFixed(4) + "%" : r.achievement,
     rank: scoreRank(r.achievementVal),
@@ -390,9 +391,11 @@ export async function renderRatingCard(
   profile: CachedProfile,
   records: PlayRecord[],
   avatarBuf: Buffer | null,
+  translate = false,
 ): Promise<Buffer> {
   // ─── Render cache: return cached PNG if profile and card version unchanged ─
-  const cached = getRatingCardCache(profile.profileKey);
+  // 번역 표시본은 뷰어별로 달라 공유 캐시(원제 기준)를 쓰지 않고 매번 새로 렌더한다.
+  const cached = translate ? null : getRatingCardCache(profile.profileKey);
   if (
     cached &&
     cached.syncedAt === profile.lastSyncedAt &&
@@ -429,8 +432,8 @@ export async function renderRatingCard(
     profile.server === "jp"
       ? records.filter((r) => !isNewSong(r.title, "jp")).slice(0, 35)
       : records.slice(15, 50);
-  const newVms = newRecords.map((r) => toVM(fix(r), markMap, profile.server));
-  const otherVms = otherRecords.map((r) => toVM(fix(r), markMap, profile.server));
+  const newVms = newRecords.map((r) => toVM(fix(r), markMap, profile.server, translate));
+  const otherVms = otherRecords.map((r) => toVM(fix(r), markMap, profile.server, translate));
   // 헤더에는 프로필에 저장된 실제 레이팅을 표시
   const totalRs =
     profile.rating || newVms.concat(otherVms).reduce((s, v) => s + v.rs, 0);
@@ -624,12 +627,15 @@ export async function renderRatingCard(
   const buf = Buffer.from(png);
 
   // ─── Persist render cache ─────────────────────────────────────────────────
-  saveRatingCardCache(
-    profile.profileKey,
-    buf,
-    profile.lastSyncedAt,
-    CARD_VERSION,
-  );
+  // 번역본은 공유 캐시(원제 기준)를 덮어쓰지 않는다.
+  if (!translate) {
+    saveRatingCardCache(
+      profile.profileKey,
+      buf,
+      profile.lastSyncedAt,
+      CARD_VERSION,
+    );
+  }
 
   return buf;
 }
