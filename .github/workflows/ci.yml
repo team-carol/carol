@@ -1,0 +1,21 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [master]
+
+jobs:
+  source-branch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Require dev as the PR head branch
+        shell: bash
+        run: |
+          if [[ "${{ github.head_ref }}" != "dev" ]]; then
+            echo "::error::master can only accept pull requests from dev, but got '${{ github.head_ref }}'."
+            exit 1
+          fi
