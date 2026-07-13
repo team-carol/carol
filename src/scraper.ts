@@ -107,6 +107,8 @@ export interface PlayRecord {
   playedAt?: number;
   updatedAt?: number;
   isNewScore?: boolean;
+  newScoreCountInSync?: number;
+  isBaseSnapshot?: boolean;
 }
 
 export type MapAreaKind = "normal" | "event";

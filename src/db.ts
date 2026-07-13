@@ -82,6 +82,7 @@ db.exec(`
     top_json TEXT DEFAULT '[]',
     clear_json TEXT DEFAULT '[]',
     last_synced_at INTEGER DEFAULT 0,
+    achievement_initialized_at INTEGER DEFAULT 0,
     created_at INTEGER DEFAULT (strftime('%s','now') * 1000)
   );
 
@@ -156,6 +157,14 @@ try { db.exec("ALTER TABLE profiles ADD COLUMN server_region TEXT DEFAULT 'intl'
 try { db.exec("ALTER TABLE profiles ADD COLUMN display_friend_code TEXT DEFAULT ''"); } catch (_) {}
 try { db.exec("ALTER TABLE profiles ADD COLUMN total_play_count INTEGER DEFAULT 0"); } catch (_) {}
 try { db.exec("ALTER TABLE profiles ADD COLUMN map_json TEXT DEFAULT '[]'"); } catch (_) {}
+let achievementInitColumnAdded = false;
+try {
+  db.exec("ALTER TABLE profiles ADD COLUMN achievement_initialized_at INTEGER DEFAULT 0");
+  achievementInitColumnAdded = true;
+} catch (_) {}
+if (achievementInitColumnAdded) {
+  db.prepare("UPDATE profiles SET achievement_initialized_at = ? WHERE achievement_initialized_at = 0").run(Date.now());
+}
 try { db.exec("ALTER TABLE sessions ADD COLUMN profile_private INTEGER DEFAULT 0"); } catch (_) {}
 try { db.exec("ALTER TABLE sessions ADD COLUMN extra_bookmarklets TEXT DEFAULT '[]'"); } catch (_) {}
 try { db.exec("ALTER TABLE sessions ADD COLUMN preset_bookmarklets TEXT DEFAULT '[]'"); } catch (_) {}
@@ -198,17 +207,7 @@ const stmtDelete = db.prepare("DELETE FROM profiles WHERE friend_code = ?");
 const stmtUpsertDailyAchievement = db.prepare(`
   INSERT INTO daily_achievements (profile_key, play_day, chart_key, record_json, achievement_val, played_at, updated_at)
   VALUES (@profileKey, @playDay, @chartKey, @recordJson, @achievementVal, @playedAt, @updatedAt)
-  ON CONFLICT(profile_key, play_day, chart_key) DO UPDATE SET
-    record_json = CASE
-      WHEN excluded.achievement_val >= daily_achievements.achievement_val THEN excluded.record_json
-      ELSE daily_achievements.record_json
-    END,
-    achievement_val = MAX(daily_achievements.achievement_val, excluded.achievement_val),
-    played_at = CASE
-      WHEN excluded.achievement_val >= daily_achievements.achievement_val THEN excluded.played_at
-      ELSE daily_achievements.played_at
-    END,
-    updated_at = excluded.updated_at
+  ON CONFLICT(profile_key, play_day, chart_key) DO NOTHING
 `);
 const stmtUpsertDailyAchievementSnapshot = db.prepare(`
   INSERT INTO daily_achievement_snapshots (profile_key, play_day, chart_key, record_json, achievement_val, played_at, updated_at)
@@ -262,6 +261,38 @@ export function getAllCachedProfiles(): CachedProfile[] {
   return db.prepare(`SELECT ${profileSelect} FROM profiles ORDER BY last_synced_at DESC`).all() as CachedProfile[];
 }
 
+export function getAchievementInitializedAt(profileKeyValue: string): number {
+  const row = db.prepare("SELECT achievement_initialized_at AS initializedAt FROM profiles WHERE friend_code = ?").get(profileKeyValue) as { initializedAt?: number | null } | undefined;
+  return typeof row?.initializedAt === "number" && row.initializedAt > 0 ? row.initializedAt : 0;
+}
+
+export function hasAchievementSnapshots(profileKeyValue: string): boolean {
+  const row = db.prepare("SELECT 1 AS found FROM daily_achievement_snapshots WHERE profile_key = ? LIMIT 1").get(profileKeyValue) as { found?: number } | undefined;
+  return row?.found === 1;
+}
+
+export function getAchievementRepeatedFromDay(profileKeyValue: string): string | null {
+  const row = db.prepare(`
+    SELECT MIN(play_day) AS playDay
+    FROM (
+      SELECT play_day
+      FROM daily_achievement_snapshots
+      WHERE profile_key = ?
+      GROUP BY play_day, chart_key
+      HAVING COUNT(*) > 1
+    )
+  `).get(profileKeyValue) as { playDay?: string | null } | undefined;
+  return typeof row?.playDay === "string" ? row.playDay : null;
+}
+
+export function markAchievementInitialized(profileKeyValue: string, initializedAt = Date.now()): void {
+  db.prepare(`
+    UPDATE profiles
+    SET achievement_initialized_at = ?
+    WHERE friend_code = ?
+  `).run(initializedAt, profileKeyValue);
+}
+
 export function deleteCachedProfile(friendCode: string): void {
   stmtDelete.run(friendCode);
 }
@@ -312,12 +343,35 @@ export function pruneDailyAchievements(_retainDays = 7): number {
 
 export function getDailyAchievements(profileKeyValue: string, playDay: string): DailyAchievementRecord[] {
   return db.prepare(`
-    SELECT profile_key AS profileKey, play_day AS playDay, chart_key AS chartKey,
-      record_json AS recordJson, achievement_val AS achievementVal,
-      played_at AS playedAt, updated_at AS updatedAt
-    FROM daily_achievements
-    WHERE profile_key = ? AND play_day = ?
-    ORDER BY achievement_val DESC, played_at DESC
+    WITH snapshot_rows AS (
+      SELECT profile_key, play_day, chart_key, record_json, achievement_val, played_at, updated_at,
+        CASE WHEN json_extract(record_json, '$.isNewScore') = 1 THEN 1 ELSE 0 END AS is_new_score,
+        CASE WHEN json_extract(record_json, '$.fc') IN ('FC', 'FC+', 'AP', 'AP+')
+          OR json_extract(record_json, '$.sync') IN ('FS', 'FS+', 'FDX', 'FDX+') THEN 1 ELSE 0 END AS is_performance_mark,
+        CASE WHEN json_extract(record_json, '$.isBaseSnapshot') = 0 THEN 1 ELSE 0 END AS is_post_init_snapshot,
+        MAX(achievement_val) OVER (
+          PARTITION BY chart_key
+          ORDER BY updated_at
+          ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+        ) AS previous_best
+      FROM daily_achievement_snapshots
+      JOIN profiles ON profiles.friend_code = daily_achievement_snapshots.profile_key
+      WHERE profile_key = ?
+    ), snapshot_achievements AS (
+      SELECT profile_key AS profileKey, play_day AS playDay, chart_key AS chartKey,
+        record_json AS recordJson, achievement_val AS achievementVal,
+        played_at AS playedAt, updated_at AS updatedAt,
+        ROW_NUMBER() OVER (PARTITION BY play_day, chart_key ORDER BY achievement_val DESC, updated_at ASC) AS event_rank
+      FROM snapshot_rows
+      WHERE is_new_score = 1
+        OR is_performance_mark = 1
+        OR (previous_best IS NOT NULL AND achievement_val > previous_best)
+        OR (previous_best IS NULL AND is_post_init_snapshot = 1)
+    )
+    SELECT profileKey, playDay, chartKey, recordJson, achievementVal, playedAt, updatedAt
+    FROM snapshot_achievements
+    WHERE playDay = ? AND event_rank = 1
+    ORDER BY achievementVal DESC, playedAt DESC
   `).all(profileKeyValue, playDay) as DailyAchievementRecord[];
 }
 
@@ -338,6 +392,17 @@ export function getPreviousDailyAchievementVal(profileKeyValue: string, chartKey
     FROM daily_achievement_snapshots
     WHERE profile_key = ? AND chart_key = ? AND updated_at < ?
   `).get(profileKeyValue, chartKeyValue, updatedAt) as { achievementVal?: number | null } | undefined;
+  return typeof row?.achievementVal === "number" ? row.achievementVal : null;
+}
+
+export function getPreviousDailyAchievementValBeforePlay(profileKeyValue: string, chartKeyValue: string, playedAt: number, updatedAt: number, newScoreOnly = false): number | null {
+  const row = db.prepare(`
+    SELECT MAX(achievement_val) AS achievementVal
+    FROM daily_achievement_snapshots
+    WHERE profile_key = ? AND chart_key = ?
+      AND (played_at < ? OR (played_at = ? AND updated_at < ?))
+      AND (? = 0 OR json_extract(record_json, '$.isNewScore') = 1)
+  `).get(profileKeyValue, chartKeyValue, playedAt, playedAt, updatedAt, newScoreOnly ? 1 : 0) as { achievementVal?: number | null } | undefined;
   return typeof row?.achievementVal === "number" ? row.achievementVal : null;
 }
 

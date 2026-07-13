@@ -1,7 +1,7 @@
 import * as http from "http";
 import * as fs from "fs";
 import { parseHome, parsePlayerData, parseFriendCode as parseFC, parseRecentRecords, parsePlaylogHistory, parseTop5, parseTopSongs, parseMusicScore, mergeTopRecords, getMaimaiBaseUrl, parseMapAreas, chartKey, parsePlaylogDetail } from "../scraper";
-import { cacheProfile, saveUserSession, getUserSyncToken, findUserBySyncToken, saveAvatarBlob, getAvatarBlob, getSongJacket, saveSongJacket, getExtraBookmarklets, getProfilePrivate, setProfilePrivate, addExtraBookmarklet, removeExtraBookmarklet, getEnabledBookmarkletPresetIds, setBookmarkletPresetEnabled, getUserDefaultServer, setUserDefaultServer, isMaimaiServer, getMapImage, saveMapImage, saveDailyAchievement, saveDailyAchievementSnapshot } from "../db";
+import { cacheProfile, saveUserSession, getUserSyncToken, findUserBySyncToken, saveAvatarBlob, getAvatarBlob, getSongJacket, saveSongJacket, getExtraBookmarklets, getProfilePrivate, setProfilePrivate, addExtraBookmarklet, removeExtraBookmarklet, getEnabledBookmarkletPresetIds, setBookmarkletPresetEnabled, getUserDefaultServer, setUserDefaultServer, isMaimaiServer, getMapImage, saveMapImage, saveDailyAchievement, saveDailyAchievementSnapshot, getAchievementInitializedAt, hasAchievementSnapshots, getPreviousDailyAchievementVal, markAchievementInitialized } from "../db";
 import { buildBookmarkletJs, setBaseUrl, getBaseUrl, buildBookmarklet, BOOKMARKLET_PRESETS, getBookmarkletPresets } from "./bookmarklet";
 import { computeRatingTarget } from "../constants";
 import { settingsPage } from "./settingsPage";
@@ -12,6 +12,7 @@ const isDev = !CONFIG.baseUrl;
 const DISCORD_INVITE_BASE_URL = "https://discord.com/oauth2/authorize";
 const DISCORD_INVITE_PERMISSIONS = "2415938560";
 const DISCORD_INVITE_INTEGRATION_TYPE = "0";
+const ACHIEVEMENT_MARKS = new Set(["FC", "FC+", "AP", "AP+", "FS", "FS+", "FDX", "FDX+"]);
 
 export { setBaseUrl, getBaseUrl, buildBookmarklet };
 
@@ -571,30 +572,58 @@ a{color:#c084fc}
           trophyClass: effective.trophyClass || "normal", stars: effective.stars || "0",
           playCount: playCount || 0, totalPlayCount: totalPlayCount || 0, comment: effective.comment || "", friendCode: fc,
         }, playCount || 0, homeHtml, JSON.stringify(enrichedRecentRecords), JSON.stringify(topRecords), JSON.stringify(clearRecords), syncServer, JSON.stringify(mapAreas));
+        const achievementInitializedAt = getAchievementInitializedAt(savedProfileKey);
+        const hasBaseSnapshots = hasAchievementSnapshots(savedProfileKey);
+        const shouldRecordAchievements = achievementInitializedAt > 0 && hasBaseSnapshots;
+        const isNewProfile = achievementInitializedAt === 0;
+        const isExistingProfileBaseSync = achievementInitializedAt > 0 && !hasBaseSnapshots;
+        const isInitializingAchievementBase = isNewProfile || isExistingProfileBaseSync;
+        const shouldInitializeAchievementBase = isInitializingAchievementBase;
         const fallbackPlayDay = koreaPlayDayKey(new Date());
         const syncStamp = Date.now();
+        const newScoreCounts = new Map<string, number>();
+        for (const record of enrichedHistoryRecords) {
+          if (!record.isNewScore) continue;
+          const key = chartKey(record);
+          newScoreCounts.set(key, (newScoreCounts.get(key) ?? 0) + 1);
+        }
         for (const [index, record] of enrichedHistoryRecords.entries()) {
           const snapshotAt = syncStamp + index * 2;
+          const recordChartKey = chartKey(record);
+          const previousBest = getPreviousDailyAchievementVal(savedProfileKey, recordChartKey, snapshotAt);
+          const scoreImproved = previousBest !== null && record.achievementVal > previousBest;
+          const performanceMark = ACHIEVEMENT_MARKS.has(record.fc) || ACHIEVEMENT_MARKS.has(record.sync);
+          const snapshotRecord = {
+            ...record,
+            newScoreCountInSync: newScoreCounts.get(recordChartKey) ?? 0,
+            isBaseSnapshot: isInitializingAchievementBase,
+          };
           const dailyAt = snapshotAt + 1;
           saveDailyAchievementSnapshot(
             savedProfileKey,
             playDayKeyFromRecordDate(record.date, fallbackPlayDay),
-            chartKey(record),
-            JSON.stringify(record),
+            recordChartKey,
+            JSON.stringify(snapshotRecord),
             record.achievementVal,
             recordPlayedAt(record.date),
             snapshotAt,
           );
-          if (!record.isNewScore) continue;
+          const isAchievement = isNewProfile
+            ? record.isNewScore === true || performanceMark
+            : shouldRecordAchievements && (record.isNewScore === true || performanceMark || scoreImproved || previousBest === null);
+          if (!isAchievement) continue;
           saveDailyAchievement(
             savedProfileKey,
             playDayKeyFromRecordDate(record.date, fallbackPlayDay),
-            chartKey(record),
-            JSON.stringify(record),
+            recordChartKey,
+            JSON.stringify(snapshotRecord),
             record.achievementVal,
             recordPlayedAt(record.date),
             dailyAt,
           );
+        }
+        if (isInitializingAchievementBase) {
+          markAchievementInitialized(savedProfileKey, syncStamp + enrichedHistoryRecords.length * 2 + 1);
         }
         saveUserSession(syncUserId, "{}", savedProfileKey, syncServer);
 
@@ -620,8 +649,8 @@ a{color:#c084fc}
           });
           console.log(`[web] song jackets saved: ${saved}`);
         }
-        console.log(`[web] 저장: ${effective.playerName} ⭐${effective.rating} server=${syncServer} fc=${fc}`);
-        res.writeHead(200); res.end("ok");
+        console.log(`[web] 저장: ${effective.playerName} ⭐${effective.rating} server=${syncServer} fc=${fc} achievementBase=${shouldInitializeAchievementBase}`);
+        res.writeHead(200); res.end(shouldInitializeAchievementBase ? "initialized" : "ok");
       } catch (e) {
         console.error("[web] 동기화 실패:", e);
         res.writeHead(500); res.end("sync error");

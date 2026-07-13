@@ -97,6 +97,7 @@ function recordRow(record: PlayRecord, rank: number, profile: CachedProfile, jac
     ? `+${record.ratingUp}`
     : "0";
   const achievementGain = typeof record.achievementGain === "number"
+    && record.achievementGain > 0
     ? `(+${record.achievementGain.toFixed(4)}%)`
     : "";
   const constant = getConstant(record.title, record.musicKind, record.diff, profile.server);
