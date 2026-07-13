@@ -334,6 +334,17 @@ export function getDailyAchievements(profileKeyValue: string, playDay: string): 
   `).all(profileKeyValue, playDay) as DailyAchievementRecord[];
 }
 
+export function getDailyAchievementSnapshots(profileKeyValue: string, playDay: string): DailyAchievementSnapshotRecord[] {
+  return db.prepare(`
+    SELECT profile_key AS profileKey, play_day AS playDay, chart_key AS chartKey,
+      record_json AS recordJson, achievement_val AS achievementVal,
+      played_at AS playedAt, updated_at AS updatedAt
+    FROM daily_achievement_snapshots
+    WHERE profile_key = ? AND play_day = ?
+    ORDER BY updated_at ASC
+  `).all(profileKeyValue, playDay) as DailyAchievementSnapshotRecord[];
+}
+
 export function getPreviousDailyAchievementVal(profileKeyValue: string, chartKeyValue: string, updatedAt: number): number | null {
   const row = db.prepare(`
     SELECT MAX(achievement_val) AS achievementVal
