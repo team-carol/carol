@@ -1,7 +1,7 @@
 import { Client, Events, GatewayIntentBits, ChatInputCommandInteraction, ButtonInteraction, REST, Routes, MessageFlags } from "discord.js";
 import { initEncryption } from "../crypto";
 import { startWebServer, setBaseUrl } from "../web";
-import { closeDb, loadUserSession, getCachedProfile, clearRatingCardCacheForInactive } from "../db";
+import { closeDb, loadUserSession, getCachedProfile, clearRatingCardCacheForInactive, getTranslateTitles } from "../db";
 import { CONFIG, PORT } from "../config";
 import { recentEmbeds, rtTableEmbed, searchResultEmbeds, getSearchCtx, mapAreaEmbed } from "./utils/embeds";
 
@@ -23,10 +23,11 @@ import * as songrec      from "./commands/songrec";
 import * as random       from "./commands/random";
 import * as areaMap      from "./commands/map";
 import * as report       from "./commands/report";
+import * as aliasAdmin   from "./commands/aliasAdmin";
 
 type Command = { data: { toJSON(): object; name: string }; execute: (i: ChatInputCommandInteraction) => Promise<void> };
 
-const COMMANDS: Command[] = [profile, bookmarklet, ratingtable, ratingimage, achievement, fortune, settings, serverSettings, search, status, songrec, random, areaMap, report];
+const COMMANDS: Command[] = [profile, bookmarklet, ratingtable, ratingimage, achievement, fortune, settings, serverSettings, search, status, songrec, random, areaMap, report, aliasAdmin];
 const EPHEMERAL_REPLY = { flags: MessageFlags.Ephemeral } as const;
 
 const RATING_CARD_GC_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000;
@@ -56,8 +57,7 @@ client.once(Events.ClientReady, async (c) => {
   await rest.put(route, { body: [...COMMANDS.map((cmd) => cmd.data.toJSON()), report.contextData.toJSON()] });
   await loadConstants();
   setInterval(() => loadConstants(), 24 * 60 * 60 * 1000);
-  loadAliases().catch((e) => console.error("[aliases] 초기 로드 실패:", e));
-  setInterval(() => loadAliases(), 24 * 60 * 60 * 1000);
+  loadAliases();
   loadFonts().catch((e) => console.error("[fonts] 초기 로드 실패:", e));
   runRatingCardGC();
   setInterval(runRatingCardGC, RATING_CARD_GC_INTERVAL_MS);
@@ -145,7 +145,7 @@ client.on(Events.InteractionCreate, async (i) => {
         if (!stored?.friendCode) { await (i as ButtonInteraction).reply({ content: "프로필을 먼저 등록하세요.", ...EPHEMERAL_REPLY }); return; }
         const cached = getCachedProfile(stored.friendCode);
         if (!cached) { await (i as ButtonInteraction).reply({ content: "프로필을 먼저 등록하세요.", ...EPHEMERAL_REPLY }); return; }
-        await (i as ButtonInteraction).reply({ ...rtTableEmbed(cached), ...EPHEMERAL_REPLY });
+        await (i as ButtonInteraction).reply({ ...rtTableEmbed(cached, getTranslateTitles(userId)), ...EPHEMERAL_REPLY });
       } catch (e) {
         console.error("[rt-btn]", e);
       }

@@ -6,7 +6,7 @@ export const CONFIG = require("../config.json") as {
   webPort?: number;
   baseUrl?: string;
   discordInviteUrl?: string;
-  databaseUrl?: string;
+  aliasAdminGuildId?: string;
   carolIssueBaseUrl?: string;
   carolSharedSecret?: string;
   carolIssueGuildId?: string;

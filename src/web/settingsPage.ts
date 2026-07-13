@@ -1,9 +1,9 @@
 import type { ExtraBookmarklet, MaimaiServer } from "../db";
 import { BOOKMARKLET_PRESETS } from "./bookmarklet";
 
-export function settingsPage(token: string, isPrivate: boolean, enabledPresetIds: string[], bookmarklets: ExtraBookmarklet[], defaultServer: MaimaiServer): string {
+export function settingsPage(token: string, isPrivate: boolean, enabledPresetIds: string[], bookmarklets: ExtraBookmarklet[], defaultServer: MaimaiServer, translate = false): string {
   const presets = BOOKMARKLET_PRESETS.map((preset) => ({ ...preset, enabled: enabledPresetIds.includes(preset.id) }));
-  const dataJson = JSON.stringify({ private: isPrivate, presets, bookmarklets, defaultServer })
+  const dataJson = JSON.stringify({ private: isPrivate, presets, bookmarklets, defaultServer, translate })
     .replace(/</g, "\\u003c").replace(/>/g, "\\u003e");
   const tokenJson = JSON.stringify(token);
 
@@ -88,6 +88,17 @@ a{color:#c084fc}
 <div class="status" id="privStatus"></div>
 </div>
 <div class="card">
+<p class="section-label">곡 제목 한국어 번역</p>
+<div class="toggle-row">
+<div class="toggle-info">
+<div class="toggle-title">일본어·한자 곡 번역 표시</div>
+<div class="toggle-desc">제목이 일본어/한자로만 된 곡을 한국어 번역으로 표시합니다. 번역이 등록된 곡에만 적용됩니다.</div>
+</div>
+<label class="toggle"><input type="checkbox" id="transToggle" onchange="toggleTranslate()"><span class="slider"></span></label>
+</div>
+<div class="status" id="transStatus"></div>
+</div>
+<div class="card">
 <p class="section-label">프리셋 북마클릿 <span class="count" id="presetCount"></span></p>
 <ul class="bm-list" id="presetList"></ul>
 <div class="status" id="presetStatus"></div>
@@ -111,6 +122,7 @@ var MAX_BM=5;
 (function init(){
   renderDefaultServer();
   renderPrivacy();
+  renderTranslate();
   renderPresetList();
   renderBmList();
 })();
@@ -162,6 +174,19 @@ function renderBmList(){
   list.querySelectorAll('.bm-del').forEach(function(btn){
     btn.onclick=function(){deleteBm(parseInt(this.getAttribute('data-i'),10));};
   });
+}
+
+function renderTranslate(){
+  document.getElementById('transToggle').checked=!!DATA.translate;
+}
+
+function toggleTranslate(){
+  var cb=document.getElementById('transToggle');
+  var want=cb.checked;
+  fetch('/api/settings/translate?code='+TOKEN,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({translate:want})})
+  .then(function(r){if(!r.ok)throw new Error(r.status);return r.json();})
+  .then(function(){DATA.translate=want;showStatus('transStatus','ok','저장됨');})
+  .catch(function(){cb.checked=!cb.checked;showStatus('transStatus','err','저장 실패');});
 }
 
 function togglePrivacy(){

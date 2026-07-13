@@ -8,8 +8,10 @@ import {
   getCachedProfile,
   getUserFriendCode,
   getProfilePrivate,
+  getTranslateTitles,
 } from "../../db";
 import { getClearList } from "../utils/embeds";
+import { displayTitle } from "../../aliases";
 import {
   calcSongRating,
   getConstant,
@@ -321,6 +323,7 @@ export async function execute(
     return;
   }
 
+  const translate = getTranslateTitles(interaction.user.id);
   const embeds = recs.map((r, i) => {
     const chartDelta = r.targetRS - r.currentRS;
     const cur = r.currentAch > 0 ? `${r.currentAch.toFixed(4)}%` : "미플레이";
@@ -334,7 +337,7 @@ export async function execute(
     const ytUrl = `https://www.youtube.com/results?search_query=${ytQuery}`;
     const emb = new EmbedBuilder()
       .setColor(RANK_COLOR[r.targetRank] ?? 0x9333ea)
-      .setTitle(`${r.title} [${r.kind}]`)
+      .setTitle(`${displayTitle(r.title, translate)} [${r.kind}]`)
       .setDescription(`[▶ 외부출력](${ytUrl})`)
       .addFields(
         {

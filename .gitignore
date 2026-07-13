@@ -14,6 +14,6 @@ avatar.png
 scripts/gen-avatar.mjs
 scripts/test-card.ts
 fonts/
-data/
+/data/
 .omo/
 .DS_Store
