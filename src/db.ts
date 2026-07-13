@@ -3,6 +3,7 @@ import * as path from "path";
 import type { MaimaiProfile } from "./scraper";
 import { encrypt, decrypt } from "./crypto";
 import * as crypto from "crypto";
+import { ALIAS_SEED } from "./data/aliasSeed";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 export interface CachedProfile {
@@ -124,6 +125,15 @@ db.exec(`
     updated_at INTEGER DEFAULT (strftime('%s','now') * 1000),
     PRIMARY KEY (profile_key, play_day, chart_key)
   );
+
+  CREATE TABLE IF NOT EXISTS song_aliases (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    alias TEXT NOT NULL,
+    created_at INTEGER DEFAULT (strftime('%s','now') * 1000),
+    UNIQUE(title, alias)
+  );
+  CREATE INDEX IF NOT EXISTS idx_song_aliases_title ON song_aliases(title);
 `);
 
 try { db.exec("ALTER TABLE profiles ADD COLUMN top_json TEXT DEFAULT '[]'"); } catch (_) {}
@@ -144,6 +154,18 @@ try { db.exec("ALTER TABLE sessions ADD COLUMN friend_code_jp TEXT DEFAULT ''");
 try { db.exec("ALTER TABLE sessions ADD COLUMN avatar_blob_intl TEXT DEFAULT ''"); } catch (_) {}
 try { db.exec("ALTER TABLE sessions ADD COLUMN avatar_blob_jp TEXT DEFAULT ''"); } catch (_) {}
 try { db.exec("ALTER TABLE daily_achievements ADD COLUMN played_at INTEGER DEFAULT 0"); } catch (_) {}
+
+// ─── 별명 시드 (최초 실행 시 song_aliases가 비어 있으면 번들 데이터로 채운다) ───
+(function seedAliases() {
+  const { n } = db.prepare("SELECT COUNT(*) AS n FROM song_aliases").get() as { n: number };
+  if (n > 0) return;
+  const insert = db.prepare("INSERT OR IGNORE INTO song_aliases (title, alias) VALUES (?, ?)");
+  const seed = db.transaction((rows: readonly [string, string][]) => {
+    for (const [title, alias] of rows) insert.run(title, alias);
+  });
+  seed(ALIAS_SEED);
+  console.log(`[db] song_aliases 시드 ${ALIAS_SEED.length}개 삽입`);
+})();
 
 // ─── Queries ────────────────────────────────────────────────────────────
 const profileSelect = "friend_code AS profileKey, COALESCE(NULLIF(display_friend_code, ''), friend_code) AS friendCode, COALESCE(server_region, 'intl') AS server, player_name AS playerName, rating, rating_max AS ratingMax, trophy, trophy_class AS trophyClass, avatar, grade_img AS gradeImg, stars, comment, play_count AS playCount, COALESCE(total_play_count, 0) AS totalPlayCount, raw_html AS rawHtml, recent_json AS recentJson, top_json AS topJson, clear_json AS clearJson, COALESCE(map_json, '[]') AS mapJson, last_synced_at AS lastSyncedAt";
@@ -523,6 +545,29 @@ export function getConstantsCache(): { data: string; updatedAt: number } | null 
 
 export function saveConstantsCache(data: string): void {
   db.prepare("INSERT OR REPLACE INTO constants_cache (key, data, updated_at) VALUES ('main', ?, ?)").run(data, Date.now());
+}
+
+// ─── Song aliases (곡 별명 — 캐롤 자체 관리) ──────────────────────────────
+export interface SongAliasRow {
+  id: number;
+  title: string;
+  alias: string;
+}
+
+export function getAllAliases(): SongAliasRow[] {
+  return db.prepare("SELECT id, title, alias FROM song_aliases ORDER BY title ASC, alias ASC").all() as SongAliasRow[];
+}
+
+// 별명 추가. 성공 시 생성된 행, (title, alias) 중복이면 null 반환.
+export function addAlias(title: string, alias: string): SongAliasRow | null {
+  const info = db.prepare("INSERT OR IGNORE INTO song_aliases (title, alias) VALUES (?, ?)").run(title, alias);
+  if (info.changes === 0) return null;
+  return { id: Number(info.lastInsertRowid), title, alias };
+}
+
+// 별명 삭제. 삭제된 행이 있으면 true.
+export function deleteAlias(id: number): boolean {
+  return db.prepare("DELETE FROM song_aliases WHERE id = ?").run(id).changes > 0;
 }
 
 // ─── Extra bookmarklets per user ────────────────────────────────────────

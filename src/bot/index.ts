@@ -23,10 +23,11 @@ import * as songrec      from "./commands/songrec";
 import * as random       from "./commands/random";
 import * as areaMap      from "./commands/map";
 import * as report       from "./commands/report";
+import * as aliasAdmin   from "./commands/aliasAdmin";
 
 type Command = { data: { toJSON(): object; name: string }; execute: (i: ChatInputCommandInteraction) => Promise<void> };
 
-const COMMANDS: Command[] = [profile, bookmarklet, ratingtable, ratingimage, achievement, fortune, settings, serverSettings, search, status, songrec, random, areaMap, report];
+const COMMANDS: Command[] = [profile, bookmarklet, ratingtable, ratingimage, achievement, fortune, settings, serverSettings, search, status, songrec, random, areaMap, report, aliasAdmin];
 const EPHEMERAL_REPLY = { flags: MessageFlags.Ephemeral } as const;
 
 const RATING_CARD_GC_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000;
@@ -56,8 +57,7 @@ client.once(Events.ClientReady, async (c) => {
   await rest.put(route, { body: [...COMMANDS.map((cmd) => cmd.data.toJSON()), report.contextData.toJSON()] });
   await loadConstants();
   setInterval(() => loadConstants(), 24 * 60 * 60 * 1000);
-  loadAliases().catch((e) => console.error("[aliases] 초기 로드 실패:", e));
-  setInterval(() => loadAliases(), 24 * 60 * 60 * 1000);
+  loadAliases();
   loadFonts().catch((e) => console.error("[fonts] 초기 로드 실패:", e));
   runRatingCardGC();
   setInterval(runRatingCardGC, RATING_CARD_GC_INTERVAL_MS);

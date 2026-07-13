@@ -60,7 +60,7 @@ npm start
   "encryptionKey": "",           // 빈 값이면 자동 생성
   "baseUrl": "",                 // 프로덕션에서만 입력
   "discordInviteUrl": "",        // 선택: /invite 리다이렉트 대상
-  "databaseUrl": "",             // 선택: NeonDB 곡 별칭 DB
+  "aliasAdminGuildId": "",       // 선택: /별명 곡 별명 관리 허용 guildId
   "carolIssueBaseUrl": "",       // 선택: carol-issue 제보 연동 주소
   "carolSharedSecret": "",       // 선택: carol-issue와 동일한 공유 secret
   "carolIssueGuildId": ""        // 선택: DM 제보용 대표 guildId
@@ -69,7 +69,7 @@ npm start
 
 - `baseUrl`: 비워두면 `http://localhost:{webPort}`를 사용합니다. Cloudflare Tunnel 등으로 배포하면 공개 HTTPS URL을 입력하세요.
 - `discordInviteUrl`: 비워두면 `/invite`가 `clientId`로 기본 초대 링크를 생성합니다. 기본 권한은 `permissions=2415938560`, `integration_type=0`, `scope=applications.commands+bot`입니다. 권한 값을 직접 조정한 긴 OAuth2 URL이 있다면 여기에 넣으면 됩니다.
-- `databaseUrl`: 비워두면 곡 별칭 기능 없이 SQLite 기반 프로필 캐시만 사용합니다.
+- `aliasAdminGuildId`: `/별명` 명령으로 곡 별명 관리 웹페이지를 열 수 있는 서버(guild) ID입니다. 비워두면 어디서도 `/별명`이 비활성화됩니다. 곡 별명 데이터는 SQLite(`song_aliases` 테이블)에 저장되며, 최초 실행 시 번들된 시드(`src/data/aliasSeed.ts`)로 자동 채워집니다.
 - `carolIssueBaseUrl` / `carolSharedSecret`: [carol-issue](https://github.com/team-carol) 제보 연동. 둘 다 채워야 `/문의`·"이슈로 등록"이 활성화됩니다. secret은 carol-issue의 `CAROL_SHARED_SECRET`과 동일해야 합니다.
 - `carolIssueGuildId`: DM에서 제보 시 payload `guildId` 폴백값. 비워두면 DM 채널 ID로 폴백합니다.
 
@@ -80,6 +80,7 @@ npm start
 | `/invite` | Discord 봇 초대 링크로 리다이렉트 |
 | `/sync?code=...` | 북마클릿 설치 가이드 및 동기화 진입점 |
 | `/settings?code=...` | 개인정보/프리셋/추가 북마클릿 설정 |
+| `/admin/aliases?code=...` | 곡 별명 관리 (관리자, `/별명`으로 발급한 토큰 필요) |
 | `/privacy` | 개인정보처리방침 |
 | `/terms` | 이용약관 |
 
@@ -94,6 +95,7 @@ npm start
 | `/설정` | 웹 설정 페이지 안내 |
 | `/서버설정` | 서버 자동 역할 설정 관리 (관리자 전용) |
 | `/검색 title [user]` | 클리어 기록에서 곡명 검색 |
+| `/별명` | 곡 별명 관리 웹페이지 열기 (`aliasAdminGuildId` 서버 전용) |
 | `/상태` | 봇 및 서버 상태 확인 |
 | `/문의` | 모달 팝업에 본문을 작성해 GitHub 이슈로 등록 (미리보기 후 생성) |
 
