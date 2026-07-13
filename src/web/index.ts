@@ -1,7 +1,7 @@
 import * as http from "http";
 import * as fs from "fs";
 import { parseHome, parsePlayerData, parseFriendCode as parseFC, parseRecentRecords, parsePlaylogHistory, parseTop5, parseTopSongs, parseMusicScore, mergeTopRecords, getMaimaiBaseUrl, parseMapAreas, chartKey, parsePlaylogDetail } from "../scraper";
-import { cacheProfile, saveUserSession, getUserSyncToken, findUserBySyncToken, saveAvatarBlob, getAvatarBlob, getSongJacket, saveSongJacket, getExtraBookmarklets, getProfilePrivate, setProfilePrivate, addExtraBookmarklet, removeExtraBookmarklet, getEnabledBookmarkletPresetIds, setBookmarkletPresetEnabled, getUserDefaultServer, setUserDefaultServer, isMaimaiServer, getMapImage, saveMapImage, saveDailyAchievement, saveDailyAchievementSnapshot, pruneDailyAchievements } from "../db";
+import { cacheProfile, saveUserSession, getUserSyncToken, findUserBySyncToken, saveAvatarBlob, getAvatarBlob, getSongJacket, saveSongJacket, getExtraBookmarklets, getProfilePrivate, setProfilePrivate, addExtraBookmarklet, removeExtraBookmarklet, getEnabledBookmarkletPresetIds, setBookmarkletPresetEnabled, getUserDefaultServer, setUserDefaultServer, isMaimaiServer, getMapImage, saveMapImage, saveDailyAchievement, saveDailyAchievementSnapshot } from "../db";
 import { buildBookmarkletJs, setBaseUrl, getBaseUrl, buildBookmarklet, BOOKMARKLET_PRESETS, getBookmarkletPresets } from "./bookmarklet";
 import { computeRatingTarget } from "../constants";
 import { settingsPage } from "./settingsPage";
@@ -596,8 +596,6 @@ a{color:#c084fc}
             dailyAt,
           );
         }
-        const pruned = pruneDailyAchievements(7);
-        if (pruned > 0) console.log(`[web] daily achievements pruned: ${pruned}`);
         saveUserSession(syncUserId, "{}", savedProfileKey, syncServer);
 
         const savedMapImages = await cacheMapImages(mapAreas, syncServer);
