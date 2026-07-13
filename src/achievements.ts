@@ -1,5 +1,5 @@
 import { getPreviousDailyAchievementVal } from "./db";
-import type { DailyAchievementRecord } from "./db";
+import type { DailyAchievementRecord, DailyAchievementSnapshotRecord } from "./db";
 import type { PlayRecord } from "./scraper";
 import { chartKey } from "./scraper";
 
@@ -36,7 +36,9 @@ export function recordPlayedAt(dateText: string): number {
   return parseKoreaDateText(dateText)?.getTime() ?? Date.now();
 }
 
-export function parseDailyAchievementRows(rows: readonly DailyAchievementRecord[]): PlayRecord[] {
+type DailyAchievementRow = DailyAchievementRecord | DailyAchievementSnapshotRecord;
+
+export function parseDailyAchievementRows(rows: readonly DailyAchievementRow[]): PlayRecord[] {
   const records: PlayRecord[] = [];
   for (const row of rows) {
     try {
