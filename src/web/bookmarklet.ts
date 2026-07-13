@@ -45,13 +45,46 @@ export function buildBookmarklet(token: string, port: number): string {
 }
 
 export function buildBookmarkletJs(extras: Array<{ label: string; code: string; execution?: BookmarkletExecution }>): string {
-  if (extras.length === 0) return bookmarkletJs;
+  const baseScript = withAchievementInitUi(bookmarkletJs);
+  if (extras.length === 0) return baseScript;
   const extrasJson = JSON.stringify(extras);
   const injection = `(function(){var _exbms=${extrasJson};if(_exbms.length>0){addSection('EXTRA');_exbms.forEach(function(bm,i){var _id='ex'+i;var _lbl=bm.label.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');addRow(_id,_lbl);try{(0,eval)(bm.code.replace(/^javascript:/,''));okRow(_id,'\\uC2E4\\uD589');}catch(_e){console.warn('[carol] extra:',bm.label,_e);failRow(_id,'\\uC2E4\\uD328');}});}})();`;
   const marker = "addSection('PROFILE');";
-  const pos = bookmarkletJs.indexOf(marker);
-  if (pos === -1) return bookmarkletJs;
-  return bookmarkletJs.slice(0, pos) + injection + bookmarkletJs.slice(pos);
+  const pos = baseScript.indexOf(marker);
+  if (pos === -1) return baseScript;
+  return baseScript.slice(0, pos) + injection + baseScript.slice(pos);
+}
+
+function withAchievementInitUi(script: string): string {
+  return script
+    .replace(
+      "var stEl=doc.getElementById('mmsync-st'),hadErr=false;",
+      "var stEl=doc.getElementById('mmsync-st'),hadErr=false;var phaseEl=doc.createElement('div');phaseEl.style.cssText='display:none;color:#c084fc;font-size:11px;line-height:1.4;padding:8px 0 2px;margin-bottom:4px;border-bottom:1px solid #202020';stEl.parentNode.insertBefore(phaseEl,stEl);function phase(tx){phaseEl.textContent=tx;phaseEl.style.display=tx?'block':'none';}",
+    )
+    .replace(
+      "addRow('rt','레이팅 곡');addRow('av','아바타');addRow('jk','재킷 이미지');",
+      "addRow('rt','레이팅 곡');addRow('av','아바타');addRow('jk','재킷 이미지');addSection('PLAY DETAIL');addRow('dt','플레이 기록 상세');",
+    )
+    .replace(
+      "async function collectDetails(){var reqs=collectDetailRequests(rd),out=[];",
+      "async function collectDetails(){var reqs=collectDetailRequests(rd),out=[];if(reqs.length===0){skipRow('dt','확인할 기록 없음');return [];}setRow('dt','↻','#facc15','확인 중');",
+    )
+    .replace(
+      "return out;}",
+      "okRow('dt',out.length+'개');return out;}",
+    )
+    .replace(
+      "async function postSync(){",
+      "async function postSync(){phase('동기화 저장 중...');",
+    )
+    .replace(
+      "else{okRow('sv');}return true;",
+      "else if(svText==='initialized'){phase('기준 데이터 초기화 완료 · 다음 동기화부터 성과 집계');okRow('sv','기준 데이터 설정');}else{phase('동기화 저장 완료');okRow('sv');}return true;",
+    )
+    .replace(
+      "else if(!hadErr){fin.style.color='#4ade80';",
+      "else if(typeof svText!=='undefined'&&svText==='initialized'&&!hadErr){fin.style.color='#c084fc';fin.innerHTML='<span style=\"font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10px\">INIT</span><span>기준 데이터 설정 완료 · 다음 동기화부터 성과 집계</span>';stEl.appendChild(fin);}else if(!hadErr){fin.style.color='#4ade80';",
+    );
 }
 
 export const bookmarkletJs = `(async()=>{
