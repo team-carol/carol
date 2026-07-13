@@ -1,8 +1,9 @@
 import {
   SlashCommandBuilder, ChatInputCommandInteraction, EmbedBuilder, MessageFlags,
 } from "discord.js";
-import { getCachedProfile, getUserFriendCode, getProfilePrivate } from "../../db";
+import { getCachedProfile, getUserFriendCode, getProfilePrivate, getTranslateTitles } from "../../db";
 import { getClearList } from "../utils/embeds";
+import { displayTitle } from "../../aliases";
 import {
   getChartsInConstantRange, getJacketFile, isIntlAvailable,
   getSongGenre, GENRES, getSongVersionName, VERSION_NAMES, isSongPlus,
@@ -146,6 +147,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     genreOpt || undefined,
     verOpt ? verOpt + (plusOpt === "plus" ? " PLUS" : plusOpt === "base" ? " (무인)" : "") : undefined,
   ].filter(Boolean).join("  ·  ");
+  const translate = getTranslateTitles(interaction.user.id);
   const embeds = picks.map((c, i) => {
     const rec = clearMap?.get(`${c.title}|${c.kind}|${c.diff}`);
     const ytQuery = encodeURIComponent(
@@ -154,7 +156,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     const ytUrl = `https://www.youtube.com/results?search_query=${ytQuery}`;
     const emb = new EmbedBuilder()
       .setColor(MAI_DIFF_COLOR[c.diff] ?? 0x9333ea)
-      .setTitle(`${c.title} [${c.kind}]`)
+      .setTitle(`${displayTitle(c.title, translate)} [${c.kind}]`)
       .setDescription(`[▶ 외부출력](${ytUrl})`)
       .addFields(
         { name: "채보", value: `\`${c.diff}\`  ·  상수 \`${c.level.toFixed(1)}\``, inline: true },

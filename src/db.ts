@@ -3,6 +3,7 @@ import * as path from "path";
 import type { MaimaiProfile } from "./scraper";
 import { encrypt, decrypt } from "./crypto";
 import * as crypto from "crypto";
+import { ALIAS_SEED } from "./data/aliasSeed";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 export interface CachedProfile {
@@ -136,6 +137,16 @@ db.exec(`
     PRIMARY KEY (profile_key, play_day, chart_key)
   );
 
+  CREATE TABLE IF NOT EXISTS song_aliases (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    alias TEXT NOT NULL,
+    is_translation INTEGER DEFAULT 0,
+    created_at INTEGER DEFAULT (strftime('%s','now') * 1000),
+    UNIQUE(title, alias)
+  );
+  CREATE INDEX IF NOT EXISTS idx_song_aliases_title ON song_aliases(title);
+
   CREATE TABLE IF NOT EXISTS daily_achievement_snapshots (
     profile_key TEXT NOT NULL,
     play_day TEXT NOT NULL,
@@ -147,6 +158,8 @@ db.exec(`
     PRIMARY KEY (profile_key, play_day, chart_key, updated_at)
   );
 `);
+try { db.exec("ALTER TABLE song_aliases ADD COLUMN is_translation INTEGER DEFAULT 0"); } catch (_) {}
+try { db.exec("ALTER TABLE sessions ADD COLUMN translate_titles INTEGER DEFAULT 0"); } catch (_) {}
 
 try { db.exec("ALTER TABLE profiles ADD COLUMN top_json TEXT DEFAULT '[]'"); } catch (_) {}
 try { db.exec("ALTER TABLE profiles ADD COLUMN clear_json TEXT DEFAULT '[]'"); } catch (_) {}
@@ -175,6 +188,18 @@ try { db.exec("ALTER TABLE sessions ADD COLUMN avatar_blob_intl TEXT DEFAULT ''"
 try { db.exec("ALTER TABLE sessions ADD COLUMN avatar_blob_jp TEXT DEFAULT ''"); } catch (_) {}
 try { db.exec("ALTER TABLE daily_achievements ADD COLUMN played_at INTEGER DEFAULT 0"); } catch (_) {}
 try { db.exec("ALTER TABLE daily_achievement_snapshots ADD COLUMN played_at INTEGER DEFAULT 0"); } catch (_) {}
+
+// ─── 별명 시드 (최초 실행 시 song_aliases가 비어 있으면 번들 데이터로 채운다) ───
+(function seedAliases() {
+  const { n } = db.prepare("SELECT COUNT(*) AS n FROM song_aliases").get() as { n: number };
+  if (n > 0) return;
+  const insert = db.prepare("INSERT OR IGNORE INTO song_aliases (title, alias) VALUES (?, ?)");
+  const seed = db.transaction((rows: readonly [string, string][]) => {
+    for (const [title, alias] of rows) insert.run(title, alias);
+  });
+  seed(ALIAS_SEED);
+  console.log(`[db] song_aliases 시드 ${ALIAS_SEED.length}개 삽입`);
+})();
 
 // ─── Queries ────────────────────────────────────────────────────────────
 const profileSelect = "friend_code AS profileKey, COALESCE(NULLIF(display_friend_code, ''), friend_code) AS friendCode, COALESCE(server_region, 'intl') AS server, player_name AS playerName, rating, rating_max AS ratingMax, trophy, trophy_class AS trophyClass, avatar, grade_img AS gradeImg, stars, comment, play_count AS playCount, COALESCE(total_play_count, 0) AS totalPlayCount, raw_html AS rawHtml, recent_json AS recentJson, top_json AS topJson, clear_json AS clearJson, COALESCE(map_json, '[]') AS mapJson, last_synced_at AS lastSyncedAt";
@@ -648,6 +673,66 @@ export function getConstantsCache(): { data: string; updatedAt: number } | null 
 
 export function saveConstantsCache(data: string): void {
   db.prepare("INSERT OR REPLACE INTO constants_cache (key, data, updated_at) VALUES ('main', ?, ?)").run(data, Date.now());
+}
+
+// ─── Song aliases (곡 별명 — 캐롤 자체 관리) ──────────────────────────────
+export interface SongAliasRow {
+  id: number;
+  title: string;
+  alias: string;
+  isTranslation: boolean;
+}
+
+function mapAliasRow(r: { id: number; title: string; alias: string; is_translation: number }): SongAliasRow {
+  return { id: r.id, title: r.title, alias: r.alias, isTranslation: r.is_translation === 1 };
+}
+
+export function getAllAliases(): SongAliasRow[] {
+  return (db.prepare("SELECT id, title, alias, is_translation FROM song_aliases ORDER BY title ASC, alias ASC").all() as { id: number; title: string; alias: string; is_translation: number }[]).map(mapAliasRow);
+}
+
+// 번역으로 지정된 별명만 (곡명 → 번역 별명)
+export function getTranslationAliases(): { title: string; alias: string }[] {
+  return db.prepare("SELECT title, alias FROM song_aliases WHERE is_translation = 1").all() as { title: string; alias: string }[];
+}
+
+// 별명 추가. 성공 시 생성된 행, (title, alias) 중복이면 null 반환.
+export function addAlias(title: string, alias: string): SongAliasRow | null {
+  const info = db.prepare("INSERT OR IGNORE INTO song_aliases (title, alias) VALUES (?, ?)").run(title, alias);
+  if (info.changes === 0) return null;
+  return { id: Number(info.lastInsertRowid), title, alias, isTranslation: false };
+}
+
+// 별명 삭제. 삭제된 행이 있으면 true.
+export function deleteAlias(id: number): boolean {
+  return db.prepare("DELETE FROM song_aliases WHERE id = ?").run(id).changes > 0;
+}
+
+// 특정 별명을 해당 곡의 한국어 번역으로 지정(on=true) 또는 해제(on=false).
+// 지정 시 같은 곡의 다른 별명 지정은 자동 해제(곡당 1개). 대상 곡명을 반환, id가 없으면 null.
+export function setAliasTranslation(id: number, on: boolean): string | null {
+  const row = db.prepare("SELECT title FROM song_aliases WHERE id = ?").get(id) as { title: string } | undefined;
+  if (!row) return null;
+  const tx = db.transaction(() => {
+    if (on) db.prepare("UPDATE song_aliases SET is_translation = 0 WHERE title = ?").run(row.title);
+    db.prepare("UPDATE song_aliases SET is_translation = ? WHERE id = ?").run(on ? 1 : 0, id);
+  });
+  tx();
+  return row.title;
+}
+
+// ─── 사용자별 제목 번역 표시 설정 ─────────────────────────────────────────
+export function getTranslateTitles(discordUserId: string): boolean {
+  const row = db.prepare("SELECT translate_titles FROM sessions WHERE discord_user_id = ?").get(discordUserId) as { translate_titles: number | null } | undefined;
+  return row?.translate_titles === 1;
+}
+
+export function setTranslateTitles(discordUserId: string, value: boolean): void {
+  db.prepare(`
+    INSERT INTO sessions (discord_user_id, cookie_json, translate_titles, profile_private, updated_at)
+    VALUES (?, '{}', ?, 0, ?)
+    ON CONFLICT(discord_user_id) DO UPDATE SET translate_titles = excluded.translate_titles
+  `).run(discordUserId, value ? 1 : 0, Date.now());
 }
 
 // ─── Extra bookmarklets per user ────────────────────────────────────────

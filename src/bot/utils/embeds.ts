@@ -11,6 +11,7 @@ import {
   getSongJacket,
   getMapImage,
   saveSongJacket,
+  getTranslateTitles,
 } from "../../db";
 import { getMaimaiBaseUrl } from "../../scraper";
 import {
@@ -21,7 +22,7 @@ import {
   isNewSong,
   getRegionExclusive,
 } from "../../constants";
-import { aliasMatches, normalizeQuery } from "../../aliases";
+import { aliasMatches, normalizeQuery, displayTitle } from "../../aliases";
 import { ratingColor } from "./roles";
 import { buildMarkMap, buildKindResolver, chartKey } from "../../scraper";
 import type { PlayRecord, ChartMarks, MaimaiServer, MapArea } from "../../scraper";
@@ -215,6 +216,7 @@ export async function recentEmbeds(
   const records = getSongList(p);
   const games = groupByGame(records);
   const total = games.length;
+  const translate = getTranslateTitles(userId);
 
   if (total === 0) {
     return {
@@ -240,7 +242,7 @@ export async function recentEmbeds(
         `\`${r.diff} ${lv}\`` + (rankStr ? `  ·  \`${rankStr}\`` : "");
       const emb = new EmbedBuilder()
         .setColor(0x2b2d31)
-        .setTitle(truncateVisual(r.title, 26) + kind)
+        .setTitle(truncateVisual(displayTitle(r.title, translate), 26) + kind)
         .setDescription(desc)
         .setAuthor(
           r.track > 0
@@ -438,6 +440,7 @@ export async function searchResultEmbeds(
 }> {
   const records = getClearList(p);
   const q = normalizeQuery(query);
+  const translate = getTranslateTitles(userId);
   // 같은 곡명이라도 ST/DX 채보는 별도 결과로 분리 (musicKind 포함 키로 그룹핑)
   const byChart = new Map<string, PlayRecord[]>();
   for (const r of records) {
@@ -534,7 +537,7 @@ export async function searchResultEmbeds(
         (getRegionExclusive(title) ? `${verLabel} 전용` : verLabel) + "\n";
       const emb = new EmbedBuilder()
         .setColor(0x2b2d31)
-        .setTitle(truncateVisual(title, 26) + kind)
+        .setTitle(truncateVisual(displayTitle(title, translate), 26) + kind)
         .setAuthor({ name: `"${query}"${typeLabel} 에 대한 검색 결과` })
         .setDescription(
           regionLine +
@@ -595,6 +598,7 @@ function formatRtRow(
   rank: number,
   markMap?: Map<string, ChartMarks>,
   server: MaimaiServer = "intl",
+  translate = false,
 ): string {
   const rankStr = String(rank).padStart(2);
   const diff = DIFF_ABBR[r.diff] ?? "???";
@@ -605,12 +609,13 @@ function formatRtRow(
     r.achievementVal > 0 ? r.achievementVal.toFixed(4) + "%" : r.achievement
   ).padStart(9);
   const rs = String(songRating(r, markMap?.get(chartKey(r))?.fc, server)).padStart(3);
-  const title = truncateVisual(r.title, 26);
+  const title = truncateVisual(displayTitle(r.title, translate), 26);
   return `${rankStr} ${diff} ${kind} ${lv} ${ach}  ${rs}  ${title}`;
 }
 
 export function rtTableEmbed(
   p: NonNullable<ReturnType<typeof getCachedProfile>>,
+  translate = false,
 ): { embeds: EmbedBuilder[]; components: ActionRowBuilder<ButtonBuilder>[] } {
   const records = getTopList(p);
 
@@ -644,8 +649,8 @@ export function rtTableEmbed(
   const markMap = buildMarkMap(clearList);
   const resolveKind = buildKindResolver(clearList);
   const fix = (r: PlayRecord): PlayRecord => ({ ...r, musicKind: resolveKind(r) });
-  const newRows = newRecords.map((r, i) => formatRtRow(fix(r), i + 1, markMap, p.server));
-  const otherRows = otherRecords.map((r, i) => formatRtRow(fix(r), i + 1, markMap, p.server));
+  const newRows = newRecords.map((r, i) => formatRtRow(fix(r), i + 1, markMap, p.server, translate));
+  const otherRows = otherRecords.map((r, i) => formatRtRow(fix(r), i + 1, markMap, p.server, translate));
 
   // 구분선 길이를 가장 긴 행(보통 ASCII 곡명)에 맞춰 표 너비와 일치시킴
   const maxW = Math.max(

@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, MessageFlags, AttachmentBuilder } from "discord.js";
-import { getAchievementInitializedAt, getAchievementRepeatedFromDay, getAvatarBlob, getCachedProfile, getDailyAchievements, getProfilePrivate, getUserFriendCode } from "../../db";
+import { getAchievementInitializedAt, getAchievementRepeatedFromDay, getAvatarBlob, getCachedProfile, getDailyAchievements, getProfilePrivate, getUserFriendCode, getTranslateTitles } from "../../db";
 import { attachAchievementGains, koreaPlayDayKey, parseDailyAchievementRows } from "../../achievements";
 import { renderAchievementCard } from "../utils/achievementCard";
 
@@ -80,7 +80,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     const avatar = getAvatarBlob(userId, cached.server);
     const renderStartedAt = Date.now();
     console.log(`[성과] 렌더 시작 records=${records.length} avatarBytes=${avatar?.length ?? 0}`);
-    const png = await renderAchievementCard(cached, records, playDay, avatar);
+    const png = await renderAchievementCard(cached, records, playDay, avatar, getTranslateTitles(interaction.user.id));
     console.log(`[성과] 렌더 완료 pngBytes=${png.length} elapsedMs=${Date.now() - renderStartedAt}`);
     await interaction.editReply({
       files: [new AttachmentBuilder(png, { name: `achievement-${playDay}.png` })],

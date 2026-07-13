@@ -336,6 +336,30 @@ export function getSongGenre(title: string): string | null {
   return genreMap.get(title) ?? null;
 }
 
+export interface AliasSongInfo {
+  title: string;
+  version: number;
+  versionName: string;
+  // "jp": 내수판 전용(국제판 미수록, 별명 관리 페이지에서 신곡처럼 표시) / null: 그 외
+  region: "jp" | "intl" | null;
+}
+
+// 별명 관리 페이지용 전체 곡 목록. intl/jp 수록곡 합집합을 title 기준으로 반환.
+export function getAllSongTitles(): AliasSongInfo[] {
+  const titles = new Set<string>([...intlTitles, ...jpTitles, ...versionMap.keys()]);
+  return Array.from(titles)
+    .map((title) => {
+      const version = versionMap.get(title) ?? 0;
+      return {
+        title,
+        version,
+        versionName: getSongVersionName(title) ?? "",
+        region: getRegionExclusive(title),
+      };
+    })
+    .sort((a, b) => a.title.localeCompare(b.title, "en"));
+}
+
 export interface ChartInfo {
   title: string;
   kind: "ST" | "DX";

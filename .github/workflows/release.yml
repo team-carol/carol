@@ -1,8 +1,6 @@
-name: Build & Deploy
+name: Release
 
 on:
-  pull_request:
-    branches: [master]
   push:
     tags:
       - "v*"
@@ -12,24 +10,7 @@ env:
   IMAGE_BASE: carol
 
 jobs:
-  source-branch:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Require dev as the PR head branch
-        shell: bash
-        run: |
-          if [[ "${{ github.head_ref }}" != "dev" ]]; then
-            echo "::error::master can only accept pull requests from dev, but got '${{ github.head_ref }}'."
-            exit 1
-          fi
-
   build-and-push:
-    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
       contents: read
