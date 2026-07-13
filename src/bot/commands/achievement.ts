@@ -1,6 +1,6 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, MessageFlags, AttachmentBuilder } from "discord.js";
-import { getAvatarBlob, getCachedProfile, getDailyAchievements, getProfilePrivate, getUserFriendCode, getTranslateTitles } from "../../db";
-import { koreaPlayDayKey, parseDailyAchievementRows } from "../../achievements";
+import { getAvatarBlob, getCachedProfile, getDailyAchievementSnapshots, getProfilePrivate, getUserFriendCode, getTranslateTitles } from "../../db";
+import { attachAchievementGains, koreaPlayDayKey, parseDailyAchievementRows } from "../../achievements";
 import { renderAchievementCard } from "../utils/achievementCard";
 
 export const data = new SlashCommandBuilder()
@@ -42,12 +42,12 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     const playDay = requestedDay && isPlayDayKey(requestedDay)
       ? requestedDay
       : koreaPlayDayKey(new Date());
-    const records = parseDailyAchievementRows(getDailyAchievements(cached.profileKey, playDay));
+    const records = attachAchievementGains(cached.profileKey, parseDailyAchievementRows(getDailyAchievementSnapshots(cached.profileKey, playDay)));
     if (records.length === 0) {
       await interaction.reply({
         content: requestedDay
-          ? `${playDay}에 새로 달성한 스코어가 없습니다.`
-          : "오늘 새로 달성한 스코어가 없습니다.",
+          ? `${playDay}에 기록된 스코어가 없습니다.`
+          : "오늘 기록된 스코어가 없습니다.",
         flags: MessageFlags.Ephemeral,
       });
       return;
