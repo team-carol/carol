@@ -225,6 +225,14 @@ export function parseRecentRecords(html: string, server: MaimaiServer = "intl"):
   return recent;
 }
 
+export function parsePlaylogHistory(html: string, server: MaimaiServer = "intl"): PlayRecord[] {
+  const $ = cheerio.load(html);
+  const baseUrl = getMaimaiBaseUrl(server);
+  const records: PlayRecord[] = [];
+  $(".p_10.t_l.f_0.v_b").each((_, el) => { const r = parseOneRecord($, el, baseUrl); if (r) records.push(r); });
+  return records;
+}
+
 export function parseTopSongs(html: string, server: MaimaiServer = "intl"): PlayRecord[] {
   const $ = cheerio.load(html);
   const baseUrl = getMaimaiBaseUrl(server);

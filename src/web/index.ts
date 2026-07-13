@@ -1,6 +1,6 @@
 import * as http from "http";
 import * as fs from "fs";
-import { parseHome, parsePlayerData, parseFriendCode as parseFC, parseRecentRecords, parseTop5, parseTopSongs, parseMusicScore, mergeTopRecords, getMaimaiBaseUrl, parseMapAreas, chartKey, parsePlaylogDetail } from "../scraper";
+import { parseHome, parsePlayerData, parseFriendCode as parseFC, parseRecentRecords, parsePlaylogHistory, parseTop5, parseTopSongs, parseMusicScore, mergeTopRecords, getMaimaiBaseUrl, parseMapAreas, chartKey, parsePlaylogDetail } from "../scraper";
 import { cacheProfile, saveUserSession, getUserSyncToken, findUserBySyncToken, saveAvatarBlob, getAvatarBlob, getSongJacket, saveSongJacket, getExtraBookmarklets, getProfilePrivate, setProfilePrivate, addExtraBookmarklet, removeExtraBookmarklet, getEnabledBookmarkletPresetIds, setBookmarkletPresetEnabled, getUserDefaultServer, setUserDefaultServer, isMaimaiServer, getMapImage, saveMapImage, saveDailyAchievement, saveDailyAchievementSnapshot, pruneDailyAchievements } from "../db";
 import { buildBookmarkletJs, setBaseUrl, getBaseUrl, buildBookmarklet, BOOKMARKLET_PRESETS, getBookmarkletPresets } from "./bookmarklet";
 import { computeRatingTarget } from "../constants";
@@ -510,6 +510,7 @@ a{color:#c084fc}
         const fc = [effective.friendCode, fcRaw].find((v) => v && /^\d{13}$/.test(v)) || token;
 
         const recentRecords = parseRecentRecords(recordHtml, syncServer);
+        const historyRecords = parsePlaylogHistory(recordHtml, syncServer);
         const detailMap = new Map<string, string>();
         for (const detail of detailPayloads) {
           if (!detail || typeof detail !== "object") continue;
@@ -519,6 +520,10 @@ a{color:#c084fc}
           detailMap.set(idx, html);
         }
         const enrichedRecentRecords = recentRecords.map((record) => {
+          const detailHtml = record.detailIdx ? detailMap.get(record.detailIdx) : undefined;
+          return detailHtml ? { ...record, ...parsePlaylogDetail(detailHtml) } : record;
+        });
+        const enrichedHistoryRecords = historyRecords.map((record) => {
           const detailHtml = record.detailIdx ? detailMap.get(record.detailIdx) : undefined;
           return detailHtml ? { ...record, ...parsePlaylogDetail(detailHtml) } : record;
         });
@@ -535,7 +540,7 @@ a{color:#c084fc}
         ];
         const emptyFc = clearRecords.filter((r) => !r.fc).length;
         const expectedRecentRecords = Math.min(Math.max(playCount || 1, 1), 5);
-        console.log(`[web] recentRecords: ${enrichedRecentRecords.length} songs, top: ${topRecords.length} (rating target), clear: ${clearRecords.length} (empty fc: ${emptyFc}), mapAreas: ${mapAreas.length}, detailPayloads: ${detailMap.size}`);
+        console.log(`[web] recentRecords: ${enrichedRecentRecords.length} songs, historyRecords: ${enrichedHistoryRecords.length} songs, top: ${topRecords.length} (rating target), clear: ${clearRecords.length} (empty fc: ${emptyFc}), mapAreas: ${mapAreas.length}, detailPayloads: ${detailMap.size}`);
 
         if (!effective.playerName || !/^\d{13}$/.test(fc) || enrichedRecentRecords.length < expectedRecentRecords || clearRecords.length === 0 || topRecords.length === 0) {
           console.warn("[web] invalid sync payload", {
@@ -568,7 +573,7 @@ a{color:#c084fc}
         }, playCount || 0, homeHtml, JSON.stringify(enrichedRecentRecords), JSON.stringify(topRecords), JSON.stringify(clearRecords), syncServer, JSON.stringify(mapAreas));
         const fallbackPlayDay = koreaPlayDayKey(new Date());
         const syncStamp = Date.now();
-        for (const [index, record] of enrichedRecentRecords.entries()) {
+        for (const [index, record] of enrichedHistoryRecords.entries()) {
           const snapshotAt = syncStamp + index * 2;
           const dailyAt = snapshotAt + 1;
           saveDailyAchievementSnapshot(
