@@ -32,13 +32,22 @@ test("PostgreSQL achievement log and durable projection", async () => {
   const pg = await temporaryPostgres();
   const { PostgresStorage } = require("../dist/storage/postgres");
   const db = new PostgresStorage(pg.url);
-  const event = (id, chartKey, score, playedAt, extra = {}) => ({ profileKey: "integration", sourcePlayId: id, chartKey, playedAt, sourceSequence: Number(id), recordJson: JSON.stringify({ title: chartKey, musicKind: "DX", diff: "MASTER" }), achievementVal: score, fc: extra.fc || "", sync: extra.sync || "", ratingUp: extra.ratingUp, isNewScore: extra.isNewScore, title: chartKey, diff: "MASTER", level: "13+", musicKind: "DX", achievementText: `${score}%` });
+  const event = (id, chartKey, score, playedAt, extra = {}) => ({ profileKey: extra.profileKey || "integration", sourcePlayId: id, chartKey, playedAt, sourceSequence: Number(id) || 1, recordJson: JSON.stringify({ title: chartKey, musicKind: "DX", diff: "MASTER" }), achievementVal: score, fc: extra.fc || "", sync: extra.sync || "", ratingUp: extra.ratingUp, isNewScore: extra.isNewScore, title: chartKey, diff: "MASTER", level: "13+", musicKind: "DX", achievementText: `${score}%` });
   const start = Date.UTC(2026, 0, 1, 19); // 2026-01-02 04:00 KST
   try {
     await db.initialize();
     await db.saveAchievementPlayEventLogBatch([event("1", "chart-a", 90, start - 1)]); // baseline
     assert.equal((await db.getAchievementPlayEventLog("integration"))[0].isBaseline, 1);
     assert.equal((await db.getDailyAchievementSummaries("integration", start - 10, start + 10)).length, 0);
+
+    await db.cacheProfile({ playerName: "migrated", rating: 1, ratingMax: 1, gradeImg: "", avatar: "", trophy: "", trophyClass: "", stars: "", playCount: 1, friendCode: "migrated" }, 1);
+    const migratedKey = "intl:migrated";
+    assert.equal(await db.hasAchievementEventLogState(migratedKey), false);
+    assert.equal(await db.saveAchievementPlayEventLogBatch([event("migrated-1", "migrated-chart", 80, start, { profileKey: migratedKey, isNewScore: true })], Date.now(), true), "ok");
+    const migratedEvent = (await db.getAchievementPlayEventLog(migratedKey))[0];
+    assert.equal(migratedEvent.isBaseline, 0);
+    assert.equal(migratedEvent.isMeaningful, 1);
+    assert.equal(await db.hasAchievementEventLogState(migratedKey), true);
     await db.saveAchievementPlayEventLogBatch([
       event("2", "chart-a", 95, start + 1, { ratingUp: 12 }),
       event("3", "chart-a", 93, start + 2, { ratingUp: 99 }), // regression

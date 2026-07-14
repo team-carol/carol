@@ -581,6 +581,7 @@ a{color:#c084fc}
       const playerHtml: string = data.p || "";
       const fcHtml: string = data.f || "";
       const recordHtml: string = data.r || "";
+      const ratingTargetHtml: string = data.rt || "";
       const top4Html: string = data.tb4 || "";
       const top3Html: string = data.tb3 || "";
       const top2Html: string = data.tb2 || "";
@@ -590,12 +591,13 @@ a{color:#c084fc}
       const eventMapHtml: string = data.em || "";
       const avatarBase64: string = data.a || "";
       const detailPayloads = Array.isArray(data.dt) ? data.dt : [];
-      console.log(`[web] user=${syncUserId.slice(-6)}, server=${syncServer}, home=${homeHtml.length}B, player=${playerHtml.length}B, record=${recordHtml.length}B, fc=${fcHtml.length}B, top4=${top4Html.length}B, top3=${top3Html.length}B, top2=${top2Html.length}B, top1=${top1Html.length}B, top0=${top0Html.length}B, map=${mapHtml.length}B, eventMap=${eventMapHtml.length}B`);
+      console.log(`[web] user=${syncUserId.slice(-6)}, server=${syncServer}, home=${homeHtml.length}B, player=${playerHtml.length}B, record=${recordHtml.length}B, ratingTarget=${ratingTargetHtml.length}B, fc=${fcHtml.length}B, top4=${top4Html.length}B, top3=${top3Html.length}B, top2=${top2Html.length}B, top1=${top1Html.length}B, top0=${top0Html.length}B, map=${mapHtml.length}B, eventMap=${eventMapHtml.length}B`);
       if (isDev) {
         fs.writeFileSync("debug_home.html", homeHtml, "utf-8");
         fs.writeFileSync("debug_pd.html", playerHtml, "utf-8");
         fs.writeFileSync("debug_fc.html", fcHtml, "utf-8");
         fs.writeFileSync("debug_record.html", recordHtml, "utf-8");
+        fs.writeFileSync("debug_rating_target.html", ratingTargetHtml, "utf-8");
         fs.writeFileSync("debug_map.html", mapHtml, "utf-8");
         fs.writeFileSync("debug_event_map.html", eventMapHtml, "utf-8");
         detailPayloads.forEach((detail: unknown, idx: number) => {
@@ -641,7 +643,11 @@ a{color:#c084fc}
         const clearRecords = clearHtmls.length > 0 ? mergeTopRecords(clearHtmls.map((h) => parseMusicScore(h, syncServer))) : [];
         // 내수판(JP)은 레이팅 대상 페이지 수집에 유료 코스가 필요하므로,
         // 전체 기록에서 레이팅 대상(신곡 15 + 구곡 35)을 직접 추론한다.
-        const topRecords = syncServer === "jp" ? computeRatingTarget(clearRecords, syncServer) : parseTop5(recordHtml, syncServer);
+        const topRecords = syncServer === "jp"
+          ? computeRatingTarget(clearRecords, syncServer)
+          : ratingTargetHtml
+            ? parseMusicScore(ratingTargetHtml, syncServer)
+            : parseTop5(recordHtml, syncServer);
         const mapAreas = [
           ...parseMapAreas(mapHtml, "normal", syncServer),
           ...parseMapAreas(eventMapHtml, "event", syncServer),
@@ -671,6 +677,7 @@ a{color:#c084fc}
           return;
         }
 
+        const preexistingProfile = (await getCachedProfile(`${syncServer}:${fc}`)) !== null;
         const savedProfileKey = await cacheProfile({
           playerName: effective.playerName || "???", rating: effective.rating || 0,
           ratingMax: effective.ratingMax || 0, gradeImg: effective.gradeImg || "",
@@ -692,7 +699,7 @@ a{color:#c084fc}
             musicKind: record.musicKind, achievementText: record.achievement,
           };
         });
-        const canonicalStatus = await saveAchievementPlayEventLogBatch(canonicalBatch, syncStamp);
+        const canonicalStatus = await saveAchievementPlayEventLogBatch(canonicalBatch, syncStamp, preexistingProfile);
         await saveUserSession(syncUserId, "{}", savedProfileKey, syncServer);
 
         const savedMapImages = await cacheMapImages(mapAreas, syncServer);
