@@ -13,9 +13,10 @@ test("PostgreSQL bootstrap is idempotent on a completed volume", { skip: !proces
   const sqlite = new Database(sqlitePath);
   sqlite.pragma("journal_mode=WAL");
   sqlite.pragma("wal_autocheckpoint=0");
-  sqlite.exec("CREATE TABLE profiles (friend_code TEXT PRIMARY KEY, player_name TEXT); CREATE TABLE sessions (discord_user_id TEXT PRIMARY KEY, cookie_json TEXT);");
-  const insert = sqlite.prepare("INSERT INTO profiles VALUES (?, ?)");
-  const insertMany = sqlite.transaction(() => { for (let i = 0; i < 1250; i++) insert.run(i === 0 ? "wal-fixture" : `fixture-${i}`, i === 0 ? "WAL Fixture" : `Fixture ${i}`); });
+  sqlite.exec("CREATE TABLE profiles (friend_code TEXT PRIMARY KEY, player_name TEXT, rating INTEGER, raw_html TEXT, rating_card_blob BLOB); CREATE TABLE sessions (discord_user_id TEXT PRIMARY KEY, cookie_json TEXT);");
+  const insert = sqlite.prepare("INSERT INTO profiles VALUES (?, ?, ?, ?, ?)");
+  const rawCache = "<html>" + "x".repeat(1024 * 1024) + "</html>";
+  const insertMany = sqlite.transaction(() => { for (let i = 0; i < 1250; i++) insert.run(i === 0 ? "wal-fixture" : `fixture-${i}`, i === 0 ? "WAL Fixture" : `Fixture ${i}`, i, i === 0 ? rawCache : "", Buffer.from("rebuildable-card")); });
   insertMany();
   sqlite.prepare("INSERT INTO sessions VALUES (?, ?)").run("fixture-user", "{}");
   sqlite.close();
@@ -38,6 +39,10 @@ test("PostgreSQL bootstrap is idempotent on a completed volume", { skip: !proces
       assert.equal(result.rows[0].count, 1);
       const fixture = await client.query("SELECT player_name FROM profiles WHERE friend_code = 'wal-fixture'");
       assert.equal(fixture.rows[0].player_name, "WAL Fixture");
+      const cache = await client.query("SELECT raw_html, rating, rating_card_blob FROM profiles WHERE friend_code = 'wal-fixture'");
+      assert.equal(cache.rows[0].raw_html, "");
+      assert.equal(cache.rows[0].rating, 0);
+      assert.equal(cache.rows[0].rating_card_blob, null);
     } finally { await client.end(); }
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
