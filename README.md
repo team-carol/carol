@@ -31,7 +31,7 @@ Discord → /프로필 → 북마클릿 코드 받음
 | TypeScript | 전체 코드베이스 |
 | discord.js v14 | Discord 봇 |
 | cheerio | maimai DX net HTML 파싱 |
-| better-sqlite3 | 프로필/세션 캐시 |
+| PostgreSQL (`DATABASE_URL`) | 프로필/세션 캐시 |
 | AES-256-GCM | 세션 토큰 암호화 |
 | Docker + Compose | 컨테이너 배포 |
 | Cloudflare Tunnel | 무료 HTTPS (열린 포트 없음) |
