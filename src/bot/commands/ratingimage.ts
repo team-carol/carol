@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, MessageFlags, AttachmentBuilder } from "discord.js";
-import { getCachedProfile, getUserFriendCode, getAvatarBlob, getProfilePrivate, getTranslateTitles } from "../../db";
+import { getCachedProfile, getUserFriendCode, getAvatarBlob, getProfilePrivate, getTranslateTitles } from "../../storage";
 import { getTopList } from "../utils/embeds";
 import { renderRatingCard } from "../utils/ratingCard";
 
@@ -13,12 +13,12 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   const target = interaction.options.getUser("user") ?? interaction.user;
   const userId = target.id;
-  if (target.id !== interaction.user.id && getProfilePrivate(target.id)) {
+  if (target.id !== interaction.user.id && await getProfilePrivate(target.id)) {
     await interaction.reply({ content: `<@${target.id}> 님은 프로필을 비공개로 설정했습니다.`, flags: MessageFlags.Ephemeral });
     return;
   }
-  const friendCode = getUserFriendCode(userId);
-  const cached = friendCode ? getCachedProfile(friendCode) : null;
+  const friendCode = await getUserFriendCode(userId);
+  const cached = friendCode ? await getCachedProfile(friendCode) : null;
   if (!cached) {
     const msg = target.id === interaction.user.id
       ? "아직 프로필이 등록되지 않았습니다. `/북마클릿` 명령어로 먼저 등록해주세요."
@@ -33,7 +33,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   }
   await interaction.deferReply();
   try {
-    const png = await renderRatingCard(cached, records, getAvatarBlob(userId, cached.server), getTranslateTitles(interaction.user.id));
+    const png = await renderRatingCard(cached, records, await getAvatarBlob(userId, cached.server), await getTranslateTitles(interaction.user.id));
     await interaction.editReply({
       files: [new AttachmentBuilder(png, { name: "rating.png" })],
     });

@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, EmbedBuilder } from "discord.js";
-import { getRegisteredUserCount, getLastSyncTime } from "../../db";
+import { getRegisteredUserCount, getLastSyncTime } from "../../storage";
 
 export const data = new SlashCommandBuilder()
   .setName("상태")
@@ -43,8 +43,8 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 
   const ping = interaction.client.ws.ping;
   const uptime = formatUptime(Math.floor(process.uptime()));
-  const userCount = getRegisteredUserCount();
-  const lastSync = getLastSyncTime();
+  const userCount = await getRegisteredUserCount();
+  const lastSync = await getLastSyncTime();
   const version = displayVersion();
   const lastSyncStr = lastSync
     ? new Date(lastSync).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })

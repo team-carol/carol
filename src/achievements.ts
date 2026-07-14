@@ -1,5 +1,5 @@
-import { getAchievementInitializedAt, getPreviousDailyAchievementValBeforePlay, hasAchievementEventLogState } from "./db";
-import type { DailyAchievementRecord, DailyAchievementSnapshotRecord } from "./db";
+import { getAchievementInitializedAt, getPreviousDailyAchievementValBeforePlay, hasAchievementEventLogState } from "./storage";
+import type { DailyAchievementRecord, DailyAchievementSnapshotRecord } from "./storage";
 import type { PlayRecord } from "./scraper";
 import { chartKey } from "./scraper";
 
@@ -97,20 +97,20 @@ export function parseDailyAchievementRows(rows: readonly DailyAchievementRow[]):
   return records;
 }
 
-export function attachAchievementGains(profileKey: string, records: readonly PlayRecord[]): PlayRecord[] {
-  if (hasAchievementEventLogState(profileKey)) {
+export async function attachAchievementGains(profileKey: string, records: readonly PlayRecord[]): Promise<PlayRecord[]> {
+  if (await hasAchievementEventLogState(profileKey)) {
     return records.map((record) => ({ ...record, achievementGain: 0 }));
   }
-  const initializedAt = getAchievementInitializedAt(profileKey);
-  return records.map((record) => {
+  const initializedAt = await getAchievementInitializedAt(profileKey);
+  return Promise.all(records.map(async (record) => {
     const updatedAt = record.updatedAt ?? 0;
     const playedAt = record.playedAt ?? 0;
     const newScoreOnly = (record.newScoreCountInSync ?? 0) >= 2;
     const previousBest = updatedAt > 0 && playedAt > 0
-      ? getPreviousDailyAchievementValBeforePlay(profileKey, chartKey(record), playedAt, updatedAt, newScoreOnly)
+      ? await getPreviousDailyAchievementValBeforePlay(profileKey, chartKey(record), playedAt, updatedAt, newScoreOnly)
       : null;
     const allHistoryBest = previousBest === null && newScoreOnly && updatedAt > 0 && playedAt > 0
-      ? getPreviousDailyAchievementValBeforePlay(profileKey, chartKey(record), playedAt, updatedAt)
+      ? await getPreviousDailyAchievementValBeforePlay(profileKey, chartKey(record), playedAt, updatedAt)
       : previousBest;
     const isNewChartAfterInit = previousBest === null
       && allHistoryBest === null
@@ -123,5 +123,5 @@ export function attachAchievementGains(profileKey: string, records: readonly Pla
       ...record,
       achievementGain,
     };
-  });
+  }));
 }

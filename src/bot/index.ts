@@ -1,7 +1,7 @@
 import { Client, Events, GatewayIntentBits, ChatInputCommandInteraction, ButtonInteraction, REST, Routes, MessageFlags } from "discord.js";
 import { initEncryption } from "../crypto";
 import { startWebServer, setBaseUrl } from "../web";
-import { closeDb, loadUserSession, getCachedProfile, clearRatingCardCacheForInactive, getTranslateTitles } from "../db";
+import { closeStorage, initializeStorage, loadUserSession, getCachedProfile, clearRatingCardCacheForInactive, getTranslateTitles } from "../storage";
 import { CONFIG, PORT } from "../config";
 import { recentEmbeds, rtTableEmbed, searchResultEmbeds, getSearchCtx, mapAreaEmbed } from "./utils/embeds";
 
@@ -33,18 +33,14 @@ const EPHEMERAL_REPLY = { flags: MessageFlags.Ephemeral } as const;
 const RATING_CARD_GC_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000;
 const RATING_CARD_GC_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
-function runRatingCardGC(): void {
+async function runRatingCardGC(): Promise<void> {
   try {
-    const cleared = clearRatingCardCacheForInactive(RATING_CARD_GC_THRESHOLD_MS);
+    const cleared = await clearRatingCardCacheForInactive(RATING_CARD_GC_THRESHOLD_MS) as number;
     if (cleared > 0) console.log(`[gc] rating_card_blob cleared for ${cleared} inactive profile(s)`);
   } catch (e) {
     console.error("[gc] rating_card_blob cleanup failed:", e);
   }
 }
-
-initEncryption(CONFIG.encryptionKey);
-if (CONFIG.baseUrl) setBaseUrl(CONFIG.baseUrl);
-startWebServer(PORT);
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
@@ -57,10 +53,10 @@ client.once(Events.ClientReady, async (c) => {
   await rest.put(route, { body: [...COMMANDS.map((cmd) => cmd.data.toJSON()), report.contextData.toJSON()] });
   await loadConstants();
   setInterval(() => loadConstants(), 24 * 60 * 60 * 1000);
-  loadAliases();
+  await loadAliases();
   loadFonts().catch((e) => console.error("[fonts] 초기 로드 실패:", e));
-  runRatingCardGC();
-  setInterval(runRatingCardGC, RATING_CARD_GC_INTERVAL_MS);
+  void runRatingCardGC();
+  setInterval(() => void runRatingCardGC(), RATING_CARD_GC_INTERVAL_MS);
   console.log("[maimai] 준비 완료");
 });
 
@@ -101,9 +97,9 @@ client.on(Events.InteractionCreate, async (i) => {
         const parts = i.customId.split(":");
         const userId = parts[1];
         const gameIdx = parseInt(parts[2] ?? "0") || 0;
-        const stored = loadUserSession(userId);
+        const stored = await loadUserSession(userId);
         if (!stored?.friendCode) { await (i as ButtonInteraction).reply({ content: "프로필을 먼저 등록하세요.", ...EPHEMERAL_REPLY }); return; }
-        const cached = getCachedProfile(stored.friendCode);
+        const cached = await getCachedProfile(stored.friendCode);
         if (!cached) { await (i as ButtonInteraction).reply({ content: "프로필을 먼저 등록하세요.", ...EPHEMERAL_REPLY }); return; }
         const result = await recentEmbeds(cached, userId, gameIdx);
         if (i.customId.startsWith("recent:")) {
@@ -122,9 +118,9 @@ client.on(Events.InteractionCreate, async (i) => {
         const targetUserId = parts[1];
         const gameIdx = parseInt(parts[2]) || 0;
         const songIdx = parseInt(parts[3]) || 0;
-        const stored = loadUserSession(targetUserId);
+        const stored = await loadUserSession(targetUserId);
         if (!stored?.friendCode) { await (i as ButtonInteraction).reply({ content: "프로필을 찾을 수 없습니다.", ...EPHEMERAL_REPLY }); return; }
-        const cached = getCachedProfile(stored.friendCode);
+        const cached = await getCachedProfile(stored.friendCode);
         if (!cached) { await (i as ButtonInteraction).reply({ content: "프로필을 찾을 수 없습니다.", ...EPHEMERAL_REPLY }); return; }
         const result = await recentEmbeds(cached, targetUserId, gameIdx);
         const emb = result.embeds[songIdx];
@@ -141,11 +137,11 @@ client.on(Events.InteractionCreate, async (i) => {
       try {
         const parts = i.customId.split(":");
         const userId = parts[1];
-        const stored = loadUserSession(userId);
+        const stored = await loadUserSession(userId);
         if (!stored?.friendCode) { await (i as ButtonInteraction).reply({ content: "프로필을 먼저 등록하세요.", ...EPHEMERAL_REPLY }); return; }
-        const cached = getCachedProfile(stored.friendCode);
+        const cached = await getCachedProfile(stored.friendCode);
         if (!cached) { await (i as ButtonInteraction).reply({ content: "프로필을 먼저 등록하세요.", ...EPHEMERAL_REPLY }); return; }
-        await (i as ButtonInteraction).reply({ ...rtTableEmbed(cached, getTranslateTitles(userId)), ...EPHEMERAL_REPLY });
+        await (i as ButtonInteraction).reply({ ...rtTableEmbed(cached, await getTranslateTitles(userId)), ...EPHEMERAL_REPLY });
       } catch (e) {
         console.error("[rt-btn]", e);
       }
@@ -156,9 +152,9 @@ client.on(Events.InteractionCreate, async (i) => {
         const parts = i.customId.split(":");
         const userId = parts[1];
         if (userId !== i.user.id) { await (i as ButtonInteraction).reply({ content: "본인 지방 진행도만 열 수 있습니다.", ...EPHEMERAL_REPLY }); return; }
-        const stored = loadUserSession(userId);
+        const stored = await loadUserSession(userId);
         if (!stored?.friendCode) { await (i as ButtonInteraction).reply({ content: "프로필을 먼저 등록하세요.", ...EPHEMERAL_REPLY }); return; }
-        const cached = getCachedProfile(stored.friendCode);
+        const cached = await getCachedProfile(stored.friendCode);
         if (!cached) { await (i as ButtonInteraction).reply({ content: "프로필을 먼저 등록하세요.", ...EPHEMERAL_REPLY }); return; }
         await (i as ButtonInteraction).deferReply(EPHEMERAL_REPLY);
         await (i as ButtonInteraction).editReply(await mapAreaEmbed(cached, userId, 0));
@@ -173,9 +169,9 @@ client.on(Events.InteractionCreate, async (i) => {
         const userId = parts[1];
         const pageIdx = parseInt(parts[2] ?? "0") || 0;
         if (userId !== i.user.id) { await (i as ButtonInteraction).reply({ content: "본인 지방 진행도만 볼 수 있습니다.", ...EPHEMERAL_REPLY }); return; }
-        const stored = loadUserSession(userId);
+        const stored = await loadUserSession(userId);
         if (!stored?.friendCode) { await (i as ButtonInteraction).reply({ content: "프로필을 먼저 등록하세요.", ...EPHEMERAL_REPLY }); return; }
-        const cached = getCachedProfile(stored.friendCode);
+        const cached = await getCachedProfile(stored.friendCode);
         if (!cached) { await (i as ButtonInteraction).reply({ content: "프로필을 먼저 등록하세요.", ...EPHEMERAL_REPLY }); return; }
         await (i as ButtonInteraction).deferUpdate();
         await (i as ButtonInteraction).editReply(await mapAreaEmbed(cached, userId, pageIdx));
@@ -190,9 +186,9 @@ client.on(Events.InteractionCreate, async (i) => {
         const userId = parts[1];
         const areaIdx = parseInt(parts[2] ?? "0") || 0;
         if (userId !== i.user.id) { await (i as ButtonInteraction).reply({ content: "본인 지방 진행도만 공유할 수 있습니다.", ...EPHEMERAL_REPLY }); return; }
-        const stored = loadUserSession(userId);
+        const stored = await loadUserSession(userId);
         if (!stored?.friendCode) { await (i as ButtonInteraction).reply({ content: "프로필을 찾을 수 없습니다.", ...EPHEMERAL_REPLY }); return; }
-        const cached = getCachedProfile(stored.friendCode);
+        const cached = await getCachedProfile(stored.friendCode);
         if (!cached) { await (i as ButtonInteraction).reply({ content: "프로필을 찾을 수 없습니다.", ...EPHEMERAL_REPLY }); return; }
         await (i as ButtonInteraction).deferReply();
         const result = await mapAreaEmbed(cached, userId, Math.floor(areaIdx / 5));
@@ -213,9 +209,9 @@ client.on(Events.InteractionCreate, async (i) => {
         const pageIdx = parseInt(parts[2] ?? "0") || 0;
         const ctx = getSearchCtx(token);
         if (!ctx) { await (i as ButtonInteraction).reply({ content: "검색이 만료되었습니다. 다시 검색해주세요.", ...EPHEMERAL_REPLY }); return; }
-        const stored = loadUserSession(ctx.userId);
+        const stored = await loadUserSession(ctx.userId);
         if (!stored?.friendCode) { await (i as ButtonInteraction).reply({ content: "프로필을 먼저 등록하세요.", ...EPHEMERAL_REPLY }); return; }
-        const cached = getCachedProfile(stored.friendCode);
+        const cached = await getCachedProfile(stored.friendCode);
         if (!cached) { await (i as ButtonInteraction).reply({ content: "프로필을 먼저 등록하세요.", ...EPHEMERAL_REPLY }); return; }
         const result = await searchResultEmbeds(cached, ctx.userId, ctx.query, pageIdx, ctx.typeFilter, token);
         await (i as ButtonInteraction).update(result);
@@ -227,6 +223,14 @@ client.on(Events.InteractionCreate, async (i) => {
   }
 });
 
-process.on("SIGINT",  () => { closeDb(); process.exit(0); });
-process.on("SIGTERM", () => { closeDb(); process.exit(0); });
-client.login(CONFIG.token);
+async function main(): Promise<void> {
+  await initializeStorage();
+  initEncryption(CONFIG.encryptionKey);
+  if (CONFIG.baseUrl) setBaseUrl(CONFIG.baseUrl);
+  startWebServer(PORT);
+  process.on("SIGINT", () => { void closeStorage().finally(() => process.exit(0)); });
+  process.on("SIGTERM", () => { void closeStorage().finally(() => process.exit(0)); });
+  await client.login(CONFIG.token);
+}
+
+void main().catch((e) => { console.error("[startup] storage initialization failed", e); process.exitCode = 1; });

@@ -2,7 +2,7 @@ import {
   SlashCommandBuilder, ChatInputCommandInteraction, EmbedBuilder,
   MessageFlags, ActionRowBuilder, ButtonBuilder, ButtonStyle,
 } from "discord.js";
-import { getUserFriendCode, getUserSyncToken, getUserDefaultServer } from "../../db";
+import { getUserFriendCode, getUserSyncToken, getUserDefaultServer } from "../../storage";
 import { getBaseUrl } from "../../web";
 import { PORT } from "../../config";
 
@@ -10,11 +10,11 @@ export const data = new SlashCommandBuilder()
   .setName("설정")
   .setDescription("웹 설정 페이지 안내");
 
-function buildSettingsContent(userId: string) {
+async function buildSettingsContent(userId: string) {
   const baseUrl = getBaseUrl(PORT);
-  const settingsUrl = `${baseUrl}/settings?code=${getUserSyncToken(userId)}`;
+  const settingsUrl = `${baseUrl}/settings?code=${await getUserSyncToken(userId)}`;
   const termsUrl = `${baseUrl}/terms`;
-  const server = getUserDefaultServer(userId) === "jp" ? "JP" : "INTERNATIONAL";
+  const server = await getUserDefaultServer(userId) === "jp" ? "JP" : "INTERNATIONAL";
   const embed = new EmbedBuilder()
     .setTitle("⚙️ 웹 설정")
     .setColor(0x5865f2)
@@ -50,7 +50,7 @@ function buildSettingsContent(userId: string) {
 }
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
-  if (!getUserFriendCode(interaction.user.id)) {
+  if (!await getUserFriendCode(interaction.user.id)) {
     await interaction.reply({
       content: "아직 프로필이 등록되지 않았습니다. `/북마클릿` 명령어로 먼저 등록해주세요.",
       flags: MessageFlags.Ephemeral,

@@ -2,7 +2,7 @@ import {
   EmbedBuilder, MessageFlags, ChatInputCommandInteraction,
   PermissionsBitField, GuildMember,
 } from "discord.js";
-import { getCachedProfile, loadUserSession, getGuildSetting } from "../../db";
+import { getCachedProfile, loadUserSession, getGuildSetting } from "../../storage";
 
 export const RATING_ROLES: [number, string, number][] = [
   [16750, "무지개(극) IV",  0xab30ff],
@@ -47,12 +47,12 @@ export async function handleRole(interaction: ChatInputCommandInteraction, userI
     await interaction.reply({ content: "봇에 '역할 관리' 권한이 필요합니다.", flags: MessageFlags.Ephemeral });
     return;
   }
-  const stored = loadUserSession(userId);
+  const stored = await loadUserSession(userId);
   if (!stored?.friendCode) {
     await interaction.reply({ content: "먼저 `/북마클릿`으로 프로필을 등록해주세요.", flags: MessageFlags.Ephemeral });
     return;
   }
-  const cached = getCachedProfile(stored.friendCode);
+  const cached = await getCachedProfile(stored.friendCode);
   if (!cached) {
     await interaction.reply({ content: "프로필 데이터가 없습니다. `/북마클릿`으로 동기화해주세요.", flags: MessageFlags.Ephemeral });
     return;
@@ -108,9 +108,9 @@ export async function handleRole(interaction: ChatInputCommandInteraction, userI
   }
 }
 
-export function autoRole(interaction: ChatInputCommandInteraction, rating: number): void {
+export async function autoRole(interaction: ChatInputCommandInteraction, rating: number): Promise<void> {
   if (!interaction.guild) return;
-  if (!getGuildSetting(interaction.guild.id)) return;
+  if (!await getGuildSetting(interaction.guild.id)) return;
   const botMember = interaction.guild.members.me;
   if (!botMember?.permissions.has(PermissionsBitField.Flags.ManageRoles)) return;
   const roleInfo = ratingRoleName(rating);
@@ -118,7 +118,7 @@ export function autoRole(interaction: ChatInputCommandInteraction, rating: numbe
   const member = interaction.member as GuildMember;
   if (!member) return;
 
-  (async () => {
+  await (async () => {
     const guild = interaction.guild!;
     const allTierRoles = guild.roles.cache.filter((r) => tierPrefixes.some((p) => r.name.startsWith(p)));
     await member.roles.remove(allTierRoles);

@@ -5,6 +5,34 @@ const os = require("node:os");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 const Database = require("better-sqlite3");
+const { Client } = require("pg");
+
+test("PostgreSQL bootstrap is idempotent on a completed volume", { skip: !process.env.REHEARSAL_DATABASE_URL }, async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "carol-bootstrap-test-"));
+  const sqlitePath = path.join(dir, "fixture.db");
+  const sqlite = new Database(sqlitePath);
+  sqlite.pragma("journal_mode=WAL");
+  sqlite.pragma("wal_autocheckpoint=0");
+  sqlite.exec("CREATE TABLE profiles (friend_code TEXT PRIMARY KEY, player_name TEXT); CREATE TABLE sessions (discord_user_id TEXT PRIMARY KEY, cookie_json TEXT);");
+  sqlite.prepare("INSERT INTO profiles VALUES (?, ?)").run("wal-fixture", "WAL Fixture");
+  sqlite.prepare("INSERT INTO sessions VALUES (?, ?)").run("fixture-user", "{}");
+  sqlite.close();
+  const env = { ...process.env, DATABASE_URL: process.env.REHEARSAL_DATABASE_URL, SQLITE_IMPORT_PATH: sqlitePath };
+  try {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const result = spawnSync(process.execPath, ["dist/tools/bootstrapPostgres.js"], { encoding: "utf8", env });
+      assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+    }
+    const client = new Client({ connectionString: process.env.REHEARSAL_DATABASE_URL });
+    await client.connect();
+    try {
+      const result = await client.query("SELECT count(*)::int AS count FROM storage_migrations WHERE version = 1");
+      assert.equal(result.rows[0].count, 1);
+      const fixture = await client.query("SELECT player_name FROM profiles WHERE friend_code = 'wal-fixture'");
+      assert.equal(fixture.rows[0].player_name, "WAL Fixture");
+    } finally { await client.end(); }
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
 
 test("postgres rehearsal preserves a blob/secret fixture without leaking it", { skip: !process.env.REHEARSAL_DATABASE_URL }, () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "carol-rehearsal-test-"));

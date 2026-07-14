@@ -1,4 +1,4 @@
-import { getConstantsCache, saveConstantsCache } from "./db";
+import { getConstantsCache, saveConstantsCache } from "./storage";
 import type { PlayRecord, MaimaiServer } from "./scraper";
 
 interface SongEntry {
@@ -185,7 +185,7 @@ function applyCache(data: string): { hasMeta: boolean } {
 }
 
 export async function loadConstants(): Promise<void> {
-  const dbCache = getConstantsCache();
+  const dbCache = await getConstantsCache();
   if (dbCache && Date.now() - dbCache.updatedAt < 24 * 60 * 60 * 1000) {
     try {
       if (applyCache(dbCache.data).hasMeta) {
@@ -224,7 +224,7 @@ export async function loadConstants(): Promise<void> {
     }
 
     console.log(`[constants] 국제판 ${intl.length}곡 (상수 ${intlCount}개) + JP 보충 ${jpAdded}개, JP상수 ${jpConstantMap.size}개, 자켓 ${jacketMap.size}개, version ${versionMap.size}개, 국제판수록 ${intlTitles.size}개`);
-    saveConstantsCache(JSON.stringify({
+    await saveConstantsCache(JSON.stringify({
       constants: Array.from(constantMap.entries()),
       jackets: Array.from(jacketMap.entries()),
       versions: Array.from(versionMap.entries()),

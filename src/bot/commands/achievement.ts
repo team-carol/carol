@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, MessageFlags, AttachmentBuilder } from "discord.js";
-import { getAchievementInitializedAt, getAchievementRepeatedFromDay, hasAchievementEventLogState, getAvatarBlob, getCachedProfile, getDailyAchievements, getProfilePrivate, getUserFriendCode, getTranslateTitles } from "../../db";
+import { getAchievementInitializedAt, getAchievementRepeatedFromDay, hasAchievementEventLogState, getAvatarBlob, getCachedProfile, getDailyAchievements, getProfilePrivate, getUserFriendCode, getTranslateTitles } from "../../storage";
 import { attachAchievementGains, koreaPlayDayKey, parseDailyAchievementRows } from "../../achievements";
 import { renderAchievementCard } from "../utils/achievementCard";
 
@@ -27,13 +27,13 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   const requestedDay = interaction.options.getString("date") ?? "";
   let replyDeferred = false;
   console.log(`[성과] 시작 scope=${targetScope} userSuffix=${userId.slice(-6)} requestedDay=${requestedDay || "today"}`);
-  if (target.id !== interaction.user.id && getProfilePrivate(target.id)) {
+  if (target.id !== interaction.user.id && await getProfilePrivate(target.id)) {
     console.log(`[성과] 비공개 차단 scope=${targetScope}`);
     await interaction.reply({ content: `<@${target.id}> 님은 프로필을 비공개로 설정했습니다.`, flags: MessageFlags.Ephemeral });
     return;
   }
-  const friendCode = getUserFriendCode(userId);
-  const cached = friendCode ? getCachedProfile(friendCode) : null;
+  const friendCode = await getUserFriendCode(userId);
+  const cached = friendCode ? await getCachedProfile(friendCode) : null;
   if (!cached) {
     console.log(`[성과] 프로필 없음 scope=${targetScope}`);
     const msg = target.id === interaction.user.id
@@ -47,12 +47,12 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     const playDay = requestedDay && isPlayDayKey(requestedDay)
       ? requestedDay
       : koreaPlayDayKey(new Date());
-    const canonical = hasAchievementEventLogState(cached.profileKey);
-    const initializedAt = canonical ? 0 : getAchievementInitializedAt(cached.profileKey);
+    const canonical = await hasAchievementEventLogState(cached.profileKey);
+    const initializedAt = canonical ? 0 : await getAchievementInitializedAt(cached.profileKey);
     const initializedDay = !canonical && initializedAt > 0 ? koreaPlayDayKey(new Date(initializedAt)) : "";
-    const repeatedFromDay = !canonical ? (getAchievementRepeatedFromDay(cached.profileKey) ?? "") : "";
+    const repeatedFromDay = !canonical ? (await getAchievementRepeatedFromDay(cached.profileKey) ?? "") : "";
     const availableFromDay = [initializedDay, repeatedFromDay].filter(Boolean).sort()[0] ?? "";
-    const dailyRows = getDailyAchievements(cached.profileKey, playDay);
+    const dailyRows = await getDailyAchievements(cached.profileKey, playDay);
     const hasNewScoreForDay = dailyRows.length > 0;
     console.log(`[성과] 기준 확인 playDay=${playDay} canonical=${canonical} initializedDay=${initializedDay || "none"} repeatedFromDay=${repeatedFromDay || "none"} availableFromDay=${availableFromDay || "none"} dayRows=${dailyRows.length}`);
     if (requestedDay && isPlayDayKey(requestedDay) && availableFromDay && requestedDay < availableFromDay && !hasNewScoreForDay) {
@@ -64,7 +64,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       return;
     }
     const parsedRecords = parseDailyAchievementRows(dailyRows);
-    const records = attachAchievementGains(cached.profileKey, parsedRecords);
+    const records = await attachAchievementGains(cached.profileKey, parsedRecords);
     console.log(`[성과] 데이터 rows=${dailyRows.length} parsed=${parsedRecords.length} records=${records.length}`);
     if (records.length === 0) {
       console.log(`[성과] 표시할 성과 없음 playDay=${playDay}`);
@@ -78,10 +78,10 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     }
     await interaction.deferReply();
     replyDeferred = true;
-    const avatar = getAvatarBlob(userId, cached.server);
+    const avatar = await getAvatarBlob(userId, cached.server);
     const renderStartedAt = Date.now();
     console.log(`[성과] 렌더 시작 records=${records.length} avatarBytes=${avatar?.length ?? 0}`);
-    const png = await renderAchievementCard(cached, records, playDay, avatar, getTranslateTitles(interaction.user.id));
+    const png = await renderAchievementCard(cached, records, playDay, avatar, await getTranslateTitles(interaction.user.id));
     console.log(`[성과] 렌더 완료 pngBytes=${png.length} elapsedMs=${Date.now() - renderStartedAt}`);
     await interaction.editReply({
       files: [new AttachmentBuilder(png, { name: `achievement-${playDay}.png` })],

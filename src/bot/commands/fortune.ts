@@ -1,6 +1,6 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, EmbedBuilder, MessageFlags } from "discord.js";
 import { getDailyFortuneSong, getJacketFile } from "../../constants";
-import { getTranslateTitles } from "../../db";
+import { getTranslateTitles } from "../../storage";
 import { displayTitle } from "../../aliases";
 
 function formatSeoulDate(date: Date): string {
@@ -41,7 +41,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   const emb = new EmbedBuilder()
     .setTitle("오늘의 운세")
     .setColor(style.color)
-    .setDescription(`오늘의 곡은 **${displayTitle(fortune.title, getTranslateTitles(interaction.user.id))}** 입니다.`)
+    .setDescription(`오늘의 곡은 **${displayTitle(fortune.title, await getTranslateTitles(interaction.user.id))}** 입니다.`)
     .addFields(
       { name: "선정 차트", value: `\`${chart.kind} ${chart.diff}\``, inline: true },
       { name: "상수", value: `\`${chart.level.toFixed(1)}\``, inline: true },

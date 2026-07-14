@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, MessageFlags } from "discord.js";
-import { getCachedProfile, getUserFriendCode, getProfilePrivate } from "../../db";
+import { getCachedProfile, getUserFriendCode, getProfilePrivate } from "../../storage";
 import { buildProfileReply } from "../utils/embeds";
 import { autoRole } from "../utils/roles";
 
@@ -13,16 +13,16 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   const target = interaction.options.getUser("user") ?? interaction.user;
   const userId = target.id;
-  if (target.id !== interaction.user.id && getProfilePrivate(target.id)) {
+  if (target.id !== interaction.user.id && await getProfilePrivate(target.id)) {
     await interaction.reply({ content: `<@${target.id}> 님은 프로필을 비공개로 설정했습니다.`, flags: MessageFlags.Ephemeral });
     return;
   }
-  const friendCode = getUserFriendCode(userId);
+  const friendCode = await getUserFriendCode(userId);
   if (friendCode) {
-    const cached = getCachedProfile(friendCode);
+    const cached = await getCachedProfile(friendCode);
     if (cached) {
-      await interaction.reply(buildProfileReply(cached, userId));
-      if (target.id === interaction.user.id) autoRole(interaction, cached.rating);
+      await interaction.reply(await buildProfileReply(cached, userId));
+      if (target.id === interaction.user.id) await autoRole(interaction, cached.rating);
       return;
     }
   }
