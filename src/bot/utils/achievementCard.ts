@@ -1,8 +1,8 @@
 import satori from "satori";
 import { Resvg } from "@resvg/resvg-js";
-import type { CachedProfile } from "../../db";
+import type { CachedProfile } from "../../storage/types";
 import type { PlayRecord } from "../../scraper";
-import { calcSongRating, getConstant, levelToNumber } from "../../constants";
+import { getConstant } from "../../constants";
 import { loadFonts } from "../../fonts";
 import { displayTitle } from "../../aliases";
 
@@ -85,21 +85,12 @@ function stat(label: string, value: string, color = "#ffffff"): El {
   ]);
 }
 
-function songRating(record: PlayRecord, server: CachedProfile["server"]): number {
-  const constant = getConstant(record.title, record.musicKind, record.diff, server);
-  const level = constant ?? levelToNumber(record.level);
-  return calcSongRating(record.achievementVal, level, record.fc);
-}
-
 function recordRow(record: PlayRecord, rank: number, profile: CachedProfile, jacket: string | null, playDay: string, translate = false): El {
   const diffColor = DIFF_COLOR[record.diff] ?? MUTED;
   const marks = [record.fc, record.sync].filter((mark) => mark.length > 0);
-  const ratingGain = typeof record.ratingUp === "number" && record.ratingUp > 0
-    ? `+${record.ratingUp}`
-    : typeof record.ratingUp === "number" ? String(record.ratingUp) : "?";
+  const ratingGain = typeof record.ratingUp === "number" ? `rating +${record.ratingUp}` : "rating —";
   const constant = getConstant(record.title, record.musicKind, record.diff, profile.server);
   const constantLabel = constant !== null ? constant.toFixed(1) : record.level;
-  const chartRating = songRating(record, profile.server);
   return el(
     "div",
     {
@@ -157,7 +148,7 @@ function recordRow(record: PlayRecord, rank: number, profile: CachedProfile, jac
               el("span", { color: "#fff", fontSize: 18, fontWeight: 800, lineHeight: 1 }, record.achievementVal > 0 ? `${record.achievementVal.toFixed(4)}%` : record.achievement),
             ]),
             el("div", { display: "flex", alignItems: "baseline", gap: 8 }, [
-              el("span", { color: ACCENT, fontSize: 13, fontWeight: 800 }, `${chartRating}(${ratingGain})`),
+              el("span", { color: ACCENT, fontSize: 13, fontWeight: 800 }, `+${(record.achievementGain ?? 0).toFixed(4)}% · ${ratingGain}`),
               el("div", { display: "flex", gap: 4, width: 76, justifyContent: "flex-end" }, marks.map((mark) =>
                 el("span", { color: MARK_COLOR[mark] ?? "rgba(255,255,255,0.7)", fontSize: 10, fontWeight: 800 }, mark),
               )),
@@ -185,8 +176,8 @@ function emptyState(): El {
       gap: 8,
     },
     [
-      el("span", { color: "#fff", fontSize: 18, fontWeight: 800 }, "오늘 관측된 플레이가 없습니다"),
-      el("span", { color: MUTED, fontSize: 11 }, "한국시간 오전 5시부터 다음 오전 5시까지의 동기화 기록입니다"),
+      el("span", { color: "#fff", fontSize: 18, fontWeight: 800 }, "오늘의 의미 있는 성과가 없습니다"),
+      el("span", { color: MUTED, fontSize: 11 }, "한국시간 오전 4시부터 다음 오전 4시까지의 성과입니다"),
     ],
   );
 }
@@ -208,7 +199,6 @@ export async function renderAchievementCard(
 ): Promise<Buffer> {
   const fonts = await loadFonts();
   const topRecords = records.slice().sort((a, b) => (b.playedAt ?? 0) - (a.playedAt ?? 0));
-  const totalRatingGain = topRecords.reduce((sum, record) => sum + Math.max(0, record.ratingUp ?? 0), 0);
   const avatarUrl = avatarBuf ? `data:image/png;base64,${avatarBuf.toString("base64")}` : "";
   const jacketUrls = new Map<string, string | null>();
   await Promise.all(
@@ -235,19 +225,19 @@ export async function renderAchievementCard(
           ? image(avatarUrl, { width: 44, height: 44, objectFit: "cover", marginRight: 12 })
           : el("div", { width: 44, height: 44, background: "#242424", marginRight: 12 }),
         el("div", { display: "flex", flexDirection: "column", flex: 1 }, [
-          el("span", { color: MUTED, fontSize: 10, fontWeight: 700 }, "OBSERVED PLAY EVENTS"),
+          el("span", { color: MUTED, fontSize: 10, fontWeight: 700 }, "DAILY ACHIEVEMENTS"),
           el("span", { color: "#fff", fontSize: 18, fontWeight: 800 }, profile.playerName || "—"),
         ]),
         wordmark(),
       ]),
       el("div", { display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 18 }, [
         el("div", { display: "flex", flexDirection: "column", gap: 4 }, [
-          el("span", { color: "#fff", fontSize: 28, fontWeight: 800, lineHeight: 1 }, "관측된 플레이"),
-          el("span", { color: MUTED, fontSize: 11 }, `${playDay} · 한국시간 오전 5시 기준`),
+          el("span", { color: "#fff", fontSize: 28, fontWeight: 800, lineHeight: 1 }, "오늘의 성과"),
+          el("span", { color: MUTED, fontSize: 11 }, `${playDay} · 한국시간 오전 4시 기준`),
         ]),
         el("div", { display: "flex", gap: 26 }, [
           stat("COUNT", String(topRecords.length), ACCENT),
-          stat("RATING UP", `+${totalRatingGain}`, ACCENT),
+          stat("ACHIEVEMENT GAIN", `+${topRecords.reduce((sum, record) => sum + Math.max(0, record.achievementGain ?? 0), 0).toFixed(4)}%`, ACCENT),
         ]),
       ]),
       el(

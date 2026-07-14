@@ -294,56 +294,6 @@ export function parseMusicScore(html: string, server: MaimaiServer = "intl"): Pl
   return records;
 }
 
-export interface CatalogScoreRecord {
-  scoreLocator: string;
-  diff: string;
-  title: string;
-  level: string;
-  musicKind: string;
-  achievement: string;
-  achievementVal: number;
-  fc: string;
-  sync: string;
-  sourcePayload: string;
-}
-
-/** Dedicated parser for authenticated musicSort/search score-list pages. */
-export function parseCatalogScoreList(html: string, expectedDiff: string, server: MaimaiServer = "intl"): CatalogScoreRecord[] {
-  if (!html || html.length > 2_000_000) throw new Error("invalid catalog page");
-  const $ = cheerio.load(html);
-  const body = $.root().text();
-  const scoreListMarker = $("form[action*='musicSort/search'],.music_sort,.musicSort,[class*='music_'][class*='_score_back'],.music_score_block").length > 0;
-  if (/(?:ログイン|login required|session expired|エラー|error occurred)/i.test(body)) {
-    throw new Error("catalog authentication/error page");
-  }
-  if (!scoreListMarker) throw new Error("unknown catalog page");
-  const diffMap: Record<string, string> = { "diff_basic.png": "BASIC", "diff_advanced.png": "ADVANCED", "diff_expert.png": "EXPERT", "diff_master.png": "MASTER", "diff_remaster.png": "Re:MASTER" };
-  const records: CatalogScoreRecord[] = [];
-  const seen = new Set<string>();
-  $("[class*='music_'][class*='_score_back']").each((_, el) => {
-    const block = $(el);
-    const scoreLocator = String(block.find("input[name='idx']").val() ?? "").trim();
-    const rawTitle = block.find(".music_name_block").text();
-    const title = rawTitle.trim() || (/　/.test(rawTitle) ? "　" : "");
-    const level = block.find(".music_lv_block").text().trim();
-    const achievement = block.find(".music_score_block").text().trim();
-    const diff = diffMap[(block.find("img").first().attr("src") || "").split("/").pop() || ""] || "";
-    const kindImg = block.find(".music_kind_icon").first().attr("src") || block.nextAll(".music_kind_icon").first().attr("src") || "";
-    const musicKind = kindImg.includes("_dx") ? "DX" : kindImg.includes("_standard") ? "ST" : "";
-    const valueMatch = achievement.match(/[0-9]+(?:\.[0-9]+)?/);
-    if (!valueMatch) throw new Error("invalid catalog achievement");
-    const value = Number(valueMatch[0]);
-    if (!Number.isFinite(value) || value < 0 || value > 101) throw new Error("invalid catalog achievement");
-    let fc = "", sync = "";
-    block.find("img").each((__, img) => { const name = iconName($(img).attr("src") || ""); if (!fc && FC_LABELS[name]) fc = FC_LABELS[name]; else if (!sync && SYNC_LABELS[name]) sync = SYNC_LABELS[name]; });
-    if (!scoreLocator || !title || diff !== expectedDiff || seen.has(scoreLocator)) throw new Error("invalid or duplicate catalog score row");
-    seen.add(scoreLocator);
-    records.push({ scoreLocator, diff, title, level, musicKind, achievement, achievementVal: value, fc, sync, sourcePayload: $.html(el) });
-  });
-  if (/(?:page\s*\d+\s*of\s*\d+|次のページ|next page|truncated)/i.test(body)) throw new Error("truncated catalog page");
-  return records;
-}
-
 export function parseTop5(html: string, server: MaimaiServer = "intl"): PlayRecord[] {
   const $ = cheerio.load(html);
   const baseUrl = getMaimaiBaseUrl(server);

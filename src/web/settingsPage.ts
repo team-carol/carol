@@ -1,4 +1,4 @@
-import type { ExtraBookmarklet, MaimaiServer } from "../db";
+import type { ExtraBookmarklet, MaimaiServer } from "../storage/types";
 import { BOOKMARKLET_PRESETS } from "./bookmarklet";
 
 export function settingsPage(token: string, isPrivate: boolean, enabledPresetIds: string[], bookmarklets: ExtraBookmarklet[], defaultServer: MaimaiServer, translate = false): string {

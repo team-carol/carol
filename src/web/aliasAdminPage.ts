@@ -1,5 +1,5 @@
 import type { AliasSongInfo } from "../constants";
-import type { SongAliasRow } from "../db";
+import type { SongAliasRow } from "../storage/types";
 
 // 임베드용 JSON 직렬화 (</script> 이스케이프)
 function embed(data: unknown): string {

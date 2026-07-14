@@ -15,23 +15,6 @@ services:
       timeout: 5s
       retries: 20
 
-  migrate:
-    image: ghcr.io/team-carol/carol:latest
-    container_name: carol-migrate
-    restart: "no"
-    init: true
-    mem_limit: 512m
-    command: ["node", "--max-old-space-size=384", "dist/tools/bootstrapPostgres.js"]
-    environment:
-      DB_DRIVER: postgres
-      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env}
-      SQLITE_IMPORT_PATH: /app/data/maimai.db
-    volumes:
-      - ./data:/app/data:ro
-    depends_on:
-      postgres:
-        condition: service_healthy
-
   bot:
     image: ghcr.io/team-carol/carol:latest
     container_name: carol-bot
@@ -40,7 +23,6 @@ services:
       - ./data:/app/data
       - ./config.json:/app/config.json:ro
     environment:
-      DB_DRIVER: postgres
       DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env}
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3456/',r=>{process.exit(r.statusCode===404?0:1)}).on('error',()=>process.exit(1))"]
@@ -48,8 +30,6 @@ services:
       timeout: 5s
       retries: 3
     depends_on:
-      migrate:
-        condition: service_completed_successfully
       postgres:
         condition: service_healthy
 

@@ -1,11 +1,11 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, MessageFlags, AttachmentBuilder } from "discord.js";
-import { getAchievementInitializedAt, getAchievementRepeatedFromDay, hasAchievementEventLogState, getAvatarBlob, getCachedProfile, getDailyAchievements, getProfilePrivate, getUserFriendCode, getTranslateTitles } from "../../storage";
-import { attachAchievementGains, koreaPlayDayKey, parseDailyAchievementRows } from "../../achievements";
+import { getDailyAchievementSummaries, getAvatarBlob, getCachedProfile, getProfilePrivate, getUserFriendCode, getTranslateTitles } from "../../storage";
+import { koreaPlayDayKey, koreaPlayDayRange } from "../../achievements";
 import { renderAchievementCard } from "../utils/achievementCard";
 
 export const data = new SlashCommandBuilder()
   .setName("성과")
-  .setDescription("새 플레이 이벤트를 이미지로 표시 (한국시간 오전 5시 기준)")
+  .setDescription("04:00 KST 기준 일일 성과")
   .addUserOption((opt) =>
     opt.setName("user").setDescription("조회할 유저 (생략 시 본인)").setRequired(false),
   )
@@ -47,31 +47,16 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     const playDay = requestedDay && isPlayDayKey(requestedDay)
       ? requestedDay
       : koreaPlayDayKey(new Date());
-    const canonical = await hasAchievementEventLogState(cached.profileKey);
-    const initializedAt = canonical ? 0 : await getAchievementInitializedAt(cached.profileKey);
-    const initializedDay = !canonical && initializedAt > 0 ? koreaPlayDayKey(new Date(initializedAt)) : "";
-    const repeatedFromDay = !canonical ? (await getAchievementRepeatedFromDay(cached.profileKey) ?? "") : "";
-    const availableFromDay = [initializedDay, repeatedFromDay].filter(Boolean).sort()[0] ?? "";
-    const dailyRows = await getDailyAchievements(cached.profileKey, playDay);
-    const hasNewScoreForDay = dailyRows.length > 0;
-    console.log(`[성과] 기준 확인 playDay=${playDay} canonical=${canonical} initializedDay=${initializedDay || "none"} repeatedFromDay=${repeatedFromDay || "none"} availableFromDay=${availableFromDay || "none"} dayRows=${dailyRows.length}`);
-    if (requestedDay && isPlayDayKey(requestedDay) && availableFromDay && requestedDay < availableFromDay && !hasNewScoreForDay) {
-      console.log(`[성과] 이전 날짜 차단 requestedDay=${requestedDay} availableFromDay=${availableFromDay} hasNewScoreForDay=${hasNewScoreForDay}`);
-      await interaction.reply({
-        content: `성과 데이터가 수집된 시작일은 ${availableFromDay}입니다. 이전 날짜는 조회할 수 없습니다.`,
-        flags: MessageFlags.Ephemeral,
-      });
-      return;
-    }
-    const parsedRecords = parseDailyAchievementRows(dailyRows);
-    const records = await attachAchievementGains(cached.profileKey, parsedRecords);
-    console.log(`[성과] 데이터 rows=${dailyRows.length} parsed=${parsedRecords.length} records=${records.length}`);
+    const { from, to } = koreaPlayDayRange(playDay);
+    const summaries = await getDailyAchievementSummaries(cached.profileKey, from, to);
+    const records = summaries.map((e) => ({ title:e.title, achievement:e.achievementVal.toFixed(4)+"%", diff:e.diff, level:e.level, date:new Date(e.playedAt).toISOString(), jacketUrl:"", musicKind:e.musicKind, achievementVal:Number(e.achievementVal), track:0, fc:e.fc, sync:e.sync, ratingUp:e.ratingUp ?? undefined, playedAt:Number(e.playedAt), achievementGain:e.achievementGain }));
+    console.log(`[성과] 데이터 summaries=${summaries.length} records=${records.length}`);
     if (records.length === 0) {
       console.log(`[성과] 표시할 성과 없음 playDay=${playDay}`);
       await interaction.reply({
         content: requestedDay
-          ? `${playDay}에 관측된 동기화 플레이가 없습니다.`
-          : "오늘 관측된 동기화 플레이가 없습니다.",
+          ? `${playDay}에 의미 있는 성과가 없습니다.`
+          : "오늘의 의미 있는 성과가 없습니다.",
         flags: MessageFlags.Ephemeral,
       });
       return;
