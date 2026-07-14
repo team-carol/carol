@@ -1,5 +1,5 @@
 # Stage 1: Compile TypeScript
-FROM node:20-slim AS build
+FROM node:22-slim AS build
 RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY package.json package-lock.json ./
@@ -9,7 +9,7 @@ COPY src/ ./src/
 RUN npx tsc
 
 # Stage 2: Production
-FROM node:20-slim
+FROM node:22-slim AS production
 ARG BUILD_VERSION=local
 ARG RELEASE_VERSION=0.0.0
 RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ && rm -rf /var/lib/apt/lists/*
