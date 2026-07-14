@@ -21,7 +21,7 @@ services:
     restart: "no"
     init: true
     mem_limit: 512m
-    command: ["node", "dist/tools/bootstrapPostgres.js"]
+    command: ["node", "--max-old-space-size=384", "dist/tools/bootstrapPostgres.js"]
     environment:
       DB_DRIVER: postgres
       DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env}
