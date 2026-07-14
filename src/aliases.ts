@@ -1,4 +1,4 @@
-import { getAllAliases, getTranslationAliases } from "./db";
+import { getAllAliases, getTranslationAliases } from "./storage";
 
 // 곡명 → 별명 목록 (캐롤 자체 SQLite의 song_aliases 테이블에서 로드)
 let aliasMap: Map<string, string[]> = new Map();
@@ -10,8 +10,8 @@ export function normalizeQuery(s: string): string {
   return s.toLowerCase().replace(/\s+/g, "");
 }
 
-export function loadAliases(): void {
-  const rows = getAllAliases();
+export async function loadAliases(): Promise<void> {
+  const rows = await getAllAliases();
   const map = new Map<string, string[]>();
   for (const { title, alias } of rows) {
     const list = map.get(title) ?? [];
@@ -19,7 +19,7 @@ export function loadAliases(): void {
     map.set(title, list);
   }
   aliasMap = map;
-  translationMap = new Map(getTranslationAliases().map((t) => [t.title, t.alias]));
+  translationMap = new Map((await getTranslationAliases()).map((t) => [t.title, t.alias]));
   console.log(`[aliases] 별명 ${rows.length}개 (곡 ${map.size}개), 번역 ${translationMap.size}개 로드`);
 }
 

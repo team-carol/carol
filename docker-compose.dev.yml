@@ -1,0 +1,18 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+
+  migrate:
+    build:
+      context: .
+      target: build
+    image: carol:dev
+
+  bot:
+    build:
+      context: .
+      target: production
+    image: carol:dev
+
+  cloudflared:
+    profiles: [remote-tunnel]

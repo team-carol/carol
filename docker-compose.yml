@@ -1,4 +1,35 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: carol-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-carol}
+      POSTGRES_USER: ${POSTGRES_USER:-carol}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - carol-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  migrate:
+    image: ghcr.io/team-carol/carol:latest
+    container_name: carol-migrate
+    restart: "no"
+    command: ["node", "dist/tools/bootstrapPostgres.js"]
+    environment:
+      DB_DRIVER: postgres
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env}
+      SQLITE_IMPORT_PATH: /app/data/maimai.db
+    volumes:
+      - ./data:/app/data:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   bot:
     image: ghcr.io/team-carol/carol:latest
     container_name: carol-bot
@@ -6,11 +37,19 @@ services:
     volumes:
       - ./data:/app/data
       - ./config.json:/app/config.json:ro
+    environment:
+      DB_DRIVER: postgres
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env}
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3456/',r=>{process.exit(r.statusCode===404?0:1)}).on('error',()=>process.exit(1))"]
       interval: 30s
       timeout: 5s
       retries: 3
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
 
   cloudflared:
     image: cloudflare/cloudflared:latest
@@ -20,4 +59,8 @@ services:
     environment:
       - TUNNEL_TOKEN=${CF_TUNNEL_TOKEN}
     depends_on:
-      - bot
+      bot:
+        condition: service_healthy
+
+volumes:
+  carol-postgres:

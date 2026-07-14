@@ -1,7 +1,7 @@
 import * as http from "http";
 import * as fs from "fs";
-import { parseHome, parsePlayerData, parseFriendCode as parseFC, parseRecentRecords, parsePlaylogHistory, parseTop5, parseTopSongs, parseMusicScore, mergeTopRecords, getMaimaiBaseUrl, parseMapAreas, chartKey, parsePlaylogDetail } from "../scraper";
-import { cacheProfile, saveUserSession, getUserSyncToken, findUserBySyncToken, saveAvatarBlob, getAvatarBlob, getSongJacket, saveSongJacket, getExtraBookmarklets, getProfilePrivate, setProfilePrivate, addExtraBookmarklet, removeExtraBookmarklet, getEnabledBookmarkletPresetIds, setBookmarkletPresetEnabled, getUserDefaultServer, setUserDefaultServer, isMaimaiServer, getMapImage, saveMapImage, saveDailyAchievement, saveDailyAchievementSnapshot, getAchievementInitializedAt, hasAchievementSnapshots, getPreviousDailyAchievementVal, markAchievementInitialized, getAllAliases, addAlias, deleteAlias, setAliasTranslation, getTranslateTitles, setTranslateTitles } from "../db";
+import { parseHome, parsePlayerData, parseFriendCode as parseFC, parseRecentRecords, parsePlaylogHistory, parseTop5, parseTopSongs, parseMusicScore, mergeTopRecords, getMaimaiBaseUrl, parseMapAreas, parsePlaylogDetail } from "../scraper";
+import { cacheProfile, getCachedProfile, saveUserSession, getUserSyncToken, findUserBySyncToken, getUserFriendCodeForServer, saveAvatarBlob, getAvatarBlob, getSongJacket, saveSongJacket, getExtraBookmarklets, getProfilePrivate, setProfilePrivate, addExtraBookmarklet, removeExtraBookmarklet, getEnabledBookmarkletPresetIds, setBookmarkletPresetEnabled, getUserDefaultServer, setUserDefaultServer, isMaimaiServer, getMapImage, saveMapImage, saveAchievementPlayEventLogBatch, saveChartRecordCatalogBatch, isChartRecordCatalogDue, getAllAliases, addAlias, deleteAlias, setAliasTranslation, getTranslateTitles, setTranslateTitles } from "../storage";
 import { buildBookmarkletJs, setBaseUrl, getBaseUrl, buildBookmarklet, BOOKMARKLET_PRESETS, getBookmarkletPresets } from "./bookmarklet";
 import { computeRatingTarget, getAllSongTitles } from "../constants";
 import { settingsPage } from "./settingsPage";
@@ -9,13 +9,12 @@ import { aliasAdminPage } from "./aliasAdminPage";
 import { isValidAdminToken } from "./adminAuth";
 import { loadAliases } from "../aliases";
 import { CONFIG } from "../config";
-import { koreaPlayDayKey, playDayKeyFromRecordDate, recordPlayedAt } from "../achievements";
+import { hasValidRecordDate, recordPlayedAt } from "../achievements";
 
 const isDev = !CONFIG.baseUrl;
 const DISCORD_INVITE_BASE_URL = "https://discord.com/oauth2/authorize";
 const DISCORD_INVITE_PERMISSIONS = "2415938560";
 const DISCORD_INVITE_INTEGRATION_TYPE = "0";
-const ACHIEVEMENT_MARKS = new Set(["FC", "FC+", "AP", "AP+", "FS", "FS+", "FDX", "FDX+"]);
 
 export { setBaseUrl, getBaseUrl, buildBookmarklet };
 
@@ -39,11 +38,11 @@ async function cacheMapImages(areas: readonly { imageUrl: string }[], server: st
   const uniqueUrls = Array.from(new Set(areas.map((area) => area.imageUrl).filter((url) => url.length > 0)));
   let saved = 0;
   for (const imageUrl of uniqueUrls) {
-    if (getMapImage(imageUrl)) continue;
+    if (await getMapImage(imageUrl)) continue;
     try {
       const resp = await fetch(imageUrl);
       if (!resp.ok) continue;
-      saveMapImage(imageUrl, Buffer.from(await resp.arrayBuffer()));
+      await saveMapImage(imageUrl, Buffer.from(await resp.arrayBuffer()));
       saved++;
     } catch (e) {
       console.warn(`[web] map image fetch failed (${server}): ${imageUrl}`, e instanceof Error ? e.message : e);
@@ -202,7 +201,7 @@ export function startWebServer(port: number): void {
       const uid = url.searchParams.get("user") || "";
       const serverParam = url.searchParams.get("server") || "";
       const server = isMaimaiServer(serverParam) ? serverParam : undefined;
-      const data = getAvatarBlob(uid, server);
+      const data = await getAvatarBlob(uid, server);
       if (data) {
         res.writeHead(200, { "content-type": "image/png", "cache-control": "max-age=3600" });
         res.end(data);
@@ -215,7 +214,7 @@ export function startWebServer(port: number): void {
     if (req.method === "GET" && url.pathname === "/jacket") {
       const musicId = url.searchParams.get("id") || "";
       if (!musicId) { res.writeHead(400); res.end(); return; }
-      let imgData = getSongJacket(musicId);
+      let imgData = await getSongJacket(musicId);
       if (!imgData) {
         try {
           const origins = [getMaimaiBaseUrl("intl"), getMaimaiBaseUrl("jp")];
@@ -223,7 +222,7 @@ export function startWebServer(port: number): void {
             const resp = await fetch(`${origin}/maimai-mobile/img/Music/${musicId}.png`);
             if (!resp.ok) continue;
             imgData = Buffer.from(await resp.arrayBuffer());
-            saveSongJacket(musicId, imgData);
+            await saveSongJacket(musicId, imgData);
             break;
           }
         } catch (e) {
@@ -242,9 +241,9 @@ export function startWebServer(port: number): void {
     if (req.method === "GET" && url.pathname === "/bookmarklet.js") {
       res.writeHead(200, { "content-type": "application/javascript; charset=utf-8", "cache-control": "no-cache" });
       const code = url.searchParams.get("code") ?? "";
-      const userId = code ? findUserBySyncToken(code) : null;
-      const extras = userId ? getExtraBookmarklets(userId) : [];
-      const presetIds = userId ? getEnabledBookmarkletPresetIds(userId) : [];
+      const userId = code ? await findUserBySyncToken(code) : null;
+      const extras = userId ? await getExtraBookmarklets(userId) : [];
+      const presetIds = userId ? await getEnabledBookmarkletPresetIds(userId) : [];
       const bookmarklets = [...getBookmarkletPresets(presetIds), ...extras];
       res.end(buildBookmarkletJs(bookmarklets));
       return;
@@ -312,7 +311,7 @@ a{color:#c084fc}
 
     if (req.method === "GET" && url.pathname === "/sync") {
       const token = url.searchParams.get("code") || "";
-      const userId = findUserBySyncToken(token);
+      const userId = await findUserBySyncToken(token);
       if (!userId && !isDev) { res.writeHead(403); res.end("expired"); return; }
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
       res.end(guidePage(token, userId ? buildBookmarklet(token, port) : buildBookmarklet("preview", port)));
@@ -321,13 +320,13 @@ a{color:#c084fc}
 
     if (req.method === "GET" && url.pathname === "/settings") {
       const token = url.searchParams.get("code") || "";
-      const userId = findUserBySyncToken(token);
+      const userId = await findUserBySyncToken(token);
       if (!userId && !isDev) { res.writeHead(403); res.end("expired"); return; }
-      const isPrivate = userId ? getProfilePrivate(userId) : false;
-      const presetIds = userId ? getEnabledBookmarkletPresetIds(userId) : [];
-      const bookmarklets = userId ? getExtraBookmarklets(userId) : [];
-      const defaultServer = userId ? getUserDefaultServer(userId) : "intl";
-      const translate = userId ? getTranslateTitles(userId) : false;
+      const isPrivate = userId ? await getProfilePrivate(userId) : false;
+      const presetIds = userId ? await getEnabledBookmarkletPresetIds(userId) : [];
+      const bookmarklets = userId ? await getExtraBookmarklets(userId) : [];
+      const defaultServer = userId ? await getUserDefaultServer(userId) : "intl";
+      const translate = userId ? await getTranslateTitles(userId) : false;
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
       res.end(settingsPage(token, isPrivate, presetIds, bookmarklets, defaultServer, translate));
       return;
@@ -338,7 +337,7 @@ a{color:#c084fc}
       const token = url.searchParams.get("code") || "";
       if (!isValidAdminToken(token)) { res.writeHead(403); res.end("expired"); return; }
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-      res.end(aliasAdminPage(token, getAllSongTitles(), getAllAliases()));
+      res.end(aliasAdminPage(token, getAllSongTitles(), await getAllAliases()));
       return;
     }
 
@@ -354,13 +353,13 @@ a{color:#c084fc}
           res.end(JSON.stringify({ ok: false, error: "곡과 별명을 모두 입력하세요" }));
           return;
         }
-        const created = addAlias(title, alias);
+        const created = await addAlias(title, alias);
         if (!created) {
           res.writeHead(409, { "content-type": "application/json" });
           res.end(JSON.stringify({ ok: false, error: "이미 존재하는 별명입니다" }));
           return;
         }
-        loadAliases();
+        await loadAliases();
         res.writeHead(200, { "content-type": "application/json" });
         res.end(JSON.stringify({ ok: true, alias: created }));
       } catch {
@@ -381,8 +380,8 @@ a{color:#c084fc}
           res.end(JSON.stringify({ ok: false, error: "invalid_id" }));
           return;
         }
-        const removed = deleteAlias(id);
-        if (removed) loadAliases();
+        const removed = await deleteAlias(id);
+        if (removed) await loadAliases();
         res.writeHead(200, { "content-type": "application/json" });
         res.end(JSON.stringify({ ok: removed }));
       } catch {
@@ -405,13 +404,13 @@ a{color:#c084fc}
           res.end(JSON.stringify({ ok: false, error: "invalid_id" }));
           return;
         }
-        const title = setAliasTranslation(id, on);
+        const title = await setAliasTranslation(id, on);
         if (title === null) {
           res.writeHead(404, { "content-type": "application/json" });
           res.end(JSON.stringify({ ok: false, error: "not_found" }));
           return;
         }
-        loadAliases();
+        await loadAliases();
         res.writeHead(200, { "content-type": "application/json" });
         res.end(JSON.stringify({ ok: true, title, on }));
       } catch {
@@ -424,13 +423,13 @@ a{color:#c084fc}
     // ─── Settings API ─────────────────────────────────────────────────────
     if (req.method === "GET" && url.pathname === "/api/settings") {
       const token = url.searchParams.get("code") || "";
-      const userId = findUserBySyncToken(token);
+      const userId = await findUserBySyncToken(token);
       if (!userId) { res.writeHead(403, { "content-type": "application/json" }); res.end(JSON.stringify({ error: "expired" })); return; }
-      const isPrivate = getProfilePrivate(userId);
-      const presets = getEnabledBookmarkletPresetIds(userId);
-      const bookmarklets = getExtraBookmarklets(userId);
-      const defaultServer = getUserDefaultServer(userId);
-      const translate = getTranslateTitles(userId);
+      const isPrivate = await getProfilePrivate(userId);
+      const presets = await getEnabledBookmarkletPresetIds(userId);
+      const bookmarklets = await getExtraBookmarklets(userId);
+      const defaultServer = await getUserDefaultServer(userId);
+      const translate = await getTranslateTitles(userId);
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify({ private: isPrivate, presets, bookmarklets, defaultServer, translate }));
       return;
@@ -438,12 +437,12 @@ a{color:#c084fc}
 
     if (req.method === "POST" && url.pathname === "/api/settings/translate") {
       const token = url.searchParams.get("code") || "";
-      const userId = findUserBySyncToken(token);
+      const userId = await findUserBySyncToken(token);
       if (!userId) { res.writeHead(403, { "content-type": "application/json" }); res.end(JSON.stringify({ error: "expired" })); return; }
       try {
         const body = JSON.parse(await readBody(req));
         const value = !!body.translate;
-        setTranslateTitles(userId, value);
+        await setTranslateTitles(userId, value);
         res.writeHead(200, { "content-type": "application/json" });
         res.end(JSON.stringify({ translate: value }));
       } catch {
@@ -455,12 +454,12 @@ a{color:#c084fc}
 
     if (req.method === "POST" && url.pathname === "/api/settings/privacy") {
       const token = url.searchParams.get("code") || "";
-      const userId = findUserBySyncToken(token);
+      const userId = await findUserBySyncToken(token);
       if (!userId) { res.writeHead(403, { "content-type": "application/json" }); res.end(JSON.stringify({ error: "expired" })); return; }
       try {
         const body = JSON.parse(await readBody(req));
         const value = !!body.private;
-        setProfilePrivate(userId, value);
+        await setProfilePrivate(userId, value);
         res.writeHead(200, { "content-type": "application/json" });
         res.end(JSON.stringify({ private: value }));
       } catch {
@@ -472,7 +471,7 @@ a{color:#c084fc}
 
     if (req.method === "POST" && url.pathname === "/api/settings/default-server") {
       const token = url.searchParams.get("code") || "";
-      const userId = findUserBySyncToken(token);
+      const userId = await findUserBySyncToken(token);
       if (!userId) { res.writeHead(403, { "content-type": "application/json" }); res.end(JSON.stringify({ error: "expired" })); return; }
       try {
         const body = JSON.parse(await readBody(req));
@@ -482,7 +481,7 @@ a{color:#c084fc}
           res.end(JSON.stringify({ error: "invalid_server" }));
           return;
         }
-        setUserDefaultServer(userId, server);
+        await setUserDefaultServer(userId, server);
         res.writeHead(200, { "content-type": "application/json" });
         res.end(JSON.stringify({ defaultServer: server }));
       } catch {
@@ -494,7 +493,7 @@ a{color:#c084fc}
 
     if (req.method === "POST" && url.pathname === "/api/settings/preset") {
       const token = url.searchParams.get("code") || "";
-      const userId = findUserBySyncToken(token);
+      const userId = await findUserBySyncToken(token);
       if (!userId) { res.writeHead(403, { "content-type": "application/json" }); res.end(JSON.stringify({ error: "expired" })); return; }
       try {
         const body = JSON.parse(await readBody(req));
@@ -505,8 +504,8 @@ a{color:#c084fc}
           return;
         }
         const enabled = !!body.enabled;
-        setBookmarkletPresetEnabled(userId, presetId, enabled);
-        const presets = getEnabledBookmarkletPresetIds(userId);
+        await setBookmarkletPresetEnabled(userId, presetId, enabled);
+        const presets = await getEnabledBookmarkletPresetIds(userId);
         res.writeHead(200, { "content-type": "application/json" });
         res.end(JSON.stringify({ presets }));
       } catch {
@@ -518,7 +517,7 @@ a{color:#c084fc}
 
     if (req.method === "POST" && url.pathname === "/api/settings/bookmarklet") {
       const token = url.searchParams.get("code") || "";
-      const userId = findUserBySyncToken(token);
+      const userId = await findUserBySyncToken(token);
       if (!userId) { res.writeHead(403, { "content-type": "application/json" }); res.end(JSON.stringify({ error: "expired" })); return; }
       try {
         const body = JSON.parse(await readBody(req));
@@ -531,7 +530,7 @@ a{color:#c084fc}
             res.end(JSON.stringify({ error: "missing_fields" }));
             return;
           }
-          const existing = getExtraBookmarklets(userId);
+          const existing = await getExtraBookmarklets(userId);
           if (existing.length >= 5) {
             res.writeHead(400, { "content-type": "application/json" });
             res.end(JSON.stringify({ error: "max_reached" }));
@@ -542,7 +541,7 @@ a{color:#c084fc}
             res.end(JSON.stringify({ error: "duplicate_label" }));
             return;
           }
-          addExtraBookmarklet(userId, label, code);
+          await addExtraBookmarklet(userId, label, code);
         } else if (action === "delete") {
           const label = (body.label || "").trim();
           if (!label) {
@@ -550,13 +549,13 @@ a{color:#c084fc}
             res.end(JSON.stringify({ error: "missing_fields" }));
             return;
           }
-          removeExtraBookmarklet(userId, label);
+          await removeExtraBookmarklet(userId, label);
         } else {
           res.writeHead(400, { "content-type": "application/json" });
           res.end(JSON.stringify({ error: "invalid_action" }));
           return;
         }
-        const bookmarklets = getExtraBookmarklets(userId);
+        const bookmarklets = await getExtraBookmarklets(userId);
         res.writeHead(200, { "content-type": "application/json" });
         res.end(JSON.stringify({ bookmarklets }));
       } catch {
@@ -566,9 +565,35 @@ a{color:#c084fc}
       return;
     }
 
+    if (req.method === "POST" && url.pathname === "/sync/catalog") {
+      const token = url.searchParams.get("code") || "";
+      const userId = await findUserBySyncToken(token);
+      if (!userId) { res.writeHead(403); res.end("expired"); return; }
+      try {
+        const raw = await readBody(req, 10_000_000);
+        const data = JSON.parse(raw) as { server?: string; pages?: unknown };
+        const server = typeof data.server === "string" && isMaimaiServer(data.server) ? data.server : await getUserDefaultServer(userId);
+        const friendCode = await getUserFriendCodeForServer(userId, server);
+        // Resolve the submitted region explicitly; await getCachedProfile(raw 13-digit
+        // code) intentionally defaults to intl and is unsafe for JP catalog data.
+        const profile = friendCode ? await getCachedProfile(`${server}:${friendCode}`) : null;
+        const pages = data.pages && typeof data.pages === "object" && !Array.isArray(data.pages)
+          ? [0, 1, 2, 3, 4].map((diff) => (data.pages as Record<string, unknown>)[`diff${diff}`])
+          : null;
+        if (!profile || profile.server !== server || !pages || pages.length !== 5 || pages.some((page) => typeof page !== "string" || page.length === 0 || page.length > 2_000_000)) {
+          res.writeHead(400); res.end("invalid_catalog"); return;
+        }
+        const result = await saveChartRecordCatalogBatch(profile.profileKey, pages as [string, string, string, string, string]);
+        res.writeHead(200); res.end(JSON.stringify({ ok: true, rows: result.rowCount }));
+      } catch {
+        res.writeHead(400); res.end("invalid_catalog");
+      }
+      return;
+    }
+
     if (req.method === "POST" && url.pathname === "/sync") {
       const token = url.searchParams.get("code") || "";
-      const userId = findUserBySyncToken(token);
+      const userId = await findUserBySyncToken(token);
       const isPreview = isDev && token === "preview" && !userId;
       if (!userId && !isPreview) { res.writeHead(403); res.end("expired"); return; }
       const syncUserId = userId || "preview";
@@ -675,67 +700,29 @@ a{color:#c084fc}
           return;
         }
 
-        const savedProfileKey = cacheProfile({
+        const savedProfileKey = await cacheProfile({
           playerName: effective.playerName || "???", rating: effective.rating || 0,
           ratingMax: effective.ratingMax || 0, gradeImg: effective.gradeImg || "",
           avatar: effective.avatar || "", trophy: effective.trophy || "",
           trophyClass: effective.trophyClass || "normal", stars: effective.stars || "0",
           playCount: playCount || 0, totalPlayCount: totalPlayCount || 0, comment: effective.comment || "", friendCode: fc,
         }, playCount || 0, homeHtml, JSON.stringify(enrichedRecentRecords), JSON.stringify(topRecords), JSON.stringify(clearRecords), syncServer, JSON.stringify(mapAreas));
-        const achievementInitializedAt = getAchievementInitializedAt(savedProfileKey);
-        const hasBaseSnapshots = hasAchievementSnapshots(savedProfileKey);
-        const shouldRecordAchievements = achievementInitializedAt > 0 && hasBaseSnapshots;
-        const isNewProfile = achievementInitializedAt === 0;
-        const isExistingProfileBaseSync = achievementInitializedAt > 0 && !hasBaseSnapshots;
-        const isInitializingAchievementBase = isNewProfile || isExistingProfileBaseSync;
-        const shouldInitializeAchievementBase = isInitializingAchievementBase;
-        const fallbackPlayDay = koreaPlayDayKey(new Date());
         const syncStamp = Date.now();
-        const newScoreCounts = new Map<string, number>();
-        for (const record of enrichedHistoryRecords) {
-          if (!record.isNewScore) continue;
-          const key = chartKey(record);
-          newScoreCounts.set(key, (newScoreCounts.get(key) ?? 0) + 1);
-        }
-        for (const [index, record] of enrichedHistoryRecords.entries()) {
-          const snapshotAt = syncStamp + index * 2;
-          const recordChartKey = chartKey(record);
-          const previousBest = getPreviousDailyAchievementVal(savedProfileKey, recordChartKey, snapshotAt);
-          const scoreImproved = previousBest !== null && record.achievementVal > previousBest;
-          const performanceMark = ACHIEVEMENT_MARKS.has(record.fc) || ACHIEVEMENT_MARKS.has(record.sync);
-          const snapshotRecord = {
-            ...record,
-            newScoreCountInSync: newScoreCounts.get(recordChartKey) ?? 0,
-            isBaseSnapshot: isInitializingAchievementBase,
+        const canonicalBatch = enrichedHistoryRecords.map((record, index) => {
+          if (!record.detailIdx || !hasValidRecordDate(record.date)) {
+            throw new Error("canonical history missing source identity or timestamp");
+          }
+          return {
+            profileKey: savedProfileKey, sourcePlayId: record.detailIdx,
+            playedAt: recordPlayedAt(record.date), sourceSequence: enrichedHistoryRecords.length - index,
+            capturedAt: syncStamp, recordJson: JSON.stringify(record), achievementVal: record.achievementVal,
+            fc: record.fc, sync: record.sync, ratingUp: record.ratingUp,
+            title: record.title, diff: record.diff, level: record.level,
+            musicKind: record.musicKind, achievementText: record.achievement,
           };
-          const dailyAt = snapshotAt + 1;
-          saveDailyAchievementSnapshot(
-            savedProfileKey,
-            playDayKeyFromRecordDate(record.date, fallbackPlayDay),
-            recordChartKey,
-            JSON.stringify(snapshotRecord),
-            record.achievementVal,
-            recordPlayedAt(record.date),
-            snapshotAt,
-          );
-          const isAchievement = isNewProfile
-            ? record.isNewScore === true || performanceMark
-            : shouldRecordAchievements && (record.isNewScore === true || performanceMark || scoreImproved || previousBest === null);
-          if (!isAchievement) continue;
-          saveDailyAchievement(
-            savedProfileKey,
-            playDayKeyFromRecordDate(record.date, fallbackPlayDay),
-            recordChartKey,
-            JSON.stringify(snapshotRecord),
-            record.achievementVal,
-            recordPlayedAt(record.date),
-            dailyAt,
-          );
-        }
-        if (isInitializingAchievementBase) {
-          markAchievementInitialized(savedProfileKey, syncStamp + enrichedHistoryRecords.length * 2 + 1);
-        }
-        saveUserSession(syncUserId, "{}", savedProfileKey, syncServer);
+        });
+        const canonicalStatus = await saveAchievementPlayEventLogBatch(canonicalBatch, syncStamp);
+        await saveUserSession(syncUserId, "{}", savedProfileKey, syncServer);
 
         const savedMapImages = await cacheMapImages(mapAreas, syncServer);
         console.log(`[web] map images saved: ${savedMapImages}`);
@@ -743,24 +730,24 @@ a{color:#c084fc}
         // base64 아바타 → DB에 저장
         if (avatarBase64 && avatarBase64.startsWith("data:")) {
           const m = avatarBase64.match(/^data:image\/\w+;base64,(.+)$/);
-          if (m) saveAvatarBlob(syncUserId, syncServer, m[1]);
+          if (m) await saveAvatarBlob(syncUserId, syncServer, m[1]);
         }
         if (Array.isArray(data.js)) {
           let saved = 0;
-          data.js.forEach((j: unknown) => {
+          for (const j of data.js) {
             if (j && typeof j === "object" && "data" in j && "url" in j && typeof j.data === "string" && typeof j.url === "string") {
               const m = j.url.match(/\/img\/Music\/([^.]+)\.png/);
               if (m) {
                 const b64 = j.data.replace(/^data:image\/\w+;base64,/, "");
-                saveSongJacket(m[1], Buffer.from(b64, "base64"));
+                await saveSongJacket(m[1], Buffer.from(b64, "base64"));
                 saved++;
               }
             }
-          });
+          }
           console.log(`[web] song jackets saved: ${saved}`);
         }
-        console.log(`[web] 저장: ${effective.playerName} ⭐${effective.rating} server=${syncServer} fc=${fc} achievementBase=${shouldInitializeAchievementBase}`);
-        res.writeHead(200); res.end(shouldInitializeAchievementBase ? "initialized" : "ok");
+        console.log(`[web] 저장: ${effective.playerName} ⭐${effective.rating} server=${syncServer} fc=${fc} canonical=${canonicalStatus}`);
+        res.writeHead(200, { "x-carol-catalog": await isChartRecordCatalogDue(savedProfileKey) ? "required" : "not_due" }); res.end(canonicalStatus);
       } catch (e) {
         console.error("[web] 동기화 실패:", e);
         res.writeHead(500); res.end("sync error");
@@ -774,6 +761,6 @@ a{color:#c084fc}
   server.listen(port, () => console.log(`[maimai] 🌐 http://localhost:${port}`));
 }
 
-function readBody(req: http.IncomingMessage): Promise<string> {
-  return new Promise((r) => { let d = ""; req.on("data", (c) => (d += c)); req.on("end", () => r(d)); });
+function readBody(req: http.IncomingMessage, maxBytes = 20_000_000): Promise<string> {
+  return new Promise((resolve, reject) => { let d = ""; let size = 0; req.on("data", (c) => { size += c.length; if (size > maxBytes) { reject(new Error("body_too_large")); req.destroy(); return; } d += c; }); req.on("end", () => resolve(d)); req.on("error", reject); });
 }

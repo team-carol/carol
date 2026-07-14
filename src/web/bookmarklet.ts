@@ -63,7 +63,7 @@ function withAchievementInitUi(script: string): string {
     )
     .replace(
       "addRow('rt','레이팅 곡');addRow('av','아바타');addRow('jk','재킷 이미지');",
-      "addRow('rt','레이팅 곡');addRow('av','아바타');addRow('jk','재킷 이미지');addSection('PLAY DETAIL');addRow('dt','플레이 기록 상세');",
+      "addRow('rt','레이팅 곡');addRow('av','아바타');addRow('jk','재킷 이미지');addSection('PLAY DETAIL');addRow('dt','플레이 기록 상세');addSection('CATALOG');addRow('cat','곡 목록 기준선');",
     )
     .replace(
       "async function collectDetails(){var reqs=collectDetailRequests(rd),out=[];",
@@ -78,12 +78,24 @@ function withAchievementInitUi(script: string): string {
       "async function postSync(){phase('동기화 저장 중...');",
     )
     .replace(
+      "svText=await resp.text();",
+      "catalogRequired=resp.headers.get('x-carol-catalog')==='required';svText=await resp.text();",
+    )
+    .replace(
+      "async function postSync(){phase('동기화 저장 중...');",
+      "async function postCatalog(){var pages=[];for(var ci=0;ci<5;ci++){setRow('cat','↻','#facc15','곡 목록 '+(ci+1)+'/5');var got='';for(var ca=1;ca<=3&&!got;ca++){try{var cr=await fetch('/maimai-mobile/musicSort/search/?search=A&sort=1&playCheck=on&diff='+ci);if(!cr.ok)throw new Error('catalog http');got=await cr.text();}catch(_ce){if(ca<3)await sleep(700);}}if(!got)throw new Error('catalog fetch');pages.push(got);if(ci<4)await sleep(900);}var pr=await fetch(v+'/sync/catalog?code='+c,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({server:server,pages:{diff0:pages[0],diff1:pages[1],diff2:pages[2],diff3:pages[3],diff4:pages[4]}})});if(!pr.ok)throw new Error('catalog save');okRow('cat','5개 저장');}async function postSync(){phase('동기화 저장 중...');",
+    )
+    .replace(
       "else{okRow('sv');}return true;",
-      "else if(svText==='initialized'){phase('기준 데이터 초기화 완료 · 다음 동기화부터 성과 집계');okRow('sv','기준 데이터 설정');}else{phase('동기화 저장 완료');okRow('sv');}return true;",
+      "else if(svText==='initialized'){phase('첫 동기화는 기준선으로 저장 · 이후부터 플레이 기록 수집');okRow('sv','기준선 설정');}else{phase('동기화 저장 완료');okRow('sv');}return true;",
+    )
+    .replace(
+      "await postSync();",
+      "await postSync();if(catalogRequired){try{await postCatalog();}catch(_ce){failRow('cat','곡 목록 실패');console.warn('[carol] catalog failed');}}",
     )
     .replace(
       "else if(!hadErr){fin.style.color='#4ade80';",
-      "else if(typeof svText!=='undefined'&&svText==='initialized'&&!hadErr){fin.style.color='#c084fc';fin.innerHTML='<span style=\"font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10px\">INIT</span><span>기준 데이터 설정 완료 · 다음 동기화부터 성과 집계</span>';stEl.appendChild(fin);}else if(!hadErr){fin.style.color='#4ade80';",
+      "else if(typeof svText!=='undefined'&&svText==='initialized'&&!hadErr){fin.style.color='#c084fc';fin.innerHTML='<span style=\"font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10px\">INIT</span><span>첫 동기화 기준선 설정 완료 · 다음부터 플레이 기록 수집</span>';stEl.appendChild(fin);}else if(!hadErr){fin.style.color='#4ade80';",
     );
 }
 
@@ -114,6 +126,7 @@ addSection('CLEAR CHART');
 addRow('tb4','Re:MASTER');addRow('tb3','MASTER');addRow('tb2','EXPERT');addRow('tb1','ADVANCED');addRow('tb0','BASIC');
 addSection('AREA');
 addRow('mp','\uC9C0\uC5ED \uC9C4\uD589\uB3C4');addRow('em','\uC774\uBCA4\uD2B8 \uC9C0\uC5ED');
+addSection('CATALOG');addRow('cat','\uACE1 \uBAA9\uB85D \uAE30\uC900\uC120');
 addSection('ASSETS');
 addRow('rt','\uB808\uC774\uD305 \uACE1');addRow('av','\uC544\uBC14\uD0C0');addRow('jk','\uC7AC\uD0B7 \uC774\uBBF8\uC9C0');
 addSection('SERVER');
@@ -121,7 +134,7 @@ addRow('sv','\uC11C\uBC84 \uC800\uC7A5');
 var MAX_ATTEMPTS=3;
 function sleep(ms){return new Promise(function(res){setTimeout(res,ms);});}
 function xf(id,url,opt,attempt){return fetch(url).then(function(r){return r.text();}).then(function(t){var info=t.length>0?(t.length>1024?(t.length/1024).toFixed(1)+'KB':t.length+'B'):'\uC5C6\uC74C';okRow(id,info);console.log('[carol]',id,url,t.length);return t;}).catch(function(){if(attempt<MAX_ATTEMPTS){setRow(id,'\u21BB','#facc15','\uC7AC\uC2DC\uB3C4');}else if(opt){skipRow(id,'\uC2E4\uD328');}else{failRow(id,'\uB124\uD2B8\uC6CC\uD06C \uC624\uB958');}return '';});}
-var h='',p='',rd='',f='',tb4='',tb3='',tb2='',tb1='',tb0='',rt='',m='',em='',a='',js=[],dt=[],svText;
+var h='',p='',rd='',f='',tb4='',tb3='',tb2='',tb1='',tb0='',rt='',m='',em='',a='',js=[],dt=[],svText,catalogRequired=false;
 function parsePage(tx){return new DOMParser().parseFromString(tx,'text/html');}
 function pageText(d){return d.body?d.body.textContent||'':'';}
 function hasScoreBlocks(tx){var d=parsePage(tx);return d.querySelectorAll("[class*='music_'][class*='_score_back'],.music_name_block").length>0;}
