@@ -17,8 +17,8 @@ carol/
 │   └── web/             # raw http server, bookmarklet JS, settings pages/APIs
 ├── docs/                # deployment/setup/design references
 ├── .github/workflows/   # master -> GHCR image -> GCP VM deploy
-├── Dockerfile           # node:20-slim two-stage TS build
-└── docker-compose.yml   # bot + cloudflared tunnel, ./data volume
+├── Dockerfile           # node:22-slim two-stage TS build
+└── docker-compose.yml   # PostgreSQL + bot + cloudflared tunnel
 ```
 
 ## WHERE TO LOOK
@@ -33,7 +33,7 @@ carol/
 | Web routes / sync ingest | `src/web/index.ts` | Manual `req.method` + `url.pathname` chains. |
 | Bookmarklet source | `src/web/bookmarklet.ts` | Embedded JS string; preset bookmarklets injected before extras. |
 | Web settings UI | `src/web/settingsPage.ts` | Inline HTML/CSS/JS, no React/templates. |
-| DB schema/storage | `src/db.ts` | better-sqlite3 singleton; additive migrations only. |
+| DB schema/storage | `src/storage/postgres.ts` | PostgreSQL storage and numbered migrations. |
 | maimai parsing | `src/scraper.ts` | Cheerio selectors tied to DX NET markup. |
 | Song constants/jackets | `src/constants.ts` | otoge-db cache; startup network failure is non-fatal. |
 | Visual tokens | `docs/DESIGN.md` | Dark theme shared by web and rating card. |
@@ -52,8 +52,8 @@ TypeScript LSP was unavailable in this workspace, and codegraph is not indexed. 
 | `settingsPage` | HTML generator | `src/web/settingsPage.ts` | Privacy, preset bookmarklets, extra bookmarklet CRUD. |
 | `buildBookmarkletJs` | generator | `src/web/bookmarklet.ts` | Wraps embedded sync JS and evaluates enabled extra scripts. |
 | `BOOKMARKLET_PRESETS` | config list | `src/web/bookmarklet.ts` | Built-in bookmarklets; first preset is `maishift`. |
-| `cacheProfile` / `saveUserSession` | persistence | `src/db.ts` | Main write path after `/sync`. |
-| `getUserSyncToken` / `findUserBySyncToken` | auth link | `src/db.ts` | Token-based web access for `/sync` and `/settings`. |
+| `cacheProfile` / `saveUserSession` | persistence | `src/storage/postgres.ts` | Main write path after `/sync`. |
+| `getUserSyncToken` / `findUserBySyncToken` | auth link | `src/storage/postgres.ts` | Token-based web access for `/sync` and `/settings`. |
 | `parseHome` / `parseMusicScore` | scraper | `src/scraper.ts` | CSS-selector parsing of DX NET HTML. |
 | `renderRatingCard` | PNG render | `src/bot/utils/ratingCard.ts` | Rating image generation and cache population. |
 
@@ -63,7 +63,7 @@ TypeScript LSP was unavailable in this workspace, and codegraph is not indexed. 
 - Empty `encryptionKey` is generated on first start and written back to `config.json`; do not overwrite the file after first run.
 - `baseUrl` controls bookmarklet URLs. Empty means local `http://localhost:{webPort}`; production must set the tunnel/domain URL.
 - TypeScript is strict CommonJS targeting ES2022. Build output, declarations, and maps go to `dist/`.
-- SQLite schema changes are additive only: `try { db.exec("ALTER TABLE ... ADD COLUMN ...") } catch (_) {}` in `src/db.ts`.
+- Runtime storage is PostgreSQL through `DATABASE_URL`; migrations in `src/storage/postgres.ts` are numbered and immutable once released.
 - Slash commands use Korean names. User `/설정` links to web settings; guild auto-role lives in `/서버설정`.
 - Web UI is inline string HTML/CSS/JS. Match `docs/DESIGN.md`: `#0d0d0d` canvas, `#1a1a1a` surface, `#2a2a2a` border, `#9333ea` accent, Inter + JetBrains Mono.
 - Rating-card UI uses satori without JSX via the local `el()` helper and NotoSansJP fonts cached under `{DATA_DIR}/fonts/`.
@@ -71,7 +71,7 @@ TypeScript LSP was unavailable in this workspace, and codegraph is not indexed. 
 ## ANTI-PATTERNS (THIS PROJECT)
 
 - Do not store SEGA credentials. Bookmarklet-pushed HTML/cookies are the only current sync path.
-- Do not use DROP/RENAME migrations; keep DB schema additive.
+- Do not reintroduce SQLite runtime storage, SQLite import tooling, or the removed catalog baseline crawler.
 - Do not import Express or routers for web routes; `src/web/index.ts` intentionally uses raw `http` and manual route chains.
 - Do not change `customId` formats casually; builder code and `src/bot/index.ts` router must change together.
 - Do not rely on `auth.ts` for the current flow; it is a full login/session client but not wired into bookmarklet sync.
@@ -88,12 +88,12 @@ npm run dev:web   # ts-node src/web/dev.ts, no Discord client
 docker compose up -d
 ```
 
-No test runner, linter, or formatter is configured. Validation is `npm run build` plus manual Discord/web/bookmarklet checks.
+No linter or formatter is configured. Validation is `npm run test:integration` plus manual Discord/web/bookmarklet checks.
 
 ## NOTES
 
 - `POST /sync` returns HTTP 200 body `no_change` when play count matches cached data and `clearJson` is non-empty; empty `clearJson` bypasses the guard.
 - Debug HTML files are dev artifacts written to repo root, not Docker `/app/data`.
-- Runtime data is `maimai.db` in dev root or `/app/data/maimai.db` in Docker.
+- Runtime state is PostgreSQL; local SQLite files are migration archives only.
 - GitHub Actions triggers on `master`, builds/pushes GHCR image, then SSHes to GCP VM and runs `docker compose pull && docker compose up -d && docker image prune -f`.
 - `.dockerignore` excludes config, DB/data, debug HTML, `.git`, and local generated artifacts from images.

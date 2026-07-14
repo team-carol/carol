@@ -1,7 +1,7 @@
 import * as http from "http";
 import * as fs from "fs";
 import { parseHome, parsePlayerData, parseFriendCode as parseFC, parseRecentRecords, parsePlaylogHistory, parseTop5, parseTopSongs, parseMusicScore, mergeTopRecords, getMaimaiBaseUrl, parseMapAreas, parsePlaylogDetail } from "../scraper";
-import { cacheProfile, getCachedProfile, saveUserSession, getUserSyncToken, findUserBySyncToken, getUserFriendCodeForServer, saveAvatarBlob, getAvatarBlob, getSongJacket, saveSongJacket, getExtraBookmarklets, getProfilePrivate, setProfilePrivate, addExtraBookmarklet, removeExtraBookmarklet, getEnabledBookmarkletPresetIds, setBookmarkletPresetEnabled, getUserDefaultServer, setUserDefaultServer, isMaimaiServer, getMapImage, saveMapImage, saveAchievementPlayEventLogBatch, saveChartRecordCatalogBatch, isChartRecordCatalogDue, getAllAliases, addAlias, deleteAlias, setAliasTranslation, getTranslateTitles, setTranslateTitles } from "../storage";
+import { cacheProfile, getCachedProfile, saveUserSession, getUserSyncToken, findUserBySyncToken, getUserFriendCodeForServer, saveAvatarBlob, getAvatarBlob, getSongJacket, saveSongJacket, getExtraBookmarklets, getProfilePrivate, setProfilePrivate, addExtraBookmarklet, removeExtraBookmarklet, getEnabledBookmarkletPresetIds, setBookmarkletPresetEnabled, getUserDefaultServer, setUserDefaultServer, isMaimaiServer, getMapImage, saveMapImage, saveAchievementPlayEventLogBatch, getAllAliases, addAlias, deleteAlias, setAliasTranslation, getTranslateTitles, setTranslateTitles } from "../storage";
 import { buildBookmarkletJs, setBaseUrl, getBaseUrl, buildBookmarklet, BOOKMARKLET_PRESETS, getBookmarkletPresets } from "./bookmarklet";
 import { computeRatingTarget, getAllSongTitles } from "../constants";
 import { settingsPage } from "./settingsPage";
@@ -536,7 +536,7 @@ a{color:#c084fc}
             res.end(JSON.stringify({ error: "max_reached" }));
             return;
           }
-          if (existing.some(b => b.label === label)) {
+          if (existing.some((b: { label: string }) => b.label === label)) {
             res.writeHead(400, { "content-type": "application/json" });
             res.end(JSON.stringify({ error: "duplicate_label" }));
             return;
@@ -565,31 +565,7 @@ a{color:#c084fc}
       return;
     }
 
-    if (req.method === "POST" && url.pathname === "/sync/catalog") {
-      const token = url.searchParams.get("code") || "";
-      const userId = await findUserBySyncToken(token);
-      if (!userId) { res.writeHead(403); res.end("expired"); return; }
-      try {
-        const raw = await readBody(req, 10_000_000);
-        const data = JSON.parse(raw) as { server?: string; pages?: unknown };
-        const server = typeof data.server === "string" && isMaimaiServer(data.server) ? data.server : await getUserDefaultServer(userId);
-        const friendCode = await getUserFriendCodeForServer(userId, server);
-        // Resolve the submitted region explicitly; await getCachedProfile(raw 13-digit
-        // code) intentionally defaults to intl and is unsafe for JP catalog data.
-        const profile = friendCode ? await getCachedProfile(`${server}:${friendCode}`) : null;
-        const pages = data.pages && typeof data.pages === "object" && !Array.isArray(data.pages)
-          ? [0, 1, 2, 3, 4].map((diff) => (data.pages as Record<string, unknown>)[`diff${diff}`])
-          : null;
-        if (!profile || profile.server !== server || !pages || pages.length !== 5 || pages.some((page) => typeof page !== "string" || page.length === 0 || page.length > 2_000_000)) {
-          res.writeHead(400); res.end("invalid_catalog"); return;
-        }
-        const result = await saveChartRecordCatalogBatch(profile.profileKey, pages as [string, string, string, string, string]);
-        res.writeHead(200); res.end(JSON.stringify({ ok: true, rows: result.rowCount }));
-      } catch {
-        res.writeHead(400); res.end("invalid_catalog");
-      }
-      return;
-    }
+
 
     if (req.method === "POST" && url.pathname === "/sync") {
       const token = url.searchParams.get("code") || "";
@@ -610,18 +586,16 @@ a{color:#c084fc}
       const top2Html: string = data.tb2 || "";
       const top1Html: string = data.tb1 || "";
       const top0Html: string = data.tb0 || "";
-      const ratingTargetHtml: string = data.rt || "";
       const mapHtml: string = data.m || "";
       const eventMapHtml: string = data.em || "";
       const avatarBase64: string = data.a || "";
       const detailPayloads = Array.isArray(data.dt) ? data.dt : [];
-      console.log(`[web] user=${syncUserId.slice(-6)}, server=${syncServer}, home=${homeHtml.length}B, player=${playerHtml.length}B, record=${recordHtml.length}B, fc=${fcHtml.length}B, top4=${top4Html.length}B, top3=${top3Html.length}B, top2=${top2Html.length}B, top1=${top1Html.length}B, top0=${top0Html.length}B, map=${mapHtml.length}B, eventMap=${eventMapHtml.length}B, rt=${ratingTargetHtml.length}B`);
+      console.log(`[web] user=${syncUserId.slice(-6)}, server=${syncServer}, home=${homeHtml.length}B, player=${playerHtml.length}B, record=${recordHtml.length}B, fc=${fcHtml.length}B, top4=${top4Html.length}B, top3=${top3Html.length}B, top2=${top2Html.length}B, top1=${top1Html.length}B, top0=${top0Html.length}B, map=${mapHtml.length}B, eventMap=${eventMapHtml.length}B`);
       if (isDev) {
         fs.writeFileSync("debug_home.html", homeHtml, "utf-8");
         fs.writeFileSync("debug_pd.html", playerHtml, "utf-8");
         fs.writeFileSync("debug_fc.html", fcHtml, "utf-8");
         fs.writeFileSync("debug_record.html", recordHtml, "utf-8");
-        fs.writeFileSync("debug_rating_target.html", ratingTargetHtml, "utf-8");
         fs.writeFileSync("debug_map.html", mapHtml, "utf-8");
         fs.writeFileSync("debug_event_map.html", eventMapHtml, "utf-8");
         detailPayloads.forEach((detail: unknown, idx: number) => {
@@ -667,9 +641,7 @@ a{color:#c084fc}
         const clearRecords = clearHtmls.length > 0 ? mergeTopRecords(clearHtmls.map((h) => parseMusicScore(h, syncServer))) : [];
         // 내수판(JP)은 레이팅 대상 페이지 수집에 유료 코스가 필요하므로,
         // 전체 기록에서 레이팅 대상(신곡 15 + 구곡 35)을 직접 추론한다.
-        const topRecords = syncServer === "jp"
-          ? computeRatingTarget(clearRecords, syncServer)
-          : ratingTargetHtml ? parseMusicScore(ratingTargetHtml, syncServer) : parseTop5(recordHtml, syncServer);
+        const topRecords = syncServer === "jp" ? computeRatingTarget(clearRecords, syncServer) : parseTop5(recordHtml, syncServer);
         const mapAreas = [
           ...parseMapAreas(mapHtml, "normal", syncServer),
           ...parseMapAreas(eventMapHtml, "event", syncServer),
@@ -688,7 +660,6 @@ a{color:#c084fc}
             top: topRecords.length,
             recordBytes: recordHtml.length,
             clearBytes: clearHtmls.reduce((sum, html) => sum + html.length, 0),
-            ratingTargetBytes: ratingTargetHtml.length,
           });
           res.writeHead(400); res.end("invalid_sync_payload");
           return;
@@ -713,10 +684,10 @@ a{color:#c084fc}
             throw new Error("canonical history missing source identity or timestamp");
           }
           return {
-            profileKey: savedProfileKey, sourcePlayId: record.detailIdx,
+            profileKey: savedProfileKey, sourcePlayId: record.detailIdx, chartKey: `${record.title}|${record.musicKind}|${record.diff}`,
             playedAt: recordPlayedAt(record.date), sourceSequence: enrichedHistoryRecords.length - index,
             capturedAt: syncStamp, recordJson: JSON.stringify(record), achievementVal: record.achievementVal,
-            fc: record.fc, sync: record.sync, ratingUp: record.ratingUp,
+            fc: record.fc, sync: record.sync, ratingUp: record.ratingUp, isNewScore: record.isNewScore,
             title: record.title, diff: record.diff, level: record.level,
             musicKind: record.musicKind, achievementText: record.achievement,
           };
@@ -747,7 +718,7 @@ a{color:#c084fc}
           console.log(`[web] song jackets saved: ${saved}`);
         }
         console.log(`[web] 저장: ${effective.playerName} ⭐${effective.rating} server=${syncServer} fc=${fc} canonical=${canonicalStatus}`);
-        res.writeHead(200, { "x-carol-catalog": await isChartRecordCatalogDue(savedProfileKey) ? "required" : "not_due" }); res.end(canonicalStatus);
+        res.writeHead(200); res.end(canonicalStatus);
       } catch (e) {
         console.error("[web] 동기화 실패:", e);
         res.writeHead(500); res.end("sync error");

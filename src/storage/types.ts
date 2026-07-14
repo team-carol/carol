@@ -1,0 +1,10 @@
+export const MAIMAI_SERVERS = ["intl", "jp"] as const;
+export type MaimaiServer = (typeof MAIMAI_SERVERS)[number];
+export function isMaimaiServer(value: string): value is MaimaiServer { return value === "intl" || value === "jp"; }
+export interface CachedProfile { profileKey:string; server:MaimaiServer; friendCode:string; playerName:string; rating:number; ratingMax:number; trophy:string; trophyClass:string; avatar:string; gradeImg:string; stars:string; comment:string; playCount:number; totalPlayCount:number; lastSyncedAt:number; recentJson:string; topJson:string; clearJson:string; mapJson:string; }
+export interface ExtraBookmarklet { label:string; code:string; }
+export interface SongAliasRow { id:number; title:string; alias:string; isTranslation:boolean; }
+export interface AchievementPlayEventInput { profileKey:string; discordUserId?:string; playDay:string; chartKey:string; detailIdx?:string; sourceSequence:number; playedAt:number; firstCapturedAt?:number; sourceKind?:string; legacyUpdatedAt?:number; recordJson:string; achievementVal:number; isNewScore?:boolean; ratingUp?:number|null; title?:string; diff?:string; level?:string; musicKind?:string; achievementText?:string; fc?:string; sync?:string; }
+export interface AchievementPlayEventLogInput { profileKey:string; sourcePlayId?:string; detailIdx?:string; isBaseline?:boolean; isNewScore?:boolean; playedAt:number; chartKey:string; sourceSequence:number; capturedAt?:number; sourceKind?:string; recordJson:string; achievementVal:number; fc:string; sync:string; ratingUp?:number|null; title:string; diff:string; level:string; musicKind:string; achievementText:string; }
+export interface AchievementPlayEventLogRecord extends AchievementPlayEventLogInput { eventKey:string; payloadHash:string; scoreGain?:number; isMeaningful?:boolean; }
+export interface DailyAchievementSummary extends AchievementPlayEventLogRecord { achievementGain: number; }
