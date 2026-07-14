@@ -1,7 +1,7 @@
 import * as http from "http";
 import * as fs from "fs";
-import { parseHome, parsePlayerData, parseFriendCode as parseFC, parseRecentRecords, parsePlaylogHistory, parseTop5, parseTopSongs, parseMusicScore, mergeTopRecords, getMaimaiBaseUrl, parseMapAreas, chartKey, parsePlaylogDetail } from "../scraper";
-import { cacheProfile, saveUserSession, getUserSyncToken, findUserBySyncToken, saveAvatarBlob, getAvatarBlob, getSongJacket, saveSongJacket, getExtraBookmarklets, getProfilePrivate, setProfilePrivate, addExtraBookmarklet, removeExtraBookmarklet, getEnabledBookmarkletPresetIds, setBookmarkletPresetEnabled, getUserDefaultServer, setUserDefaultServer, isMaimaiServer, getMapImage, saveMapImage, saveDailyAchievement, saveDailyAchievementSnapshot, getAchievementInitializedAt, hasAchievementSnapshots, getPreviousDailyAchievementVal, markAchievementInitialized, getAllAliases, addAlias, deleteAlias, setAliasTranslation, getTranslateTitles, setTranslateTitles } from "../db";
+import { parseHome, parsePlayerData, parseFriendCode as parseFC, parseRecentRecords, parsePlaylogHistory, parseTop5, parseTopSongs, parseMusicScore, mergeTopRecords, getMaimaiBaseUrl, parseMapAreas, parsePlaylogDetail } from "../scraper";
+import { cacheProfile, getCachedProfile, saveUserSession, getUserSyncToken, findUserBySyncToken, getUserFriendCodeForServer, saveAvatarBlob, getAvatarBlob, getSongJacket, saveSongJacket, getExtraBookmarklets, getProfilePrivate, setProfilePrivate, addExtraBookmarklet, removeExtraBookmarklet, getEnabledBookmarkletPresetIds, setBookmarkletPresetEnabled, getUserDefaultServer, setUserDefaultServer, isMaimaiServer, getMapImage, saveMapImage, saveAchievementPlayEventLogBatch, saveChartRecordCatalogBatch, isChartRecordCatalogDue, getAllAliases, addAlias, deleteAlias, setAliasTranslation, getTranslateTitles, setTranslateTitles } from "../db";
 import { buildBookmarkletJs, setBaseUrl, getBaseUrl, buildBookmarklet, BOOKMARKLET_PRESETS, getBookmarkletPresets } from "./bookmarklet";
 import { computeRatingTarget, getAllSongTitles } from "../constants";
 import { settingsPage } from "./settingsPage";
@@ -9,13 +9,12 @@ import { aliasAdminPage } from "./aliasAdminPage";
 import { isValidAdminToken } from "./adminAuth";
 import { loadAliases } from "../aliases";
 import { CONFIG } from "../config";
-import { koreaPlayDayKey, playDayKeyFromRecordDate, recordPlayedAt } from "../achievements";
+import { hasValidRecordDate, recordPlayedAt } from "../achievements";
 
 const isDev = !CONFIG.baseUrl;
 const DISCORD_INVITE_BASE_URL = "https://discord.com/oauth2/authorize";
 const DISCORD_INVITE_PERMISSIONS = "2415938560";
 const DISCORD_INVITE_INTEGRATION_TYPE = "0";
-const ACHIEVEMENT_MARKS = new Set(["FC", "FC+", "AP", "AP+", "FS", "FS+", "FDX", "FDX+"]);
 
 export { setBaseUrl, getBaseUrl, buildBookmarklet };
 
@@ -566,6 +565,32 @@ a{color:#c084fc}
       return;
     }
 
+    if (req.method === "POST" && url.pathname === "/sync/catalog") {
+      const token = url.searchParams.get("code") || "";
+      const userId = findUserBySyncToken(token);
+      if (!userId) { res.writeHead(403); res.end("expired"); return; }
+      try {
+        const raw = await readBody(req, 10_000_000);
+        const data = JSON.parse(raw) as { server?: string; pages?: unknown };
+        const server = typeof data.server === "string" && isMaimaiServer(data.server) ? data.server : getUserDefaultServer(userId);
+        const friendCode = getUserFriendCodeForServer(userId, server);
+        // Resolve the submitted region explicitly; getCachedProfile(raw 13-digit
+        // code) intentionally defaults to intl and is unsafe for JP catalog data.
+        const profile = friendCode ? getCachedProfile(`${server}:${friendCode}`) : null;
+        const pages = data.pages && typeof data.pages === "object" && !Array.isArray(data.pages)
+          ? [0, 1, 2, 3, 4].map((diff) => (data.pages as Record<string, unknown>)[`diff${diff}`])
+          : null;
+        if (!profile || profile.server !== server || !pages || pages.length !== 5 || pages.some((page) => typeof page !== "string" || page.length === 0 || page.length > 2_000_000)) {
+          res.writeHead(400); res.end("invalid_catalog"); return;
+        }
+        const result = saveChartRecordCatalogBatch(profile.profileKey, pages as [string, string, string, string, string]);
+        res.writeHead(200); res.end(JSON.stringify({ ok: true, rows: result.rowCount }));
+      } catch {
+        res.writeHead(400); res.end("invalid_catalog");
+      }
+      return;
+    }
+
     if (req.method === "POST" && url.pathname === "/sync") {
       const token = url.searchParams.get("code") || "";
       const userId = findUserBySyncToken(token);
@@ -682,59 +707,21 @@ a{color:#c084fc}
           trophyClass: effective.trophyClass || "normal", stars: effective.stars || "0",
           playCount: playCount || 0, totalPlayCount: totalPlayCount || 0, comment: effective.comment || "", friendCode: fc,
         }, playCount || 0, homeHtml, JSON.stringify(enrichedRecentRecords), JSON.stringify(topRecords), JSON.stringify(clearRecords), syncServer, JSON.stringify(mapAreas));
-        const achievementInitializedAt = getAchievementInitializedAt(savedProfileKey);
-        const hasBaseSnapshots = hasAchievementSnapshots(savedProfileKey);
-        const shouldRecordAchievements = achievementInitializedAt > 0 && hasBaseSnapshots;
-        const isNewProfile = achievementInitializedAt === 0;
-        const isExistingProfileBaseSync = achievementInitializedAt > 0 && !hasBaseSnapshots;
-        const isInitializingAchievementBase = isNewProfile || isExistingProfileBaseSync;
-        const shouldInitializeAchievementBase = isInitializingAchievementBase;
-        const fallbackPlayDay = koreaPlayDayKey(new Date());
         const syncStamp = Date.now();
-        const newScoreCounts = new Map<string, number>();
-        for (const record of enrichedHistoryRecords) {
-          if (!record.isNewScore) continue;
-          const key = chartKey(record);
-          newScoreCounts.set(key, (newScoreCounts.get(key) ?? 0) + 1);
-        }
-        for (const [index, record] of enrichedHistoryRecords.entries()) {
-          const snapshotAt = syncStamp + index * 2;
-          const recordChartKey = chartKey(record);
-          const previousBest = getPreviousDailyAchievementVal(savedProfileKey, recordChartKey, snapshotAt);
-          const scoreImproved = previousBest !== null && record.achievementVal > previousBest;
-          const performanceMark = ACHIEVEMENT_MARKS.has(record.fc) || ACHIEVEMENT_MARKS.has(record.sync);
-          const snapshotRecord = {
-            ...record,
-            newScoreCountInSync: newScoreCounts.get(recordChartKey) ?? 0,
-            isBaseSnapshot: isInitializingAchievementBase,
+        const canonicalBatch = enrichedHistoryRecords.map((record, index) => {
+          if (!record.detailIdx || !hasValidRecordDate(record.date)) {
+            throw new Error("canonical history missing source identity or timestamp");
+          }
+          return {
+            profileKey: savedProfileKey, sourcePlayId: record.detailIdx,
+            playedAt: recordPlayedAt(record.date), sourceSequence: enrichedHistoryRecords.length - index,
+            capturedAt: syncStamp, recordJson: JSON.stringify(record), achievementVal: record.achievementVal,
+            fc: record.fc, sync: record.sync, ratingUp: record.ratingUp,
+            title: record.title, diff: record.diff, level: record.level,
+            musicKind: record.musicKind, achievementText: record.achievement,
           };
-          const dailyAt = snapshotAt + 1;
-          saveDailyAchievementSnapshot(
-            savedProfileKey,
-            playDayKeyFromRecordDate(record.date, fallbackPlayDay),
-            recordChartKey,
-            JSON.stringify(snapshotRecord),
-            record.achievementVal,
-            recordPlayedAt(record.date),
-            snapshotAt,
-          );
-          const isAchievement = isNewProfile
-            ? record.isNewScore === true || performanceMark
-            : shouldRecordAchievements && (record.isNewScore === true || performanceMark || scoreImproved || previousBest === null);
-          if (!isAchievement) continue;
-          saveDailyAchievement(
-            savedProfileKey,
-            playDayKeyFromRecordDate(record.date, fallbackPlayDay),
-            recordChartKey,
-            JSON.stringify(snapshotRecord),
-            record.achievementVal,
-            recordPlayedAt(record.date),
-            dailyAt,
-          );
-        }
-        if (isInitializingAchievementBase) {
-          markAchievementInitialized(savedProfileKey, syncStamp + enrichedHistoryRecords.length * 2 + 1);
-        }
+        });
+        const canonicalStatus = saveAchievementPlayEventLogBatch(canonicalBatch, syncStamp);
         saveUserSession(syncUserId, "{}", savedProfileKey, syncServer);
 
         const savedMapImages = await cacheMapImages(mapAreas, syncServer);
@@ -759,8 +746,8 @@ a{color:#c084fc}
           });
           console.log(`[web] song jackets saved: ${saved}`);
         }
-        console.log(`[web] 저장: ${effective.playerName} ⭐${effective.rating} server=${syncServer} fc=${fc} achievementBase=${shouldInitializeAchievementBase}`);
-        res.writeHead(200); res.end(shouldInitializeAchievementBase ? "initialized" : "ok");
+        console.log(`[web] 저장: ${effective.playerName} ⭐${effective.rating} server=${syncServer} fc=${fc} canonical=${canonicalStatus}`);
+        res.writeHead(200, { "x-carol-catalog": isChartRecordCatalogDue(savedProfileKey) ? "required" : "not_due" }); res.end(canonicalStatus);
       } catch (e) {
         console.error("[web] 동기화 실패:", e);
         res.writeHead(500); res.end("sync error");
@@ -774,6 +761,6 @@ a{color:#c084fc}
   server.listen(port, () => console.log(`[maimai] 🌐 http://localhost:${port}`));
 }
 
-function readBody(req: http.IncomingMessage): Promise<string> {
-  return new Promise((r) => { let d = ""; req.on("data", (c) => (d += c)); req.on("end", () => r(d)); });
+function readBody(req: http.IncomingMessage, maxBytes = 20_000_000): Promise<string> {
+  return new Promise((resolve, reject) => { let d = ""; let size = 0; req.on("data", (c) => { size += c.length; if (size > maxBytes) { reject(new Error("body_too_large")); req.destroy(); return; } d += c; }); req.on("end", () => resolve(d)); req.on("error", reject); });
 }

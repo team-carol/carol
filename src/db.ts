@@ -1,6 +1,7 @@
 import Database from "better-sqlite3";
 import * as path from "path";
 import type { MaimaiProfile } from "./scraper";
+import { parseCatalogScoreList, type CatalogScoreRecord } from "./scraper";
 import { encrypt, decrypt } from "./crypto";
 import * as crypto from "crypto";
 import { ALIAS_SEED } from "./data/aliasSeed";
@@ -47,6 +48,91 @@ export interface DailyAchievementSnapshotRecord {
   achievementVal: number;
   playedAt: number;
   updatedAt: number;
+}
+
+export interface AchievementEventRecord {
+  profileKey: string;
+  discordUserId: string;
+  playDay: string;
+  chartKey: string;
+  recordJson: string;
+  achievementVal: number;
+  playedAt: number;
+  updatedAt: number;
+}
+
+export interface AchievementEventInput {
+  profileKey: string;
+  discordUserId: string;
+  playDay: string;
+  chartKey: string;
+  recordJson: string;
+  achievementVal: number;
+  playedAt: number;
+  updatedAt?: number;
+  title: string;
+  diff: string;
+  level: string;
+  musicKind: string;
+  achievementText: string;
+  ratingUp?: number | null;
+  fc: string;
+  sync: string;
+}
+
+/** Immutable, source-oriented play event.  `eventKey` is derived by the writer. */
+export interface AchievementPlayEventInput {
+  profileKey: string;
+  discordUserId?: string;
+  playDay: string;
+  chartKey: string;
+  detailIdx?: string;
+  sourceSequence: number;
+  playedAt: number;
+  firstCapturedAt?: number;
+  sourceKind?: string;
+  legacyUpdatedAt?: number;
+  recordJson: string;
+  achievementVal: number;
+  isNewScore?: boolean;
+  ratingUp?: number | null;
+  title?: string; diff?: string; level?: string; musicKind?: string;
+  achievementText?: string; fc?: string; sync?: string;
+}
+
+export interface AchievementPlayEventRecord extends AchievementPlayEventInput {
+  eventKey: string;
+  identityKind: "source_play_id" | "legacy_fallback";
+  identityVersion: number;
+  chartKeyVersion: number;
+  payloadHash: string;
+}
+
+export interface AchievementPlayEventLogInput {
+  profileKey: string;
+  sourcePlayId?: string;
+  detailIdx?: string;
+  isBaseline?: boolean;
+  playedAt: number;
+  sourceSequence: number;
+  capturedAt?: number;
+  sourceKind?: string;
+  recordJson: string;
+  achievementVal: number;
+  fc: string; sync: string; ratingUp?: number | null;
+  title: string; diff: string; level: string; musicKind: string; achievementText: string;
+}
+
+export interface AchievementPlayEventLogRecord extends AchievementPlayEventLogInput {
+  eventKey: string;
+  payloadHash: string;
+}
+
+export interface ChartRecordBaselineRecord extends CatalogScoreRecord {
+  profileKey: string;
+  observedAt: number;
+  changedAt: number;
+  sourceHash: string;
 }
 
 export const MAIMAI_SERVERS = ["intl", "jp"] as const;
@@ -157,6 +243,99 @@ db.exec(`
     updated_at INTEGER DEFAULT (strftime('%s','now') * 1000),
     PRIMARY KEY (profile_key, play_day, chart_key, updated_at)
   );
+
+  CREATE TABLE IF NOT EXISTS achievement_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    profile_key TEXT NOT NULL,
+    discord_user_id TEXT NOT NULL DEFAULT '',
+    play_day TEXT NOT NULL,
+    chart_key TEXT NOT NULL,
+    record_json TEXT NOT NULL,
+    achievement_val REAL DEFAULT 0,
+    played_at INTEGER DEFAULT 0,
+    updated_at INTEGER DEFAULT (strftime('%s','now') * 1000),
+    title TEXT NOT NULL DEFAULT '',
+    diff TEXT NOT NULL DEFAULT '',
+    level TEXT NOT NULL DEFAULT '',
+    music_kind TEXT NOT NULL DEFAULT '',
+    achievement_text TEXT NOT NULL DEFAULT '',
+    rating_up INTEGER,
+    fc TEXT NOT NULL DEFAULT '',
+    sync TEXT NOT NULL DEFAULT '',
+    UNIQUE(profile_key, chart_key, played_at)
+  );
+  CREATE INDEX IF NOT EXISTS idx_achievement_events_profile_day ON achievement_events(profile_key, play_day, chart_key, played_at);
+  CREATE INDEX IF NOT EXISTS idx_achievement_events_profile_chart ON achievement_events(profile_key, chart_key, played_at, updated_at);
+
+  CREATE TABLE IF NOT EXISTS achievement_play_events (
+    event_key TEXT PRIMARY KEY,
+    profile_key TEXT NOT NULL,
+    discord_user_id TEXT NOT NULL DEFAULT '',
+    identity_kind TEXT NOT NULL,
+    identity_version INTEGER NOT NULL DEFAULT 1,
+    source_play_id TEXT NOT NULL DEFAULT '',
+    chart_key TEXT NOT NULL,
+    chart_key_version INTEGER NOT NULL DEFAULT 1,
+    source_sequence INTEGER NOT NULL,
+    played_at INTEGER NOT NULL,
+    play_day TEXT NOT NULL,
+    first_captured_at INTEGER NOT NULL,
+    source_kind TEXT NOT NULL DEFAULT 'history',
+    legacy_updated_at INTEGER,
+    achievement_val REAL NOT NULL,
+    is_new_score INTEGER NOT NULL DEFAULT 0,
+    rating_up REAL,
+    title TEXT NOT NULL DEFAULT '', diff TEXT NOT NULL DEFAULT '',
+    level TEXT NOT NULL DEFAULT '', music_kind TEXT NOT NULL DEFAULT '',
+    achievement_text TEXT NOT NULL DEFAULT '', fc TEXT NOT NULL DEFAULT '', sync TEXT NOT NULL DEFAULT '',
+    record_json TEXT NOT NULL, payload_hash TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_achievement_play_events_profile_day
+    ON achievement_play_events(profile_key, play_day, chart_key, played_at, source_sequence, event_key);
+  CREATE INDEX IF NOT EXISTS idx_achievement_play_events_profile_chart
+    ON achievement_play_events(profile_key, chart_key, played_at, source_sequence, event_key);
+
+  CREATE TABLE IF NOT EXISTS achievement_play_event_log (
+    event_key TEXT PRIMARY KEY,
+    profile_key TEXT NOT NULL,
+    source_play_id TEXT NOT NULL,
+    is_baseline INTEGER NOT NULL,
+    played_at INTEGER NOT NULL,
+    source_sequence INTEGER NOT NULL,
+    captured_at INTEGER NOT NULL,
+    source_kind TEXT NOT NULL DEFAULT 'history',
+    achievement_val REAL NOT NULL,
+    fc TEXT NOT NULL DEFAULT '', sync TEXT NOT NULL DEFAULT '', rating_up REAL,
+    title TEXT NOT NULL DEFAULT '', diff TEXT NOT NULL DEFAULT '', level TEXT NOT NULL DEFAULT '',
+    music_kind TEXT NOT NULL DEFAULT '', achievement_text TEXT NOT NULL DEFAULT '',
+    record_json TEXT NOT NULL, payload_hash TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_achievement_play_event_log_timeline
+    ON achievement_play_event_log(profile_key, is_baseline, played_at DESC, source_sequence DESC);
+  CREATE INDEX IF NOT EXISTS idx_achievement_play_event_log_source
+    ON achievement_play_event_log(profile_key, source_play_id);
+  CREATE TABLE IF NOT EXISTS achievement_event_state (
+    profile_key TEXT PRIMARY KEY,
+    initialized_at INTEGER NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS achievement_play_event_log_state (
+    profile_key TEXT PRIMARY KEY,
+    initialized_at INTEGER NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS chart_record_baselines (
+    profile_key TEXT NOT NULL, score_locator TEXT NOT NULL, diff TEXT NOT NULL,
+    title TEXT NOT NULL, level TEXT NOT NULL, music_kind TEXT NOT NULL,
+    achievement_val REAL NOT NULL, achievement_text TEXT NOT NULL,
+    fc TEXT NOT NULL, sync TEXT NOT NULL, observed_at INTEGER NOT NULL,
+    changed_at INTEGER NOT NULL, source_payload TEXT NOT NULL, source_hash TEXT NOT NULL,
+    PRIMARY KEY (profile_key, score_locator, diff)
+  );
+  CREATE INDEX IF NOT EXISTS idx_chart_record_baselines_profile_diff
+    ON chart_record_baselines(profile_key, diff, score_locator);
+  CREATE TABLE IF NOT EXISTS chart_record_baseline_state (
+    profile_key TEXT PRIMARY KEY, latest_capture INTEGER NOT NULL,
+    row_count INTEGER NOT NULL, page_manifest TEXT NOT NULL
+  );
 `);
 try { db.exec("ALTER TABLE song_aliases ADD COLUMN is_translation INTEGER DEFAULT 0"); } catch (_) {}
 try { db.exec("ALTER TABLE sessions ADD COLUMN translate_titles INTEGER DEFAULT 0"); } catch (_) {}
@@ -188,6 +367,15 @@ try { db.exec("ALTER TABLE sessions ADD COLUMN avatar_blob_intl TEXT DEFAULT ''"
 try { db.exec("ALTER TABLE sessions ADD COLUMN avatar_blob_jp TEXT DEFAULT ''"); } catch (_) {}
 try { db.exec("ALTER TABLE daily_achievements ADD COLUMN played_at INTEGER DEFAULT 0"); } catch (_) {}
 try { db.exec("ALTER TABLE daily_achievement_snapshots ADD COLUMN played_at INTEGER DEFAULT 0"); } catch (_) {}
+try { db.exec("ALTER TABLE achievement_events ADD COLUMN discord_user_id TEXT DEFAULT ''"); } catch (_) {}
+try { db.exec("ALTER TABLE achievement_events ADD COLUMN title TEXT DEFAULT ''"); } catch (_) {}
+try { db.exec("ALTER TABLE achievement_events ADD COLUMN diff TEXT DEFAULT ''"); } catch (_) {}
+try { db.exec("ALTER TABLE achievement_events ADD COLUMN level TEXT DEFAULT ''"); } catch (_) {}
+try { db.exec("ALTER TABLE achievement_events ADD COLUMN music_kind TEXT DEFAULT ''"); } catch (_) {}
+try { db.exec("ALTER TABLE achievement_events ADD COLUMN achievement_text TEXT DEFAULT ''"); } catch (_) {}
+try { db.exec("ALTER TABLE achievement_events ADD COLUMN rating_up INTEGER"); } catch (_) {}
+try { db.exec("ALTER TABLE achievement_events ADD COLUMN fc TEXT DEFAULT ''"); } catch (_) {}
+try { db.exec("ALTER TABLE achievement_events ADD COLUMN sync TEXT DEFAULT ''"); } catch (_) {}
 
 // ─── 별명 시드 (최초 실행 시 song_aliases가 비어 있으면 번들 데이터로 채운다) ───
 (function seedAliases() {
@@ -241,6 +429,47 @@ const stmtUpsertDailyAchievementSnapshot = db.prepare(`
     record_json = excluded.record_json,
     achievement_val = excluded.achievement_val,
     updated_at = excluded.updated_at
+`);
+const stmtUpsertAchievementEvent = db.prepare(`
+  INSERT INTO achievement_events (
+    profile_key, discord_user_id, play_day, chart_key, record_json, achievement_val,
+    played_at, updated_at, title, diff, level, music_kind, achievement_text, rating_up, fc, sync
+  )
+  VALUES (
+    @profileKey, @discordUserId, @playDay, @chartKey, @recordJson, @achievementVal,
+    @playedAt, @updatedAt, @title, @diff, @level, @musicKind, @achievementText, @ratingUp, @fc, @sync
+  )
+  ON CONFLICT(profile_key, chart_key, played_at) DO UPDATE SET
+    discord_user_id = excluded.discord_user_id,
+    play_day = excluded.play_day,
+    record_json = excluded.record_json,
+    achievement_val = excluded.achievement_val,
+    updated_at = excluded.updated_at,
+    title = excluded.title,
+    diff = excluded.diff,
+    level = excluded.level,
+    music_kind = excluded.music_kind,
+    achievement_text = excluded.achievement_text,
+    rating_up = excluded.rating_up,
+    fc = excluded.fc,
+    sync = excluded.sync
+`);
+const stmtInsertAchievementPlayEvent = db.prepare(`
+  INSERT INTO achievement_play_events (
+    event_key, profile_key, discord_user_id, identity_kind, identity_version,
+    source_play_id, chart_key, chart_key_version, source_sequence, played_at,
+    play_day, first_captured_at, source_kind, legacy_updated_at, achievement_val,
+    is_new_score, rating_up, title, diff, level, music_kind, achievement_text,
+    fc, sync, record_json, payload_hash
+  ) VALUES (
+    @eventKey, @profileKey, @discordUserId, @identityKind, 1, @sourcePlayId,
+    @chartKey, 1, @sourceSequence, @playedAt, @playDay, @firstCapturedAt,
+    @sourceKind, @legacyUpdatedAt, @achievementVal, @isNewScore, @ratingUp,
+    @title, @diff, @level, @musicKind, @achievementText, @fc, @sync,
+    @recordJson, @payloadHash
+  ) ON CONFLICT(event_key) DO UPDATE SET
+    rating_up = CASE WHEN achievement_play_events.rating_up IS NULL
+      THEN excluded.rating_up ELSE achievement_play_events.rating_up END
 `);
 
 // ─── Public API ─────────────────────────────────────────────────────────
@@ -362,18 +591,208 @@ export function saveDailyAchievementSnapshot(
   });
 }
 
+export function saveAchievementEvent(event: AchievementEventInput): void;
+/** Compatibility overload for the reviewed draft API; this table remains untouched. */
+export function saveAchievementEvent(profileKey: string, playDay: string, chartKeyValue: string, recordJson: string, achievementVal: number, playedAt: number, updatedAt?: number): void;
+export function saveAchievementEvent(eventOrProfile: AchievementEventInput | string, playDay?: string, chartKeyValue?: string, recordJson?: string, achievementVal?: number, playedAt?: number, updatedAt?: number): void {
+  const event: AchievementEventInput = typeof eventOrProfile === "string" ? {
+    profileKey: eventOrProfile, discordUserId: "", playDay: playDay ?? "", chartKey: chartKeyValue ?? "",
+    recordJson: recordJson ?? "{}", achievementVal: achievementVal ?? 0, playedAt: playedAt ?? 0,
+    updatedAt, title: "", diff: "", level: "", musicKind: "", achievementText: "", fc: "", sync: "",
+  } : eventOrProfile;
+  stmtUpsertAchievementEvent.run({
+    profileKey: event.profileKey,
+    discordUserId: event.discordUserId,
+    playDay: event.playDay,
+    chartKey: event.chartKey,
+    recordJson: event.recordJson,
+    achievementVal: event.achievementVal,
+    playedAt: event.playedAt,
+    updatedAt: event.updatedAt ?? Date.now(),
+    title: event.title,
+    diff: event.diff,
+    level: event.level,
+    musicKind: event.musicKind,
+    achievementText: event.achievementText,
+    ratingUp: event.ratingUp ?? null,
+    fc: event.fc,
+    sync: event.sync,
+  });
+}
+
+export function getAchievementEvents(profileKeyValue: string, playDay?: string): AchievementEventRecord[] {
+  return db.prepare(`SELECT profile_key AS profileKey, discord_user_id AS discordUserId,
+    play_day AS playDay, chart_key AS chartKey, record_json AS recordJson,
+    achievement_val AS achievementVal, played_at AS playedAt, updated_at AS updatedAt
+    FROM achievement_events WHERE profile_key = ? AND (? IS NULL OR play_day = ?)
+    ORDER BY played_at ASC, updated_at ASC`).all(profileKeyValue, playDay ?? null, playDay ?? null) as AchievementEventRecord[];
+}
+
+/**
+ * Insert the canonical event.  The event key deliberately excludes capture
+ * time and payload: rolling history pages must not create new plays.
+ * Invalid timestamps are quarantined by omission rather than given Date.now().
+ */
+export function saveAchievementPlayEvent(event: AchievementPlayEventInput): string | null {
+  if (!Number.isFinite(event.playedAt) || event.playedAt <= 0 || !event.chartKey || !event.playDay) return null;
+  const sourcePlayId = event.detailIdx?.trim() || `legacy:${event.playedAt}:${event.chartKey}:${event.sourceSequence}`;
+  const identityKind = event.detailIdx?.trim() ? "source_play_id" : "legacy_fallback";
+  const identity = `${event.profileKey}\u001f${identityKind}\u001f${sourcePlayId}\u001f${event.chartKey}`;
+  const eventKey = crypto.createHash("sha256").update(identity).digest("hex");
+  const payloadHash = crypto.createHash("sha256").update(event.recordJson).digest("hex");
+  stmtInsertAchievementPlayEvent.run({
+    eventKey, profileKey: event.profileKey, discordUserId: event.discordUserId ?? "",
+    identityKind, sourcePlayId, chartKey: event.chartKey, sourceSequence: event.sourceSequence,
+    playedAt: event.playedAt, playDay: event.playDay, firstCapturedAt: event.firstCapturedAt ?? Date.now(),
+    sourceKind: event.sourceKind ?? "history", legacyUpdatedAt: event.legacyUpdatedAt ?? null,
+    achievementVal: event.achievementVal, isNewScore: event.isNewScore ? 1 : 0,
+    ratingUp: event.ratingUp ?? null, title: event.title ?? "", diff: event.diff ?? "",
+    level: event.level ?? "", musicKind: event.musicKind ?? "", achievementText: event.achievementText ?? "",
+    fc: event.fc ?? "", sync: event.sync ?? "", recordJson: event.recordJson, payloadHash,
+  });
+  return eventKey;
+}
+
+export function getAchievementPlayEvents(profileKeyValue: string, playDay?: string): AchievementPlayEventRecord[] {
+  const rows = db.prepare(`SELECT event_key AS eventKey, profile_key AS profileKey,
+    discord_user_id AS discordUserId, play_day AS playDay, chart_key AS chartKey,
+    source_play_id AS detailIdx, source_sequence AS sourceSequence, played_at AS playedAt,
+    first_captured_at AS firstCapturedAt, source_kind AS sourceKind, legacy_updated_at AS legacyUpdatedAt,
+    record_json AS recordJson, achievement_val AS achievementVal, is_new_score AS isNewScore,
+    rating_up AS ratingUp, title, diff, level, music_kind AS musicKind,
+    achievement_text AS achievementText, fc, sync, identity_kind AS identityKind,
+    identity_version AS identityVersion, chart_key_version AS chartKeyVersion, payload_hash AS payloadHash
+    FROM achievement_play_events WHERE profile_key = ? AND (? IS NULL OR play_day = ?)
+    ORDER BY played_at ASC, source_sequence ASC, event_key ASC`).all(profileKeyValue, playDay ?? null, playDay ?? null) as AchievementPlayEventRecord[];
+  return rows;
+}
+
+const stmtInsertPlayEventLog = db.prepare(`INSERT INTO achievement_play_event_log
+  (event_key, profile_key, source_play_id, is_baseline, played_at, source_sequence, captured_at, source_kind,
+   achievement_val, fc, sync, rating_up, title, diff, level, music_kind, achievement_text, record_json, payload_hash)
+  VALUES (@eventKey, @profileKey, @sourcePlayId, @isBaseline, @playedAt, @sourceSequence, @capturedAt, @sourceKind,
+   @achievementVal, @fc, @sync, @ratingUp, @title, @diff, @level, @musicKind, @achievementText, @recordJson, @payloadHash)
+  ON CONFLICT(event_key) DO UPDATE SET rating_up = CASE
+    WHEN achievement_play_event_log.rating_up IS NULL THEN excluded.rating_up
+    ELSE achievement_play_event_log.rating_up END`);
+const stmtInsertEventLogState = db.prepare("INSERT INTO achievement_play_event_log_state (profile_key, initialized_at) VALUES (?, ?)");
+
+function eventLogKey(profileKeyValue: string, sourcePlayId: string): string {
+  return crypto.createHash("sha256").update(`achievement-play-event-log\u001f${profileKeyValue}\u001f${sourcePlayId}`).digest("hex");
+}
+
+/** Atomically validates and ingests one complete source history batch. */
+export function saveAchievementPlayEventLogBatch(events: readonly AchievementPlayEventLogInput[], capturedAt = Date.now()): "initialized" | "ok" {
+  const ids = new Set<string>();
+  if (events.length === 0 || !Number.isFinite(capturedAt) || capturedAt <= 0) throw new Error("canonical history batch is empty or invalid");
+  for (const event of events) {
+    const sourcePlayId = (event.sourcePlayId ?? event.detailIdx ?? "").trim();
+    if (event.profileKey !== events[0].profileKey || !event.profileKey || !sourcePlayId || ids.has(sourcePlayId) ||
+      !Number.isFinite(event.playedAt) || event.playedAt <= 0) throw new Error("invalid canonical history batch");
+    ids.add(sourcePlayId);
+  }
+  const transaction = db.transaction(() => {
+    const state = db.prepare("SELECT 1 AS found FROM achievement_play_event_log_state WHERE profile_key = ?").get(events[0].profileKey) as { found?: number } | undefined;
+    const initializing = state?.found !== 1;
+    for (const event of events) {
+      const sourcePlayId = (event.sourcePlayId ?? event.detailIdx ?? "").trim();
+      const payloadHash = crypto.createHash("sha256").update(event.recordJson).digest("hex");
+      stmtInsertPlayEventLog.run({
+        eventKey: eventLogKey(event.profileKey, sourcePlayId), profileKey: event.profileKey,
+        sourcePlayId, isBaseline: initializing ? 1 : 0,
+        playedAt: event.playedAt, sourceSequence: event.sourceSequence, capturedAt,
+        sourceKind: event.sourceKind ?? "history",
+        achievementVal: event.achievementVal, fc: event.fc, sync: event.sync, ratingUp: event.ratingUp ?? null,
+        title: event.title, diff: event.diff, level: event.level, musicKind: event.musicKind,
+        achievementText: event.achievementText, recordJson: event.recordJson, payloadHash,
+      });
+    }
+    if (initializing) stmtInsertEventLogState.run(events[0].profileKey, capturedAt);
+    return initializing ? "initialized" as const : "ok" as const;
+  });
+  return transaction();
+}
+
+export function hasAchievementEventLogState(profileKeyValue: string): boolean {
+  const row = db.prepare("SELECT 1 AS found FROM achievement_play_event_log_state WHERE profile_key = ?").get(profileKeyValue) as { found?: number } | undefined;
+  return row?.found === 1;
+}
+
+export function getAchievementPlayEventLog(profileKeyValue: string, fromPlayedAt: number, toPlayedAt: number): AchievementPlayEventLogRecord[] {
+  return db.prepare(`SELECT event_key AS eventKey, profile_key AS profileKey, source_play_id AS sourcePlayId,
+    is_baseline AS isBaseline, played_at AS playedAt, source_sequence AS sourceSequence,
+    captured_at AS capturedAt, source_kind AS sourceKind, achievement_val AS achievementVal, fc, sync, rating_up AS ratingUp,
+    title, diff, level, music_kind AS musicKind, achievement_text AS achievementText,
+    record_json AS recordJson, payload_hash AS payloadHash
+    FROM achievement_play_event_log
+    WHERE profile_key = ? AND is_baseline = 0 AND played_at >= ? AND played_at < ?
+    ORDER BY played_at DESC, source_sequence DESC, event_key DESC`).all(profileKeyValue, fromPlayedAt, toPlayedAt) as AchievementPlayEventLogRecord[];
+}
+
+export function isChartRecordCatalogDue(profileKeyValue: string, now = Date.now(), intervalMs = 12 * 60 * 60 * 1000): boolean {
+  const row = db.prepare("SELECT latest_capture AS latestCapture FROM chart_record_baseline_state WHERE profile_key = ?").get(profileKeyValue) as { latestCapture?: number } | undefined;
+  return !row || now - row.latestCapture! >= intervalMs;
+}
+
+/** Parse and validate all five catalog pages before the single SQLite transaction. */
+export function saveChartRecordCatalogBatch(profileKeyValue: string, pages: readonly [string, string, string, string, string], capturedAt = Date.now()): { rowCount: number } {
+  if (pages.length !== 5 || !Number.isFinite(capturedAt) || capturedAt <= 0) throw new Error("catalog requires five pages");
+  const parsed = pages.flatMap((html, index) => parseCatalogScoreList(html, ["BASIC", "ADVANCED", "EXPERT", "MASTER", "Re:MASTER"][index]));
+  const seen = new Set<string>();
+  for (const row of parsed) { const key = `${row.scoreLocator}\u001f${row.diff}`; if (seen.has(key)) throw new Error("duplicate catalog locator"); seen.add(key); }
+  const manifest = JSON.stringify(pages.map((page) => crypto.createHash("sha256").update(page).digest("hex")));
+  const transaction = db.transaction(() => {
+    const select = db.prepare("SELECT title,level,music_kind AS musicKind,achievement_val AS achievementVal,achievement_text AS achievementText,fc,sync FROM chart_record_baselines WHERE profile_key = ? AND score_locator = ? AND diff = ?");
+    const insert = db.prepare(`INSERT INTO chart_record_baselines
+      (profile_key,score_locator,diff,title,level,music_kind,achievement_val,achievement_text,fc,sync,observed_at,changed_at,source_payload,source_hash)
+      VALUES (@profileKey,@scoreLocator,@diff,@title,@level,@musicKind,@achievementVal,@achievementText,@fc,@sync,@observedAt,@changedAt,@sourcePayload,@sourceHash)`);
+    const observe = db.prepare("UPDATE chart_record_baselines SET observed_at = @observedAt WHERE profile_key = @profileKey AND score_locator = @scoreLocator AND diff = @diff");
+    const change = db.prepare(`UPDATE chart_record_baselines SET title=@title,level=@level,music_kind=@musicKind,achievement_val=@achievementVal,achievement_text=@achievementText,fc=@fc,sync=@sync,observed_at=@observedAt,changed_at=@changedAt,source_payload=@sourcePayload,source_hash=@sourceHash WHERE profile_key=@profileKey AND score_locator=@scoreLocator AND diff=@diff`);
+    for (const row of parsed) {
+      const args = { profileKey: profileKeyValue, scoreLocator: row.scoreLocator, diff: row.diff, title: row.title, level: row.level, musicKind: row.musicKind, achievementVal: row.achievementVal, achievementText: row.achievement, fc: row.fc, sync: row.sync, observedAt: capturedAt, changedAt: capturedAt, sourcePayload: row.sourcePayload, sourceHash: crypto.createHash("sha256").update(row.sourcePayload).digest("hex") };
+      const old = select.get(profileKeyValue, row.scoreLocator, row.diff) as (typeof args & { achievementVal: number }) | undefined;
+      if (!old) insert.run(args);
+      else if (old.title !== row.title || old.level !== row.level || old.musicKind !== row.musicKind || old.achievementVal !== row.achievementVal || old.achievementText !== row.achievement || old.fc !== row.fc || old.sync !== row.sync) change.run(args);
+      else observe.run(args);
+    }
+    db.prepare(`INSERT INTO chart_record_baseline_state(profile_key,latest_capture,row_count,page_manifest) VALUES (?,?,?,?)
+      ON CONFLICT(profile_key) DO UPDATE SET latest_capture=excluded.latest_capture,row_count=excluded.row_count,page_manifest=excluded.page_manifest`).run(profileKeyValue, capturedAt, parsed.length, manifest);
+    return { rowCount: parsed.length };
+  });
+  return transaction();
+}
+
+export function getChartRecordBaselines(profileKeyValue: string): ChartRecordBaselineRecord[] {
+  return db.prepare(`SELECT profile_key AS profileKey, score_locator AS scoreLocator, diff, title, level,
+    music_kind AS musicKind, achievement_val AS achievementVal, achievement_text AS achievement,
+    fc, sync, observed_at AS observedAt, changed_at AS changedAt, source_payload AS sourcePayload,
+    source_hash AS sourceHash FROM chart_record_baselines WHERE profile_key = ? ORDER BY score_locator, diff`).all(profileKeyValue) as ChartRecordBaselineRecord[];
+}
+
 export function pruneDailyAchievements(_retainDays = 7): number {
   return 0;
 }
 
 export function getDailyAchievements(profileKeyValue: string, playDay: string): DailyAchievementRecord[] {
+  if (hasAchievementEventLogState(profileKeyValue)) {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(playDay);
+    if (!match) return [];
+    // Discord's achievement day starts at 05:00 KST (20:00 UTC prior day).
+    const from = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]), -4);
+    return db.prepare(`SELECT profile_key AS profileKey, ? AS playDay, '' AS chartKey,
+      CASE WHEN rating_up IS NULL THEN record_json ELSE json_set(record_json, '$.ratingUp', rating_up) END AS recordJson,
+      achievement_val AS achievementVal, played_at AS playedAt,
+      captured_at AS updatedAt FROM achievement_play_event_log
+      WHERE profile_key = ? AND is_baseline = 0 AND played_at >= ? AND played_at < ?
+      ORDER BY played_at DESC, source_sequence DESC, event_key DESC`)
+      .all(playDay, profileKeyValue, from, from + 86_400_000) as DailyAchievementRecord[];
+  }
   return db.prepare(`
     WITH snapshot_rows AS (
       SELECT profile_key, play_day, chart_key, record_json, achievement_val, played_at, updated_at,
         CASE WHEN json_extract(record_json, '$.isNewScore') = 1 THEN 1 ELSE 0 END AS is_new_score,
         CASE WHEN json_extract(record_json, '$.fc') IN ('FC', 'FC+', 'AP', 'AP+')
           OR json_extract(record_json, '$.sync') IN ('FS', 'FS+', 'FDX', 'FDX+') THEN 1 ELSE 0 END AS is_performance_mark,
-        CASE WHEN json_extract(record_json, '$.isBaseSnapshot') = 0 THEN 1 ELSE 0 END AS is_post_init_snapshot,
         MAX(achievement_val) OVER (
           PARTITION BY chart_key
           ORDER BY updated_at
@@ -388,10 +807,8 @@ export function getDailyAchievements(profileKeyValue: string, playDay: string): 
         played_at AS playedAt, updated_at AS updatedAt,
         ROW_NUMBER() OVER (PARTITION BY play_day, chart_key ORDER BY achievement_val DESC, updated_at ASC) AS event_rank
       FROM snapshot_rows
-      WHERE is_new_score = 1
-        OR is_performance_mark = 1
-        OR (previous_best IS NOT NULL AND achievement_val > previous_best)
-        OR (previous_best IS NULL AND is_post_init_snapshot = 1)
+      WHERE is_performance_mark = 1
+        OR (is_new_score = 1 AND (previous_best IS NULL OR achievement_val > previous_best))
     )
     SELECT profileKey, playDay, chartKey, recordJson, achievementVal, playedAt, updatedAt
     FROM snapshot_achievements
@@ -524,6 +941,12 @@ export function loadUserSession(discordUserId: string): { friendCode: string } |
 export function getUserFriendCode(discordUserId: string): string | null {
   const row = db.prepare("SELECT friend_code, friend_code_intl, friend_code_jp, default_server FROM sessions WHERE discord_user_id = ?").get(discordUserId) as Pick<StoredSession, "friend_code" | "friend_code_intl" | "friend_code_jp" | "default_server"> | undefined;
   return row ? selectedFriendCode(row) || null : null;
+}
+
+export function getUserFriendCodeForServer(discordUserId: string, server: MaimaiServer): string | null {
+  const column = friendCodeColumn(server);
+  const row = db.prepare(`SELECT ${column} AS friendCode FROM sessions WHERE discord_user_id = ?`).get(discordUserId) as { friendCode?: string | null } | undefined;
+  return row?.friendCode || null;
 }
 
 export function getUserDefaultServer(discordUserId: string): MaimaiServer {
