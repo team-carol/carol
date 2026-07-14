@@ -19,6 +19,8 @@ services:
     image: ghcr.io/team-carol/carol:latest
     container_name: carol-migrate
     restart: "no"
+    init: true
+    mem_limit: 512m
     command: ["node", "dist/tools/bootstrapPostgres.js"]
     environment:
       DB_DRIVER: postgres

@@ -14,7 +14,9 @@ test("PostgreSQL bootstrap is idempotent on a completed volume", { skip: !proces
   sqlite.pragma("journal_mode=WAL");
   sqlite.pragma("wal_autocheckpoint=0");
   sqlite.exec("CREATE TABLE profiles (friend_code TEXT PRIMARY KEY, player_name TEXT); CREATE TABLE sessions (discord_user_id TEXT PRIMARY KEY, cookie_json TEXT);");
-  sqlite.prepare("INSERT INTO profiles VALUES (?, ?)").run("wal-fixture", "WAL Fixture");
+  const insert = sqlite.prepare("INSERT INTO profiles VALUES (?, ?)");
+  const insertMany = sqlite.transaction(() => { for (let i = 0; i < 1250; i++) insert.run(i === 0 ? "wal-fixture" : `fixture-${i}`, i === 0 ? "WAL Fixture" : `Fixture ${i}`); });
+  insertMany();
   sqlite.prepare("INSERT INTO sessions VALUES (?, ?)").run("fixture-user", "{}");
   sqlite.close();
   const env = { ...process.env, DATABASE_URL: process.env.REHEARSAL_DATABASE_URL, SQLITE_IMPORT_PATH: sqlitePath };
@@ -22,6 +24,12 @@ test("PostgreSQL bootstrap is idempotent on a completed volume", { skip: !proces
     for (let attempt = 0; attempt < 2; attempt++) {
       const result = spawnSync(process.execPath, ["dist/tools/bootstrapPostgres.js"], { encoding: "utf8", env });
       assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+      assert.match(result.stdout, /bootstrap start/);
+      assert.match(result.stdout, /snapshot ready/);
+      if (attempt === 0) assert.match(result.stdout, /rows=1251/);
+      else assert.match(result.stdout, /already migrated/);
+      assert.ok(!result.stdout.includes("cookie_json"));
+      assert.ok(result.stdout.split("\n").length < 100, "progress output should not be per-row");
     }
     const client = new Client({ connectionString: process.env.REHEARSAL_DATABASE_URL });
     await client.connect();
