@@ -16,9 +16,12 @@ safe and does not re-import an already bootstrapped database.
 
 Before a PostgreSQL cutover, stop the old SQLite bot. The migrator copies the
 database and any `-wal`/`-shm` sidecars into a private writable staging
-directory, checkpoints and backs it up there, then imports that snapshot. It
-does not write the read-only source mount; the source must remain offline while
-the copy is made.
+directory and backs it up there, then imports that snapshot. It does not write
+the read-only source mount; the source must remain offline while the copy is
+made. The migrator never reads `profiles.raw_html` and writes it as
+an empty cache; `profiles.rating_card_blob` is also cleared. The rebuildable
+`map_images` and `song_jackets` cache tables are intentionally skipped. These
+caches repopulate during normal sync/use. Raw HTML is never migrated.
 
 For local development, use the workspace build override instead of the GHCR
 release image:

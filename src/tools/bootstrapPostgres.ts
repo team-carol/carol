@@ -14,6 +14,7 @@ const source = arg("--sqlite") ?? process.env.SQLITE_IMPORT_PATH;
 if (!url || !source) { console.error("usage: bootstrapPostgres --pg-url URL --sqlite PATH"); process.exit(2); }
 
 const BATCH_SIZE = 100;
+const REBUILT_CACHES = ["profiles.raw_html", "profiles.rating_card_blob", "map_images", "song_jackets"];
 let interrupted = false;
 let sqlite: Database.Database | undefined;
 let pool: Pool | undefined;
@@ -74,15 +75,30 @@ async function main() {
     }
     const tables = sqlite.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all() as { name: string }[];
     const known = new Set(["profiles", "sessions", "jackets", "guild_settings", "song_jackets", "map_images", "constants_cache", "daily_achievements", "song_aliases", "daily_achievement_snapshots", "achievement_events", "achievement_play_events", "achievement_play_event_log", "achievement_event_state", "achievement_play_event_log_state", "chart_record_baselines", "chart_record_baseline_state"]);
+    console.log(`${REBUILT_CACHES.join(", ")} will be rebuilt/cleared`);
     let total = 0;
     for (const { name } of tables) {
       checkInterrupted();
       const escaped = name.replace(/"/g, '""');
       const columns = (sqlite.prepare(`PRAGMA table_info("${escaped}")`).all() as { name: string }[]).map(x => x.name);
       console.log(`table start: ${name}`);
-      const query = sqlite.prepare(`SELECT * FROM "${escaped}"`);
+      if (name === "map_images" || name === "song_jackets") {
+        console.log(`table complete: ${name} rows=0 batches=0 (rebuildable cache intentionally skipped)`);
+        continue;
+      }
+      // Do not even ask SQLite for large cache fields: better-sqlite3 converts
+      // each selected value to a JS string before iterate() can yield it.
+      const omitted: string[] = name === "profiles"
+        ? columns.filter(x => x === "rating_card_blob" || x === "raw_html")
+        : [];
+      const selected = columns.filter(x => !omitted.includes(x)).map(x => `"${x.replace(/"/g, '""')}"`).join(",");
+      const query = sqlite.prepare(`SELECT ${selected || "1"} FROM "${escaped}"`);
       let batch: Record<string, unknown>[] = [], tableCount = 0, batches = 0;
       for (const row of query.iterate() as Iterable<Record<string, unknown>>) {
+        if (name === "profiles") {
+          if (omitted.includes("raw_html")) row.raw_html = "";
+          if (omitted.includes("rating_card_blob")) row.rating_card_blob = null;
+        }
         batch.push(row);
         if (batch.length === BATCH_SIZE) {
           if (known.has(name)) await insertBatch(client, name, columns, batch);
