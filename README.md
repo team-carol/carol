@@ -49,6 +49,15 @@ npm run build
 npm start
 ```
 
+For local Compose development (Node 22 build, PostgreSQL, migration, and bot):
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+```
+
+Remote deployments use the GHCR-based production file and `docker compose up -d`;
+see `docs/DEPLOY.md`.
+
 ## 설정
 
 ```jsonc

@@ -96,11 +96,7 @@ function recordRow(record: PlayRecord, rank: number, profile: CachedProfile, jac
   const marks = [record.fc, record.sync].filter((mark) => mark.length > 0);
   const ratingGain = typeof record.ratingUp === "number" && record.ratingUp > 0
     ? `+${record.ratingUp}`
-    : "0";
-  const achievementGain = typeof record.achievementGain === "number"
-    && record.achievementGain > 0
-    ? `(+${record.achievementGain.toFixed(4)}%)`
-    : "";
+    : typeof record.ratingUp === "number" ? String(record.ratingUp) : "?";
   const constant = getConstant(record.title, record.musicKind, record.diff, profile.server);
   const constantLabel = constant !== null ? constant.toFixed(1) : record.level;
   const chartRating = songRating(record, profile.server);
@@ -155,10 +151,10 @@ function recordRow(record: PlayRecord, rank: number, profile: CachedProfile, jac
             el("span", { color: "#fff", fontSize: 15, fontWeight: 800, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", flex: 1 }, displayTitle(record.title, translate)),
             el("span", { color: MUTED, fontSize: 9, fontWeight: 700, flexShrink: 0 }, `#${rank}`),
           ]),
-          el("span", { color: TEXT, fontSize: 10, marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, `${record.diff} ${constantLabel} · ${record.musicKind || "?"} · ${playDay}`),
+          el("span", { color: TEXT, fontSize: 10, marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, `${record.diff} ${constantLabel} · ${record.musicKind || "?"} · ${record.date || playDay}`),
           el("div", { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginTop: 8 }, [
             el("div", { display: "flex", alignItems: "baseline", gap: 8 }, [
-              el("span", { color: "#fff", fontSize: 18, fontWeight: 800, lineHeight: 1 }, record.achievementVal > 0 ? `${record.achievementVal.toFixed(4)}%${achievementGain}` : record.achievement),
+              el("span", { color: "#fff", fontSize: 18, fontWeight: 800, lineHeight: 1 }, record.achievementVal > 0 ? `${record.achievementVal.toFixed(4)}%` : record.achievement),
             ]),
             el("div", { display: "flex", alignItems: "baseline", gap: 8 }, [
               el("span", { color: ACCENT, fontSize: 13, fontWeight: 800 }, `${chartRating}(${ratingGain})`),
@@ -189,8 +185,8 @@ function emptyState(): El {
       gap: 8,
     },
     [
-      el("span", { color: "#fff", fontSize: 18, fontWeight: 800 }, "오늘 새로 달성한 스코어가 없습니다"),
-      el("span", { color: MUTED, fontSize: 11 }, "기준 시간은 한국시간 오전 4시입니다"),
+      el("span", { color: "#fff", fontSize: 18, fontWeight: 800 }, "오늘 관측된 플레이가 없습니다"),
+      el("span", { color: MUTED, fontSize: 11 }, "한국시간 오전 5시부터 다음 오전 5시까지의 동기화 기록입니다"),
     ],
   );
 }
@@ -211,7 +207,7 @@ export async function renderAchievementCard(
   translate = false,
 ): Promise<Buffer> {
   const fonts = await loadFonts();
-  const topRecords = records.slice().sort((a, b) => b.achievementVal - a.achievementVal);
+  const topRecords = records.slice().sort((a, b) => (b.playedAt ?? 0) - (a.playedAt ?? 0));
   const totalRatingGain = topRecords.reduce((sum, record) => sum + Math.max(0, record.ratingUp ?? 0), 0);
   const avatarUrl = avatarBuf ? `data:image/png;base64,${avatarBuf.toString("base64")}` : "";
   const jacketUrls = new Map<string, string | null>();
@@ -239,15 +235,15 @@ export async function renderAchievementCard(
           ? image(avatarUrl, { width: 44, height: 44, objectFit: "cover", marginRight: 12 })
           : el("div", { width: 44, height: 44, background: "#242424", marginRight: 12 }),
         el("div", { display: "flex", flexDirection: "column", flex: 1 }, [
-          el("span", { color: MUTED, fontSize: 10, fontWeight: 700 }, "TODAY'S NEW SCORES"),
+          el("span", { color: MUTED, fontSize: 10, fontWeight: 700 }, "OBSERVED PLAY EVENTS"),
           el("span", { color: "#fff", fontSize: 18, fontWeight: 800 }, profile.playerName || "—"),
         ]),
         wordmark(),
       ]),
       el("div", { display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 18 }, [
         el("div", { display: "flex", flexDirection: "column", gap: 4 }, [
-          el("span", { color: "#fff", fontSize: 28, fontWeight: 800, lineHeight: 1 }, "오늘의 성과"),
-          el("span", { color: MUTED, fontSize: 11 }, `${playDay} · 한국시간 오전 4시 기준`),
+          el("span", { color: "#fff", fontSize: 28, fontWeight: 800, lineHeight: 1 }, "관측된 플레이"),
+          el("span", { color: MUTED, fontSize: 11 }, `${playDay} · 한국시간 오전 5시 기준`),
         ]),
         el("div", { display: "flex", gap: 26 }, [
           stat("COUNT", String(topRecords.length), ACCENT),

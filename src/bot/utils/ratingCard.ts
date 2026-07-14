@@ -2,13 +2,13 @@ import satori from "satori";
 import { Resvg } from "@resvg/resvg-js";
 import type { PlayRecord, ChartMarks, MaimaiServer } from "../../scraper";
 import { buildMarkMap, buildKindResolver, chartKey } from "../../scraper";
-import type { CachedProfile } from "../../db";
+import type { CachedProfile } from "../../storage";
 import {
   getSongJacket,
   saveSongJacket,
   getRatingCardCache,
   saveRatingCardCache,
-} from "../../db";
+} from "../../storage";
 import {
   getConstant,
   levelToNumber,
@@ -130,13 +130,13 @@ function toVM(r: PlayRecord, markMap?: Map<string, ChartMarks>, server: MaimaiSe
 // 레이팅 대상곡 페이지엔 자켓이 없어 otoge-db의 image_url(파일명)로 받아온다.
 async function fetchJacketDataUrl(file: string): Promise<string | null> {
   const key = file.replace(/\.png$/, "");
-  let buf = getSongJacket(key);
+  let buf = await getSongJacket(key);
   if (!buf) {
     try {
       const res = await fetch(`https://otoge-db.net/maimai/jacket/${file}`);
       if (res.ok) {
         buf = Buffer.from(await res.arrayBuffer());
-        saveSongJacket(key, buf);
+        await saveSongJacket(key, buf);
       }
     } catch {
       /* ignore */
@@ -395,7 +395,7 @@ export async function renderRatingCard(
 ): Promise<Buffer> {
   // ─── Render cache: return cached PNG if profile and card version unchanged ─
   // 번역 표시본은 뷰어별로 달라 공유 캐시(원제 기준)를 쓰지 않고 매번 새로 렌더한다.
-  const cached = translate ? null : getRatingCardCache(profile.profileKey);
+  const cached = translate ? null : await getRatingCardCache(profile.profileKey);
   if (
     cached &&
     cached.syncedAt === profile.lastSyncedAt &&
@@ -629,7 +629,7 @@ export async function renderRatingCard(
   // ─── Persist render cache ─────────────────────────────────────────────────
   // 번역본은 공유 캐시(원제 기준)를 덮어쓰지 않는다.
   if (!translate) {
-    saveRatingCardCache(
+    await saveRatingCardCache(
       profile.profileKey,
       buf,
       profile.lastSyncedAt,

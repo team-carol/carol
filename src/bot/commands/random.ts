@@ -1,7 +1,7 @@
 import {
   SlashCommandBuilder, ChatInputCommandInteraction, EmbedBuilder, MessageFlags,
 } from "discord.js";
-import { getCachedProfile, getUserFriendCode, getProfilePrivate, getTranslateTitles } from "../../db";
+import { getCachedProfile, getUserFriendCode, getProfilePrivate, getTranslateTitles } from "../../storage";
 import { getClearList } from "../utils/embeds";
 import { displayTitle } from "../../aliases";
 import {
@@ -99,12 +99,12 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   let clearMap: Map<string, ReturnType<typeof getClearList>[number]> | null = null;
   if (playOpt) {
     const target = interaction.options.getUser("user") ?? interaction.user;
-    if (target.id !== interaction.user.id && getProfilePrivate(target.id)) {
+    if (target.id !== interaction.user.id && await getProfilePrivate(target.id)) {
       await interaction.reply({ content: `<@${target.id}> 님은 프로필을 비공개로 설정했습니다.`, flags: MessageFlags.Ephemeral });
       return;
     }
-    const fc = getUserFriendCode(target.id);
-    const cached = fc ? getCachedProfile(fc) : null;
+    const fc = await getUserFriendCode(target.id);
+    const cached = fc ? await getCachedProfile(fc) : null;
     if (!cached) {
       const msg = target.id === interaction.user.id
         ? "플레이여부 필터는 프로필이 필요합니다. `/북마클릿`으로 먼저 등록해주세요."
@@ -147,7 +147,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     genreOpt || undefined,
     verOpt ? verOpt + (plusOpt === "plus" ? " PLUS" : plusOpt === "base" ? " (무인)" : "") : undefined,
   ].filter(Boolean).join("  ·  ");
-  const translate = getTranslateTitles(interaction.user.id);
+  const translate = await getTranslateTitles(interaction.user.id);
   const embeds = picks.map((c, i) => {
     const rec = clearMap?.get(`${c.title}|${c.kind}|${c.diff}`);
     const ytQuery = encodeURIComponent(

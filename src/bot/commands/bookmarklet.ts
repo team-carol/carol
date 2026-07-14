@@ -7,7 +7,7 @@ import {
   ButtonStyle,
   ActionRowBuilder,
 } from "discord.js";
-import { getUserSyncToken } from "../../db";
+import { getUserSyncToken } from "../../storage";
 import { getBaseUrl } from "../../web";
 import { PORT } from "../../config";
 
@@ -16,7 +16,7 @@ export const data = new SlashCommandBuilder()
   .setDescription("프로필 동기화용 북마클릿 설치 가이드");
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
-  const token = getUserSyncToken(interaction.user.id);
+  const token = await getUserSyncToken(interaction.user.id);
   const guideUrl = `${getBaseUrl(PORT)}/sync?code=${token}`;
   const btn = new ButtonBuilder()
     .setLabel("설치 가이드 열기")

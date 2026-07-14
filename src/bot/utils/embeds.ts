@@ -12,7 +12,7 @@ import {
   getMapImage,
   saveSongJacket,
   getTranslateTitles,
-} from "../../db";
+} from "../../storage";
 import { getMaimaiBaseUrl } from "../../scraper";
 import {
   getConstant,
@@ -32,14 +32,14 @@ export async function jacketBuffer(r: PlayRecord): Promise<Buffer | null> {
   const m = r.jacketUrl?.match(/\/img\/Music\/([^.]+)\.png/);
   const musicId = m ? m[1] : null;
   if (musicId) {
-    const cached = getSongJacket(musicId);
+    const cached = await getSongJacket(musicId);
     if (cached) return cached;
     try {
       for (const origin of [getMaimaiBaseUrl("intl"), getMaimaiBaseUrl("jp")]) {
         const res = await fetch(`${origin}/maimai-mobile/img/Music/${musicId}.png`);
         if (!res.ok) continue;
         const b = Buffer.from(await res.arrayBuffer());
-        saveSongJacket(musicId, b);
+        await saveSongJacket(musicId, b);
         return b;
       }
     } catch {
@@ -49,13 +49,13 @@ export async function jacketBuffer(r: PlayRecord): Promise<Buffer | null> {
   const file = getJacketFile(r.title);
   if (file) {
     const key = file.replace(/\.png$/, "");
-    const cached = getSongJacket(key);
+    const cached = await getSongJacket(key);
     if (cached) return cached;
     try {
       const res = await fetch(`https://otoge-db.net/maimai/jacket/${file}`);
       if (res.ok) {
         const b = Buffer.from(await res.arrayBuffer());
-        saveSongJacket(key, b);
+        await saveSongJacket(key, b);
         return b;
       }
     } catch {
@@ -119,17 +119,17 @@ function songRating(r: PlayRecord, fc?: string, server: MaimaiServer = "intl"): 
   return calcSongRating(r.achievementVal, lvNum, fc ?? r.fc);
 }
 
-export function buildAvatarAttachment(
+export async function buildAvatarAttachment(
   userId: string,
   server: MaimaiServer,
-): AttachmentBuilder | null {
-  const buf = getAvatarBlob(userId, server);
+): Promise<AttachmentBuilder | null> {
+  const buf = await getAvatarBlob(userId, server);
   if (!buf) return null;
   return new AttachmentBuilder(buf, { name: "avatar.png" });
 }
 
 export function profileEmb(
-  p: NonNullable<ReturnType<typeof getCachedProfile>>,
+  p: NonNullable<Awaited<ReturnType<typeof getCachedProfile>>>,
   hasAvatar: boolean,
 ) {
   const stars = p.stars && p.stars !== "0" ? " · ★×" + p.stars : "";
@@ -149,21 +149,21 @@ export function profileEmb(
 }
 
 export function getSongList(
-  p: NonNullable<ReturnType<typeof getCachedProfile>>,
+  p: NonNullable<Awaited<ReturnType<typeof getCachedProfile>>>,
 ): PlayRecord[] {
   const raw = JSON.parse(p.recentJson || "{}");
   return Array.isArray(raw) ? raw : raw.recent || [];
 }
 
 export function getTopList(
-  p: NonNullable<ReturnType<typeof getCachedProfile>>,
+  p: NonNullable<Awaited<ReturnType<typeof getCachedProfile>>>,
 ): PlayRecord[] {
   const raw = JSON.parse(p.topJson || "[]");
   return Array.isArray(raw) ? raw : [];
 }
 
 export function getClearList(
-  p: NonNullable<ReturnType<typeof getCachedProfile>>,
+  p: NonNullable<Awaited<ReturnType<typeof getCachedProfile>>>,
 ): PlayRecord[] {
   const raw = JSON.parse(p.clearJson || "[]");
   return Array.isArray(raw) ? raw : [];
@@ -183,7 +183,7 @@ function isMapArea(value: unknown): value is MapArea {
 }
 
 export function getMapAreaList(
-  p: NonNullable<ReturnType<typeof getCachedProfile>>,
+  p: NonNullable<Awaited<ReturnType<typeof getCachedProfile>>>,
 ): MapArea[] {
   const raw = JSON.parse(p.mapJson || "[]");
   return Array.isArray(raw) ? raw.filter(isMapArea) : [];
@@ -205,7 +205,7 @@ export function groupByGame(records: PlayRecord[]): PlayRecord[][] {
 }
 
 export async function recentEmbeds(
-  p: NonNullable<ReturnType<typeof getCachedProfile>>,
+  p: NonNullable<Awaited<ReturnType<typeof getCachedProfile>>>,
   userId: string,
   gameIdx: number,
 ): Promise<{
@@ -216,7 +216,7 @@ export async function recentEmbeds(
   const records = getSongList(p);
   const games = groupByGame(records);
   const total = games.length;
-  const translate = getTranslateTitles(userId);
+  const translate = await getTranslateTitles(userId);
 
   if (total === 0) {
     return {
@@ -322,7 +322,7 @@ function mapAreaDescription(area: MapArea): string {
 }
 
 function buildMapAreaCard(
-  p: NonNullable<ReturnType<typeof getCachedProfile>>,
+  p: NonNullable<Awaited<ReturnType<typeof getCachedProfile>>>,
   area: MapArea,
   absoluteIdx: number,
   totalAreas: number,
@@ -341,7 +341,7 @@ function buildMapAreaCard(
 }
 
 export async function mapAreaEmbed(
-  p: NonNullable<ReturnType<typeof getCachedProfile>>,
+  p: NonNullable<Awaited<ReturnType<typeof getCachedProfile>>>,
   userId: string,
   pageIdx: number,
 ): Promise<{ embeds: EmbedBuilder[]; components: ActionRowBuilder<ButtonBuilder>[]; files: AttachmentBuilder[] }> {
@@ -363,13 +363,13 @@ export async function mapAreaEmbed(
   const start = idx * MAP_PAGE_SIZE;
   const pageAreas = areas.slice(start, start + MAP_PAGE_SIZE);
   const files: AttachmentBuilder[] = [];
-  const embeds = pageAreas.map((area, offset) => {
-    const buf = area.imageUrl ? getMapImage(area.imageUrl) : null;
+  const embeds = await Promise.all(pageAreas.map(async (area, offset) => {
+    const buf = area.imageUrl ? await getMapImage(area.imageUrl) : null;
     const fileName = buf ? `map${start + offset}.png` : "";
     if (buf) files.push(new AttachmentBuilder(buf, { name: fileName }));
     const imageRef = buf ? `attachment://${fileName}` : "";
     return buildMapAreaCard(p, area, start + offset, areas.length, imageRef);
-  });
+  }));
 
   const prevBtn = new ButtonBuilder()
     .setCustomId(`map:${userId}:${idx - 1}`)
@@ -427,7 +427,7 @@ export function getSearchCtx(token: string): SearchCtx | undefined {
 }
 
 export async function searchResultEmbeds(
-  p: NonNullable<ReturnType<typeof getCachedProfile>>,
+  p: NonNullable<Awaited<ReturnType<typeof getCachedProfile>>>,
   userId: string,
   query: string,
   pageIdx: number,
@@ -440,7 +440,7 @@ export async function searchResultEmbeds(
 }> {
   const records = getClearList(p);
   const q = normalizeQuery(query);
-  const translate = getTranslateTitles(userId);
+  const translate = await getTranslateTitles(userId);
   // 같은 곡명이라도 ST/DX 채보는 별도 결과로 분리 (musicKind 포함 키로 그룹핑)
   const byChart = new Map<string, PlayRecord[]>();
   for (const r of records) {
@@ -614,7 +614,7 @@ function formatRtRow(
 }
 
 export function rtTableEmbed(
-  p: NonNullable<ReturnType<typeof getCachedProfile>>,
+  p: NonNullable<Awaited<ReturnType<typeof getCachedProfile>>>,
   translate = false,
 ): { embeds: EmbedBuilder[]; components: ActionRowBuilder<ButtonBuilder>[] } {
   const records = getTopList(p);
@@ -684,11 +684,11 @@ export function rtTableEmbed(
   };
 }
 
-export function buildProfileReply(
-  cached: NonNullable<ReturnType<typeof getCachedProfile>>,
+export async function buildProfileReply(
+  cached: NonNullable<Awaited<ReturnType<typeof getCachedProfile>>>,
   userId: string,
 ) {
-  const avatar = buildAvatarAttachment(userId, cached.server);
+  const avatar = await buildAvatarAttachment(userId, cached.server);
   const recentBtn = new ButtonBuilder()
     .setCustomId(`recent:${userId}`)
     .setLabel("최근 플레이")

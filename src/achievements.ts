@@ -1,5 +1,5 @@
-import { getAchievementInitializedAt, getPreviousDailyAchievementValBeforePlay } from "./db";
-import type { DailyAchievementRecord, DailyAchievementSnapshotRecord } from "./db";
+import { getAchievementInitializedAt, getPreviousDailyAchievementValBeforePlay, hasAchievementEventLogState } from "./storage";
+import type { DailyAchievementRecord, DailyAchievementSnapshotRecord } from "./storage";
 import type { PlayRecord } from "./scraper";
 import { chartKey } from "./scraper";
 
@@ -12,7 +12,8 @@ function isObjectRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export function koreaPlayDayKey(date: Date = new Date()): string {
-  const shifted = new Date(date.getTime() + 5 * 60 * 60 * 1000);
+  // Achievement days begin at 05:00 KST (20:00 UTC on the prior date).
+  const shifted = new Date(date.getTime() + 4 * 60 * 60 * 1000);
   return `${shifted.getUTCFullYear()}-${pad2(shifted.getUTCMonth() + 1)}-${pad2(shifted.getUTCDate())}`;
 }
 
@@ -24,7 +25,11 @@ function parseKoreaDateText(dateText: string): Date | null {
   const day = Number(match[3]);
   const hour = match[4] ? Number(match[4]) : 12;
   const minute = match[5] ? Number(match[5]) : 0;
-  return new Date(Date.UTC(year, month - 1, day, hour - 9, minute));
+  if (month < 1 || month > 12 || day < 1 || day > 31 || hour > 23 || minute > 59) return null;
+  const parsed = new Date(Date.UTC(year, month - 1, day, hour - 9, minute));
+  const shifted = new Date(parsed.getTime() + 9 * 60 * 60 * 1000);
+  return shifted.getUTCFullYear() === year && shifted.getUTCMonth() === month - 1 && shifted.getUTCDate() === day
+    && shifted.getUTCHours() === hour && shifted.getUTCMinutes() === minute ? parsed : null;
 }
 
 export function playDayKeyFromRecordDate(dateText: string, fallback: string): string {
@@ -34,6 +39,10 @@ export function playDayKeyFromRecordDate(dateText: string, fallback: string): st
 
 export function recordPlayedAt(dateText: string): number {
   return parseKoreaDateText(dateText)?.getTime() ?? Date.now();
+}
+
+export function hasValidRecordDate(dateText: string): boolean {
+  return parseKoreaDateText(dateText) !== null;
 }
 
 type DailyAchievementRow = DailyAchievementRecord | DailyAchievementSnapshotRecord;
@@ -88,17 +97,20 @@ export function parseDailyAchievementRows(rows: readonly DailyAchievementRow[]):
   return records;
 }
 
-export function attachAchievementGains(profileKey: string, records: readonly PlayRecord[]): PlayRecord[] {
-  const initializedAt = getAchievementInitializedAt(profileKey);
-  return records.map((record) => {
+export async function attachAchievementGains(profileKey: string, records: readonly PlayRecord[]): Promise<PlayRecord[]> {
+  if (await hasAchievementEventLogState(profileKey)) {
+    return records.map((record) => ({ ...record, achievementGain: 0 }));
+  }
+  const initializedAt = await getAchievementInitializedAt(profileKey);
+  return Promise.all(records.map(async (record) => {
     const updatedAt = record.updatedAt ?? 0;
     const playedAt = record.playedAt ?? 0;
     const newScoreOnly = (record.newScoreCountInSync ?? 0) >= 2;
     const previousBest = updatedAt > 0 && playedAt > 0
-      ? getPreviousDailyAchievementValBeforePlay(profileKey, chartKey(record), playedAt, updatedAt, newScoreOnly)
+      ? await getPreviousDailyAchievementValBeforePlay(profileKey, chartKey(record), playedAt, updatedAt, newScoreOnly)
       : null;
     const allHistoryBest = previousBest === null && newScoreOnly && updatedAt > 0 && playedAt > 0
-      ? getPreviousDailyAchievementValBeforePlay(profileKey, chartKey(record), playedAt, updatedAt)
+      ? await getPreviousDailyAchievementValBeforePlay(profileKey, chartKey(record), playedAt, updatedAt)
       : previousBest;
     const isNewChartAfterInit = previousBest === null
       && allHistoryBest === null
@@ -111,5 +123,5 @@ export function attachAchievementGains(profileKey: string, records: readonly Pla
       ...record,
       achievementGain,
     };
-  });
+  }));
 }

@@ -7,7 +7,7 @@ import {
   getCachedProfile,
   getUserFriendCode,
   getProfilePrivate,
-} from "../../db";
+} from "../../storage";
 import { searchResultEmbeds } from "../utils/embeds";
 
 export const data = new SlashCommandBuilder()
@@ -42,15 +42,15 @@ export async function execute(
 ): Promise<void> {
   const target = interaction.options.getUser("user") ?? interaction.user;
   const userId = target.id;
-  if (target.id !== interaction.user.id && getProfilePrivate(target.id)) {
+  if (target.id !== interaction.user.id && await getProfilePrivate(target.id)) {
     await interaction.reply({
       content: `<@${target.id}> 님은 프로필을 비공개로 설정했습니다.`,
       flags: MessageFlags.Ephemeral,
     });
     return;
   }
-  const friendCode = getUserFriendCode(userId);
-  const cached = friendCode ? getCachedProfile(friendCode) : null;
+  const friendCode = await getUserFriendCode(userId);
+  const cached = friendCode ? await getCachedProfile(friendCode) : null;
   if (!cached) {
     const msg =
       target.id === interaction.user.id
