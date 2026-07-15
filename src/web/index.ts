@@ -1,7 +1,7 @@
 import * as http from "http";
 import * as fs from "fs";
 import { parseHome, parsePlayerData, parseFriendCode as parseFC, parseRecentRecords, parsePlaylogHistory, parseTop5, parseTopSongs, parseMusicScore, mergeTopRecords, getMaimaiBaseUrl, parseMapAreas, parsePlaylogDetail } from "../scraper";
-import { cacheProfile, getCachedProfile, saveUserSession, getUserSyncToken, findUserBySyncToken, getUserFriendCodeForServer, saveAvatarBlob, getAvatarBlob, getSongJacket, saveSongJacket, getExtraBookmarklets, getProfilePrivate, setProfilePrivate, addExtraBookmarklet, removeExtraBookmarklet, getEnabledBookmarkletPresetIds, setBookmarkletPresetEnabled, getUserDefaultServer, setUserDefaultServer, isMaimaiServer, getMapImage, saveMapImage, saveAchievementPlayEventLogBatch, getAllAliases, addAlias, deleteAlias, setAliasTranslation, getTranslateTitles, setTranslateTitles } from "../storage";
+import { cacheProfile, getCachedProfile, saveUserSession, getUserSyncToken, findUserBySyncToken, getUserFriendCodeForServer, saveAvatarBlob, getAvatarBlob, getSongJacket, saveSongJacket, getExtraBookmarklets, getProfilePrivate, setProfilePrivate, addExtraBookmarklet, removeExtraBookmarklet, getEnabledBookmarkletPresetIds, setBookmarkletPresetEnabled, getUserDefaultServer, setUserDefaultServer, isMaimaiServer, getMapImage, saveMapImage, saveAchievementPlayEventLogBatch, getAllAliases, addAlias, deleteAlias, setAliasTranslation, getTranslateTitles, setTranslateTitles, getRegisteredUserCount } from "../storage";
 import { buildBookmarkletJs, setBaseUrl, getBaseUrl, buildBookmarklet, BOOKMARKLET_PRESETS, getBookmarkletPresets } from "./bookmarklet";
 import { computeRatingTarget, getAllSongTitles } from "../constants";
 import { settingsPage } from "./settingsPage";
@@ -17,6 +17,10 @@ const DISCORD_INVITE_PERMISSIONS = "2415938560";
 const DISCORD_INVITE_INTEGRATION_TYPE = "0";
 
 export { setBaseUrl, getBaseUrl, buildBookmarklet };
+
+// 길드 수는 Discord client에서만 알 수 있어 지연 게터로 주입받는다 (요청 시 호출).
+let getGuildCount: (() => number) | null = null;
+export function setGuildCountProvider(fn: () => number): void { getGuildCount = fn; }
 
 function discordInviteUrl(): string | null {
   const configuredUrl = CONFIG.discordInviteUrl?.trim();
@@ -194,6 +198,23 @@ export function startWebServer(port: number): void {
       if (!targetUrl) { res.writeHead(500); res.end("missing_client_id"); return; }
       res.writeHead(302, { Location: targetUrl, "cache-control": "no-cache" });
       res.end();
+      return;
+    }
+
+    // 랜딩페이지용 통계 (carol-web의 STATS_URL 대상)
+    if (req.method === "GET" && url.pathname === "/api/stats") {
+      const userCount = await getRegisteredUserCount();
+      const serverCount = getGuildCount ? getGuildCount() : 0;
+      const version =
+        process.env.RELEASE_VERSION?.trim() ||
+        process.env.BUILD_VERSION?.trim() ||
+        "local";
+      res.writeHead(200, {
+        "content-type": "application/json",
+        "access-control-allow-origin": "*",
+        "cache-control": "public, max-age=300",
+      });
+      res.end(JSON.stringify({ userCount, serverCount, version }));
       return;
     }
 
