@@ -1,6 +1,6 @@
 import { Client, Events, GatewayIntentBits, ChatInputCommandInteraction, ButtonInteraction, REST, Routes, MessageFlags } from "discord.js";
 import { initEncryption } from "../crypto";
-import { startWebServer, setBaseUrl } from "../web";
+import { startWebServer, setBaseUrl, setGuildCountProvider } from "../web";
 import { closeStorage, initializeStorage, loadUserSession, getCachedProfile, clearRatingCardCacheForInactive, getTranslateTitles } from "../storage";
 import { CONFIG, PORT } from "../config";
 import { recentEmbeds, rtTableEmbed, searchResultEmbeds, getSearchCtx, mapAreaEmbed } from "./utils/embeds";
@@ -228,6 +228,7 @@ async function main(): Promise<void> {
   initEncryption(CONFIG.encryptionKey);
   if (CONFIG.baseUrl) setBaseUrl(CONFIG.baseUrl);
   startWebServer(PORT);
+  setGuildCountProvider(() => client.guilds.cache.size);
   process.on("SIGINT", () => { void closeStorage().finally(() => process.exit(0)); });
   process.on("SIGTERM", () => { void closeStorage().finally(() => process.exit(0)); });
   await client.login(CONFIG.token);
