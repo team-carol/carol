@@ -1,7 +1,9 @@
 import * as http from "http";
 import * as fs from "fs";
+import { gunzip } from "zlib";
+import { promisify } from "util";
 import { parseHome, parsePlayerData, parseFriendCode as parseFC, parseRecentRecords, parsePlaylogHistory, parseTop5, parseTopSongs, parseMusicScore, mergeTopRecords, getMaimaiBaseUrl, parseMapAreas, parsePlaylogDetail } from "../scraper";
-import { cacheProfile, getCachedProfile, saveUserSession, getUserSyncToken, findUserBySyncToken, getUserFriendCodeForServer, saveAvatarBlob, getAvatarBlob, getSongJacket, saveSongJacket, getExtraBookmarklets, getProfilePrivate, setProfilePrivate, addExtraBookmarklet, removeExtraBookmarklet, getEnabledBookmarkletPresetIds, setBookmarkletPresetEnabled, getUserDefaultServer, setUserDefaultServer, isMaimaiServer, getMapImage, saveMapImage, saveAchievementPlayEventLogBatch, getAllAliases, addAlias, deleteAlias, setAliasTranslation, getTranslateTitles, setTranslateTitles, getRegisteredUserCount } from "../storage";
+import { cacheProfile, getCachedProfile, saveUserSession, getUserSyncToken, findUserBySyncToken, getUserFriendCodeForServer, saveAvatarBlob, getAvatarBlob, getSongJacket, saveSongJacket, getExtraBookmarklets, getProfilePrivate, setProfilePrivate, addExtraBookmarklet, removeExtraBookmarklet, getEnabledBookmarkletPresetIds, setBookmarkletPresetEnabled, getUserDefaultServer, setUserDefaultServer, isMaimaiServer, getMapImage, saveMapImage, saveAchievementPlayEventLogBatch, getAllAliases, addAlias, deleteAlias, setAliasTranslation, getTranslateTitles, setTranslateTitles, getRegisteredUserCount, getAchievementMinimum, setAchievementMinimum } from "../storage";
 import { buildBookmarkletJs, setBaseUrl, getBaseUrl, buildBookmarklet, BOOKMARKLET_PRESETS, getBookmarkletPresets } from "./bookmarklet";
 import { computeRatingTarget, getAllSongTitles } from "../constants";
 import { settingsPage } from "./settingsPage";
@@ -15,6 +17,8 @@ const isDev = !CONFIG.baseUrl;
 const DISCORD_INVITE_BASE_URL = "https://discord.com/oauth2/authorize";
 const DISCORD_INVITE_PERMISSIONS = "2415938560";
 const DISCORD_INVITE_INTEGRATION_TYPE = "0";
+const gunzipAsync = promisify(gunzip);
+const MAX_SYNC_BYTES = 20_000_000;
 
 export { setBaseUrl, getBaseUrl, buildBookmarklet };
 
@@ -185,7 +189,7 @@ if(/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)) sw('MB');
 }
 
 export function startWebServer(port: number): void {
-  const server = http.createServer(async (req, res) => {
+  const server = http.createServer((req, res) => { void (async () => {
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
     res.setHeader("Access-Control-Allow-Headers", "Content-Type");
@@ -452,7 +456,14 @@ a{color:#c084fc}
       const defaultServer = await getUserDefaultServer(userId);
       const translate = await getTranslateTitles(userId);
       res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({ private: isPrivate, presets, bookmarklets, defaultServer, translate }));
+      res.end(JSON.stringify({ private: isPrivate, presets, bookmarklets, defaultServer, translate, minimumAchievement: await getAchievementMinimum(userId) }));
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/settings/achievement-filter") {
+      const token=url.searchParams.get("code")||"", userId=await findUserBySyncToken(token);
+      if(!userId){res.writeHead(403,{"content-type":"application/json"});res.end(JSON.stringify({error:"expired"}));return;}
+      try { const body=JSON.parse(await readBody(req)); const value=body.minimumAchievement; if(typeof value!=="number"||!Number.isFinite(value)||value<0||value>101){res.writeHead(400,{"content-type":"application/json"});res.end(JSON.stringify({error:"invalid_minimum_achievement"}));return;} await setAchievementMinimum(userId,value); res.writeHead(200,{"content-type":"application/json"});res.end(JSON.stringify({minimumAchievement:value})); } catch {res.writeHead(400,{"content-type":"application/json"});res.end(JSON.stringify({error:"invalid_body"}));}
       return;
     }
 
@@ -595,8 +606,13 @@ a{color:#c084fc}
       if (!userId && !isPreview) { res.writeHead(403); res.end("expired"); return; }
       const syncUserId = userId || "preview";
 
-      const raw = await readBody(req);
-      const data = JSON.parse(raw);
+      let raw: string;
+      try { raw = await readSyncBody(req); } catch (error) {
+        const message = error instanceof Error ? error.message : "invalid_body";
+        res.writeHead(message === "body_too_large" ? 413 : 400); res.end(message); return;
+      }
+      let data: any;
+      try { data = JSON.parse(raw); } catch { res.writeHead(400); res.end("invalid_json"); return; }
       const syncServer = typeof data.server === "string" && isMaimaiServer(data.server) ? data.server : "intl";
       const homeHtml: string = data.h || "";
       const playerHtml: string = data.p || "";
@@ -755,11 +771,38 @@ a{color:#c084fc}
     }
 
     res.writeHead(404); res.end();
-  });
+  })().catch((error: unknown) => {
+    console.error("[web] request failed:", error);
+    if (!res.headersSent) res.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
+    if (!res.writableEnded) res.end("internal_server_error");
+  }); });
 
+  server.on("error", (error) => console.error("[web] server error:", error));
   server.listen(port, () => console.log(`[maimai] 🌐 http://localhost:${port}`));
 }
 
 function readBody(req: http.IncomingMessage, maxBytes = 20_000_000): Promise<string> {
   return new Promise((resolve, reject) => { let d = ""; let size = 0; req.on("data", (c) => { size += c.length; if (size > maxBytes) { reject(new Error("body_too_large")); req.destroy(); return; } d += c; }); req.on("end", () => resolve(d)); req.on("error", reject); });
+}
+
+async function readSyncBody(req: http.IncomingMessage): Promise<string> {
+  const body = Buffer.from(await readBodyBuffer(req, MAX_SYNC_BYTES));
+  if (String(req.headers["content-encoding"] || "").toLowerCase() !== "gzip") return body.toString("utf8");
+  try {
+    const decoded = await gunzipAsync(body, { maxOutputLength: MAX_SYNC_BYTES });
+    if (decoded.length > MAX_SYNC_BYTES) throw new Error("body_too_large");
+    return decoded.toString("utf8");
+  } catch (error) {
+    if (error instanceof Error && error.message === "body_too_large") throw error;
+    throw new Error("invalid_gzip");
+  }
+}
+
+function readBodyBuffer(req: http.IncomingMessage, maxBytes: number): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = []; let size = 0;
+    req.on("data", (chunk: Buffer) => { size += chunk.length; if (size > maxBytes) { reject(new Error("body_too_large")); req.destroy(); return; } chunks.push(chunk); });
+    req.on("end", () => resolve(Buffer.concat(chunks)));
+    req.on("error", reject);
+  });
 }

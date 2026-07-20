@@ -13,6 +13,7 @@ export function settingsPage(token: string, isPrivate: boolean, enabledPresetIds
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
 <style>
+ .achievement-filter{display:flex;align-items:end;gap:10px}.achievement-filter .input-group{flex:1;margin-bottom:0}.filter-save{background:#9333ea;color:#fff;border:0;border-radius:8px;padding:10px 16px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer}.filter-save:disabled{opacity:.4;cursor:not-allowed}
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:#0d0d0d;color:#ccc;font-size:16px;line-height:1.5;-webkit-font-smoothing:antialiased;display:flex;justify-content:center;min-height:100vh;padding:80px 24px}
 .wrap{width:100%;max-width:600px}
@@ -99,6 +100,12 @@ a{color:#c084fc}
 <div class="status" id="transStatus"></div>
 </div>
 <div class="card">
+<p class="section-label">오늘의 성과 필터</p>
+<div class="toggle-desc" style="margin-bottom:14px">이 기준 이상 오른 기록만 표시합니다. FC/FS 이상 플레이는 기준보다 낮아도 계속 표시됩니다.</div>
+<div class="achievement-filter"><div class="input-group"><label for="achievementMin">최소 달성률 (%)</label><input id="achievementMin" type="number" min="0" max="101" step="0.0001" value="95.0000"></div><button class="filter-save" id="achievementSave" onclick="saveAchievementFilter()">저장</button></div>
+<div class="status" id="achievementStatus"></div>
+</div>
+<div class="card">
 <p class="section-label">프리셋 북마클릿 <span class="count" id="presetCount"></span></p>
 <ul class="bm-list" id="presetList"></ul>
 <div class="status" id="presetStatus"></div>
@@ -123,9 +130,33 @@ var MAX_BM=5;
   renderDefaultServer();
   renderPrivacy();
   renderTranslate();
+  loadAchievementFilter();
   renderPresetList();
   renderBmList();
 })();
+
+function renderAchievementFilter(){
+  var value=Number(DATA.minimumAchievement);
+  document.getElementById('achievementMin').value=(Number.isFinite(value)?value:95).toFixed(4);
+}
+
+function loadAchievementFilter(){
+  renderAchievementFilter();
+  fetch('/api/settings?code='+TOKEN).then(function(r){if(!r.ok)throw new Error(r.status);return r.json();}).then(function(data){
+    if(typeof data.minimumAchievement==='number'&&Number.isFinite(data.minimumAchievement)){DATA.minimumAchievement=data.minimumAchievement;renderAchievementFilter();}
+  }).catch(function(){});
+}
+
+function saveAchievementFilter(){
+  var input=document.getElementById('achievementMin'), save=document.getElementById('achievementSave'), next=Number(input.value), previous=Number(DATA.minimumAchievement);
+  if(!Number.isFinite(next)||next<0||next>101){showStatus('achievementStatus','err','0~101 사이의 값을 입력해주세요.');renderAchievementFilter();return;}
+  save.disabled=true;
+  fetch('/api/settings/achievement-filter?code='+TOKEN,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({minimumAchievement:next})})
+  .then(function(r){if(!r.ok)throw new Error(r.status);return r.json();})
+  .then(function(){DATA.minimumAchievement=next;renderAchievementFilter();showStatus('achievementStatus','ok','저장됨');})
+  .catch(function(){DATA.minimumAchievement=Number.isFinite(previous)?previous:95;renderAchievementFilter();showStatus('achievementStatus','err','저장 실패');})
+  .then(function(){save.disabled=false;});
+}
 
 function renderDefaultServer(){
   document.getElementById('serverIntl').className='server-btn'+(DATA.defaultServer==='intl'?' active':'');

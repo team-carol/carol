@@ -3,9 +3,10 @@ const assert = require("node:assert/strict");
 const { execFileSync, spawn } = require("node:child_process");
 const { Client } = require("pg");
 
+let temporaryPostgresSequence = 0;
 async function temporaryPostgres() {
-  if (process.env.DATABASE_URL) return { url: process.env.DATABASE_URL, stop: async () => {} };
-  const name = `carol-pg-${process.pid}`;
+  if (process.env.TEST_DATABASE_URL) return { url: process.env.TEST_DATABASE_URL, stop: async () => {} };
+  const name = `carol-pg-${process.pid}-${++temporaryPostgresSequence}`;
   // A failed prior run must not make this test attach to an unrelated
   // container with the same deterministic name.
   try { execFileSync("docker", ["rm", "-f", name], { stdio: "ignore" }); } catch {}
@@ -30,12 +31,14 @@ async function temporaryPostgres() {
 
 test("PostgreSQL achievement log and durable projection", async () => {
   const pg = await temporaryPostgres();
+  process.env.DATABASE_URL = pg.url;
   const { PostgresStorage } = require("../dist/storage/postgres");
   const db = new PostgresStorage(pg.url);
   const event = (id, chartKey, score, playedAt, extra = {}) => ({ profileKey: extra.profileKey || "integration", sourcePlayId: id, chartKey, playedAt, sourceSequence: Number(id) || 1, recordJson: JSON.stringify({ title: chartKey, musicKind: "DX", diff: "MASTER" }), achievementVal: score, fc: extra.fc || "", sync: extra.sync || "", ratingUp: extra.ratingUp, isNewScore: extra.isNewScore, title: chartKey, diff: "MASTER", level: "13+", musicKind: "DX", achievementText: `${score}%` });
   const start = Date.UTC(2026, 0, 1, 19); // 2026-01-02 04:00 KST
   try {
     await db.initialize();
+    await db.setAchievementMinimum("integration", 0);
     await db.saveAchievementPlayEventLogBatch([event("1", "chart-a", 90, start - 1)]); // baseline
     assert.equal((await db.getAchievementPlayEventLog("integration"))[0].isBaseline, 1);
     assert.equal((await db.getDailyAchievementSummaries("integration", start - 10, start + 10)).length, 0);
@@ -129,6 +132,7 @@ test("PostgreSQL achievement log and durable projection", async () => {
 
 test("accepts legacy v1 migration checksum without rewriting it", async () => {
   const pg = await temporaryPostgres();
+  process.env.DATABASE_URL = pg.url;
   const legacyChecksum = "legacy-whole-schema-checksum";
   const client = new Client({ connectionString: pg.url });
   try {
