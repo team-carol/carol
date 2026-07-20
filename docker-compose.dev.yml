@@ -2,17 +2,14 @@ services:
   postgres:
     image: postgres:16-alpine
 
-  migrate:
-    build:
-      context: .
-      target: build
-    image: carol:dev
-
   bot:
     build:
       context: .
       target: production
     image: carol:dev
+    ports:
+      - "3456:3456"
 
+  # Base Compose의 터널을 개발 실행에서 제외한다.
   cloudflared:
     profiles: [remote-tunnel]

@@ -48,8 +48,8 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       ? requestedDay
       : koreaPlayDayKey(new Date());
     const { from, to } = koreaPlayDayRange(playDay);
-    const summaries = await getDailyAchievementSummaries(cached.profileKey, from, to);
-    const records = summaries.map((e) => ({ title:e.title, achievement:e.achievementVal.toFixed(4)+"%", diff:e.diff, level:e.level, date:new Date(e.playedAt).toISOString(), jacketUrl:"", musicKind:e.musicKind, achievementVal:Number(e.achievementVal), track:0, fc:e.fc, sync:e.sync, ratingUp:e.ratingUp ?? undefined, playedAt:Number(e.playedAt), achievementGain:e.achievementGain }));
+    const summaries = await getDailyAchievementSummaries(userId, from, to);
+    const records = summaries.map((e) => ({ title:e.title, achievement:e.achievementAfter.toFixed(4)+"%", diff:e.diff, level:e.level, date:new Date(e.playedAt).toISOString(), jacketUrl:"", musicKind:e.musicKind, achievementVal:Number(e.achievementAfter), track:0, fc:e.fc, sync:e.sync, ratingUp:e.ratingUp ?? undefined, playedAt:Number(e.playedAt), achievementGain:e.ratingGain, ratingGain:e.ratingGain, achievementBefore:e.achievementBefore, achievementAfter:e.achievementAfter, levelConstant:e.levelConstant ?? undefined }));
     console.log(`[성과] 데이터 summaries=${summaries.length} records=${records.length}`);
     if (records.length === 0) {
       console.log(`[성과] 표시할 성과 없음 playDay=${playDay}`);
