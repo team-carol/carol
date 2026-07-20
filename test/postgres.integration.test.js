@@ -39,7 +39,7 @@ test("PostgreSQL achievement log and durable projection", async () => {
   try {
     await db.initialize();
     await db.setAchievementMinimum("integration", 0);
-    await db.saveAchievementPlayEventLogBatch([event("1", "chart-a", 90, start - 1)]); // baseline
+    await db.saveAchievementPlayEventLogBatch([event("1", "chart-a", 90, start - 1), event("legacy-baseline", "legacy-chart", 97, start - 2)]); // baseline
     assert.equal((await db.getAchievementPlayEventLog("integration"))[0].isBaseline, 1);
     assert.equal((await db.getDailyAchievementSummaries("integration", start - 10, start + 10)).length, 0);
 
@@ -59,16 +59,19 @@ test("PostgreSQL achievement log and durable projection", async () => {
       event("6", "chart-c", 70, start + 5, { sync: "FDX", ratingUp: 7, isNewScore: true }),
       event("7", "chart-c", 71, start + 6, { sync: "FDX", ratingUp: 8 }), // same-chart latest representative
       event("8", "chart-boundary", 99, start + 24 * 60 * 60 * 1000, { isNewScore: true }), // next day 04:00
+      event("legacy-99", "legacy-chart", 99, start + 7),
     ]);
+    await db.pool.query("UPDATE achievement_play_event_log SET achievement_before=NULL WHERE source_play_id='legacy-99'");
     const raw = await db.getAchievementPlayEventLog("integration");
-    assert.equal(raw.length, 8);
-    assert.equal((await db.getAchievementPlayEventLog("integration", start, start + 24 * 60 * 60 * 1000)).length, 6);
+    assert.equal(raw.length, 10);
+    assert.equal((await db.getAchievementPlayEventLog("integration", start, start + 24 * 60 * 60 * 1000)).length, 7);
     const summaries = await db.getDailyAchievementSummaries("integration", start, start + 24 * 60 * 60 * 1000);
-    assert.deepEqual(summaries.map((x) => x.chartKey).sort(), ["chart-a", "chart-b", "chart-c"]);
+    assert.deepEqual(summaries.map((x) => x.chartKey).sort(), ["chart-a", "chart-b", "chart-c", "legacy-chart"]);
     assert.equal(summaries.find((x) => x.chartKey === "chart-a").achievementGain, 5);
     assert.equal(summaries.find((x) => x.chartKey === "chart-b").achievementGain, 0);
     assert.equal(summaries.find((x) => x.chartKey === "chart-c").sync, "FDX");
     assert.equal(summaries.find((x) => x.chartKey === "chart-c").ratingUp, 8);
+    assert.equal(summaries.find((x) => x.chartKey === "legacy-chart").achievementBefore, 97);
     assert.equal((await db.getDailyAchievementSummaries("integration", start + 24 * 60 * 60 * 1000, start + 48 * 60 * 60 * 1000)).length, 1);
 
     // A lower score is still meaningful for FC and FDX -> FDX+, but a plain

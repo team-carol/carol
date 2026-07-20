@@ -1,6 +1,7 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, MessageFlags, AttachmentBuilder } from "discord.js";
 import { getDailyAchievementSummaries, getAvatarBlob, getCachedProfile, getProfilePrivate, getUserFriendCode, getTranslateTitles } from "../../storage";
 import { koreaPlayDayKey, koreaPlayDayRange } from "../../achievements";
+import { getJacketFile } from "../../constants";
 import { renderAchievementCard } from "../utils/achievementCard";
 
 export const data = new SlashCommandBuilder()
@@ -18,6 +19,18 @@ export const data = new SlashCommandBuilder()
 
 function isPlayDayKey(value: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+function achievementJacketUrl(record: { recordJson: string; title: string }): string {
+  try {
+    const parsed = JSON.parse(record.recordJson) as { jacketUrl?: unknown };
+    if (typeof parsed.jacketUrl === "string") {
+      const url = new URL(parsed.jacketUrl);
+      if ((url.protocol === "http:" || url.protocol === "https:") && ["maimaidx.jp", "maimaidx-eng.com", "otoge-db.net"].some((host) => url.hostname === host || url.hostname.endsWith(`.${host}`))) return url.toString();
+    }
+  } catch { /* legacy rows may contain non-JSON payloads */ }
+  const file = getJacketFile(record.title);
+  return file ? `https://otoge-db.net/maimai/jacket/${encodeURIComponent(file)}` : "";
 }
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
@@ -49,7 +62,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       : koreaPlayDayKey(new Date());
     const { from, to } = koreaPlayDayRange(playDay);
     const summaries = await getDailyAchievementSummaries(userId, from, to);
-    const records = summaries.map((e) => ({ title:e.title, achievement:e.achievementAfter.toFixed(4)+"%", diff:e.diff, level:e.level, date:new Date(e.playedAt).toISOString(), jacketUrl:"", musicKind:e.musicKind, achievementVal:Number(e.achievementAfter), track:0, fc:e.fc, sync:e.sync, ratingUp:e.ratingUp ?? undefined, playedAt:Number(e.playedAt), achievementGain:e.ratingGain, ratingGain:e.ratingGain, achievementBefore:e.achievementBefore, achievementAfter:e.achievementAfter, levelConstant:e.levelConstant ?? undefined }));
+    const records = summaries.map((e) => ({ title:e.title, achievement:e.achievementAfter.toFixed(4)+"%", diff:e.diff, level:e.level, date:new Date(e.playedAt).toISOString(), jacketUrl:achievementJacketUrl(e), musicKind:e.musicKind, achievementVal:Number(e.achievementAfter), track:0, fc:e.fc, sync:e.sync, ratingUp:e.ratingUp ?? undefined, playedAt:Number(e.playedAt), achievementGain:e.ratingGain, ratingGain:e.ratingGain, achievementBefore:e.achievementBefore, achievementAfter:e.achievementAfter, levelConstant:e.levelConstant ?? undefined }));
     console.log(`[성과] 데이터 summaries=${summaries.length} records=${records.length}`);
     if (records.length === 0) {
       console.log(`[성과] 표시할 성과 없음 playDay=${playDay}`);
