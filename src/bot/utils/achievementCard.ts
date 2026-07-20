@@ -85,12 +85,55 @@ function stat(label: string, value: string, color = "#ffffff"): El {
   ]);
 }
 
+// Keep this renderer tolerant of summaries from older and newer backends.
+type AchievementRecord = PlayRecord & {
+  rating?: number;
+  ratingGain?: number;
+  levelConstant?: number;
+  constant?: number;
+  beforeAchievement?: number;
+  afterAchievement?: number;
+  achievementBefore?: number;
+  achievementAfter?: number;
+};
+
+function details(record: PlayRecord): AchievementRecord {
+  return record as AchievementRecord;
+}
+
+function chartConstant(record: PlayRecord, profile: CachedProfile): number | null {
+  const supplied = details(record).levelConstant ?? details(record).constant;
+  if (typeof supplied === "number" && Number.isFinite(supplied)) return supplied;
+  const constant = getConstant(record.title, record.musicKind, record.diff, profile.server);
+  if (constant !== null) return constant;
+  const parsed = Number.parseFloat(record.level);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function ratingGain(record: PlayRecord): number | null {
+  const value = details(record).ratingGain ?? record.ratingUp;
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function achievementAfter(record: PlayRecord): number {
+  const value = details(record).afterAchievement ?? details(record).achievementAfter;
+  return typeof value === "number" && Number.isFinite(value) ? value : record.achievementVal;
+}
+
+function achievementBefore(record: PlayRecord): number | null {
+  const value = details(record).beforeAchievement ?? details(record).achievementBefore;
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
 function recordRow(record: PlayRecord, rank: number, profile: CachedProfile, jacket: string | null, playDay: string, translate = false): El {
   const diffColor = DIFF_COLOR[record.diff] ?? MUTED;
   const marks = [record.fc, record.sync].filter((mark) => mark.length > 0);
-  const ratingGain = typeof record.ratingUp === "number" ? `rating +${record.ratingUp}` : "rating —";
-  const constant = getConstant(record.title, record.musicKind, record.diff, profile.server);
+  const gain = ratingGain(record);
+  const ratingLabel = gain !== null ? `rating +${gain.toFixed(2)}` : typeof details(record).rating === "number" ? `rating ${details(record).rating!.toFixed(2)}` : "rating —";
+  const constant = chartConstant(record, profile);
   const constantLabel = constant !== null ? constant.toFixed(1) : record.level;
+  const before = achievementBefore(record);
+  const achievementLabel = before !== null ? `${before.toFixed(4)}% → ${achievementAfter(record).toFixed(4)}%` : `${achievementAfter(record).toFixed(4)}%`;
   return el(
     "div",
     {
@@ -145,10 +188,10 @@ function recordRow(record: PlayRecord, rank: number, profile: CachedProfile, jac
           el("span", { color: TEXT, fontSize: 10, marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, `${record.diff} ${constantLabel} · ${record.musicKind || "?"} · ${record.date || playDay}`),
           el("div", { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginTop: 8 }, [
             el("div", { display: "flex", alignItems: "baseline", gap: 8 }, [
-              el("span", { color: "#fff", fontSize: 18, fontWeight: 800, lineHeight: 1 }, record.achievementVal > 0 ? `${record.achievementVal.toFixed(4)}%` : record.achievement),
+              el("span", { color: "#fff", fontSize: 15, fontWeight: 700, lineHeight: 1 }, achievementLabel),
             ]),
             el("div", { display: "flex", alignItems: "baseline", gap: 8 }, [
-              el("span", { color: ACCENT, fontSize: 13, fontWeight: 800 }, `+${(record.achievementGain ?? 0).toFixed(4)}% · ${ratingGain}`),
+              el("span", { color: ACCENT, fontSize: 14, fontWeight: 800 }, ratingLabel),
               el("div", { display: "flex", gap: 4, width: 76, justifyContent: "flex-end" }, marks.map((mark) =>
                 el("span", { color: MARK_COLOR[mark] ?? "rgba(255,255,255,0.7)", fontSize: 10, fontWeight: 800 }, mark),
               )),
@@ -198,7 +241,11 @@ export async function renderAchievementCard(
   translate = false,
 ): Promise<Buffer> {
   const fonts = await loadFonts();
-  const topRecords = records.slice().sort((a, b) => (b.playedAt ?? 0) - (a.playedAt ?? 0));
+  const topRecords = records.slice().sort((a, b) => {
+    const aScore = (chartConstant(a, profile) ?? 0) + achievementAfter(a) / 100;
+    const bScore = (chartConstant(b, profile) ?? 0) + achievementAfter(b) / 100;
+    return bScore - aScore || (ratingGain(b) ?? 0) - (ratingGain(a) ?? 0) || (b.playedAt ?? 0) - (a.playedAt ?? 0);
+  });
   const avatarUrl = avatarBuf ? `data:image/png;base64,${avatarBuf.toString("base64")}` : "";
   const jacketUrls = new Map<string, string | null>();
   await Promise.all(
@@ -237,7 +284,7 @@ export async function renderAchievementCard(
         ]),
         el("div", { display: "flex", gap: 26 }, [
           stat("COUNT", String(topRecords.length), ACCENT),
-          stat("ACHIEVEMENT GAIN", `+${topRecords.reduce((sum, record) => sum + Math.max(0, record.achievementGain ?? 0), 0).toFixed(4)}%`, ACCENT),
+          stat("RATING GAIN", `+${topRecords.reduce((sum, record) => sum + Math.max(0, ratingGain(record) ?? 0), 0).toFixed(0)}`, ACCENT),
         ]),
       ]),
       el(

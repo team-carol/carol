@@ -57,5 +57,5 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     });
     return;
   }
-  await interaction.reply({ ...buildSettingsContent(interaction.user.id), flags: MessageFlags.Ephemeral });
+  await interaction.reply({ ...await buildSettingsContent(interaction.user.id), flags: MessageFlags.Ephemeral });
 }
