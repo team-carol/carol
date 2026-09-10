@@ -33,6 +33,13 @@ export const MESSAGES = {
   // ── /공지설정 · 공지 폴링 ───────────────────────────────────────────────
   "news.sourceJp": "maimai でらっくす 공식 (내수판)",
   "news.untitled": "(제목 없음)",
+  "news.titleKo": "{title}",
+  "news.viewOriginal": "원문 보기",
+  "news.viewTranslated": "번역 보기",
+  "news.machineTranslated": "기계 번역 · 정확한 내용은 원문을 확인해주세요",
+  "news.truncated": "…\n\n(내용이 길어 잘렸습니다 · [원문 보기]({url}))",
+  "news.detailExpired": "보관 기간이 지난 공지입니다. 임베드 제목의 링크로 원문을 확인해주세요.",
+  "news.detailEmpty": "본문을 가져오지 못했습니다. [원문 보기]({url})",
   "newsSettings.title": "공지 알림 설정",
   "newsSettings.jpField": "내수판 (info-maimai.sega.jp)",
   "newsSettings.intlField": "국제판 (maimai.sega.com)",

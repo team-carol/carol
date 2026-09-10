@@ -8,5 +8,7 @@
   "aliasAdminGuildId": "곡 별명 관리(/별명) 명령을 허용할 guildId (비우면 어디서도 비활성)",
   "carolIssueBaseUrl": "https://carol-issue.example (제보 연동 대상 주소, 없으면 /문의 비활성)",
   "carolSharedSecret": "carol-issue와 동일한 공유 secret (hex)",
-  "carolIssueGuildId": "DM 제보용 대표 guildId (선택, 없으면 DM 채널 ID로 폴백)"
+  "carolIssueGuildId": "DM 제보용 대표 guildId (선택, 없으면 DM 채널 ID로 폴백)",
+  "geminiApiKey": "Google AI Studio API 키 (없으면 내수판 공지 번역 비활성)",
+  "geminiModel": "gemini-3.6-flash (선택, 생략 시 이 값)"
 }
