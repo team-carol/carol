@@ -30,6 +30,19 @@ export const MESSAGES = {
   "ratingImage.snapshotGameUnsupported": "과거 날짜 조회는 maimai DX 레이팅표만 지원합니다. 다른 게임 환산은 전체 클리어 기록이 필요한데, 스냅샷은 레이팅 대상 50곡만 보관합니다.",
   "ratingImage.renderFailed": "이미지 생성에 실패했습니다.",
 
+  // ── /공지설정 · 공지 폴링 ───────────────────────────────────────────────
+  "news.sourceJp": "maimai でらっくす 공식 (내수판)",
+  "news.untitled": "(제목 없음)",
+  "newsSettings.title": "공지 알림 설정",
+  "newsSettings.jpField": "내수판 (info-maimai.sega.jp)",
+  "newsSettings.intlField": "국제판 (maimai.sega.com)",
+  "newsSettings.off": "꺼짐",
+  "newsSettings.set": "{source} 공지를 {channel} 에 올립니다.",
+  "newsSettings.cleared": "{source} 공지 알림을 껐습니다.",
+  "newsSettings.notSet": "설정되어 있지 않습니다.",
+  "newsSettings.badChannel": "봇이 글을 쓸 수 있는 텍스트 채널을 지정해주세요.",
+  "newsSettings.hint": "채널을 지정하면 켜지고, `해제` 옵션으로 끕니다. 새 공지만 올라가며 과거 공지는 올리지 않습니다.",
+
   // ── 공통 (서버/권한) ────────────────────────────────────────────────────
   "common.guildOnly": "서버에서만 사용 가능합니다.",
   "common.guildAdminOnly": "서버 관리자만 사용 가능합니다.",
