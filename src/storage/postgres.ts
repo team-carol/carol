@@ -7,7 +7,7 @@ import { calcSongRating, getConstant, levelToNumber } from "../constants";
 
 pgTypes.setTypeParser(20, (value) => Number(value));
 
-export const MIGRATION_VERSION = 14;
+export const MIGRATION_VERSION = 15;
 
 // Migration text is deliberately kept as separate, immutable units.  In particular,
 // an edit to the current schema must not silently change an old migration checksum.
@@ -71,6 +71,26 @@ CREATE INDEX IF NOT EXISTS idx_user_goals_owner ON user_goals(discord_user_id, c
     rating integer NOT NULL DEFAULT 0,
     synced_at bigint NOT NULL DEFAULT 0,
     PRIMARY KEY (profile_key, play_day)
+  );`,],
+  // 공지 폴링. news_channels 는 서버별 출처별 게시 채널, news_seen 은 중복 게시 방지,
+  // news_feed_state 는 조건부 요청(ETag/Last-Modified)용 상태. source 는 'jp' | 'intl'.
+  [15, `CREATE TABLE IF NOT EXISTS news_channels (
+    guild_id text NOT NULL,
+    source text NOT NULL,
+    channel_id text NOT NULL,
+    PRIMARY KEY (guild_id, source)
+  );
+  CREATE TABLE IF NOT EXISTS news_seen (
+    source text NOT NULL,
+    item_id text NOT NULL,
+    posted_at bigint NOT NULL DEFAULT 0,
+    PRIMARY KEY (source, item_id)
+  );
+  CREATE TABLE IF NOT EXISTS news_feed_state (
+    source text PRIMARY KEY,
+    etag text NOT NULL DEFAULT '',
+    last_modified text NOT NULL DEFAULT '',
+    checked_at bigint NOT NULL DEFAULT 0
   );`,],
 ];
 
@@ -226,6 +246,24 @@ SELECT u.chart_key AS "chartKey",u.achievement_val AS "achievementVal",u.fc,u.sy
   async saveJacket(id:string,i:number,b:string){await this.q("INSERT INTO jackets VALUES($1,$2,$3) ON CONFLICT(user_id,idx) DO UPDATE SET data=excluded.data",[id,i,b]);} async getJacket(id:string,i:number){const r=await this.q<any>("SELECT data FROM jackets WHERE user_id=$1 AND idx=$2",[id,i]);const m=r[0]?.data?.match(/^data:image\/\w+;base64,(.+)$/);return m?Buffer.from(m[1],'base64'):null;}
   async getSongJacket(id:string){const r=await this.q<any>("SELECT data FROM song_jackets WHERE music_id=$1",[id]);return r[0]?.data??null;} async saveSongJacket(id:string,b:Buffer){await this.q("INSERT INTO song_jackets VALUES($1,$2,$3) ON CONFLICT(music_id) DO UPDATE SET data=excluded.data",[id,b,Date.now()]);}
   async getMapImage(u:string){const r=await this.q<any>("SELECT data FROM map_images WHERE image_url=$1",[u]);return r[0]?.data??null;} async saveMapImage(u:string,b:Buffer){await this.q("INSERT INTO map_images VALUES($1,$2,$3) ON CONFLICT(image_url) DO UPDATE SET data=excluded.data",[u,b,Date.now()]);}
+  // ─── 공지 폴링 ─────────────────────────────────────────────────────────────
+  async listNewsChannels(source:string){return this.q<{guildId:string;channelId:string}>(`SELECT guild_id AS "guildId",channel_id AS "channelId" FROM news_channels WHERE source=$1`,[source]);}
+  async getNewsChannels(guildId:string){return this.q<{source:string;channelId:string}>(`SELECT source,channel_id AS "channelId" FROM news_channels WHERE guild_id=$1`,[guildId]);}
+  async setNewsChannel(guildId:string,source:string,channelId:string){await this.q(`INSERT INTO news_channels(guild_id,source,channel_id) VALUES($1,$2,$3) ON CONFLICT(guild_id,source) DO UPDATE SET channel_id=excluded.channel_id`,[guildId,source,channelId]);}
+  async clearNewsChannel(guildId:string,source:string){const r=await this.pool.query("DELETE FROM news_channels WHERE guild_id=$1 AND source=$2",[guildId,source]);return (r.rowCount??0)>0;}
+
+  async getSeenNewsIds(source:string){const r=await this.q<{itemId:string}>(`SELECT item_id AS "itemId" FROM news_seen WHERE source=$1`,[source]);return new Set(r.map(x=>x.itemId));}
+  async markNewsSeen(source:string,itemIds:readonly string[],postedAt=Date.now()){
+    if(!itemIds.length) return;
+    await this.q(`INSERT INTO news_seen(source,item_id,posted_at) SELECT $1,x,$3 FROM unnest($2::text[]) AS x ON CONFLICT(source,item_id) DO NOTHING`,[source,[...itemIds],postedAt]);
+  }
+  // 테스트용: 특정 항목을 '안 본 것'으로 되돌린다.
+  async deleteNewsSeen(source:string,itemId:string){const r=await this.pool.query("DELETE FROM news_seen WHERE source=$1 AND item_id=$2",[source,itemId]);return (r.rowCount??0)>0;}
+  async getNewsFeedState(source:string){const r=await this.q<any>(`SELECT etag,last_modified AS "lastModified",checked_at AS "checkedAt" FROM news_feed_state WHERE source=$1`,[source]);return r[0]?{...r[0],checkedAt:Number(r[0].checkedAt)}:null;}
+  async setNewsFeedState(source:string,etag:string,lastModified:string,checkedAt=Date.now()){
+    await this.q(`INSERT INTO news_feed_state(source,etag,last_modified,checked_at) VALUES($1,$2,$3,$4) ON CONFLICT(source) DO UPDATE SET etag=excluded.etag,last_modified=excluded.last_modified,checked_at=excluded.checked_at`,[source,etag,lastModified,checkedAt]);
+  }
+
   async getGuildSetting(id:string){const r=await this.q<any>("SELECT auto_role FROM guild_settings WHERE guild_id=$1",[id]);return r[0]?.auto_role!==0;} async setGuildSetting(id:string,v:boolean){await this.q("INSERT INTO guild_settings VALUES($1,$2) ON CONFLICT(guild_id) DO UPDATE SET auto_role=excluded.auto_role",[id,v?1:0]);}
   async getProfilePrivate(id:string){const r=await this.q<any>("SELECT profile_private FROM sessions WHERE discord_user_id=$1",[id]);return r[0]?.profile_private===1;} async setProfilePrivate(id:string,v:boolean){const r=await this.pool.query("UPDATE sessions SET profile_private=$1 WHERE discord_user_id=$2",[v?1:0,id]);return r.rowCount??0;}
   // 세션 행이 없으면 null(= carol을 쓴 적 없는 사용자 → 방침 변경 고지 대상 아님).

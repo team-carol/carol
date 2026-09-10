@@ -19,6 +19,8 @@ import * as achievement  from "./commands/achievement";
 import * as fortune      from "./commands/fortune";
 import * as settings     from "./commands/settings";
 import * as serverSettings from "./commands/serverSettings";
+import * as newsSettings from "./commands/newsSettings";
+import { startNewsPoller } from "./newsPoller";
 import * as search       from "./commands/search";
 import * as status       from "./commands/status";
 import * as songrec      from "./commands/songrec";
@@ -30,7 +32,7 @@ import * as goal         from "./commands/goal";
 
 type Command = { data: { toJSON(): object; name: string }; execute: (i: ChatInputCommandInteraction) => Promise<void> };
 
-const COMMANDS: Command[] = [profile, bookmarklet, ratingtable, ratingimage, achievement, fortune, settings, serverSettings, search, status, songrec, random, areaMap, report, admin, goal];
+const COMMANDS: Command[] = [profile, bookmarklet, ratingtable, ratingimage, achievement, fortune, settings, serverSettings, newsSettings, search, status, songrec, random, areaMap, report, admin, goal];
 const EPHEMERAL_REPLY = { flags: MessageFlags.Ephemeral } as const;
 
 const RATING_CARD_GC_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000;
@@ -81,6 +83,7 @@ client.once(Events.ClientReady, async (c) => {
   loadFonts().catch((e) => console.error("[fonts] 초기 로드 실패:", e));
   void runRatingCardGC();
   setInterval(() => void runRatingCardGC(), RATING_CARD_GC_INTERVAL_MS);
+  startNewsPoller(c);
   console.log("[maimai] 준비 완료");
 });
 
