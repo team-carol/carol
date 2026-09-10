@@ -16,6 +16,8 @@ export interface NewsItem {
   title?: string;
   url?: string;
   summary?: string;
+  /** 공지 본문 전문(텍스트). jp 만. RSS 의 content:encoded 에서 뽑는다. */
+  body?: string;
   imageUrl?: string;
   publishedAt?: number;
 }
@@ -46,6 +48,19 @@ function textOf(html: string, limit: number): string {
   return text.length > limit ? text.slice(0, limit - 1) + "…" : text;
 }
 
+// 본문 전문. <br>/<p> 를 줄바꿈으로 살려서 문단 구조를 유지한다(번역 품질과 가독성 모두에 필요).
+function bodyTextOf(html: string): string {
+  const $ = cheerio.load(html);
+  $("script, style").remove();
+  $("br").replaceWith("\n");
+  $("p, div, li, tr, h1, h2, h3, h4").each((_, el) => { $(el).append("\n"); });
+  return $.root().text()
+    .replace(/[ \t\u3000]+/g, " ")
+    .replace(/ *\n */g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 export function parseJpFeed(xml: string): NewsItem[] {
   const $ = cheerio.load(xml, { xmlMode: true });
   const items: NewsItem[] = [];
@@ -59,6 +74,7 @@ export function parseJpFeed(xml: string): NewsItem[] {
       title: item.find("title").first().text().trim(),
       url: item.find("link").first().text().trim(),
       summary: textOf(item.find("description").first().text(), 300),
+      body: bodyTextOf(item.find("content\\:encoded").first().text() || item.find("description").first().text()),
       publishedAt: Number.isFinite(published) ? published : undefined,
     });
   });

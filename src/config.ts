@@ -10,6 +10,8 @@ export const CONFIG = require("../config.json") as {
   carolIssueBaseUrl?: string;
   carolSharedSecret?: string;
   carolIssueGuildId?: string;
+  geminiApiKey?: string;
+  geminiModel?: string;
 };
 
 export const PORT = CONFIG.webPort ?? 3456;
