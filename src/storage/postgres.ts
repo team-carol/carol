@@ -257,6 +257,8 @@ SELECT u.chart_key AS "chartKey",u.achievement_val AS "achievementVal",u.fc,u.sy
     if(!itemIds.length) return;
     await this.q(`INSERT INTO news_seen(source,item_id,posted_at) SELECT $1,x,$3 FROM unnest($2::text[]) AS x ON CONFLICT(source,item_id) DO NOTHING`,[source,[...itemIds],postedAt]);
   }
+  // 테스트용: 특정 항목을 '안 본 것'으로 되돌린다.
+  async deleteNewsSeen(source:string,itemId:string){const r=await this.pool.query("DELETE FROM news_seen WHERE source=$1 AND item_id=$2",[source,itemId]);return (r.rowCount??0)>0;}
   async getNewsFeedState(source:string){const r=await this.q<any>(`SELECT etag,last_modified AS "lastModified",checked_at AS "checkedAt" FROM news_feed_state WHERE source=$1`,[source]);return r[0]?{...r[0],checkedAt:Number(r[0].checkedAt)}:null;}
   async setNewsFeedState(source:string,etag:string,lastModified:string,checkedAt=Date.now()){
     await this.q(`INSERT INTO news_feed_state(source,etag,last_modified,checked_at) VALUES($1,$2,$3,$4) ON CONFLICT(source) DO UPDATE SET etag=excluded.etag,last_modified=excluded.last_modified,checked_at=excluded.checked_at`,[source,etag,lastModified,checkedAt]);
