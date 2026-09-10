@@ -7,7 +7,7 @@ import { calcSongRating, getConstant, levelToNumber } from "../constants";
 
 pgTypes.setTypeParser(20, (value) => Number(value));
 
-export const MIGRATION_VERSION = 15;
+export const MIGRATION_VERSION = 16;
 
 // Migration text is deliberately kept as separate, immutable units.  In particular,
 // an edit to the current schema must not silently change an old migration checksum.
@@ -91,6 +91,19 @@ CREATE INDEX IF NOT EXISTS idx_user_goals_owner ON user_goals(discord_user_id, c
     etag text NOT NULL DEFAULT '',
     last_modified text NOT NULL DEFAULT '',
     checked_at bigint NOT NULL DEFAULT 0
+  );`,],
+  // 공지 본문/번역 보관. 버튼(customId 100자 제한)에는 키만 싣고 내용은 여기서 꺼낸다.
+  // 오래된 메시지의 버튼도 눌리므로 봇 재시작과 무관하게 남아 있어야 한다.
+  [16, `CREATE TABLE IF NOT EXISTS news_articles (
+    source text NOT NULL,
+    item_id text NOT NULL,
+    title text NOT NULL DEFAULT '',
+    title_ko text NOT NULL DEFAULT '',
+    url text NOT NULL DEFAULT '',
+    body text NOT NULL DEFAULT '',
+    body_ko text NOT NULL DEFAULT '',
+    created_at bigint NOT NULL DEFAULT 0,
+    PRIMARY KEY (source, item_id)
   );`,],
 ];
 
@@ -259,6 +272,20 @@ SELECT u.chart_key AS "chartKey",u.achievement_val AS "achievementVal",u.fc,u.sy
   }
   // 테스트용: 특정 항목을 '안 본 것'으로 되돌린다.
   async deleteNewsSeen(source:string,itemId:string){const r=await this.pool.query("DELETE FROM news_seen WHERE source=$1 AND item_id=$2",[source,itemId]);return (r.rowCount??0)>0;}
+  async saveNewsArticle(a:{source:string;itemId:string;title:string;titleKo:string;url:string;body:string;bodyKo:string},createdAt=Date.now()){
+    await this.q(`INSERT INTO news_articles(source,item_id,title,title_ko,url,body,body_ko,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8)
+      ON CONFLICT(source,item_id) DO UPDATE SET title=excluded.title,title_ko=excluded.title_ko,url=excluded.url,body=excluded.body,body_ko=excluded.body_ko`,
+      [a.source,a.itemId,a.title,a.titleKo,a.url,a.body,a.bodyKo,createdAt]);
+  }
+  async getNewsArticle(source:string,itemId:string){
+    const r=await this.q<any>(`SELECT source,item_id AS "itemId",title,title_ko AS "titleKo",url,body,body_ko AS "bodyKo" FROM news_articles WHERE source=$1 AND item_id=$2`,[source,itemId]);
+    return r[0]??null;
+  }
+  // 본문은 계속 쌓이기만 하므로 오래된 것은 지운다. 버튼은 "기간 지남" 안내로 응답한다.
+  async pruneNewsArticles(olderThanMs:number){
+    const r=await this.pool.query("DELETE FROM news_articles WHERE created_at < $1",[Date.now()-olderThanMs]);
+    return r.rowCount??0;
+  }
   async getNewsFeedState(source:string){const r=await this.q<any>(`SELECT etag,last_modified AS "lastModified",checked_at AS "checkedAt" FROM news_feed_state WHERE source=$1`,[source]);return r[0]?{...r[0],checkedAt:Number(r[0].checkedAt)}:null;}
   async setNewsFeedState(source:string,etag:string,lastModified:string,checkedAt=Date.now()){
     await this.q(`INSERT INTO news_feed_state(source,etag,last_modified,checked_at) VALUES($1,$2,$3,$4) ON CONFLICT(source) DO UPDATE SET etag=excluded.etag,last_modified=excluded.last_modified,checked_at=excluded.checked_at`,[source,etag,lastModified,checkedAt]);

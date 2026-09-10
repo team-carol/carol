@@ -20,7 +20,7 @@ import * as fortune      from "./commands/fortune";
 import * as settings     from "./commands/settings";
 import * as serverSettings from "./commands/serverSettings";
 import * as newsSettings from "./commands/newsSettings";
-import { startNewsPoller } from "./newsPoller";
+import { startNewsPoller, handleNewsButton } from "./newsPoller";
 import * as search       from "./commands/search";
 import * as status       from "./commands/status";
 import * as songrec      from "./commands/songrec";
@@ -133,6 +133,10 @@ client.on(Events.InteractionCreate, async (i) => {
     }
     if (i.customId.startsWith("serverset:")) {
       try { await serverSettings.handleButton(i); } catch (e) { console.error("[serverset-btn]", e); }
+      return;
+    }
+    if (i.customId.startsWith("news:")) {
+      try { await handleNewsButton(i); } catch (e) { console.error("[news-btn]", e); }
       return;
     }
     if (i.customId.startsWith("goal:")) {

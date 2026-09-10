@@ -32,7 +32,7 @@ There is no linter or formatter. Validate storage changes with `npm run test:int
 Data flow: Discord `/북마클릿` issues a bookmarklet → user runs it on maimai DX NET (browser cookies) → collected HTML `POST`ed to `/sync` → parsed by `src/scraper.ts` → stored in PostgreSQL via `src/storage/postgres.ts` → shown as Discord embeds / PNG rating cards.
 
 Key entry points:
-- `src/bot/index.ts` — registers all slash commands (`COMMANDS`) plus the `이슈로 등록` message context-menu command (`report.contextData`), starts the web server, and in one `InteractionCreate` handler routes slash commands, message context-menu commands, and button `customId`s (`serverset:`, `recent:`, `page:`, `share:`, `rt:`, `search:`, `map*:`, `report:`, `goal:`).
+- `src/bot/index.ts` — registers all slash commands (`COMMANDS`) plus the `이슈로 등록` message context-menu command (`report.contextData`), starts the web server, and in one `InteractionCreate` handler routes slash commands, message context-menu commands, and button `customId`s (`serverset:`, `recent:`, `page:`, `share:`, `rt:`, `search:`, `map*:`, `report:`, `goal:`, `news:`).
 - `src/web/index.ts` — owns all HTTP routes and the `/sync` parse/cache pipeline, using **raw `http`** with manual `req.method` + `url.pathname` chains (no Express router).
 - `src/storage/postgres.ts` — PostgreSQL storage and numbered migrations; main write path after `/sync`.
 - `src/scraper.ts` — Cheerio selectors bound to DX NET markup.
