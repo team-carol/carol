@@ -22,6 +22,8 @@ import { hasValidRecordDate, recordPlayedAt, koreaPlayDayKey } from "../achievem
 import { evaluateGoal, GOAL_KINDS, type GoalKind } from "../goals";
 
 const isDev = !CONFIG.baseUrl;
+// 도메인 이전 공지: 구 도메인(Host가 baseUrl과 다름)으로 들어온 요청에만 경고 표시. 이전 완료 후 삭제할 것.
+const DOMAIN_MIGRATION_CUTOFF = "2026-10-01";
 const DISCORD_INVITE_BASE_URL = "https://discord.com/oauth2/authorize";
 const DISCORD_INVITE_PERMISSIONS = "2415938560";
 const DISCORD_INVITE_INTEGRATION_TYPE = "0";
@@ -301,7 +303,9 @@ export function startWebServer(port: number): void {
       const presetIds = userId ? await getEnabledBookmarkletPresetIds(userId) : [];
       const bookmarklets = [...getBookmarkletPresets(presetIds), ...extras];
       const policyNotice = userId ? ((await getPolicyAck(userId)) ?? POLICY_VERSION) < POLICY_VERSION : false;
-      res.end(buildBookmarkletJs(bookmarklets, { policyNotice }));
+      const canonicalHost = CONFIG.baseUrl ? new URL(CONFIG.baseUrl).host : "";
+      const isLegacyHost = !!canonicalHost && req.headers.host !== canonicalHost;
+      res.end(buildBookmarkletJs(bookmarklets, { policyNotice, deprecationCutoff: isLegacyHost ? DOMAIN_MIGRATION_CUTOFF : undefined }));
       return;
     }
 
