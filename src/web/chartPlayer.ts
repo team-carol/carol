@@ -369,20 +369,46 @@ function sensorKey(x, y){
   var k = Math.round((Math.atan2(dy, dx) - ang(1)) / (Math.PI / 4));
   return (r < 0.56 ? 'B' : 'A') + (((k % 8) + 8) % 8);
 }
+// 별이 센서를 밟았다고 보는 반경. MajdataView 의 starRadius 0.7637 (단위 4.8).
+// (MJ_R 은 아래에서 선언되므로 여기서는 값 4.8 을 직접 쓴다)
+var STAR_TRIG = R * (0.763736616 / 4.8);
+var SENSOR_RAD = { A: R * 0.18, B: R * 0.15, C: R * 0.20 };
+function sensorCenter(key){
+  if (key === 'C') return { x: CX, y: CY };
+  var k = +key.slice(1);
+  return polRaw(ang(1) + k * Math.PI / 4, key.charAt(0) === 'A' ? R * 0.854 : R * 0.479);
+}
 /**
- * 묶음마다 "별이 여기 들어서면 통째로 사라진다" 는 호 길이를 매긴다.
- * 별이 있는 구역은 이미 손이 닿은 자리이므로, 빠져나갈 때가 아니라
- * 들어서는 순간 그 구역 몫이 전부 사라진다.
+ * 묶음마다 "이 호 길이를 지나면 통째로 사라진다" 는 값을 매긴다.
+ *
+ * MajdataView 의 판정은 Area.IsFinished => On && Off 다. 즉 별이 그 센서의
+ * 감지 원에 들어갔다가(On) 벗어나야(Off) 그 구역 몫이 사라진다. 구역 경계가
+ * 아니라 센서 중심 기준이라, 구역을 다 빠져나가기 전에 사라진다.
+ *   ON 조건: |별 - 센서중심|² <= 센서반지름² + 별반지름²
  */
 function groupBySensor(list, pc){
-  var g = 0, prev = null, starts = [];
+  var g = 0, prev = null, keys = [], rel = [];
   for (var i = 0; i < list.length; i++){
     var k = sensorKey(list[i].x, list[i].y);
     if (prev !== null && k !== prev) g++;
-    list[i].g = g; prev = k;
-    if (starts[g] === undefined) starts[g] = Math.max(0, list[i].d - ARROW_GAP * 0.5);
+    list[i].g = g; keys[g] = k; prev = k;
   }
-  pc.groupStarts = starts;
+  var last = list[list.length - 1];
+  // 끝까지 벗어나지 않으면 경로 끝 뒤로 보낸다 (d 의 단위는 호출부에 맞춘다)
+  var step = list.length > 1 ? list[1].d - list[0].d : 1;
+  for (var gi = 0; gi <= g; gi++){
+    var c = sensorCenter(keys[gi]);
+    var sr = SENSOR_RAD[keys[gi].charAt(0)];
+    var th = Math.sqrt(sr * sr + STAR_TRIG * STAR_TRIG);
+    var inside = false, out = null;
+    for (var j = 0; j < list.length; j++){
+      var dx = list[j].x - c.x, dy = list[j].y - c.y;
+      if (dx * dx + dy * dy <= th * th) inside = true;
+      else if (inside){ out = list[j].d; break; }
+    }
+    rel[gi] = out !== null ? out : last.d + step;
+  }
+  pc.groupStarts = rel;
 }
 /** 화살표를 놓을 지점과 방향을 미리 구해 둔다 (매 프레임 경로를 훑지 않도록). */
 function buildArrows(pc){
@@ -410,15 +436,12 @@ function buildWifiBars(pc){
     }
     out.push({ f: f, pts: row });
   }
-  // 가운데 줄 기준으로 구역이 바뀌는 지점에서 끊고, 묶음마다 시작 진행률을 매긴다
-  var keys = [], g = 0, starts = [];
-  for (var k = 0; k < out.length; k++) keys.push(sensorKey(out[k].pts[1].x, out[k].pts[1].y));
-  for (var k2 = 0; k2 < out.length; k2++){
-    if (k2 > 0 && keys[k2] !== keys[k2 - 1]) g++;
-    out[k2].g = g;
-    if (starts[g] === undefined) starts[g] = Math.max(0, out[k2].f - 0.5 / WIFI_BARS);
-  }
-  for (var k3 = 0; k3 < out.length; k3++) out[k3].gStart = starts[out[k3].g];
+  // 가운데 줄 기준으로 구역을 나누고, 화살표와 같은 기준(센서 감지 원을
+  // 벗어나는 지점)으로 묶음마다 사라지는 진행률을 매긴다.
+  var mid = out.map(function(o){ return { x: o.pts[1].x, y: o.pts[1].y, d: o.f }; });
+  var fake = {};
+  groupBySensor(mid, fake);
+  for (var k = 0; k < out.length; k++){ out[k].g = mid[k].g; out[k].gStart = fake.groupStarts[mid[k].g]; }
   return out;
 }
 function cachedPath(note, k){
