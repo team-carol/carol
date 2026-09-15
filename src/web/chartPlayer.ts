@@ -387,30 +387,34 @@ function sensorCenter(key){
  *   ON 조건: |별 - 센서중심|² <= 센서반지름² + 별반지름²
  */
 function groupBySensor(list, pc){
-  var g = 0, prev = null, keys = [], from = [], rel = [];
+  var g = 0, prev = null, keys = [], from = [], to = [], rel = [];
   for (var i = 0; i < list.length; i++){
     var k = sensorKey(list[i].x, list[i].y);
     if (prev !== null && k !== prev) g++;
     list[i].g = g; keys[g] = k; prev = k;
     if (from[g] === undefined) from[g] = i;
+    to[g] = i;
   }
-  var last = list[list.length - 1];
-  // 끝까지 벗어나지 않으면 경로 끝 뒤로 보낸다 (d 의 단위는 호출부에 맞춘다)
   var step = list.length > 1 ? list[1].d - list[0].d : 1;
   for (var gi = 0; gi <= g; gi++){
     var c = sensorCenter(keys[gi]);
     var sr = SENSOR_RAD[keys[gi].charAt(0)];
     var th = Math.sqrt(sr * sr + STAR_TRIG * STAR_TRIG);
-    var inside = false, out = null;
+    var enter = null, leave = null;
     // 왕복해서 같은 구역을 다시 지나는 경로가 있으므로, 반드시 이 묶음이
     // 시작하는 지점부터 훑는다. 처음부터 훑으면 앞선 방문의 이탈 지점을
     // 물려받아 뒤쪽 궤적이 먼저 사라진다.
     for (var j = from[gi]; j < list.length; j++){
       var dx = list[j].x - c.x, dy = list[j].y - c.y;
-      if (dx * dx + dy * dy <= th * th) inside = true;
-      else if (inside){ out = list[j].d; break; }
+      if (dx * dx + dy * dy <= th * th){ if (enter === null) enter = list[j].d; }
+      else if (enter !== null){ leave = list[j].d; break; }
     }
-    rel[gi] = out !== null ? out : last.d + step;
+    // 마지막 구역은 IsLast => On 이라 닿는 순간 끝난다. 나머지는 On && Off.
+    var r = (gi === g) ? enter : leave;
+    // 감지 원에 한 번도 못 들어간 구역은 그냥 그 묶음이 끝나는 자리에서 지운다.
+    // (그대로 두면 소거 지점이 경로 밖으로 밀려 화살표가 영영 남는다.)
+    if (r === null || r === undefined) r = list[to[gi]].d + step;
+    rel[gi] = r;
   }
   pc.groupStarts = rel;
 }
