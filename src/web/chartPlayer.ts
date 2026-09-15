@@ -477,7 +477,11 @@ function touchFall(lead){
 // ── 노트 그리기 ────────────────────────────────────────────────────────────
 var NOTE_R = R * 0.107;                // mai-notes 실측: 노트 반지름 / 판정 링 반지름
 var STAR_R = NOTE_R * 1.35;            // 별은 뾰족해서 같은 반지름이면 작아 보인다
-var EDGE_W = R * 0.0192;               // 흰 테두리 두께 (홀드 육각형과 동일)
+// 흰 테두리 두께. mai-notes 실측(테두리/노트반지름 ≈ 0.135)에 맞춘 값이고,
+// 탭·홀드·별이 모두 같은 절대 두께를 쓴다.
+var EDGE_W = NOTE_R * 0.135;
+// 가운데 점. 탭과 홀드가 같은 크기여야 한다.
+var DOT_R = R * 0.0173;
 var ARROW_GAP = Math.PI * R / 32;      // MajGeo.DefaultDistance = 판정원 둘레의 1/64
 var FLASH_MS = 130;
 
@@ -554,7 +558,7 @@ function noteDonut(x, y, size, color){
   ctx.beginPath(); ctx.arc(x, y, size * 0.42, 0, TAU);
   ctx.fillStyle = FIELD_BG; ctx.fill();
   ctx.lineWidth = EDGE_W * 0.7 * (size / NOTE_R); ctx.strokeStyle = '#fff'; ctx.stroke();
-  ctx.beginPath(); ctx.arc(x, y, size * 0.11, 0, TAU);
+  ctx.beginPath(); ctx.arc(x, y, DOT_R * (size / NOTE_R), 0, TAU);
   ctx.fillStyle = color; ctx.fill();
 }
 /** BREAK 는 바깥으로 네 갈래 반짝임이 더 붙는다. */
@@ -608,7 +612,7 @@ function holdBody(pos, headRf, tailRf, capH, capT, color){
   ctx.fillStyle = FIELD_BG; ctx.fill();
   ctx.lineWidth = EDGE_W * 0.7 * k; ctx.strokeStyle = '#fff'; ctx.stroke();
   // 탭처럼 양 끝 한가운데에 점이 하나씩 있다
-  var dot = capH * 0.19;
+  var dot = DOT_R * k;
   var hp2 = mir(head), tp2 = mir(tail);
   ctx.fillStyle = color;
   ctx.beginPath(); ctx.arc(hp2.x, hp2.y, dot, 0, TAU); ctx.fill();
