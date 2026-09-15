@@ -790,22 +790,53 @@ function wifiBars(pc, progress, color, alpha){
 }
 
 // ── 필드 ───────────────────────────────────────────────────────────────────
+/** 중심을 향해 회전한 둥근 사각형 패드 하나. */
+function pad(cx, cy, rot, w, h, r){
+  ctx.save();
+  ctx.translate(cx, cy); ctx.rotate(rot);
+  var x = -w / 2, y = -h / 2;
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+  ctx.restore();
+}
+/**
+ * 배경을 maimai 의 센서 배치로 그린다. 실기에서 판정 라인 디자인을 "센서"로
+ * 뒀을 때와 같은 그림이다. 각 구역의 중심 반경은 TouchDrop.GetAreaPos 기준
+ * (A·D 4.1, E 3.0, B 2.3 · 단위 4.8).
+ */
+function drawSensors(){
+  var A_R = R * (4.1 / MJ_R), E_R = R * (3.0 / MJ_R), B_R = R * (2.3 / MJ_R);
+  ctx.lineJoin = 'round';
+  // D·E 는 정사각형을 45도 돌려 마름모로 둔다 (실기 센서 그림과 같은 방향).
+  for (var i = 1; i <= 8; i++){
+    var ba = ang(i), da = ang(i) - Math.PI / 8;
+    // 바깥쪽(A·D)은 옅게, 안쪽(B·E)은 조금 더 또렷하게
+    var a1 = mir(polRaw(ba, A_R)), d1 = mir(polRaw(da, A_R));
+    ctx.strokeStyle = 'rgba(255,255,255,.10)'; ctx.lineWidth = 2;
+    pad(a1.x, a1.y, ba + Math.PI / 2, R * 0.30, R * 0.20, R * 0.045); ctx.stroke();
+    pad(d1.x, d1.y, da + Math.PI / 4, R * 0.155, R * 0.155, R * 0.02); ctx.stroke();
+
+    var e1 = mir(polRaw(da, E_R)), b1 = mir(polRaw(ba, B_R));
+    ctx.strokeStyle = 'rgba(255,255,255,.17)'; ctx.lineWidth = 2;
+    pad(e1.x, e1.y, da + Math.PI / 4, R * 0.145, R * 0.145, R * 0.02); ctx.stroke();
+    pad(b1.x, b1.y, ba + Math.PI / 2, R * 0.245, R * 0.185, R * 0.05); ctx.stroke();
+  }
+  // C 구역
+  ctx.strokeStyle = 'rgba(255,255,255,.17)'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(CX, CY, R * 0.165, 0, TAU); ctx.stroke();
+}
+
 function drawField(){
   ctx.clearRect(0, 0, 920, 920);
   ctx.beginPath(); ctx.arc(CX, CY, R + 30, 0, TAU);
   ctx.fillStyle = FIELD_BG; ctx.fill();
-  // 센서 구획 안내선
-  ctx.strokeStyle = 'rgba(255,255,255,.08)'; ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.arc(CX, CY, GROUP_B_R, 0, TAU); ctx.stroke();
-  for (var i = 1; i <= 8; i++){
-    var a = ang(i) - Math.PI / 8;
-    ctx.beginPath();
-    ctx.moveTo(CX + Math.cos(a) * R * 0.12, CY + Math.sin(a) * R * 0.12);
-    ctx.lineTo(CX + Math.cos(a) * R, CY + Math.sin(a) * R);
-    ctx.stroke();
-  }
-  // 판정 링 + 버튼
-  // 실기의 판정 링은 가는 선이다. 두꺼우면 필드가 좁아 보여 노트가 커 보인다.
+  drawSensors();
+  // 판정 링과 버튼. 타이밍을 읽는 기준이라 센서 위에 남겨 둔다.
   ctx.strokeStyle = 'rgba(255,255,255,.8)'; ctx.lineWidth = Math.max(1.5, R * 0.012);
   ctx.beginPath(); ctx.arc(CX, CY, R, 0, TAU); ctx.stroke();
   for (var j = 1; j <= 8; j++){
