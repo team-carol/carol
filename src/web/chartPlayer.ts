@@ -555,7 +555,8 @@ function noteDonut(x, y, size, color){
   ctx.beginPath(); ctx.arc(x, y, size, 0, TAU);
   ctx.fillStyle = color; ctx.fill();
   ctx.lineWidth = EDGE_W * (size / NOTE_R); ctx.strokeStyle = '#fff'; ctx.stroke();
-  ctx.beginPath(); ctx.arc(x, y, size * 0.42, 0, TAU);
+  // 색 띠 두께는 홀드 육각형과 같은 값(BAND_W)을 쓴다
+  ctx.beginPath(); ctx.arc(x, y, Math.max(size * 0.2, size - BAND_W * (size / NOTE_R)), 0, TAU);
   ctx.fillStyle = FIELD_BG; ctx.fill();
   ctx.lineWidth = EDGE_W * 0.7 * (size / NOTE_R); ctx.strokeStyle = '#fff'; ctx.stroke();
   ctx.beginPath(); ctx.arc(x, y, DOT_R * (size / NOTE_R), 0, TAU);
@@ -587,6 +588,8 @@ function exGlow(x, y, size){
  */
 var HOLD_CAP = R / 12.5 * 1.5;   // 캡 반지름 ≈ 0.12R
 var HOLD_INNER = 0.62;           // 속을 비우는 비율
+// 색 띠(분홍 도넛 / 육각 링)의 두께. 탭과 홀드가 같은 값을 쓴다.
+var BAND_W = HOLD_CAP * (1 - HOLD_INNER);
 
 function holdHexPath(a, head, tail, capH, capT, k){
   var m = a + Math.PI / 3, b = a - Math.PI / 3, o = a + Math.PI;
