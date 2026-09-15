@@ -498,35 +498,80 @@ function starNote(x, y, size, color, spin){
 }
 
 /**
- * TOUCH: 센서 자리에 얇은 목표 링이 먼저 뜨고, 네 장의 연잎이 바깥에서
- * 그 위로 모여든다. spread 1 = 활짝, 0 = 센서 위에 모인 상태(판정 순간).
+ * TOUCH 의 구성은 MajdataView 의 Touch 프리팹을 따랐다.
+ *   TouchPart_1~4 (속 빈 삼각 4장) + Touch_Point (가운데 점) + TouchBorder (모서리 브래킷)
+ * 조각은 상/하/좌/우에서 센서를 향해 모여든다.
  */
-function touchNote(x, y, size, spread, color){
-  ctx.beginPath(); ctx.arc(x, y, size * 0.95, 0, TAU);
-  ctx.strokeStyle = 'rgba(255,255,255,.3)'; ctx.lineWidth = 2; ctx.stroke();
+function touchBracket(x, y, r, color, alpha){
+  ctx.save(); ctx.globalAlpha = alpha;
+  ctx.strokeStyle = color; ctx.lineWidth = Math.max(2, r * 0.14); ctx.lineCap = 'round';
   for (var i = 0; i < 4; i++){
-    var a = i * Math.PI / 2 - Math.PI / 4;
-    var ux = Math.cos(a), uy = Math.sin(a), px = -uy, py = ux;
-    var d = size * (0.74 + 2.3 * spread);
-    var cx = x + ux * d, cy = y + uy * d;
-    var tip = size * 0.8, back = size * 0.6, wide = size * 0.44, waist = size * 0.08;
+    var c = -Math.PI / 4 + i * Math.PI / 2;
+    ctx.beginPath(); ctx.arc(x, y, r, c - Math.PI * 0.16, c + Math.PI * 0.16); ctx.stroke();
+  }
+  ctx.lineCap = 'butt'; ctx.restore();
+}
+/** 삼각 조각 하나. 꼭짓점이 센서(안쪽)를 향한다. hollow 면 가운데가 뚫린 삼각 링. */
+function touchPetal(cx, cy, ux, uy, size, color, hollow){
+  var px = -uy, py = ux;
+  function tri(s){
     ctx.beginPath();
-    ctx.moveTo(cx - ux * tip, cy - uy * tip);
-    ctx.lineTo(cx + px * wide - ux * waist, cy + py * wide - uy * waist);
-    ctx.lineTo(cx + ux * back, cy + uy * back);
-    ctx.lineTo(cx - px * wide - ux * waist, cy - py * wide - uy * waist);
+    ctx.moveTo(cx - ux * size * 0.9 * s, cy - uy * size * 0.9 * s);
+    ctx.lineTo(cx + ux * size * 0.45 * s + px * size * 0.8 * s, cy + uy * size * 0.45 * s + py * size * 0.8 * s);
+    ctx.lineTo(cx + ux * size * 0.45 * s - px * size * 0.8 * s, cy + uy * size * 0.45 * s - py * size * 0.8 * s);
     ctx.closePath();
-    ctx.fillStyle = color; ctx.fill();
-    ctx.lineWidth = Math.max(1.2, size * 0.13); ctx.strokeStyle = '#fff'; ctx.stroke();
+  }
+  tri(1); ctx.fillStyle = '#fff'; ctx.fill();
+  tri(0.84); ctx.fillStyle = color; ctx.fill();
+  if (hollow){
+    tri(0.56); ctx.fillStyle = '#fff'; ctx.fill();
+    tri(0.44); ctx.fillStyle = FIELD_BG; ctx.fill();
   }
 }
-/** TOUCH HOLD 는 누르고 있는 동안 남은 시간이 굵은 링으로 줄어든다. */
-function touchGauge(x, y, size, left, color){
-  var rr = size * 1.55, lw = Math.max(3, size * 0.32);
-  ctx.beginPath(); ctx.arc(x, y, rr, 0, TAU);
-  ctx.strokeStyle = 'rgba(255,255,255,.15)'; ctx.lineWidth = lw; ctx.stroke();
-  ctx.beginPath(); ctx.arc(x, y, rr, -Math.PI / 2, -Math.PI / 2 + TAU * left);
-  ctx.strokeStyle = color; ctx.lineWidth = lw; ctx.stroke();
+function touchNote(x, y, size, spread, color){
+  touchBracket(x, y, size * 1.25, 'rgba(255,255,255,.35)', 1);
+  for (var i = 0; i < 4; i++){
+    var a = i * Math.PI / 2;
+    var ux = Math.cos(a), uy = Math.sin(a);
+    var d = size * (0.85 + 2.2 * spread);
+    touchPetal(x + ux * d, y + uy * d, ux, uy, size * 0.78, color, true);
+  }
+  ctx.beginPath(); ctx.arc(x, y, size * 0.22, 0, TAU);
+  ctx.fillStyle = color; ctx.fill();
+}
+
+/**
+ * TOUCH HOLD 는 실기에서 네 조각이 서로 다른 색이고, 테두리도 4색 마름모다.
+ * 남은 시간은 부채꼴 마스크로 테두리를 지워서 표현한다(프리팹의 CircleMask 와 같은 방식).
+ */
+var TH_COLORS = ['#3b8ff0', '#e8622a', '#f5d90a', '#33a852'];
+function touchHoldNote(x, y, size, spread, left){
+  var r = size * 2.05;   // 조각 바깥에 오도록
+  ctx.save();
+  // 남은 시간만큼만 남기는 부채꼴 마스크
+  ctx.beginPath(); ctx.moveTo(x, y);
+  ctx.arc(x, y, r * 2, -Math.PI / 2, -Math.PI / 2 + TAU * Math.max(0, Math.min(1, left)));
+  ctx.closePath(); ctx.clip();
+  var pts = [];
+  for (var i = 0; i < 4; i++){
+    var a = -Math.PI / 2 + i * Math.PI / 2;
+    pts.push({ x: x + Math.cos(a) * r, y: y + Math.sin(a) * r });
+  }
+  ctx.lineWidth = Math.max(4, size * 0.36); ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  for (var j = 0; j < 4; j++){
+    var p0 = pts[j], p1 = pts[(j + 1) % 4];
+    ctx.strokeStyle = TH_COLORS[j];
+    ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y); ctx.stroke();
+  }
+  ctx.restore();
+  for (var k = 0; k < 4; k++){
+    var a2 = k * Math.PI / 2;
+    var ux = Math.cos(a2), uy = Math.sin(a2);
+    var d = size * (0.85 + 2.2 * spread);
+    touchPetal(x + ux * d, y + uy * d, ux, uy, size * 0.78, TH_COLORS[k], false);
+  }
+  ctx.beginPath(); ctx.arc(x, y, size * 0.22, 0, TAU);
+  ctx.fillStyle = '#7fe3ff'; ctx.fill();
 }
 
 /**
@@ -694,11 +739,11 @@ function draw(){
     ctx.save();
     if (lead > 0){
       ctx.globalAlpha = Math.min(1, (1 - lead / ap) * 1.8);
-      touchNote(tp.x, tp.y, tsz, lead / ap, tcol);
+      if (tail > 0) touchHoldNote(tp.x, tp.y, tsz, lead / ap, 1);
+      else touchNote(tp.x, tp.y, tsz, lead / ap, tcol);
     } else if (tail > 0 && over < 0){
-      // 누르고 있는 동안: 모인 상태 유지 + 남은 시간 게이지
-      touchNote(tp.x, tp.y, tsz, 0, tcol);
-      touchGauge(tp.x, tp.y, tsz, Math.max(0, -over / tail), tcol);
+      // 누르고 있는 동안: 모인 상태 유지 + 테두리가 줄어든다
+      touchHoldNote(tp.x, tp.y, tsz, 0, -over / tail);
     } else {
       hitFlash(tp.x, tp.y, tsz * 1.1, tcol, Math.max(0, over) / FLASH_MS);
       if (n.hasFirework){
