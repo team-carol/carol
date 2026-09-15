@@ -311,7 +311,7 @@ function parseNote(raw: string, ctx: Ctx, timeMs: number): void {
     pushNote(ctx, {
       ...base, type: "slide", pos, slides: bodies,
       ...(ctx.isEach ? { isEach: true as const } : {}),
-      ...(bodies.length > 1 ? { starDouble: true as const } : {}),
+      ...(bodies.length > 1 ? { starDouble: true as const, slideEach: true as const } : {}),
       ...(/b/i.test(flags) ? { isBreak: true as const } : {}),
       ...(/x/i.test(flags) ? { isEx: true as const } : {}),
       ...(flags.includes("@") ? { plainStar: true as const } : {}),
@@ -391,7 +391,13 @@ function parseGroup(text: string, ctx: Ctx): void {
   for (let offset = 0; offset < buckets.length; offset++) {
     const bucket = buckets[offset];
     ctx.isEach = bucket.length > 1;
+    const before = ctx.notes.length;
     for (const part of bucket) parseNote(part, ctx, ctx.timeMs + offset);
+    // 궤적의 EACH 는 노트 종류를 가리지 않는 isEach 와 다르다. 실제 구현은
+    // "동시에 흐르는 슬라이드가 2개 이상"일 때만 궤적을 노랗게 칠한다.
+    // (탭 + 슬라이드면 별만 노랗고 궤적은 그대로다.)
+    const slides = ctx.notes.slice(before).filter((x) => x.type === "slide");
+    if (slides.length >= 2) for (const sl of slides) sl.slideEach = true;
   }
 }
 

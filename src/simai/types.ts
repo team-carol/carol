@@ -74,6 +74,11 @@ export interface ChartNote {
   /** `*` 로 갈라진 동시작 슬라이드. 별이 겹친 모양(star_double)이 된다. */
   starDouble?: boolean;
   /**
+   * 궤적이 EACH 색이 되는 조건. 동시에 흐르는 슬라이드가 2개 이상이거나
+   * `*` 분기일 때만 참이다. 노트 종류를 가리지 않는 isEach 와 다르다.
+   */
+  slideEach?: boolean;
+  /**
    * 슬라이드 시작 별을 아예 표시하지 않음.
    * `"fade"`(`?`) = 이동하는 별이 페이드인, `"none"`(`!`) = 출발 순간에 처음 등장.
    */

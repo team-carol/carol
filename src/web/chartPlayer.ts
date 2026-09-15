@@ -410,7 +410,8 @@ var TAU = Math.PI * 2;
 function colorOf(n){
   if (n.isBreak) return C_BREAK;
   if (n.type === 'touch' || n.type === 'touchHold') return n.isEach ? C_TOUCH_EACH : C_TOUCH;
-  return n.isEach ? C_EACH : C_TAP;
+  // 슬라이드 별은 동시 타이밍이거나 슬라이드끼리 겹칠 때 노랗게 된다.
+  return (n.isEach || n.slideEach) ? C_EACH : C_TAP;
 }
 
 // ── 등장 방식 ───────────────────────────────────────────────────────────────
@@ -568,48 +569,36 @@ function exGlow(x, y, size){
   ctx.fillStyle = 'rgba(255,255,255,.22)'; ctx.fill();
 }
 
-var HOLD_CAP = 0.58 / MJ_R;   // 9-슬라이스 캡 58px(PPU 100) = 0.58 월드
-/** 두 끝점 중 a 를 b 쪽으로 d 만큼 당긴 점. */
-function inset(a, b, d){
-  var vx = b.x - a.x, vy = b.y - a.y, L = Math.sqrt(vx*vx + vy*vy) || 1;
-  return { x: a.x + vx / L * d, y: a.y + vy / L * d };
-}
 /**
- * 레인 방향으로 늘어난 팔각형 경로 — 직사각형의 네 모서리를 45도로 잘라낸 모양.
- * 실기의 HOLD 가 이 형태다(끝이 뾰족한 육각형이 아니라 짧은 평면 + 모따기).
+ * HOLD 는 머리와 꼬리에 각각 캡이 있고, 둘을 이은 육각형이 몸통이 된다
+ * (mai-notes 의 방식). 캡은 각자의 등장 진행률만큼 커지므로, 머리가 아직
+ * 제자리에 있는 동안에는 길이가 늘지 않고 크기만 커진다.
  */
-function octPath(a, b, w, cut){
-  var vx = b.x - a.x, vy = b.y - a.y, L = Math.sqrt(vx*vx + vy*vy) || 1;
-  var ux = vx / L, uy = vy / L, px = -uy, py = ux;
-  var c = Math.min(cut, L / 2, w * 0.95);
-  function pt(along, across){
-    return [a.x + ux * along + px * across, a.y + uy * along + py * across];
-  }
+var HOLD_CAP = R / 12.5 * 1.5;   // 캡 반지름 ≈ 0.12R
+var HOLD_INNER = 0.62;           // 속을 비우는 비율
+
+function holdHexPath(a, head, tail, capH, capT, k){
+  var m = a + Math.PI / 3, b = a - Math.PI / 3, o = a + Math.PI;
+  function at(p, ang2, r){ return mir({ x: p.x + Math.cos(ang2) * r, y: p.y + Math.sin(ang2) * r }); }
   var pts = [
-    pt(L, w - c), pt(L - c, w), pt(c, w), pt(0, w - c),
-    pt(0, -(w - c)), pt(c, -w), pt(L - c, -w), pt(L, -(w - c)),
+    at(head, a, capH * k), at(head, b, capH * k),
+    at(tail, o + Math.PI / 3, capT * k), at(tail, o, capT * k),
+    at(tail, o - Math.PI / 3, capT * k), at(head, m, capH * k),
   ];
   ctx.beginPath();
-  ctx.moveTo(pts[0][0], pts[0][1]);
-  for (var i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+  ctx.moveTo(pts[0].x, pts[0].y);
+  for (var i = 1; i < 6; i++) ctx.lineTo(pts[i].x, pts[i].y);
   ctx.closePath();
 }
-/**
- * HOLD. 실기는 두꺼운 색 테두리 + 안팎 흰 선 + 비어 있는 속이고, 양 끝 한가운데에
- * 점이 하나씩 찍힌다. 스킨 스프라이트가 9-슬라이스라 끝 모양은 늘어나지 않는다.
- */
-function holdBody(a, b, size, color){
-  var cut = size * 0.5;
-  function layer(t, fill){
-    var d = size * (1 - t);
-    var a2 = d > 0 ? inset(a, b, d) : a, b2 = d > 0 ? inset(b, a, d) : b;
-    octPath(a2, b2, size * t, cut * t);
-    ctx.fillStyle = fill; ctx.fill();
-  }
-  layer(1.00, '#fff');       // 바깥 흰 선
-  layer(0.89, color);        // 두꺼운 색 테두리
-  layer(0.54, '#fff');       // 안쪽 흰 선
-  layer(0.43, FIELD_BG);     // 비어 있는 속
+function holdBody(pos, headRf, tailRf, capH, capT, color){
+  var a = ang(pos);
+  var head = polRaw(a, R * headRf), tail = polRaw(a, R * tailRf);
+  holdHexPath(a, head, tail, capH, capT, 1);
+  ctx.fillStyle = color; ctx.fill();
+  ctx.lineWidth = Math.max(2, HOLD_CAP * 0.16); ctx.strokeStyle = '#fff'; ctx.stroke();
+  holdHexPath(a, head, tail, capH, capT, HOLD_INNER);
+  ctx.fillStyle = FIELD_BG; ctx.fill();
+  ctx.lineWidth = Math.max(1.5, HOLD_CAP * 0.12); ctx.strokeStyle = '#fff'; ctx.stroke();
 }
 
 /** 슬라이드 별: 흰 별 위에 색 별, 그 안에 별 윤곽이 한 겹 더 들어간 이중 구조. */
@@ -924,8 +913,7 @@ function draw(){
       if (t >= s0){ passed = slideProgressLen(pc, b, t - s0); alpha = 1; }
       else if (t >= n.timeMs - SLIDE_FULL_MS) alpha = 1;
       else alpha = 0.55 * Math.min(1, (t - fadeStart) / SLIDE_FADE_MS);
-      // 궤적은 '*' 분기만으로도 EACH 색이 된다 (별은 그렇지 않다)
-      var acol = b.isBreak ? C_ARROW_BREAK : (n.isEach || n.slides.length > 1) ? C_EACH : C_ARROW;
+      var acol = b.isBreak ? C_ARROW_BREAK : n.slideEach ? C_EACH : C_ARROW;
       var total = pc.len[pc.len.length - 1] || 1;
       if (pc.isWifi) wifiBars(pc, passed / total, acol, alpha);
       else slideArrows(pc, passed, acol, alpha);
@@ -968,9 +956,7 @@ function draw(){
     }
   }
 
-  // 5) HOLD — MajdataPlay HoldDrop 을 그대로 옮겼다. 그려지는 길이는
-  //    (머리거리 - 꼬리거리) + 1.4 라서, 끝 캡이 실제 판정 지점보다 0.7 씩 더 나온다.
-  var HOLD_EXTRA = 1.4;
+  // 5) HOLD — 머리·꼬리가 각자 커지고, 둘 사이가 몸통이 된다
   for (i = lo; i < hi; i++){
     n = NOTES[i];
     if (n.type !== 'hold') continue;
@@ -979,28 +965,20 @@ function draw(){
     if (hLead > ap || -tLead > FLASH_MS) continue;
     var hcol = colorOf(n);
     if (tLead >= 0){
-      var hdu = MJ_APPEAR + MJ_TOTAL * (1 - hLead / ap);
-      var tdu = MJ_APPEAR + MJ_TOTAL * (1 - tLead / ap);
-      var gs = hdu * NOTE_APPEAR_RATE + (1 - NOTE_APPEAR_RATE * MJ_SPAWN);
-      var innerDu, outerDu, hsz;
-      if (hdu < MJ_SPAWN){
-        // 아직 떠오르는 중: 늘어나지 않고 노트 한 개 크기로 제자리에서 커진다
-        if (gs <= 0) continue;
-        innerDu = MJ_SPAWN - 0.71 * gs;
-        outerDu = MJ_SPAWN + 0.71 * gs;
-        hsz = NOTE_R * gs;
-      } else {
-        if (tdu < MJ_SPAWN) tdu = MJ_SPAWN;
-        if (hdu > MJ_R) hdu = MJ_R;
-        innerDu = tdu - HOLD_EXTRA / 2;
-        outerDu = hdu + HOLD_EXTRA / 2;
-        hsz = NOTE_R;
+      var hs = fall(hLead, ap), ts = fall(tLead, ap);
+      var headRf = hs ? hs.rf : 1;
+      var tailRf = ts ? ts.rf : (tLead > ap ? SPAWN_R : 1);
+      if (tailRf > headRf) tailRf = headRf;
+      // 몸통 폭은 머리 쪽 성장률을 따른다. 떠오르는 동안에는 머리와 꼬리가 같은
+      // 자리라 작은 육각형이 커지기만 하고, 다 커진 뒤부터 길이가 늘어난다.
+      var sc = hs ? Math.max(0, Math.min(1, hs.grow)) : 1;
+      if (sc > 0.02){
+        var cap = HOLD_CAP * sc;
+        var hp = mir(polRaw(ang(n.pos), R * headRf));
+        if (n.isEx) exGlow(hp.x, hp.y, cap);
+        holdBody(n.pos, headRf, tailRf, cap, cap, hcol);
+        if (n.isBreak) breakSpark(hp.x, hp.y, cap, spin);
       }
-      var ia = rayPt(n.pos, R * Math.max(0, innerDu) / MJ_R);
-      var ob = rayPt(n.pos, R * outerDu / MJ_R);
-      if (n.isEx) exGlow(ob.x, ob.y, hsz);
-      holdBody(ia, ob, hsz, hcol);
-      if (n.isBreak && hdu >= MJ_SPAWN) breakSpark(ob.x, ob.y, hsz, spin);
     }
     if (hLead <= 0 && -hLead <= FLASH_MS){
       var bp2 = btn(n.pos); hitFlash(bp2.x, bp2.y, NOTE_R * 1.1, hcol, -hLead / FLASH_MS);

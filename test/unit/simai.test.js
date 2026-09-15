@@ -201,12 +201,32 @@ test("동시작 SLIDE(*)는 궤적만 EACH, 별은 겹친 모양", () => {
   assert.equal(n.isEach, undefined, "혼자면 별은 EACH 가 아니다");
   assert.equal(n.starDouble, true, "별은 star_double 모양");
 
+  assert.equal(n.slideEach, true, "* 분기는 궤적이 EACH 색");
+
   // 다른 노트와 동시면 별도 EACH 가 된다
   const two = parseInote("(120){4}1-4[4:3]*-6[8:5]/3,", 120).notes;
   assert.equal(two[0].isEach, true);
   assert.equal(two[0].starDouble, true);
   assert.equal(n.slides[0].durationMs, 4 / 4 * 3 * 500);
   assert.equal(n.slides[1].durationMs, 4 / 8 * 5 * 500);
+});
+
+test("궤적의 EACH 는 슬라이드끼리 겹칠 때만", () => {
+  // 탭 + 슬라이드: 별은 EACH 지만 궤적은 아니다
+  const mix = parseInote("(120){4}1-5[8:1]/3,", 120).notes;
+  assert.equal(mix[0].type, "slide");
+  assert.equal(mix[0].isEach, true, "별은 EACH");
+  assert.equal(mix[0].slideEach, undefined, "궤적은 EACH 아님");
+
+  // 슬라이드 두 개: 둘 다 궤적도 EACH
+  const two = parseInote("(120){4}1-5[8:1]/3-7[8:1],", 120).notes;
+  assert.equal(two[0].slideEach, true);
+  assert.equal(two[1].slideEach, true);
+
+  // 단독 슬라이드
+  const one = parseInote("(120){4}1-5[8:1],", 120).notes[0];
+  assert.equal(one.isEach, undefined);
+  assert.equal(one.slideEach, undefined);
 });
 
 test("특수 표기: $ $$ @ ? !", () => {
