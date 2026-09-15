@@ -71,6 +71,8 @@ export interface ChartNote {
   starTap?: 1 | 2;
   /** 슬라이드의 별을 일반 TAP 모양으로 (`@`). */
   plainStar?: boolean;
+  /** `*` 로 갈라진 동시작 슬라이드. 별이 겹친 모양(star_double)이 된다. */
+  starDouble?: boolean;
   /**
    * 슬라이드 시작 별을 아예 표시하지 않음.
    * `"fade"`(`?`) = 이동하는 별이 페이드인, `"none"`(`!`) = 출발 순간에 처음 등장.

@@ -86,8 +86,8 @@ canvas{width:100%;max-width:460px;aspect-ratio:1;touch-action:none;display:block
 <div class="nav"><a href="/">← carolbot</a></div>
 <div class="head">
   ${diffName
-    ? `<div class="badge">${esc(diffName)}${data.level ? " " + esc(data.level) : ""}</div>`
-    : data.level ? `<div class="badge">Lv.${esc(data.level)}</div>` : ""}
+    ? '<div class="badge">${esc(diffName)}${data.level ? " " + esc(data.level) : ""}</div>'
+    : data.level ? '<div class="badge">Lv.${esc(data.level)}</div>' : ""}
   <h1>${esc(data.title || "(제목 없음)")}</h1>
   <div class="sub">${esc(data.artist || "-")}${data.designer ? " · 보면 " + esc(data.designer) : ""}</div>
 </div>
@@ -101,7 +101,7 @@ canvas{width:100%;max-width:460px;aspect-ratio:1;touch-action:none;display:block
     <div class="time mono"><span id="cur">0:00</span> / ${dur}</div>
   </div>
   <div class="ctl">
-    <div class="row"><label>노트 속도</label><input type="range" id="spd" min="1" max="10" step="0.25" value="7"><span class="val mono" id="spdv">7.00</span></div>
+    <div class="row"><label>노트 속도</label><input type="range" id="spd" min="1" max="12" step="0.25" value="7.5"><span class="val mono" id="spdv">7.50</span></div>
     <div class="row"><label>재생 배속</label><input type="range" id="rate" min="0.25" max="2" step="0.05" value="1"><span class="val mono" id="ratev">1.00x</span></div>
     <div class="row"><label>표시</label>
       <div class="chips">
@@ -422,23 +422,34 @@ function colorOf(n){
 // 보이는 구간의 41% 가 "떠오르는" 시간, 59% 가 "흐르는" 시간이다.
 var MJ_R = 4.8;
 var MJ_SPAWN = 1.225;
-var MJ_APPEAR = -1.275;
-var MJ_TOTAL = MJ_R - MJ_APPEAR;          // 6.075
-var SPAWN_R = MJ_SPAWN / MJ_R;            // 0.2552
-// 터치는 탭보다 늦게 나타난다. MajdataView 의 두 식(6.075/s, 3.209·s^-0.955)의 비.
+// MajdataPlay 의 NoteAppearRate 기본값. scale = distance*rate + (1 - rate*1.225) 이므로
+// 크기 0 이 되는 거리(= 노트가 처음 나타나는 지점)가 여기서 정해진다.
+var NOTE_APPEAR_RATE = 0.265;
+var MJ_APPEAR = -(1 - NOTE_APPEAR_RATE * MJ_SPAWN) / NOTE_APPEAR_RATE;   // -2.549
+var MJ_TOTAL = MJ_R - MJ_APPEAR;                                          // 7.349
+var SPAWN_R = MJ_SPAWN / MJ_R;                                            // 0.2552
 var SLIDE_FADE_MS = 200;                  // 알파 0 → 0.55 에 걸리는 시간
 var SLIDE_FULL_MS = 50;                   // 별 착지 직전 알파 1 이 되는 구간
-// 실기 기준 기본 속도. JsonDataLoader 의 noteSpeed=7 / touchSpeed=7.5 를 따른다.
-// 접근 시간 = 6.075/speed 초 이므로 기본값에서 868ms 다.
-function approachMs(){ return MJ_TOTAL * 1000 / speedIdx; }
-function touchWholeMs(){ return 3209.385682 * Math.pow(speedIdx + 0.5, -0.9549621752); }
-function slideFadeMs(){ return 3926.913 / speedIdx; }
+
+/**
+ * 화면의 속도 설정(TapSpeed, 기본 7.5)은 내부 속도와 다르다.
+ * MajdataPlay 가 쓰는 변환식을 그대로 옮긴다.
+ *   NoteSpeed = 107.25 / (71.4184491 * (TapSpeed + 0.9975)^-0.985558604)
+ * 7.5 에서 내부 속도 약 12.37 → 접근 시간 7.349/12.37 ≈ 594ms.
+ */
+function internalSpeed(){
+  return 107.25 / (71.4184491 * Math.pow(speedIdx + 0.9975, -0.985558604));
+}
+function approachMs(){ return MJ_TOTAL * 1000 / internalSpeed(); }
+function slideFadeMs(){ return 3926.913 / internalSpeed(); }
+// 터치는 변환 없이 설정값을 그대로 쓴다 (TouchSpeed).
+function touchWholeMs(){ return 3209.385682 * Math.pow(speedIdx, -0.9549621752); }
 
 /** 링 노트(탭·홀드·별)의 현재 반지름 비율과 크기. null 이면 아직/이미 안 보인다. */
 function fall(lead, ap){
   if (lead > ap || lead < 0) return null;
   var du = MJ_APPEAR + MJ_TOTAL * (1 - lead / ap);
-  if (du < MJ_SPAWN) return { rf: SPAWN_R, grow: du * 0.4 + 0.51 };
+  if (du < MJ_SPAWN) return { rf: SPAWN_R, grow: du * NOTE_APPEAR_RATE + (1 - NOTE_APPEAR_RATE * MJ_SPAWN) };
   return { rf: du / MJ_R, grow: 1 };
 }
 
@@ -612,8 +623,15 @@ function starPath(x, y, outer, inner, rot){
   }
   ctx.closePath();
 }
-function starNote(x, y, size, color, spin){
+/** '*' 분기 슬라이드의 별은 두 개가 겹친 모양이다 (star_double). */
+function starNote(x, y, size, color, spin, dbl){
   var rot = spin || 0;
+  if (dbl){
+    starPath(x, y, size, size * 0.46, rot + Math.PI / 5);
+    ctx.fillStyle = '#fff'; ctx.fill();
+    starPath(x, y, size * 0.84, size * 0.39, rot + Math.PI / 5);
+    ctx.fillStyle = color; ctx.fill();
+  }
   starPath(x, y, size, size * 0.46, rot);
   ctx.fillStyle = '#fff'; ctx.fill();
   starPath(x, y, size * 0.84, size * 0.39, rot);
@@ -790,7 +808,7 @@ function drawField(){
 // ── 상태 ───────────────────────────────────────────────────────────────────
 var END = CHART.durationMs + 1500;
 var t = 0, playing = false, last = 0;
-var rate = 1, speedIdx = 7, sound = true, guide = true;
+var rate = 1, speedIdx = 7.5, sound = true, guide = true;
 
 // 같은 타이밍의 링 노트들은 maimai 에서 노란 선으로 이어진다(EACH 표시).
 var EACH_LINKS = (function(){
@@ -906,7 +924,8 @@ function draw(){
       if (t >= s0){ passed = slideProgressLen(pc, b, t - s0); alpha = 1; }
       else if (t >= n.timeMs - SLIDE_FULL_MS) alpha = 1;
       else alpha = 0.55 * Math.min(1, (t - fadeStart) / SLIDE_FADE_MS);
-      var acol = b.isBreak ? C_ARROW_BREAK : n.isEach ? C_EACH : C_ARROW;
+      // 궤적은 '*' 분기만으로도 EACH 색이 된다 (별은 그렇지 않다)
+      var acol = b.isBreak ? C_ARROW_BREAK : (n.isEach || n.slides.length > 1) ? C_EACH : C_ARROW;
       var total = pc.len[pc.len.length - 1] || 1;
       if (pc.isWifi) wifiBars(pc, passed / total, acol, alpha);
       else slideArrows(pc, passed, acol, alpha);
@@ -949,7 +968,9 @@ function draw(){
     }
   }
 
-  // 5) HOLD
+  // 5) HOLD — MajdataPlay HoldDrop 을 그대로 옮겼다. 그려지는 길이는
+  //    (머리거리 - 꼬리거리) + 1.4 라서, 끝 캡이 실제 판정 지점보다 0.7 씩 더 나온다.
+  var HOLD_EXTRA = 1.4;
   for (i = lo; i < hi; i++){
     n = NOTES[i];
     if (n.type !== 'hold') continue;
@@ -958,16 +979,28 @@ function draw(){
     if (hLead > ap || -tLead > FLASH_MS) continue;
     var hcol = colorOf(n);
     if (tLead >= 0){
-      var hs = fall(hLead, ap);
-      var headRf = hs ? hs.rf : 1;
-      var size2 = NOTE_R * (hs ? hs.grow : 1);
-      var ts = fall(tLead, ap);
-      var tailRf = ts ? ts.rf : (tLead > ap ? SPAWN_R : 1);
-      if (tailRf > headRf) tailRf = headRf;
-      var hp = rayPt(n.pos, R * headRf), tpt = rayPt(n.pos, R * tailRf);
-      if (hs && n.isEx) exGlow(hp.x, hp.y, size2);
-      holdBody(tpt, hp, size2, hcol);
-      if (hs && n.isBreak) breakSpark(hp.x, hp.y, size2, spin);
+      var hdu = MJ_APPEAR + MJ_TOTAL * (1 - hLead / ap);
+      var tdu = MJ_APPEAR + MJ_TOTAL * (1 - tLead / ap);
+      var gs = hdu * NOTE_APPEAR_RATE + (1 - NOTE_APPEAR_RATE * MJ_SPAWN);
+      var innerDu, outerDu, hsz;
+      if (hdu < MJ_SPAWN){
+        // 아직 떠오르는 중: 늘어나지 않고 노트 한 개 크기로 제자리에서 커진다
+        if (gs <= 0) continue;
+        innerDu = MJ_SPAWN - 0.71 * gs;
+        outerDu = MJ_SPAWN + 0.71 * gs;
+        hsz = NOTE_R * gs;
+      } else {
+        if (tdu < MJ_SPAWN) tdu = MJ_SPAWN;
+        if (hdu > MJ_R) hdu = MJ_R;
+        innerDu = tdu - HOLD_EXTRA / 2;
+        outerDu = hdu + HOLD_EXTRA / 2;
+        hsz = NOTE_R;
+      }
+      var ia = rayPt(n.pos, R * Math.max(0, innerDu) / MJ_R);
+      var ob = rayPt(n.pos, R * outerDu / MJ_R);
+      if (n.isEx) exGlow(ob.x, ob.y, hsz);
+      holdBody(ia, ob, hsz, hcol);
+      if (n.isBreak && hdu >= MJ_SPAWN) breakSpark(ob.x, ob.y, hsz, spin);
     }
     if (hLead <= 0 && -hLead <= FLASH_MS){
       var bp2 = btn(n.pos); hitFlash(bp2.x, bp2.y, NOTE_R * 1.1, hcol, -hLead / FLASH_MS);
@@ -1028,7 +1061,7 @@ function draw(){
         var sp = rayPt(n.pos, R * st.rf), ssz = NOTE_R * st.grow;
         if (n.isEx) exGlow(sp.x, sp.y, ssz);
         if (n.plainStar) noteDonut(sp.x, sp.y, ssz, scol);
-        else starNote(sp.x, sp.y, ssz * 1.1, scol, spin);
+        else starNote(sp.x, sp.y, ssz * 1.1, scol, spin, n.starDouble);
         if (n.isBreak) breakSpark(sp.x, sp.y, ssz, spin);
       }
     } else if (t <= n.timeMs + delay){
@@ -1036,7 +1069,7 @@ function draw(){
       var f3 = delay > 0 ? (t - n.timeMs) / delay : 1;
       var bp4 = btn(n.pos), bsz = NOTE_R * (0.5 + f3);
       if (n.plainStar) noteDonut(bp4.x, bp4.y, NOTE_R, scol);
-      else starNote(bp4.x, bp4.y, bsz, scol, spin);
+      else starNote(bp4.x, bp4.y, bsz, scol, spin, n.starDouble);
     }
     if (t >= n.timeMs && t - n.timeMs <= FLASH_MS){
       var sbp = btn(n.pos);

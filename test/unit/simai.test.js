@@ -194,10 +194,17 @@ test("연결 SLIDE: 구간별 속도를 지정하면 묶음으로 나눈다", ()
   assert.equal(whole.segments.length, 3);
 });
 
-test("동시작 SLIDE(*)는 EACH 로 취급된다", () => {
+test("동시작 SLIDE(*)는 궤적만 EACH, 별은 겹친 모양", () => {
   const n = parseInote("(120){4}1-4[4:3]*-6[8:5],", 120).notes[0];
   assert.equal(n.slides.length, 2);
-  assert.equal(n.isEach, true, "사양서: 이들 SLIDE 는 EACH 로 취급");
+  // MajdataPlay: 궤적은 IsEach = (동시 타이밍 || multiple>1), 별은 동시 타이밍만 본다.
+  assert.equal(n.isEach, undefined, "혼자면 별은 EACH 가 아니다");
+  assert.equal(n.starDouble, true, "별은 star_double 모양");
+
+  // 다른 노트와 동시면 별도 EACH 가 된다
+  const two = parseInote("(120){4}1-4[4:3]*-6[8:5]/3,", 120).notes;
+  assert.equal(two[0].isEach, true);
+  assert.equal(two[0].starDouble, true);
   assert.equal(n.slides[0].durationMs, 4 / 4 * 3 * 500);
   assert.equal(n.slides[1].durationMs, 4 / 8 * 5 * 500);
 });

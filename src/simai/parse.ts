@@ -305,11 +305,13 @@ function parseNote(raw: string, ctx: Ctx, timeMs: number): void {
       });
     }
     if (bodies.length === 0) return;
-    // 동시작 슬라이드는 사양서상 EACH 로 취급된다.
-    const each = ctx.isEach || bodies.length > 1;
+    // 사양서상 동시작 슬라이드(`*`)도 EACH 지만, 실제 구현에서 EACH 가 되는 것은
+    // "궤적"뿐이다. 별은 동시 타이밍 기준으로만 EACH 가 되고, 대신 별 모양이
+    // 겹친 형태(star_double)로 바뀐다. 그래서 두 가지를 나눠 둔다.
     pushNote(ctx, {
       ...base, type: "slide", pos, slides: bodies,
-      ...(each ? { isEach: true as const } : {}),
+      ...(ctx.isEach ? { isEach: true as const } : {}),
+      ...(bodies.length > 1 ? { starDouble: true as const } : {}),
       ...(/b/i.test(flags) ? { isBreak: true as const } : {}),
       ...(/x/i.test(flags) ? { isEx: true as const } : {}),
       ...(flags.includes("@") ? { plainStar: true as const } : {}),
