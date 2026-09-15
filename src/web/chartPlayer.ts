@@ -372,7 +372,7 @@ function sensorKey(x, y){
 // 별이 센서를 밟았다고 보는 반경. MajdataView 의 starRadius 0.7637 (단위 4.8).
 // (MJ_R 은 아래에서 선언되므로 여기서는 값 4.8 을 직접 쓴다)
 var STAR_TRIG = R * (0.763736616 / 4.8);
-var SENSOR_RAD = { A: R * 0.18, B: R * 0.15, C: R * 0.20 };
+var SENSOR_RAD = { A: R * 0.11, B: R * 0.09, C: R * 0.12 };
 function sensorCenter(key){
   if (key === 'C') return { x: CX, y: CY };
   var k = +key.slice(1);
@@ -387,11 +387,12 @@ function sensorCenter(key){
  *   ON 조건: |별 - 센서중심|² <= 센서반지름² + 별반지름²
  */
 function groupBySensor(list, pc){
-  var g = 0, prev = null, keys = [], rel = [];
+  var g = 0, prev = null, keys = [], from = [], rel = [];
   for (var i = 0; i < list.length; i++){
     var k = sensorKey(list[i].x, list[i].y);
     if (prev !== null && k !== prev) g++;
     list[i].g = g; keys[g] = k; prev = k;
+    if (from[g] === undefined) from[g] = i;
   }
   var last = list[list.length - 1];
   // 끝까지 벗어나지 않으면 경로 끝 뒤로 보낸다 (d 의 단위는 호출부에 맞춘다)
@@ -401,7 +402,10 @@ function groupBySensor(list, pc){
     var sr = SENSOR_RAD[keys[gi].charAt(0)];
     var th = Math.sqrt(sr * sr + STAR_TRIG * STAR_TRIG);
     var inside = false, out = null;
-    for (var j = 0; j < list.length; j++){
+    // 왕복해서 같은 구역을 다시 지나는 경로가 있으므로, 반드시 이 묶음이
+    // 시작하는 지점부터 훑는다. 처음부터 훑으면 앞선 방문의 이탈 지점을
+    // 물려받아 뒤쪽 궤적이 먼저 사라진다.
+    for (var j = from[gi]; j < list.length; j++){
       var dx = list[j].x - c.x, dy = list[j].y - c.y;
       if (dx * dx + dy * dy <= th * th) inside = true;
       else if (inside){ out = list[j].d; break; }
