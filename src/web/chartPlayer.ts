@@ -356,6 +356,29 @@ function slidePos(pc, body, elapsed){
 // 궤적은 매 프레임 다시 계산하면 비싸다. 노트별로 한 번만 만들어 캐시한다.
 var cache = {};
 var WIFI_BARS = 11;   // 실기의 wifi_0 ~ wifi_10
+/**
+ * 한 점이 어느 판정 구역에 속하는지. 실기는 별이 센서를 지날 때마다 그 구역의
+ * 궤적이 통째로 사라지므로(MajdataView 는 judgeSensors 단위로 slideBars 를
+ * 한꺼번에 끈다), 화살표를 구역 단위로 묶어 두려고 쓴다.
+ */
+function sensorKey(x, y){
+  var dx = x - CX, dy = y - CY;
+  var r = Math.sqrt(dx*dx + dy*dy) / R;
+  if (r < 0.26) return 'C';
+  var k = Math.round((Math.atan2(dy, dx) - ang(1)) / (Math.PI / 4));
+  return (r < 0.56 ? 'B' : 'A') + (((k % 8) + 8) % 8);
+}
+/** 묶음마다 "이 호 길이를 지나면 통째로 사라진다" 는 값을 매긴다. */
+function groupBySensor(list, pc){
+  var g = 0, prev = null, ends = [];
+  for (var i = 0; i < list.length; i++){
+    var k = sensorKey(list[i].x, list[i].y);
+    if (prev !== null && k !== prev) g++;
+    list[i].g = g; prev = k;
+    ends[g] = list[i].d + ARROW_GAP * 0.5;
+  }
+  pc.groupEnds = ends;
+}
 /** 화살표를 놓을 지점과 방향을 미리 구해 둔다 (매 프레임 경로를 훑지 않도록). */
 function buildArrows(pc){
   var out = [], total = pc.len[pc.len.length - 1];
@@ -364,6 +387,7 @@ function buildArrows(pc){
     var vx = q.x - p.x, vy = q.y - p.y, m = Math.sqrt(vx*vx + vy*vy) || 1;
     out.push({ x: p.x, y: p.y, ux: vx/m, uy: vy/m, d: d });
   }
+  groupBySensor(out, pc);
   return out;
 }
 /**
@@ -381,6 +405,15 @@ function buildWifiBars(pc){
     }
     out.push({ f: f, pts: row });
   }
+  // 가운데 줄 기준으로 구역이 바뀌는 지점에서 끊고, 묶음마다 끝 진행률을 매긴다
+  var keys = [], g = 0, ends = [];
+  for (var k = 0; k < out.length; k++) keys.push(sensorKey(out[k].pts[1].x, out[k].pts[1].y));
+  for (var k2 = 0; k2 < out.length; k2++){
+    if (k2 > 0 && keys[k2] !== keys[k2 - 1]) g++;
+    out[k2].g = g;
+    ends[g] = out[k2].f + 0.5 / WIFI_BARS;
+  }
+  for (var k3 = 0; k3 < out.length; k3++) out[k3].gEnd = ends[out[k3].g];
   return out;
 }
 function cachedPath(note, k){
@@ -759,7 +792,8 @@ function slideArrows(pc, passedLen, color, alpha){
   ctx.lineJoin = 'miter'; ctx.lineCap = 'butt'; ctx.miterLimit = 4;
   for (var i = 0; i < arrows.length; i++){
     var a = arrows[i];
-    if (a.d < passedLen) continue;
+    // 별이 그 구역을 빠져나간 순간 묶음 전체가 한 번에 사라진다
+    if (pc.groupEnds[a.g] <= passedLen) continue;
     // 뒤로 진 그림자
     chevronPath(a.x + sh * 0.5, a.y + sh * 0.8, a.ux, a.uy, w, d);
     ctx.strokeStyle = 'rgba(0,0,0,.5)'; ctx.lineWidth = t; ctx.stroke();
@@ -773,26 +807,33 @@ function slideArrows(pc, passedLen, color, alpha){
   ctx.restore();
 }
 
-/** 扇形(w) 전용. 겹겹이 놓인 꺾인 막대가 별이 지난 것부터 사라진다. */
+/**
+ * 扇形(w) 전용. 겹겹이 놓인 꺾인 막대이고, 모서리는 화살표와 같이 각지게 둔다.
+ * 사라지는 것도 화살표와 같은 구역 단위다.
+ */
 function wifiBars(pc, progress, color, alpha){
   if (!pc.bars) return;
-  ctx.save(); ctx.globalAlpha = alpha;
-  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  var w = ARROW_GAP * 0.62, off = ARROW_GAP * 0.13;
+  var w = ARROW_GAP * ARW_T * 1.15, hw = w * 0.24, sh = ARROW_GAP * 0.1;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.lineCap = 'butt'; ctx.lineJoin = 'miter'; ctx.miterLimit = 4;
+  function bar(q, ox, oy, lw, col){
+    ctx.beginPath();
+    ctx.moveTo(q[0].x + ox, q[0].y + oy);
+    ctx.lineTo(q[1].x + ox, q[1].y + oy);
+    ctx.lineTo(q[2].x + ox, q[2].y + oy);
+    ctx.strokeStyle = col; ctx.lineWidth = lw; ctx.stroke();
+  }
   for (var i = 0; i < pc.bars.length; i++){
     var b = pc.bars[i];
-    if (b.f < progress) continue;
-    var q = b.pts;
-    ctx.strokeStyle = 'rgba(0,0,0,.5)'; ctx.lineWidth = w;
-    ctx.beginPath();
-    ctx.moveTo(q[0].x + off, q[0].y + off); ctx.lineTo(q[1].x + off, q[1].y + off);
-    ctx.lineTo(q[2].x + off, q[2].y + off); ctx.stroke();
-    ctx.strokeStyle = color; ctx.lineWidth = w;
-    ctx.beginPath();
-    ctx.moveTo(q[0].x, q[0].y); ctx.lineTo(q[1].x, q[1].y); ctx.lineTo(q[2].x, q[2].y);
-    ctx.stroke();
+    if (b.gEnd <= progress) continue;
+    bar(b.pts, sh * 0.5, sh * 0.8, w, 'rgba(0,0,0,.5)');
+    bar(b.pts, 0, 0, w, color);
+    // 부채꼴은 바깥으로 퍼지므로 바깥쪽 모서리에 밝은 띠를 둔다
+    var c = b.pts[1];
+    var ox = c.x - CX, oy = c.y - CY, L = Math.sqrt(ox*ox + oy*oy) || 1;
+    bar(b.pts, ox / L * (w - hw) / 2, oy / L * (w - hw) / 2, hw, 'rgba(255,255,255,.85)');
   }
-  ctx.lineCap = 'butt';
   ctx.restore();
 }
 
