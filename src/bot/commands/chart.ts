@@ -1,10 +1,11 @@
 import {
   SlashCommandBuilder, ChatInputCommandInteraction, EmbedBuilder,
-  ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags,
+  ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, AttachmentBuilder,
 } from "discord.js";
 import { randomBytes } from "crypto";
 import { saveSimaiChart, countSimaiChartsByOwner } from "../../storage";
 import { parseMaidata, UNKNOWN_DIFFICULTY } from "../../simai/parse";
+import { renderChartGifAsync, densestStart, GIF_DEFAULTS } from "../utils/chartGif";
 import { getBaseUrl } from "../../web/bookmarklet";
 import { PORT } from "../../config";
 import { msg } from "../../messages";
@@ -31,6 +32,10 @@ export const data = new SlashCommandBuilder()
   .addIntegerOption((o) =>
     o.setName("난이도").setDescription("생략 시 파일에 있는 가장 높은 난이도").setRequired(false)
       .addChoices(...Object.entries(DIFF_LABEL).map(([v, name]) => ({ name, value: Number(v) }))),
+  )
+  .addNumberOption((o) =>
+    o.setName("시작").setDescription("미리보기를 시작할 시각(초). 생략 시 가장 빽빽한 구간")
+      .setRequired(false).setMinValue(0),
   );
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
@@ -147,10 +152,40 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   // 링크 버튼은 https 일 때만 단다. baseUrl 이 비어 있는 로컬 개발에서는 URL 이
   // http://localhost:... 라 Discord 가 거부할 수 있고, 그러면 응답 전체가 실패한다.
   // 어차피 embed 설명에 같은 링크가 마크다운으로 들어가 있어 기능은 잃지 않는다.
+  // 미리보기 GIF. 웹 플레이어와 같은 렌더러를 워커에서 돌려 몇 초치를 잘라낸다.
+  const files: AttachmentBuilder[] = [];
+  try {
+    const clipMs = Math.min(GIF_DEFAULTS.durationMs, Math.max(2000, chart.durationMs));
+    const asked = interaction.options.getNumber("시작");
+    const maxStart = Math.max(0, chart.durationMs - clipMs);
+    const startMs = asked !== null
+      ? Math.min(asked * 1000, maxStart)
+      : Math.min(densestStart(chart, clipMs), maxStart);
+    const gif = await renderChartGifAsync(
+      { id, title: parsed.title, artist: parsed.artist, designer: parsed.designers[key] ?? "",
+        level: parsed.levels[key] ?? "", difficulty: diff, chart },
+      { ...GIF_DEFAULTS, durationMs: clipMs, startMs },
+    );
+    files.push(new AttachmentBuilder(gif, { name: "preview.gif" }));
+    embed.setImage("attachment://preview.gif");
+    const s0 = Math.round(startMs / 1000);
+    embed.addFields({
+      name: msg("chart.fieldPreview"),
+      value: msg("chart.previewRange", {
+        from: `${Math.floor(s0 / 60)}:${String(s0 % 60).padStart(2, "0")}`,
+        sec: Math.round(clipMs / 1000),
+      }),
+      inline: true,
+    });
+  } catch (e) {
+    // 미리보기는 부가 기능이라, 실패해도 링크는 그대로 준다.
+    console.error("[보면] 미리보기 생성 실패:", e);
+  }
+
   const components = url.startsWith("https://")
     ? [new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder().setStyle(ButtonStyle.Link).setURL(url).setLabel(msg("chart.button")),
       )]
     : [];
-  await interaction.editReply({ embeds: [embed], components });
+  await interaction.editReply({ embeds: [embed], components, files });
 }

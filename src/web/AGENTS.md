@@ -11,7 +11,8 @@ src/web/
 ├── index.ts         # http.createServer routes, inline guide pages, /sync ingest
 ├── bookmarklet.ts   # baseUrl helpers, preset list, generated bookmarklet JS
 ├── settingsPage.ts  # full settings HTML/CSS/JS string
-├── chartPlayer.ts   # simai 채보 플레이어 HTML/CSS/canvas JS string
+├── chartPlayer.ts   # simai 채보 플레이어 페이지 껍데기 (HTML/CSS + 컨트롤)
+├── chartRenderer.ts # 플레이어 그리기 코어를 담은 JS 문자열 (서버 GIF 생성과 공용)
 └── dev.ts           # web-only local entrypoint
 ```
 
@@ -26,7 +27,8 @@ src/web/
 | Change bookmarklet payload | `bookmarklet.ts` | Huge embedded JS string plus injection marker. |
 | Add built-in bookmarklet | `BOOKMARKLET_PRESETS` in `bookmarklet.ts` | Add preset object; state stored as ID in DB. |
 | Web-only local preview | `dev.ts` | Starts server without Discord token/login. |
-| 채보 플레이어 UI/렌더 | `chartPlayer.ts` | canvas 링 렌더러. 파싱은 `src/simai/parse.ts` 가 끝낸 뒤라 여기선 그리기만 한다. |
+| 채보 플레이어 껍데기 | `chartPlayer.ts` | HTML/CSS와 컨트롤. 그리기 코어는 `chartRenderer.ts` 를 인라인한다. |
+| 노트·슬라이드 그리기 | `chartRenderer.ts` | canvas 링 렌더러. **백틱과 `${` 를 쓰지 말 것** (템플릿 문자열로 보관). `/보면` 미리보기 GIF도 이 코드를 vm 에 올려 쓴다. |
 | Scrape sync pipeline | `POST /sync` in `index.ts` | Writes debug HTML, parses, caches, saves session/avatar/jackets. |
 | Jacket/avatar endpoints | `GET /jacket`, `GET /avatar` in `index.ts` | Cache-first asset responses. |
 

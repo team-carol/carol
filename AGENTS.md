@@ -34,7 +34,9 @@ carol/
 | Bookmarklet source | `src/web/bookmarklet.ts` | Embedded JS string; preset bookmarklets injected before extras. |
 | Web settings UI | `src/web/settingsPage.ts` | Inline HTML/CSS/JS, no React/templates. |
 | simai 채보 파싱 | `src/simai/parse.ts` | maidata.txt -> 타임라인. 순수 함수, 유닛 테스트 있음. |
-| 채보 플레이어 페이지 | `src/web/chartPlayer.ts` | canvas 렌더. 서버가 만든 `Chart` JSON 만 소비한다. |
+| 채보 플레이어 페이지 | `src/web/chartPlayer.ts` | 페이지 껍데기. 그리기 코어는 `chartRenderer.ts`. |
+| 노트 그리기 코어 | `src/web/chartRenderer.ts` | 브라우저와 서버(GIF)가 공용. 템플릿 문자열이라 백틱 금지. |
+| 미리보기 GIF | `src/bot/utils/chartGif.ts` | 같은 렌더러를 vm+napi-canvas 로 돌려 프레임을 뽑는다. |
 | DB schema/storage | `src/storage/postgres.ts` | PostgreSQL storage and numbered migrations. |
 | maimai parsing | `src/scraper.ts` | Cheerio selectors tied to DX NET markup. |
 | Song constants/jackets | `src/constants.ts` | otoge-db cache; startup network failure is non-fatal. |

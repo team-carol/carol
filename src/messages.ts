@@ -47,6 +47,8 @@ export const MESSAGES = {
   "chart.fieldBpm": "BPM",
   "chart.fieldLength": "길이",
   "chart.fieldNotes": "노트",
+  "chart.fieldPreview": "미리보기",
+  "chart.previewRange": "{from} 부터 {sec}초",
   "chart.diffUnknown": "난이도 미상",
   "chart.bpmAssumedNote": "⚠️ 파일에 BPM 표기가 없어 120으로 가정했습니다. 재생 속도가 실제와 다릅니다.",
   "chart.footer": "{user} 님이 올린 채보 · 링크를 아는 사람만 볼 수 있습니다 · 30일 보관",
