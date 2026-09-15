@@ -37,10 +37,12 @@ Key entry points:
 - `src/storage/postgres.ts` — PostgreSQL storage and numbered migrations; main write path after `/sync`.
 - `src/scraper.ts` — Cheerio selectors bound to DX NET markup.
 - `src/bot/utils/ratingCard.ts` — satori + resvg PNG rendering (no JSX; uses a local `el()` helper), cached in DB.
+- `src/simai/parse.ts` — maidata.txt(simai) 파서. 결과 `Chart` JSON 을 `src/web/chartPlayer.ts` 의 canvas 플레이어가 그대로 소비한다. **파싱은 서버에서만** — 브라우저로 옮기지 말 것(채보 출처가 업로드→DB 로 바뀌어도 이 경계는 유지).
 - `src/messages.ts` — single catalog of every user-facing bot string (`msg(key, vars)`). Defaults live here; `/관리` → `/admin/messages` writes overrides to `bot_messages`. Slash command/option names and `RATING_ROLES` names are deliberately NOT in the catalog (registered with Discord / looked up by name).
 
 ## Project-specific conventions & anti-patterns
 
+- 업로드된 simai 채보(`simai_charts`, `source='upload'`)는 30일 뒤 자동 삭제된다. 운영자 등록분(`source='registry'`)은 GC 대상이 아니다.
 - **Slash commands use Korean names.** User `/설정` links to web settings; guild auto-role config is `/서버설정`, not `/설정`.
 - **User-facing strings go through `msg()` from `src/messages.ts`** — do not inline new Korean output text in commands. Fonts for PNG cards must be registered under distinct family names (satori does not fall back within one family); see `src/fonts.ts` `FONT_STACK`.
 - **PostgreSQL migrations are numbered and immutable after release.** Do not reintroduce SQLite runtime storage or the removed catalog baseline crawler.

@@ -10,6 +10,7 @@ Shared TypeScript runtime for persistence, parsing, constants, crypto, fonts, an
 src/
 ├── bot/        # Discord-facing runtime and commands
 ├── web/        # HTTP server, bookmarklet, settings UI
+├── simai/      # maidata.txt(simai) 파서 — 채보 타임라인 생성. 네트워크/DB 의존 없음
 ├── db.ts       # SQLite singleton, schema, migrations, caches, settings
 ├── scraper.ts  # maimai DX NET HTML parser and PlayRecord model
 ├── constants.ts # otoge-db constants/jacket metadata and rating math
@@ -27,6 +28,7 @@ src/
 | Add DB column/setting/cache | `db.ts` | Use additive try/catch migration at top-level. |
 | Change sync data model | `scraper.ts`, `db.ts`, `web/index.ts` | Parser -> cache schema -> `/sync` write path. |
 | Rating formula/constant lookup | `constants.ts` | International data takes priority over JP data. |
+| simai 채보 문법/타이밍 | `simai/parse.ts`, `simai/types.ts` | 순수 함수. 브라우저에는 결과 `Chart` JSON 만 넘긴다 — 파서를 클라이언트로 옮기지 말 것. |
 | Config shape/defaults | `config.ts`, `config.json.example` | Root `config.json`, not env, is canonical. |
 | Encryption-key behavior | `crypto.ts` | Blank key writes generated value back to config. |
 | Font render failures | `fonts.ts`, `bot/utils/ratingCard.ts` | Fonts cache under `{DATA_DIR}/fonts/`. |

@@ -11,6 +11,7 @@ src/web/
 ├── index.ts         # http.createServer routes, inline guide pages, /sync ingest
 ├── bookmarklet.ts   # baseUrl helpers, preset list, generated bookmarklet JS
 ├── settingsPage.ts  # full settings HTML/CSS/JS string
+├── chartPlayer.ts   # simai 채보 플레이어 HTML/CSS/canvas JS string
 └── dev.ts           # web-only local entrypoint
 ```
 
@@ -25,6 +26,7 @@ src/web/
 | Change bookmarklet payload | `bookmarklet.ts` | Huge embedded JS string plus injection marker. |
 | Add built-in bookmarklet | `BOOKMARKLET_PRESETS` in `bookmarklet.ts` | Add preset object; state stored as ID in DB. |
 | Web-only local preview | `dev.ts` | Starts server without Discord token/login. |
+| 채보 플레이어 UI/렌더 | `chartPlayer.ts` | canvas 링 렌더러. 파싱은 `src/simai/parse.ts` 가 끝낸 뒤라 여기선 그리기만 한다. |
 | Scrape sync pipeline | `POST /sync` in `index.ts` | Writes debug HTML, parses, caches, saves session/avatar/jackets. |
 | Jacket/avatar endpoints | `GET /jacket`, `GET /avatar` in `index.ts` | Cache-first asset responses. |
 
@@ -41,6 +43,7 @@ src/web/
 | `POST /api/settings/bookmarklet` | Add/delete extra bookmarklets, max 5. |
 | `GET /bookmarklet.js?code=TOKEN` | Serves generated sync JS with enabled presets/extras. |
 | `GET /avatar`, `GET /jacket` | Stored/fetched PNG assets. |
+| `GET /chart?id=TOKEN` | simai 채보 플레이어. 토큰을 아는 사람만 열 수 있고 로그인은 요구하지 않는다. |
 | `GET /privacy`, `GET /terms` | Static legal pages. |
 
 ## CONVENTIONS

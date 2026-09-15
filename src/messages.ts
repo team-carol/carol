@@ -30,6 +30,25 @@ export const MESSAGES = {
   "ratingImage.snapshotGameUnsupported": "과거 날짜 조회는 maimai DX 레이팅표만 지원합니다. 다른 게임 환산은 전체 클리어 기록이 필요한데, 스냅샷은 레이팅 대상 50곡만 보관합니다.",
   "ratingImage.renderFailed": "이미지 생성에 실패했습니다.",
 
+  // ── /보면 (simai 채보 플레이어) ─────────────────────────────────────────
+  "chart.tooLarge": "파일이 너무 큽니다. maidata.txt 는 보통 수십 KB 입니다. (최대 2MB)",
+  "chart.notText": "maidata.txt 같은 텍스트 파일을 올려주세요.",
+  "chart.downloadFailed": "첨부 파일을 읽지 못했습니다. 다시 시도해주세요.",
+  "chart.parseFailed": "채보를 해석하지 못했습니다. simai 형식의 maidata.txt 가 맞는지 확인해주세요.",
+  "chart.noChart": "파일에서 채보(`&inote_N=`)를 찾지 못했습니다. maidata.txt 전체를 올려주세요.",
+  "chart.emptyChart": "해당 난이도에 노트가 없습니다.",
+  "chart.diffMissing": "이 파일에는 {want} 채보가 없습니다. 들어있는 난이도: {has}",
+  "chart.quota": "올릴 수 있는 채보는 {max}개까지입니다. 오래된 채보는 30일 뒤 자동으로 지워집니다.",
+  "chart.saveFailed": "채보 저장에 실패했습니다. 잠시 후 다시 시도해주세요.",
+  "chart.untitled": "(제목 없음)",
+  "chart.openLink": "[브라우저에서 재생하기]({url})",
+  "chart.button": "채보 열기",
+  "chart.fieldChart": "채보",
+  "chart.fieldBpm": "BPM",
+  "chart.fieldLength": "길이",
+  "chart.fieldNotes": "노트",
+  "chart.footer": "{user} 님이 올린 채보 · 링크를 아는 사람만 볼 수 있습니다 · 30일 보관",
+
   // ── /공지설정 · 공지 폴링 ───────────────────────────────────────────────
   "news.sourceJp": "maimai でらっくす 공식 (내수판)",
   "news.untitled": "(제목 없음)",

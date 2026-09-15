@@ -1,7 +1,7 @@
 import { Client, Events, GatewayIntentBits, ChatInputCommandInteraction, ButtonInteraction, REST, Routes, MessageFlags } from "discord.js";
 import { initEncryption } from "../crypto";
 import { startWebServer, setBaseUrl, setGuildCountProvider, getBaseUrl } from "../web";
-import { closeStorage, initializeStorage, loadUserSession, getCachedProfile, clearRatingCardCacheForInactive, getTranslateTitles, getPolicyAck, setPolicyAck } from "../storage";
+import { closeStorage, initializeStorage, loadUserSession, getCachedProfile, clearRatingCardCacheForInactive, getTranslateTitles, getPolicyAck, setPolicyAck, pruneSimaiCharts } from "../storage";
 import { CONFIG, PORT } from "../config";
 import { POLICY_VERSION, policyNoticeText } from "../policy";
 import { recentEmbeds, rtTableEmbed, searchResultEmbeds, getSearchCtx, mapAreaEmbed } from "./utils/embeds";
@@ -29,10 +29,11 @@ import * as areaMap      from "./commands/map";
 import * as report       from "./commands/report";
 import * as admin        from "./commands/admin";
 import * as goal         from "./commands/goal";
+import * as chart        from "./commands/chart";
 
 type Command = { data: { toJSON(): object; name: string }; execute: (i: ChatInputCommandInteraction) => Promise<void> };
 
-const COMMANDS: Command[] = [profile, bookmarklet, ratingtable, ratingimage, achievement, fortune, settings, serverSettings, newsSettings, search, status, songrec, random, areaMap, report, admin, goal];
+const COMMANDS: Command[] = [profile, bookmarklet, ratingtable, ratingimage, achievement, fortune, settings, serverSettings, newsSettings, search, status, songrec, random, areaMap, report, admin, goal, chart];
 const EPHEMERAL_REPLY = { flags: MessageFlags.Ephemeral } as const;
 
 const RATING_CARD_GC_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000;
@@ -83,9 +84,24 @@ client.once(Events.ClientReady, async (c) => {
   loadFonts().catch((e) => console.error("[fonts] 초기 로드 실패:", e));
   void runRatingCardGC();
   setInterval(() => void runRatingCardGC(), RATING_CARD_GC_INTERVAL_MS);
+  void runSimaiChartGC();
+  setInterval(() => void runSimaiChartGC(), SIMAI_CHART_GC_INTERVAL_MS);
   startNewsPoller(c);
   console.log("[maimai] 준비 완료");
 });
+
+// 업로드된 simai 채보는 링크를 아는 사람만 열 수 있는 임시 자료라 무한히 쌓아둘 이유가 없다.
+// 운영자가 등록한 채보(source='registry')는 지우지 않는다.
+const SIMAI_CHART_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const SIMAI_CHART_GC_INTERVAL_MS = 24 * 60 * 60 * 1000;
+async function runSimaiChartGC(): Promise<void> {
+  try {
+    const n = await pruneSimaiCharts(SIMAI_CHART_TTL_MS);
+    if (n > 0) console.log(`[보면] 만료된 업로드 채보 ${n}건 정리`);
+  } catch (e) {
+    console.error("[보면] 정리 실패:", e);
+  }
+}
 
 // 개인정보처리방침이 바뀌면(POLICY_VERSION 상향) 등록 사용자에게 다음 명령 실행 시 1회 고지.
 // 명령 응답 뒤 ephemeral 팔로업으로 붙이고, 성공하면 policy_ack 를 올려 다시 안 뜨게 한다.

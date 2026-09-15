@@ -33,6 +33,8 @@ carol/
 | Web routes / sync ingest | `src/web/index.ts` | Manual `req.method` + `url.pathname` chains. |
 | Bookmarklet source | `src/web/bookmarklet.ts` | Embedded JS string; preset bookmarklets injected before extras. |
 | Web settings UI | `src/web/settingsPage.ts` | Inline HTML/CSS/JS, no React/templates. |
+| simai 채보 파싱 | `src/simai/parse.ts` | maidata.txt -> 타임라인. 순수 함수, 유닛 테스트 있음. |
+| 채보 플레이어 페이지 | `src/web/chartPlayer.ts` | canvas 렌더. 서버가 만든 `Chart` JSON 만 소비한다. |
 | DB schema/storage | `src/storage/postgres.ts` | PostgreSQL storage and numbered migrations. |
 | maimai parsing | `src/scraper.ts` | Cheerio selectors tied to DX NET markup. |
 | Song constants/jackets | `src/constants.ts` | otoge-db cache; startup network failure is non-fatal. |

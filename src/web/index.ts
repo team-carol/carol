@@ -3,13 +3,14 @@ import * as fs from "fs";
 import { gunzip } from "zlib";
 import { promisify } from "util";
 import { parseHome, parsePlayerData, parseFriendCode as parseFC, parseRecentRecords, parsePlaylogHistory, parseTop5, parseTopSongs, parseMusicScore, mergeTopRecords, getMaimaiBaseUrl, parseMapAreas, parsePlaylogDetail, chartKey, buildMarkMap, buildKindResolver } from "../scraper";
-import { cacheProfile, getCachedProfile, saveUserSession, getUserSyncToken, findUserBySyncToken, getUserFriendCodeForServer, saveAvatarBlob, getAvatarBlob, getSongJacket, saveSongJacket, getExtraBookmarklets, getProfilePrivate, setProfilePrivate, addExtraBookmarklet, removeExtraBookmarklet, getEnabledBookmarkletPresetIds, setBookmarkletPresetEnabled, getUserDefaultServer, setUserDefaultServer, isMaimaiServer, getMapImage, saveMapImage, saveAchievementPlayEventLogBatch, upsertChartClears, backfillEventRatingUp, saveRatingSnapshot, getAllAliases, addAlias, deleteAlias, setAliasTranslation, setMessageOverride, deleteMessageOverride, getTranslateTitles, setTranslateTitles, getRegisteredUserCount, getAchievementMinimum, setAchievementMinimum, listGoals, updateGoalProgress, getPolicyAck, setPolicyAck } from "../storage";
+import { cacheProfile, getCachedProfile, saveUserSession, getUserSyncToken, findUserBySyncToken, getUserFriendCodeForServer, saveAvatarBlob, getAvatarBlob, getSongJacket, saveSongJacket, getExtraBookmarklets, getProfilePrivate, setProfilePrivate, addExtraBookmarklet, removeExtraBookmarklet, getEnabledBookmarkletPresetIds, setBookmarkletPresetEnabled, getUserDefaultServer, setUserDefaultServer, isMaimaiServer, getMapImage, saveMapImage, saveAchievementPlayEventLogBatch, upsertChartClears, backfillEventRatingUp, saveRatingSnapshot, getAllAliases, addAlias, deleteAlias, setAliasTranslation, setMessageOverride, deleteMessageOverride, getTranslateTitles, setTranslateTitles, getRegisteredUserCount, getAchievementMinimum, setAchievementMinimum, listGoals, updateGoalProgress, getPolicyAck, setPolicyAck, getSimaiChart } from "../storage";
 import { POLICY_VERSION } from "../policy";
 import type { SongAliasRow } from "../storage/types";
 import { buildBookmarkletJs, setBaseUrl, getBaseUrl, buildBookmarklet, BOOKMARKLET_PRESETS, getBookmarkletPresets } from "./bookmarklet";
 import { computeRatingTarget, getAllSongTitles } from "../constants";
 import { settingsPage } from "./settingsPage";
 import { aliasAdminPage } from "./aliasAdminPage";
+import { chartPlayerPage, chartNotFoundPage } from "./chartPlayer";
 import { messagesAdminPage, type MessageRowVM } from "./messagesAdminPage";
 import {
   MESSAGE_KEYS, defaultOf, getOverride, rawText, placeholdersOf,
@@ -210,6 +211,32 @@ export function startWebServer(port: number): void {
       if (!targetUrl) { res.writeHead(500); res.end("missing_client_id"); return; }
       res.writeHead(302, { Location: targetUrl, "cache-control": "no-cache" });
       res.end();
+      return;
+    }
+
+    // simai 채보 플레이어. id 는 업로드 시 발급한 무작위 토큰이고, 링크를 아는
+    // 사람만 열 수 있다(비공개가 아니라 "추측 불가"). 로그인은 요구하지 않는다.
+    if (req.method === "GET" && url.pathname === "/chart") {
+      const id = (url.searchParams.get("id") || "").trim();
+      const row = /^[A-Za-z0-9_-]{8,64}$/.test(id) ? await getSimaiChart(id) : null;
+      if (!row) {
+        res.writeHead(404, { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" });
+        res.end(chartNotFoundPage("채보를 찾을 수 없습니다", "링크가 잘못됐거나, 업로드된 채보의 보관 기간이 지났습니다."));
+        return;
+      }
+      let chart;
+      try {
+        chart = JSON.parse(row.chartJson);
+      } catch {
+        res.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
+        res.end("chart_corrupt");
+        return;
+      }
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "private, max-age=300" });
+      res.end(chartPlayerPage({
+        id: row.id, title: row.title, artist: row.artist, designer: row.designer,
+        level: row.level, difficulty: row.difficulty, chart,
+      }));
       return;
     }
 

@@ -7,7 +7,7 @@ import { calcSongRating, getConstant, levelToNumber } from "../constants";
 
 pgTypes.setTypeParser(20, (value) => Number(value));
 
-export const MIGRATION_VERSION = 16;
+export const MIGRATION_VERSION = 17;
 
 // Migration text is deliberately kept as separate, immutable units.  In particular,
 // an edit to the current schema must not silently change an old migration checksum.
@@ -105,6 +105,25 @@ CREATE INDEX IF NOT EXISTS idx_user_goals_owner ON user_goals(discord_user_id, c
     created_at bigint NOT NULL DEFAULT 0,
     PRIMARY KEY (source, item_id)
   );`,],
+  // simai 채보. 지금은 유저가 올린 maidata.txt 만 들어오지만(source='upload'),
+  // 나중에 운영자가 등록하는 채보(source='registry')를 같은 테이블에 넣을 수 있게
+  // owner_id 를 비워둘 수 있도록 해 뒀다. chart_json 은 파싱된 타임라인 캐시로,
+  // 파서가 바뀌면 maidata 에서 다시 만들 수 있다.
+  [17, `CREATE TABLE IF NOT EXISTS simai_charts (
+    id text PRIMARY KEY,
+    owner_id text NOT NULL DEFAULT '',
+    source text NOT NULL DEFAULT 'upload',
+    title text NOT NULL DEFAULT '',
+    artist text NOT NULL DEFAULT '',
+    designer text NOT NULL DEFAULT '',
+    level text NOT NULL DEFAULT '',
+    difficulty integer NOT NULL DEFAULT 0,
+    maidata text NOT NULL DEFAULT '',
+    chart_json text NOT NULL DEFAULT '{}',
+    created_at bigint NOT NULL DEFAULT 0
+  );
+  CREATE INDEX IF NOT EXISTS simai_charts_owner_idx ON simai_charts(owner_id, created_at DESC);
+  CREATE INDEX IF NOT EXISTS simai_charts_created_idx ON simai_charts(created_at);`,],
 ];
 
 function hash(text: string): string { return crypto.createHash("sha256").update(text).digest("hex"); }
@@ -289,6 +308,32 @@ SELECT u.chart_key AS "chartKey",u.achievement_val AS "achievementVal",u.fc,u.sy
   async getNewsFeedState(source:string){const r=await this.q<any>(`SELECT etag,last_modified AS "lastModified",checked_at AS "checkedAt" FROM news_feed_state WHERE source=$1`,[source]);return r[0]?{...r[0],checkedAt:Number(r[0].checkedAt)}:null;}
   async setNewsFeedState(source:string,etag:string,lastModified:string,checkedAt=Date.now()){
     await this.q(`INSERT INTO news_feed_state(source,etag,last_modified,checked_at) VALUES($1,$2,$3,$4) ON CONFLICT(source) DO UPDATE SET etag=excluded.etag,last_modified=excluded.last_modified,checked_at=excluded.checked_at`,[source,etag,lastModified,checkedAt]);
+  }
+
+  // ── simai 채보 ───────────────────────────────────────────────────────────
+  async saveSimaiChart(c:{id:string;ownerId:string;source:string;title:string;artist:string;designer:string;level:string;difficulty:number;maidata:string;chartJson:string},createdAt=Date.now()){
+    await this.q(`INSERT INTO simai_charts(id,owner_id,source,title,artist,designer,level,difficulty,maidata,chart_json,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+      ON CONFLICT(id) DO UPDATE SET title=excluded.title,artist=excluded.artist,designer=excluded.designer,level=excluded.level,difficulty=excluded.difficulty,maidata=excluded.maidata,chart_json=excluded.chart_json`,
+      [c.id,c.ownerId,c.source,c.title,c.artist,c.designer,c.level,c.difficulty,c.maidata,c.chartJson,createdAt]);
+  }
+  async getSimaiChart(id:string){
+    const r=await this.q<any>(`SELECT id,owner_id AS "ownerId",source,title,artist,designer,level,difficulty,maidata,chart_json AS "chartJson",created_at AS "createdAt" FROM simai_charts WHERE id=$1`,[id]);
+    return r[0]?{...r[0],createdAt:Number(r[0].createdAt)}:null;
+  }
+  // 한 사람이 올릴 수 있는 채보 수를 제한하기 위한 카운트.
+  async countSimaiChartsByOwner(ownerId:string){
+    const r=await this.q<any>("SELECT count(*)::int AS n FROM simai_charts WHERE owner_id=$1 AND source='upload'",[ownerId]);
+    return r[0]?.n??0;
+  }
+  // 오래된 업로드만 지운다. 등록 채보(source='registry')는 보존한다.
+  async pruneSimaiCharts(olderThanMs:number){
+    const r=await this.pool.query("DELETE FROM simai_charts WHERE source='upload' AND created_at < $1",[Date.now()-olderThanMs]);
+    return r.rowCount??0;
+  }
+  // 올린 사람이 자기 업로드를 지울 때. 남의 것은 지워지지 않는다.
+  async deleteSimaiChart(id:string,ownerId:string){
+    const r=await this.pool.query("DELETE FROM simai_charts WHERE id=$1 AND owner_id=$2 AND source='upload'",[id,ownerId]);
+    return (r.rowCount??0)>0;
   }
 
   async getGuildSetting(id:string){const r=await this.q<any>("SELECT auto_role FROM guild_settings WHERE guild_id=$1",[id]);return r[0]?.auto_role!==0;} async setGuildSetting(id:string,v:boolean){await this.q("INSERT INTO guild_settings VALUES($1,$2) ON CONFLICT(guild_id) DO UPDATE SET auto_role=excluded.auto_role",[id,v?1:0]);}
