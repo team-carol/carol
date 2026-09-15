@@ -790,45 +790,65 @@ function wifiBars(pc, progress, color, alpha){
 }
 
 // ── 필드 ───────────────────────────────────────────────────────────────────
-/** 중심을 향해 회전한 둥근 사각형 패드 하나. */
-function pad(cx, cy, rot, w, h, r){
-  ctx.save();
-  ctx.translate(cx, cy); ctx.rotate(rot);
-  var x = -w / 2, y = -h / 2;
+/** 꼭짓점이 둥근 다각형. pts 는 [x,y] 배열, r 은 모깎기 반지름. */
+function roundPoly(pts, r){
+  var n = pts.length;
   ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.arcTo(x + w, y, x + w, y + h, r);
-  ctx.arcTo(x + w, y + h, x, y + h, r);
-  ctx.arcTo(x, y + h, x, y, r);
-  ctx.arcTo(x, y, x + w, y, r);
+  for (var i = 0; i < n; i++){
+    var p0 = pts[(i - 1 + n) % n], p1 = pts[i], p2 = pts[(i + 1) % n];
+    var v1x = p0[0] - p1[0], v1y = p0[1] - p1[1];
+    var v2x = p2[0] - p1[0], v2y = p2[1] - p1[1];
+    var l1 = Math.sqrt(v1x*v1x + v1y*v1y) || 1, l2 = Math.sqrt(v2x*v2x + v2y*v2y) || 1;
+    var c = Math.min(r, l1 / 2, l2 / 2);
+    var a = [p1[0] + v1x / l1 * c, p1[1] + v1y / l1 * c];
+    var b = [p1[0] + v2x / l2 * c, p1[1] + v2y / l2 * c];
+    if (i === 0) ctx.moveTo(a[0], a[1]); else ctx.lineTo(a[0], a[1]);
+    ctx.quadraticCurveTo(p1[0], p1[1], b[0], b[1]);
+  }
   ctx.closePath();
-  ctx.restore();
 }
+/** 중심 (cx,cy), 회전 rot, 꼭짓점 수 k, 외접반지름 rad 인 정다각형 패드. */
+function polyPad(cx, cy, rot, k, rad, round){
+  var pts = [];
+  for (var i = 0; i < k; i++){
+    var a = rot + i * Math.PI * 2 / k;
+    pts.push([cx + Math.cos(a) * rad, cy + Math.sin(a) * rad]);
+  }
+  roundPoly(pts, round);
+}
+
 /**
- * 배경을 maimai 의 센서 배치로 그린다. 실기에서 판정 라인 디자인을 "센서"로
- * 뒀을 때와 같은 그림이다. 각 구역의 중심 반경은 TouchDrop.GetAreaPos 기준
- * (A·D 4.1, E 3.0, B 2.3 · 단위 4.8).
+ * 배경을 maimai 의 센서 배치로 그린다 (실기에서 판정 라인 디자인을 "센서"로
+ * 뒀을 때의 그림). 수치는 실제 센서 그림을 연결 성분으로 재서 맞췄다.
+ *   둥근 패드 8개  버튼 각도,      중심 0.442R, 폭 0.305R
+ *   사각 패드 8개  22.5도 어긋난 각도, 중심 0.621R, 한 변 0.211R (각도+45도 회전)
+ *   점선 방사선 16개  0.76R ~ 0.95R
  */
 function drawSensors(){
-  var A_R = R * (4.1 / MJ_R), E_R = R * (3.0 / MJ_R), B_R = R * (2.3 / MJ_R);
-  ctx.lineJoin = 'round';
-  // D·E 는 정사각형을 45도 돌려 마름모로 둔다 (실기 센서 그림과 같은 방향).
+  var PAD_R = R * 0.442, PAD_A = R * 0.150;
+  var SQ_R = R * 0.621, SQ_A = R * 0.142;   // 정사각형 외접반지름 = 한 변/√2
+  ctx.strokeStyle = 'rgba(255,255,255,.16)';
+  ctx.lineWidth = Math.max(1.5, R * 0.006);
   for (var i = 1; i <= 8; i++){
     var ba = ang(i), da = ang(i) - Math.PI / 8;
-    // 바깥쪽(A·D)은 옅게, 안쪽(B·E)은 조금 더 또렷하게
-    var a1 = mir(polRaw(ba, A_R)), d1 = mir(polRaw(da, A_R));
-    ctx.strokeStyle = 'rgba(255,255,255,.10)'; ctx.lineWidth = 2;
-    pad(a1.x, a1.y, ba + Math.PI / 2, R * 0.30, R * 0.20, R * 0.045); ctx.stroke();
-    pad(d1.x, d1.y, da + Math.PI / 4, R * 0.155, R * 0.155, R * 0.02); ctx.stroke();
-
-    var e1 = mir(polRaw(da, E_R)), b1 = mir(polRaw(ba, B_R));
-    ctx.strokeStyle = 'rgba(255,255,255,.17)'; ctx.lineWidth = 2;
-    pad(e1.x, e1.y, da + Math.PI / 4, R * 0.145, R * 0.145, R * 0.02); ctx.stroke();
-    pad(b1.x, b1.y, ba + Math.PI / 2, R * 0.245, R * 0.185, R * 0.05); ctx.stroke();
+    var p = mir(polRaw(ba, PAD_R));
+    polyPad(p.x, p.y, ba + Math.PI / 6, 6, PAD_A, R * 0.035); ctx.stroke();
+    var q = mir(polRaw(da, SQ_R));
+    polyPad(q.x, q.y, da, 4, SQ_A, R * 0.022); ctx.stroke();
   }
-  // C 구역
-  ctx.strokeStyle = 'rgba(255,255,255,.17)'; ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.arc(CX, CY, R * 0.165, 0, TAU); ctx.stroke();
+  // 바깥으로 뻗는 점선 (A 구역 경계)
+  ctx.save();
+  ctx.setLineDash([R * 0.018, R * 0.022]);
+  ctx.strokeStyle = 'rgba(255,255,255,.13)';
+  ctx.lineWidth = Math.max(1, R * 0.005);
+  for (var j = 1; j <= 8; j++){
+    var angles = [ang(j), ang(j) - Math.PI / 8];
+    for (var k = 0; k < 2; k++){
+      var a0 = mir(polRaw(angles[k], R * 0.76)), a1 = mir(polRaw(angles[k], R * 0.95));
+      ctx.beginPath(); ctx.moveTo(a0.x, a0.y); ctx.lineTo(a1.x, a1.y); ctx.stroke();
+    }
+  }
+  ctx.restore();
 }
 
 function drawField(){
