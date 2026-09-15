@@ -16,15 +16,29 @@ export interface SlideSegment {
 }
 
 /**
- * 슬라이드 하나. `1-5[8:1]*-3[8:1]` 처럼 `*` 로 이어붙인 분기 슬라이드는
+ * 연결 슬라이드에서 구간별 속도가 따로 지정된 경우의 한 묶음.
+ * `count` 는 이 묶음이 덮는 SlideSegment 개수(`V` 는 직선 2개로 분해되므로 2).
+ */
+export interface SlideGroup {
+  count: number;
+  durationMs: number;
+}
+
+/**
+ * 슬라이드 하나. `1-5[8:1]*-3[8:1]` 처럼 `*` 로 이어붙인 동시작 슬라이드는
  * 별(star) 하나에 SlideBody 가 여러 개 달린 형태가 된다.
  */
 export interface SlideBody {
   segments: SlideSegment[];
   /** 별이 뜬 뒤 궤적이 실제로 움직이기 시작할 때까지의 대기(ms). 기본 1박. */
   delayMs: number;
-  /** 궤적이 출발해서 도착할 때까지 걸리는 시간(ms). */
+  /** 궤적이 출발해서 도착할 때까지 걸리는 전체 시간(ms). */
   durationMs: number;
+  /**
+   * 구간별로 속도가 지정된 연결 슬라이드(`1-4[2:1]q7[2:1]-2[1:1]`)일 때만 채워진다.
+   * 없으면 사양서대로 시작부터 끝까지 호 길이에 비례한 일정 속도로 흐른다.
+   */
+  groups?: SlideGroup[];
   /** 슬라이드 자체가 BREAK 인지 (별이 아니라 궤적 판정). */
   isBreak: boolean;
 }
@@ -51,8 +65,17 @@ export interface ChartNote {
   hasFirework?: boolean;
   /** hold / touchHold 의 길이(ms). */
   durationMs?: number;
-  /** slide 전용. `*` 분기가 없으면 길이 1. */
+  /** slide 전용. `*` 동시작 분기가 없으면 길이 1. */
   slides?: SlideBody[];
+  /** 일반 TAP 을 별 모양으로 (`$`=1, `$$`=회전하는 별=2). */
+  starTap?: 1 | 2;
+  /** 슬라이드의 별을 일반 TAP 모양으로 (`@`). */
+  plainStar?: boolean;
+  /**
+   * 슬라이드 시작 별을 아예 표시하지 않음.
+   * `"fade"`(`?`) = 이동하는 별이 페이드인, `"none"`(`!`) = 출발 순간에 처음 등장.
+   */
+  starless?: "fade" | "none";
 }
 
 export interface BpmEvent {

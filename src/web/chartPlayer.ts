@@ -144,109 +144,163 @@ var cv = document.getElementById('cv'), ctx = cv.getContext('2d');
 var CX = 460, CY = 460, R = 330;
 
 // ── 기하 ───────────────────────────────────────────────────────────────────
-// maimai 버튼 1번은 오른쪽 위. 위(-90도)에서 22.5도 돌린 자리부터 시계방향 45도씩.
+// 사양서: "時計の1時の方向にあるボタンを1番として、時計回りに1～8番".
+// 미러는 화면을 좌우로 뒤집는 것이므로, 도형은 항상 원래 좌표로 만들고 마지막에
+// 점을 세로축 기준으로 뒤집는다. 번호를 9-i 로 바꾸는 방식은 버튼에서는 맞지만
+// D/E 센서(버튼 사이 22.5도)에서 한 칸 어긋난다.
 var mirror = false;
-// 미러는 세로축 대칭. 1↔8, 2↔7, 3↔6, 4↔5 이므로 9에서 뺀다.
-function slot(i){ return mirror ? 9 - i : i; }
-function ang(i){ return (-90 + 22.5 + (slot(i) - 1) * 45) * Math.PI / 180; }
-function pol(a, r){ return { x: CX + Math.cos(a) * r, y: CY + Math.sin(a) * r }; }
-function btn(i){ return pol(ang(i), R); }
+function ang(i){ return (-90 + 22.5 + (i - 1) * 45) * Math.PI / 180; }
+function mir(p){ return mirror ? { x: 2 * CX - p.x, y: p.y } : p; }
+function polRaw(a, r){ return { x: CX + Math.cos(a) * r, y: CY + Math.sin(a) * r }; }
+function btnRaw(i){ return polRaw(ang(i), R); }
+function btn(i){ return mir(btnRaw(i)); }
+/** 중심에서 pos 번 버튼 방향으로 반지름 r 인 점 (노트가 날아오는 궤도 위). */
+function rayPt(pos, r){ return mir(polRaw(ang(pos), r)); }
 
-// 터치 센서 위치. A/B 는 버튼과 같은 각도, D/E 는 버튼 사이(22.5도 어긋난 선 위).
+// 터치 센서. 사양서: A=버튼에 인접, B=A와 중앙 사이, C=중앙, D=A끼리의 사이,
+// E=D보다 안쪽으로 B에 인접. A/B 는 버튼과 같은 각도, D/E 는 22.5도 어긋난 선 위.
 function touchPt(area, n){
-  if (area === 'C') return { x: CX, y: CY };
-  if (area === 'A') return pol(ang(n), R * 0.80);
-  if (area === 'B') return pol(ang(n), R * 0.42);
-  if (area === 'D') return pol(ang(n) - Math.PI / 8, R * 0.80);
-  if (area === 'E') return pol(ang(n) - Math.PI / 8, R * 0.42);
-  return { x: CX, y: CY };
+  if (area === 'A') return mir(polRaw(ang(n), R * 0.80));
+  if (area === 'B') return mir(polRaw(ang(n), R * 0.42));
+  if (area === 'D') return mir(polRaw(ang(n) - Math.PI / 8, R * 0.80));
+  if (area === 'E') return mir(polRaw(ang(n) - Math.PI / 8, R * 0.42));
+  return mir({ x: CX, y: CY });   // C: 구획은 둘이지만 언제나 한가운데 하나로 나온다
 }
 
 // ── 슬라이드 궤적 ──────────────────────────────────────────────────────────
-// 각 구간을 점 목록으로 편다. 정확한 건 - ^ < > v V w, p/q/pp/qq/s/z 는 근사.
-function arcPts(from, to, cw, rad){
-  var a0 = ang(from), a1 = ang(to);
-  var d = a1 - a0;
+// 형상 정의는 전부 사양서 "SLIDE (基本・形状)" 절을 따른다.
+function clamp01(v){ return v < 0 ? 0 : v > 1 ? 1 : v; }
+function lineP(a, b, n){
+  var o = [];
+  for (var i = 0; i <= n; i++){ var t = i / n; o.push({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }); }
+  return o;
+}
+function arcP(cx, cy, r, a0, sweep, n){
+  var o = [];
+  for (var i = 0; i <= n; i++){ var a = a0 + sweep * (i / n); o.push({ x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r }); }
+  return o;
+}
+function join(out, pts){
+  for (var i = out.length ? 1 : 0; i < pts.length; i++) out.push(pts[i]);
+  return out;
+}
+
+// 「-」直線形
+function straightP(from, to){ return [btnRaw(from), btnRaw(to)]; }
+
+// 「>」「<」「^」外周形 — 画面の外側をなぞる
+function ringArc(from, to, cw){
+  var a0 = ang(from), d = ang(to) - a0;
   while (d <= 0) d += Math.PI * 2;
   if (!cw) d -= Math.PI * 2;
-  var out = [], n = 24;
-  for (var i = 0; i <= n; i++) out.push(pol(a0 + d * (i / n), rad));
-  return out;
+  return arcP(CX, CY, R, a0, d, 28);
 }
-// 짧은 쪽으로 도는 방향
-function shortCw(from, to){
-  var d = (slot(to) - slot(from) + 8) % 8;
-  return d !== 0 && d <= 4;
+// 「^」は距離が全体の半分未満のときだけ使え、向きを考えずに短い方を回る
+function shortCw(from, to){ var d = (to - from + 8) % 8; return d !== 0 && d <= 4; }
+// 「>」=始点から右へ、「<」=始点から左へ。画면 위쪽(1,2,7,8)에서 오른쪽은
+// 시계방향, 아래쪽(3~6)에서는 반시계방향이 된다.
+function arrowCw(from, right){ return [1, 2, 7, 8].indexOf(from) >= 0 ? right : !right; }
+
+// 「v」V字形 — 始点から中心を経由して終点
+function vP(from, to){
+  var a = btnRaw(from), b = btnRaw(to);
+  if (Math.abs(to - from) === 4) return [a, b];   // 정반대는 중심을 지나는 직선과 같다
+  return [a, { x: CX, y: CY }, b];
 }
-// simai 의 < > 는 화면상 방향이라 출발 위치가 위쪽(1,2,7,8)이냐 아래쪽(3~6)이냐에
-// 따라 뒤집힌다. 미러를 켜면 좌우가 바뀌므로 slot() 을 거친 값으로 판단한다.
-function arrowCw(from, right){
-  var top = [1, 2, 7, 8].indexOf(slot(from)) >= 0;
-  return top ? right : !right;
+
+// 「s」「z」稲妻形 — 稲妻を描くように3本の短い直線を繋げて結ぶ
+function boltP(from, to, isZ){
+  var a = btnRaw(from), b = btnRaw(to);
+  var vx = b.x - a.x, vy = b.y - a.y, L = Math.sqrt(vx * vx + vy * vy) || 1;
+  var ux = vx / L, uy = vy / L, px = -uy, py = ux, off = 0.4 * R;
+  var near = { x: a.x + ux * L * 0.49 + px * off, y: a.y + uy * L * 0.49 + py * off };
+  var far  = { x: a.x + ux * L * 0.51 - px * off, y: a.y + uy * L * 0.51 - py * off };
+  return isZ ? [a, far, near, b] : [a, near, far, b];
 }
-function bez(p0, p1, p2, n){
+
+// 「p」「q」p字形・q字形 — 中心の周りで円を描くように湾曲しながら結ぶ.
+// 진입점은 시작 버튼과 (시작±3)번 버튼의 중점이고, 그 점을 지나는 "중심이 필드
+// 한가운데인 원"을 따라 돈 뒤 도착점으로 빠진다.
+var PQ_STEP = Math.PI / 4;
+function pqSmallP(from, to, isQ){
+  var a = btnRaw(from), b = btnRaw(to);
+  var via = btnRaw(isQ ? ((from + 2) % 8) + 1 : ((from + 4) % 8) + 1);
+  var o = { x: (a.x + via.x) / 2, y: (a.y + via.y) / 2 };
+  var rad = Math.sqrt(Math.pow(o.x - CX, 2) + Math.pow(o.y - CY, 2));
+  var a0 = Math.atan2(o.y - CY, o.x - CX);
+  var d = (to - from + 8) % 8;
+  var sweep = isQ ? PQ_STEP * (((d - 4 + 8) % 8) + 1) : -PQ_STEP * (((4 - d + 8) % 8) + 1);
+  var exit = { x: CX + Math.cos(a0 + sweep) * rad, y: CY + Math.sin(a0 + sweep) * rad };
   var out = [];
-  for (var i = 0; i <= n; i++){
-    var t = i / n, u = 1 - t;
-    out.push({ x: u*u*p0.x + 2*u*t*p1.x + t*t*p2.x, y: u*u*p0.y + 2*u*t*p1.y + t*t*p2.y });
-  }
+  join(out, lineP(a, o, 4));
+  join(out, arcP(CX, CY, rad, a0, sweep, 40));
+  join(out, lineP(exit, b, 4));
   return out;
 }
+
+// 「pp」「qq」大きなp字形・q字形 — 中心から外周を結んだ直線を直径とした円を描く.
+// 돌아가는 양은 시작·도착 간격마다 정해져 있다((to-from)%8 → ×π).
+var QQ_SWEEP = [1.25, 1.5, 1.625, 1.875, 2, 2.25, 0.75, 1.125];
+function pqBigP(from, to, isQ){
+  var a = btnRaw(from), b = btnRaw(to);
+  var opp = btnRaw(((from - 1 + 4) % 8) + 1);
+  var o = { x: a.x + 0.4 * (opp.x - a.x), y: a.y + 0.4 * (opp.y - a.y) };
+  var dx = opp.x - a.x, dy = opp.y - a.y, L = Math.sqrt(dx * dx + dy * dy) || 1;
+  var ux = dx / L, uy = dy / L, rad = 0.45 * R;
+  var cx = o.x + (isQ ? -uy : uy) * rad;
+  var cy = o.y + (isQ ? ux : -ux) * rad;
+  var a0 = Math.atan2(o.y - cy, o.x - cx);
+  var d = (to - from + 8) % 8;
+  var sweep = (isQ ? QQ_SWEEP[d] : -QQ_SWEEP[(8 - d) % 8]) * Math.PI;
+  var exit = { x: cx + Math.cos(a0 + sweep) * rad, y: cy + Math.sin(a0 + sweep) * rad };
+  var out = [];
+  join(out, lineP(a, o, 4));
+  join(out, arcP(cx, cy, rad, a0, sweep, 40));
+  join(out, lineP(exit, b, 4));
+  return out;
+}
+
 function segPts(seg){
-  var a = btn(seg.from), b = btn(seg.to), c = { x: CX, y: CY }, t = seg.type;
-  if (t === '-') return [a, b];
-  if (t === 'v') return [a, c, b];
-  if (t === '^') return arcPts(seg.from, seg.to, shortCw(seg.from, seg.to), R);
-  if (t === '>') return arcPts(seg.from, seg.to, arrowCw(seg.from, true), R);
-  if (t === '<') return arcPts(seg.from, seg.to, arrowCw(seg.from, false), R);
-  if (t === 'w') return [a, b];                      // 가운데 줄. 양옆 두 줄은 wifiFans() 가 따로 만든다
-  if (t === 'p' || t === 'q' || t === 'pp' || t === 'qq'){
-    // 한쪽으로 크게 부푼 곡선으로 근사. p 는 반시계, q 는 시계 쪽으로 부풀린다.
-    var wide = t.length === 2;
-    var side = (t[0] === 'q') ? 1 : -1;
-    var mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-    var vx = b.x - a.x, vy = b.y - a.y;
-    var len = Math.sqrt(vx*vx + vy*vy) || 1;
-    var bulge = (wide ? 1.25 : 0.7) * R * 0.9;
-    return bez(a, { x: mid.x + (-vy/len)*bulge*side, y: mid.y + (vx/len)*bulge*side }, b, 28);
-  }
-  if (t === 's' || t === 'z'){
-    // 중앙을 가로지르는 S/Z. s 와 z 는 서로 거울상.
-    var side2 = (t === 'z') ? 1 : -1;
-    var off = R * 0.42;
-    var vx2 = b.x - a.x, vy2 = b.y - a.y;
-    var len2 = Math.sqrt(vx2*vx2 + vy2*vy2) || 1;
-    var nx = -vy2/len2 * off * side2, ny = vx2/len2 * off * side2;
-    var p1 = { x: CX + nx, y: CY + ny }, p2 = { x: CX - nx, y: CY - ny };
-    return bez(a, p1, c, 14).concat(bez(c, p2, b, 14));
-  }
-  return [a, b];
+  var t = seg.type;
+  if (t === '-') return straightP(seg.from, seg.to);
+  if (t === 'v') return vP(seg.from, seg.to);
+  if (t === '^') return ringArc(seg.from, seg.to, shortCw(seg.from, seg.to));
+  if (t === '>') return ringArc(seg.from, seg.to, arrowCw(seg.from, true));
+  if (t === '<') return ringArc(seg.from, seg.to, arrowCw(seg.from, false));
+  if (t === 's') return boltP(seg.from, seg.to, false);
+  if (t === 'z') return boltP(seg.from, seg.to, true);
+  if (t === 'q') return pqSmallP(seg.from, seg.to, true);
+  if (t === 'p') return pqSmallP(seg.from, seg.to, false);
+  if (t === 'qq') return pqBigP(seg.from, seg.to, true);
+  if (t === 'pp') return pqBigP(seg.from, seg.to, false);
+  return straightP(seg.from, seg.to);   // 'w': 가운데 줄. 양옆은 wifiFans()
 }
-function pathOf(body){
-  var pts = [];
-  for (var i = 0; i < body.segments.length; i++){
-    var p = segPts(body.segments[i]);
-    for (var j = (i === 0 ? 0 : 1); j < p.length; j++) pts.push(p[j]);
-  }
-  return pts;
-}
-// 와이파이 슬라이드는 도착점 양옆(to-1, to+1)까지 세 줄로 퍼진다.
-// 가운데 줄은 segPts 가 만들고, 여기서는 나머지 두 줄만 돌려준다.
+
+// 「w」扇形 — 始点が1点に対し終点が3つ。도착점 양옆(to-1, to+1)까지 퍼진다.
 function wifiFans(segments){
   var out = [];
   for (var i = 0; i < segments.length; i++){
     var sg = segments[i];
     if (sg.type !== 'w') continue;
-    var a = btn(sg.from);
-    out.push([a, btn((sg.to + 6) % 8 + 1)]);
-    out.push([a, btn(sg.to % 8 + 1)]);
+    var a = btnRaw(sg.from);
+    out.push([a, btnRaw((sg.to + 6) % 8 + 1)]);
+    out.push([a, btnRaw(sg.to % 8 + 1)]);
   }
   return out;
+}
+
+function pathOf(body){
+  var pts = [], segEnd = [];
+  for (var i = 0; i < body.segments.length; i++){
+    join(pts, segPts(body.segments[i]));
+    segEnd.push(pts.length - 1);
+  }
+  return { pts: mirror ? pts.map(mir) : pts, segEnd: segEnd };
 }
 function pathLen(pts){
   var L = [0], t = 0;
   for (var i = 1; i < pts.length; i++){
-    t += Math.hypot(pts[i].x - pts[i-1].x, pts[i].y - pts[i-1].y);
+    t += Math.sqrt(Math.pow(pts[i].x - pts[i-1].x, 2) + Math.pow(pts[i].y - pts[i-1].y, 2));
     L.push(t);
   }
   return L;
@@ -263,13 +317,40 @@ function atLen(pts, L, d){
   }
   return pts[pts.length-1];
 }
+
+// 사양서: "あらゆるSLIDEは必ず始点から終点まで一定のスピードで流れます" —
+// 그래서 기본은 호 길이에 비례해 보간한다. 다만 연결 슬라이드에서 구간마다
+// 길이를 따로 지정하면 구간별로 속도가 달라지므로 그때는 묶음 단위로 나눈다.
+function slidePos(pc, body, elapsed){
+  var total = pc.len[pc.len.length-1];
+  if (!pc.groups) return atLen(pc.pts, pc.len, total * clamp01(elapsed / (body.durationMs || 1)));
+  var acc = 0, seg = 0;
+  for (var g = 0; g < pc.groups.length; g++){
+    var d = pc.groups[g].durationMs || 1;
+    var last = Math.min(seg + pc.groups[g].count - 1, pc.segEnd.length - 1);
+    if (elapsed <= acc + d || g === pc.groups.length - 1){
+      var L0 = pc.len[seg === 0 ? 0 : pc.segEnd[seg-1]];
+      var L1 = pc.len[pc.segEnd[last]];
+      return atLen(pc.pts, pc.len, L0 + (L1 - L0) * clamp01((elapsed - acc) / d));
+    }
+    acc += d; seg = last + 1;
+  }
+  return pc.pts[pc.pts.length-1];
+}
+
 // 궤적은 매 프레임 다시 계산하면 비싸다. 노트별로 한 번만 만들어 캐시한다.
 var cache = {};
 function cachedPath(note, k){
   var key = note.timeMs + ':' + k + ':' + (mirror ? 'm' : 'n');
   if (!cache[key]){
-    var pts = pathOf(note.slides[k]);
-    cache[key] = { pts: pts, len: pathLen(pts), fans: wifiFans(note.slides[k].segments) };
+    var body = note.slides[k];
+    var built = pathOf(body);
+    var fans = wifiFans(body.segments);
+    if (mirror) fans = fans.map(function(f){ return f.map(mir); });
+    cache[key] = {
+      pts: built.pts, segEnd: built.segEnd, len: pathLen(built.pts),
+      fans: fans, groups: body.groups || null,
+    };
   }
   return cache[key];
 }
@@ -380,16 +461,22 @@ function draw(){
           for (var w = 0; w < pc.fans.length; w++) drawGuide(pc.fans[w]);
         }
         if (t >= s0 && t <= s1){
-          var f = (t - s0) / (b.durationMs || 1);
-          var p = atLen(pc.pts, pc.len, pc.len[pc.len.length-1] * f);
+          var p = slidePos(pc, b, t - s0);
           star(p.x, p.y, 20, b.isBreak ? C_BREAK : C_SLIDE);
         }
       }
-      if (lead >= 0 && lead <= ap){
-        var pr = 1 - lead / ap, sp = btn(n.pos);
-        star(CX + (sp.x - CX)*pr, CY + (sp.y - CY)*pr, 20 * (0.35 + 0.65*pr), colorOf(n));
-      } else if (lead < 0 && t < n.timeMs + n.slides[0].delayMs){
-        var sp2 = btn(n.pos); star(sp2.x, sp2.y, 20, colorOf(n));
+      // 시작 별. '?'/'!' 는 별을 아예 표시하지 않고, '@' 는 일반 TAP 모양으로 바꾼다.
+      if (!n.starless){
+        var scol = colorOf(n);
+        if (lead >= 0 && lead <= ap){
+          var pr = 1 - lead / ap, sp = rayPt(n.pos, R * pr);
+          if (n.plainStar) ring(sp.x, sp.y, 18, scol);
+          else star(sp.x, sp.y, 20 * (0.35 + 0.65*pr), scol);
+        } else if (lead < 0 && t < n.timeMs + n.slides[0].delayMs){
+          var sp2 = btn(n.pos);
+          if (n.plainStar) ring(sp2.x, sp2.y, 18, scol);
+          else star(sp2.x, sp2.y, 20, scol);
+        }
       }
       continue;
     }
@@ -408,20 +495,22 @@ function draw(){
     // tap / hold
     var holdMs = n.type === 'hold' ? (n.durationMs || 0) : 0;
     if (lead > ap || t > n.timeMs + holdMs + 120) continue;
-    var bp = btn(n.pos);
     var headR = lead > 0 ? R * (1 - lead / ap) : R;
-    var head = pol(ang(n.pos), Math.max(0, headR));
+    var head = rayPt(n.pos, Math.max(0, headR));
     var col = colorOf(n);
     if (holdMs > 0){
       var tailLead = (n.timeMs + holdMs) - t;
       var tailR = tailLead > 0 ? R * Math.max(0, 1 - tailLead / ap) : R;
+      var tailPt = rayPt(n.pos, Math.max(0, tailR));
       ctx.strokeStyle = col; ctx.lineWidth = 30; ctx.lineCap = 'round';
       ctx.beginPath();
-      ctx.moveTo(CX + Math.cos(ang(n.pos))*Math.max(0, tailR), CY + Math.sin(ang(n.pos))*Math.max(0, tailR));
+      ctx.moveTo(tailPt.x, tailPt.y);
       ctx.lineTo(head.x, head.y);
       ctx.stroke(); ctx.lineCap = 'butt';
     }
-    ring(head.x, head.y, 18, col, n.isEx ? 'rgba(255,255,255,.28)' : null);
+    // '$' 로 별 모양이 된 TAP 은 슬라이드 별과 같은 모양으로 그린다.
+    if (n.starTap) star(head.x, head.y, 19, col);
+    else ring(head.x, head.y, 18, col, n.isEx ? 'rgba(255,255,255,.28)' : null);
     if (n.isBreak){
       ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.arc(head.x, head.y, 23, 0, Math.PI*2); ctx.stroke();

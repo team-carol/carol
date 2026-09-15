@@ -1,23 +1,28 @@
-// maidata.txt (simai) 파서.
+// maidata.txt (simai語) 파서.
 //
-// 문법 레퍼런스는 simai 위키(w.atwiki.jp/simai)지만 Cloudflare 로 막혀 있어,
-// 실제로 유통되는 채보가 쓰는 표기를 기준으로 맞췄다. 위키에 없는 관용 표기
-// (`*` 분기 슬라이드, `[bpm#x:y]`, `[delay##dur]`, `` ` `` 의사 EACH)까지 받는다.
+// 문법 근거는 Celeca 가 정의한 공식 사양서 "simai語の譜面書式"
+// (https://w.atwiki.jp/simai/pages/1002.html). 거기 정의된 표기만 취급한다.
 //
 // 파싱은 서버에서만 한다. 브라우저 플레이어에는 결과 Chart 를 JSON 으로 넘긴다.
 
 import type {
   Chart, ChartNote, ChartStats, BpmEvent, Maidata,
-  SlideBody, SlideSegment, SlideType, TouchArea,
+  SlideBody, SlideGroup, SlideSegment, SlideType, TouchArea,
 } from "./types";
 
 /** 한 마디 = 4박(4분음표 4개). beat 필드의 단위. */
 const MEASURE_BEATS = 4;
 /** 슬라이드 구간 문자. `V` 는 뒤에서 `-` 두 개로 분해한다. */
 const SLIDE_CHARS = "-><^vpqszVw";
-
 /** 채보가 비정상적으로 길 때(무한루프성 입력) 멈추는 상한. */
 const MAX_NOTES = 20000;
+
+/**
+ * 길이 표기를 생략한 HOLD(`3h,`) / TOUCH HOLD(`Ch,`) 가 갖는 길이.
+ * 사양서: "この記述は内部的には【[1280:1]】の長さを指定したものとして扱われます"
+ * — 한순간만 눌리는 의사 TAP 이 된다.
+ */
+const PSEUDO_TAP_LENGTH = "1280:1";
 
 /**
  * 헤더 없이 본문만 공유돼서 난이도를 알 수 없을 때 쓰는 키.
@@ -88,98 +93,134 @@ interface Length {
 }
 
 /**
- * `[...]` 안의 길이 표기를 ms 로 바꾼다.
+ * `[...]` 안쪽(대괄호 제외) 길이 표기를 ms 로 바꾼다. 사양서의 전체 문법은
  *
- * - `[8:1]`        현재 BPM 기준 온음표의 1/8
- * - `[160#8:1]`    BPM 을 160 으로 보고 계산
- * - `[#2.5]`       2.5초 (절대)
- * - `[1.5##2.5]`   대기 1.5초 + 길이 2.5초 (슬라이드)
- * - `[8:1##2.5]`   대기는 박 계산, 길이는 2.5초 (슬라이드)
+ *     [ (대기초##)? (BPM#)? (음표길이 | 초) ]   또는   [#초]
  *
- * 브래킷이 여러 개면(분할 슬라이드의 구간별 길이) 박 길이를 모두 더한다.
+ * 이고, 실제 예시는 다음과 같다.
+ *
+ * - `[8:3]`          현재 BPM 의 8분음표 3개분
+ * - `[160#8:3]`      BPM160 의 8분음표 3개분 (대기도 BPM160 의 1박)
+ * - `[160#2]`        BPM160 의 대기 후 2초간 이동
+ * - `[#5.678]`       5.678초 (HOLD 의 절대 길이 지정)
+ * - `[3##1.5]`       3초 대기 후 1.5초간 이동
+ * - `[3##8:3]`       3초 대기 후 현재 BPM 의 8분음표 3개분
+ * - `[3##160#8:3]`   3초 대기 후 BPM160 의 8분음표 3개분
  */
-function parseLength(raw: string, bpm: number): Length {
-  const beatMs = 60000 / bpm;
+export function parseLength(inner: string, bpm: number): Length {
+  const oneBeatNow = 60000 / bpm;
+  let rest = inner.trim();
+  let delayMs: number | null = null;
 
-  // [delay##duration] — 둘 다 초 단위
-  const abs2 = /\[([\d.]+)##([\d.]+)\]/.exec(raw);
-  if (abs2) return { delayMs: Number(abs2[1]) * 1000, durationMs: Number(abs2[2]) * 1000 };
-
-  // [#sec] — 길이만 초 단위
-  const abs1 = /\[#([\d.]+)\]/.exec(raw);
-  if (abs1) return { delayMs: beatMs, durationMs: Number(abs1[1]) * 1000 };
-
-  const ratios = [...raw.matchAll(/\[(?:([\d.]+)#)?([\d.]+):([\d.]+)(?:##([\d.]+))?\]/g)];
-  if (ratios.length === 0) return { delayMs: beatMs, durationMs: beatMs };
-
-  let bpmOverride: number | null = null;
-  let customMs: number | null = null;
-  let beats = 0;
-  for (const r of ratios) {
-    if (r[1] && bpmOverride === null) bpmOverride = Number(r[1]);
-    if (r[4] && customMs === null) customMs = Number(r[4]) * 1000;
-    const den = Number(r[2]);
-    const numr = Number(r[3]);
-    if (den > 0) beats += (MEASURE_BEATS / den) * numr;
+  const dd = rest.indexOf("##");
+  if (dd >= 0) {
+    delayMs = num(rest.slice(0, dd), 0) * 1000;
+    rest = rest.slice(dd + 2);
   }
-  const useBpm = bpmOverride ?? bpm;
+
+  // `[#초]` — `#` 앞이 비어 있으면 길이를 초로 직접 지정한 것.
+  if (rest.startsWith("#")) {
+    return { delayMs: delayMs ?? oneBeatNow, durationMs: num(rest.slice(1), 0) * 1000 };
+  }
+
+  let useBpm = bpm;
+  const hash = rest.indexOf("#");
+  if (hash >= 0) {
+    useBpm = num(rest.slice(0, hash), 0) || bpm;
+    rest = rest.slice(hash + 1);
+  }
   const oneBeat = 60000 / useBpm;
-  return {
-    delayMs: oneBeat,
-    durationMs: customMs !== null ? customMs : oneBeat * beats,
-  };
+
+  let durationMs: number;
+  const colon = rest.indexOf(":");
+  if (colon >= 0) {
+    const den = num(rest.slice(0, colon), 0);
+    const cnt = num(rest.slice(colon + 1), 0);
+    durationMs = den > 0 ? (MEASURE_BEATS / den) * cnt * oneBeat : oneBeat;
+  } else if (rest) {
+    durationMs = num(rest, 0) * 1000;   // 초 단위
+  } else {
+    durationMs = oneBeat;
+  }
+  if (!Number.isFinite(durationMs) || durationMs < 0) durationMs = oneBeat;
+  return { delayMs: delayMs ?? oneBeat, durationMs };
 }
 
 // ── 슬라이드 궤적 ───────────────────────────────────────────────────────────
 
-/**
- * `-5`, `>7`, `V35`, `qq2` 처럼 이어진 궤적 표기를 구간 목록으로 푼다.
- * 구간이 여러 개면 앞 구간의 도착점이 다음 구간의 출발점이 된다.
- */
-export function parseSegments(start: number, spec: string): SlideSegment[] {
-  const out: SlideSegment[] = [];
-  let from = start;
+interface RawSeg {
+  type: string;
+  digits: string;
+  /** 이 구간에 붙은 `[...]` 안쪽. 없으면 빈 문자열. */
+  bracket: string;
+}
+
+/** `-4[2:1]q7[2:1]-2[1:1]` 처럼 이어 붙은 궤적 표기를 구간 단위로 훑는다. */
+function scanSegments(spec: string): RawSeg[] {
+  const out: RawSeg[] = [];
   let i = 0;
   while (i < spec.length) {
     const ch = spec[i];
     let type: string;
-    if ((ch === "p" || ch === "q") && spec[i + 1] === ch) {
-      type = ch + ch;           // pp / qq (바깥쪽으로 크게 도는 곡선)
-      i += 2;
-    } else if (SLIDE_CHARS.includes(ch)) {
-      type = ch;
-      i += 1;
-    } else {
-      i += 1;                   // 알 수 없는 문자는 버린다
-      continue;
-    }
+    if ((ch === "p" || ch === "q") && spec[i + 1] === ch) { type = ch + ch; i += 2; }
+    else if (SLIDE_CHARS.includes(ch)) { type = ch; i += 1; }
+    else { i += 1; continue; }
+
     let digits = "";
     while (i < spec.length && spec[i] >= "0" && spec[i] <= "9") digits += spec[i++];
-    if (!digits) continue;
+    // 도착 숫자와 `[` 사이에 BREAK/EX 표기가 낄 수 있다 (`-5b[8:1]`).
+    while (i < spec.length && /[bx]/i.test(spec[i])) i++;
 
-    if (type === "V") {
-      // `V` 는 "꺾어서 두 번 직선". 1V35 = 1→3→5.
-      if (digits.length < 2) continue;
-      const mid = Number(digits[0]);
-      const end = Number(digits.slice(1));
-      out.push({ type: "-", from, to: mid });
-      out.push({ type: "-", from: mid, to: end });
-      from = end;
-    } else {
-      const end = Number(digits);
-      out.push({ type: type as SlideType, from, to: end });
-      from = end;
+    let bracket = "";
+    if (spec[i] === "[") {
+      const close = spec.indexOf("]", i);
+      if (close > i) { bracket = spec.slice(i + 1, close); i = close + 1; }
+      else i = spec.length;
     }
+    if (digits) out.push({ type, digits, bracket });
   }
   return out;
 }
 
+/**
+ * 이어 붙은 궤적을 구간 목록으로 푼다. 앞 구간의 도착점이 다음 구간의 출발점이 된다.
+ * `V`(큰 V자형)는 "始点→通過点→終点" 이므로 직선 두 개로 분해한다.
+ */
+export function parseSegments(start: number, spec: string): SlideSegment[] {
+  return buildSegments(start, scanSegments(spec)).segments;
+}
+
+function buildSegments(start: number, raws: RawSeg[]): { segments: SlideSegment[]; spans: number[] } {
+  const segments: SlideSegment[] = [];
+  const spans: number[] = [];
+  let from = start;
+  for (const r of raws) {
+    const before = segments.length;
+    if (r.type === "V") {
+      if (r.digits.length < 2) continue;
+      const mid = Number(r.digits[0]);
+      const end = Number(r.digits.slice(1));
+      segments.push({ type: "-", from, to: mid });
+      segments.push({ type: "-", from: mid, to: end });
+      from = end;
+    } else {
+      const end = Number(r.digits);
+      if (!(end >= 1 && end <= 8)) continue;
+      segments.push({ type: r.type as SlideType, from, to: end });
+      from = end;
+    }
+    spans.push(segments.length - before);
+  }
+  return { segments, spans };
+}
+
 // ── 노트 ────────────────────────────────────────────────────────────────────
 
-const RE_HOLD = /^(\d)[bx]*h[bx]*((?:\[[^\]]*\])?)[bx]*$/i;
-const RE_SLIDE = new RegExp(`^(\\d)([bx]*[${SLIDE_CHARS}*].*)$`, "i");
-const RE_TOUCH = /^([ABCDE])(\d*)([hbfx]*)((?:\[[^\]]*\])?)$/i;
-const RE_TAP = /^(\d)[bx]*$/i;
+// 사양서: "「x」、「h」、「b」が2文字以上併記される場合、どのような順番で書いても構いません"
+const RE_HOLD = /^(\d)([bxh]*)(?:\[([^\]]*)\])?([bxh]*)$/i;
+const RE_SLIDE = new RegExp(`^(\\d)([bx@?!]*)([${SLIDE_CHARS}].*)$`, "i");
+const RE_TOUCH = /^([ABCDE])(\d*)([hbfx]*)(?:\[([^\]]*)\])?([hbfx]*)$/i;
+const RE_TAP = /^(\d)([bx$]*)$/i;
 
 interface Ctx {
   bpm: number;
@@ -213,109 +254,143 @@ function parseNote(raw: string, ctx: Ctx, timeMs: number): void {
     ...(ctx.isEach ? { isEach: true as const } : {}),
   };
 
-  // HOLD — 1h[4:1]
+  // HOLD — 1h[4:1] / 5hb[2:1] / 3hx[4:1] / 1h(길이 생략 = 의사 TAP)
   const hold = RE_HOLD.exec(text);
-  if (hold) {
+  if (hold && /h/i.test(hold[2] + hold[4])) {
     const pos = Number(hold[1]);
     if (pos < 1 || pos > 8) return;
-    const { durationMs } = parseLength(hold[2], ctx.bpm);
+    const flags = hold[2] + hold[4];
+    const { durationMs } = parseLength(hold[3] ?? PSEUDO_TAP_LENGTH, ctx.bpm);
     pushNote(ctx, {
       ...base, type: "hold", pos, durationMs,
-      ...(/b/i.test(text) ? { isBreak: true as const } : {}),
-      ...(/x/i.test(text) ? { isEx: true as const } : {}),
+      ...(/b/i.test(flags) ? { isBreak: true as const } : {}),
+      ...(/x/i.test(flags) ? { isEx: true as const } : {}),
     });
     return;
   }
 
-  // SLIDE — 1-5[8:1] / 1b-5[8:1] / 1-5[8:1]*-3[8:1]
+  // SLIDE — 1-5[8:1] / 1-4[4:3]*-6[8:5] / 1-4q7-2[1:2] / 1@-5 / 1?-5 / 1!-5
   const slide = RE_SLIDE.exec(text);
-  if (slide && new RegExp(`[${SLIDE_CHARS}]`).test(slide[2])) {
+  if (slide) {
     const pos = Number(slide[1]);
     if (pos < 1 || pos > 8) return;
+    const flags = slide[2];
     const bodies: SlideBody[] = [];
-    for (const part of slide[2].split("*")) {
-      const spec = part.replace(/\[[^\]]*\]/g, "").replace(/[bx]/gi, "");
-      const segments = parseSegments(pos, spec);
+    // `*` 는 같은 별에서 뻗어나가는 동시작 슬라이드(同始点SLIDE).
+    for (const part of slide[3].split("*")) {
+      const raws = scanSegments(part);
+      const { segments, spans } = buildSegments(pos, raws);
       if (segments.length === 0) continue;
-      const { delayMs, durationMs } = parseLength(part, ctx.bpm);
-      // 궤적 BREAK 는 도착 숫자 뒤(`1-5b[8:1]`) 또는 브래킷 뒤(`1-5[8:1]b`)에 붙는다.
-      const isBreak = new RegExp(`[${SLIDE_CHARS}]\\d*b`, "i").test(part) || /\]b/i.test(part);
-      bodies.push({ segments, delayMs, durationMs, isBreak });
+
+      // 구간마다 길이가 붙어 있으면 구간별 속도, 아니면 마지막 하나가 전체 길이.
+      const perSegment = raws.length > 1 && raws.every((r) => r.bracket);
+      const first = parseLength(raws[0]?.bracket ?? "", ctx.bpm);
+      let durationMs: number;
+      let groups: SlideGroup[] | undefined;
+      if (perSegment) {
+        groups = raws.map((r, i) => ({
+          count: spans[i] ?? 1,
+          durationMs: parseLength(r.bracket, ctx.bpm).durationMs,
+        }));
+        durationMs = groups.reduce((a, g) => a + g.durationMs, 0);
+      } else {
+        const last = [...raws].reverse().find((r) => r.bracket);
+        durationMs = parseLength(last?.bracket ?? "", ctx.bpm).durationMs;
+      }
+      // 사양서: BREAK SLIDE 는 마지막 `]` 뒤에 b. 도착 숫자 뒤에 붙이는 표기도 받아준다.
+      const isBreak = /\]\s*b/i.test(part) || new RegExp(`[${SLIDE_CHARS}]\\d+b`, "i").test(part);
+      bodies.push({
+        segments, delayMs: first.delayMs, durationMs, isBreak,
+        ...(groups ? { groups } : {}),
+      });
     }
     if (bodies.length === 0) return;
-    // 별 자체가 BREAK 인 경우는 시작 숫자 바로 뒤에 b 가 온다 (`1b-5`).
-    const starBreak = new RegExp(`^\\d[x]*b[x]*[${SLIDE_CHARS}]`, "i").test(text);
+    // 동시작 슬라이드는 사양서상 EACH 로 취급된다.
+    const each = ctx.isEach || bodies.length > 1;
     pushNote(ctx, {
       ...base, type: "slide", pos, slides: bodies,
-      ...(starBreak ? { isBreak: true as const } : {}),
-      ...(/^\d[bx]*x/i.test(text) ? { isEx: true as const } : {}),
+      ...(each ? { isEach: true as const } : {}),
+      ...(/b/i.test(flags) ? { isBreak: true as const } : {}),
+      ...(/x/i.test(flags) ? { isEx: true as const } : {}),
+      ...(flags.includes("@") ? { plainStar: true as const } : {}),
+      ...(flags.includes("!") ? { starless: "none" as const }
+        : flags.includes("?") ? { starless: "fade" as const } : {}),
     });
     return;
   }
 
-  // 동시 탭 축약 — `15` = 1번 + 5번
+  // TAP 끼리의 EACH 축약 — `15` = 1번 + 5번 (TAP 이외가 섞이면 `/` 를 써야 한다)
   if (/^\d{2,}$/.test(text)) {
     const digits = text.split("").map(Number);
     if (digits.every((d) => d >= 1 && d <= 8)) {
-      for (const d of digits) {
-        pushNote(ctx, { ...base, type: "tap", pos: d, isEach: true });
-      }
+      for (const d of digits) pushNote(ctx, { ...base, type: "tap", pos: d, isEach: true });
       return;
     }
   }
 
-  // TOUCH — A1 / C / E4f / B2h[4:1]
+  // TOUCH — C / B1 / E4f / Chf[1:2] / Ch(길이 생략 = 의사 TOUCH)
   const touch = RE_TOUCH.exec(text);
   if (touch) {
     const area = touch[1].toUpperCase() as Exclude<TouchArea, "">;
     const n = touch[2] ? Number(touch[2]) : null;
     if (!validTouch(area, n)) return;
-    const flags = (touch[3] ?? "").toLowerCase();
+    const flags = (touch[3] + touch[5]).toLowerCase();
+    const isHold = flags.includes("h");
     const note: ChartNote = {
       ...base,
-      type: flags.includes("h") ? "touchHold" : "touch",
-      pos: n ?? 1,
+      type: isHold ? "touchHold" : "touch",
+      // C1/C2 로 써도 사양서상 한가운데 하나로 취급된다.
+      pos: area === "C" ? 1 : (n ?? 1),
       area,
       ...(flags.includes("f") ? { hasFirework: true as const } : {}),
     };
-    if (note.type === "touchHold") note.durationMs = parseLength(touch[4], ctx.bpm).durationMs;
+    if (isHold) note.durationMs = parseLength(touch[4] ?? PSEUDO_TAP_LENGTH, ctx.bpm).durationMs;
     pushNote(ctx, note);
     return;
   }
 
-  // TAP — 1 / 3b / 5x
+  // TAP — 1 / 3b / 5x / 1$ (별 모양) / 1$$ (회전하는 별)
   const tap = RE_TAP.exec(text);
   if (tap) {
     const pos = Number(tap[1]);
     if (pos < 1 || pos > 8) return;
+    const flags = tap[2];
+    const stars = (flags.match(/\$/g) ?? []).length;
     pushNote(ctx, {
-      ...base,
-      type: "tap",
-      pos,
-      ...(/b/i.test(text) ? { isBreak: true as const } : {}),
-      ...(/x/i.test(text) ? { isEx: true as const } : {}),
+      ...base, type: "tap", pos,
+      ...(/b/i.test(flags) ? { isBreak: true as const } : {}),
+      ...(/x/i.test(flags) ? { isEx: true as const } : {}),
+      ...(stars > 0 ? { starTap: (stars >= 2 ? 2 : 1) as 1 | 2 } : {}),
     });
   }
 }
 
 /**
- * 한 박에 놓인 노트 묶음(`1/5`, ``3`4``, `15`)을 해석한다.
- * `` ` `` 는 "의사 EACH" — 동시가 아니라 아주 살짝 뒤에 친다는 뜻이라 1ms 씩 민다.
+ * 한 박에 놓인 노트 묶음을 해석한다.
+ *
+ * `/` 로 이어진 것은 EACH(노란색). `` ` `` 는 의사 EACH 로, 사양서상 뒤쪽 노트가
+ * 0.001초씩 밀리며 "동시가 아니므로" 노란색이 되지 않는다. 그래서 `` ` `` 로 나뉜
+ * 묶음마다 따로 EACH 여부를 판정한다 (``1`2`3/4`` 이면 3·4 만 EACH).
  */
 function parseGroup(text: string, ctx: Ctx): void {
-  const parts: { text: string; offset: number }[] = [];
+  const buckets: string[][] = [[]];
   let cur = "";
-  let offset = 0;
-  const push = () => { if (cur.trim()) parts.push({ text: cur.trim(), offset }); cur = ""; };
+  const push = () => {
+    const t = cur.trim();
+    if (t) buckets[buckets.length - 1].push(t);
+    cur = "";
+  };
   for (const ch of text) {
-    if (ch === "/") { push(); }
-    else if (ch === "`") { push(); offset++; }
+    if (ch === "/") push();
+    else if (ch === "`") { push(); buckets.push([]); }
     else cur += ch;
   }
   push();
-  if (parts.length === 0) return;
-  ctx.isEach = parts.length > 1;
-  for (const p of parts) parseNote(p.text, ctx, ctx.timeMs + p.offset);
+  for (let offset = 0; offset < buckets.length; offset++) {
+    const bucket = buckets[offset];
+    ctx.isEach = bucket.length > 1;
+    for (const part of bucket) parseNote(part, ctx, ctx.timeMs + offset);
+  }
 }
 
 // ── 본문 ────────────────────────────────────────────────────────────────────
@@ -328,7 +403,7 @@ export function parseInote(src: string, defaultBpm: number, offsetSec = 0): Char
   let bpm = defaultBpm > 0 ? defaultBpm : 120;
   let firstBpm: number | null = null;
   let divisor = 4;
-  let stepSec = 0;      // {#sec} 지정 시 > 0 (한 칸이 절대 시간)
+  let stepSec = 0;      // {#초} 지정 시 > 0 (한 칸이 절대 시간)
   let beat = 0;
   let timeMs = offsetSec * 1000;
   let i = 0;
@@ -408,7 +483,8 @@ function endOf(notes: ChartNote[]): number {
 
 /**
  * maimai 의 노트 수 표기에 맞춘다: BREAK 는 TAP/HOLD/SLIDE 에서 빼고 따로 센다.
- * 터치 홀드는 HOLD 가 아니라 별도로 둬서 필요하면 합칠 수 있게 한다.
+ * 터치 홀드는 사양서상 리ザ루트에서 HOLD 로 집계되지만, 여기서는 나눠 두고
+ * 표시 단계에서 합친다.
  */
 function countStats(notes: ChartNote[]): ChartStats {
   const s: ChartStats = { tap: 0, hold: 0, slide: 0, touch: 0, touchHold: 0, break: 0, total: 0 };

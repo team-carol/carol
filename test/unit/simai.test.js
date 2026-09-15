@@ -3,7 +3,7 @@ process.env.DATABASE_URL ||= "postgres://placeholder:placeholder@127.0.0.1:5432/
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { parseMaidata, parseInote, parseSegments, UNKNOWN_DIFFICULTY } = require("../../dist/simai/parse");
+const { parseMaidata, parseInote, parseSegments, parseLength, UNKNOWN_DIFFICULTY } = require("../../dist/simai/parse");
 
 // 120 BPM 에서 1박 = 500ms, 한 마디 = 2000ms
 const B = 500;
@@ -138,9 +138,99 @@ test("EACH: 숫자 붙여쓰기 축약(15)도 동시 탭", () => {
   assert.equal(c.notes[1].timeMs, 0);
 });
 
-test("의사 EACH(`)는 1ms 씩 밀린다", () => {
+test("의사 EACH(`)는 1ms 씩 밀리고, EACH 로 치지 않는다", () => {
   const c = parseInote("(120){4}1`5`3,", 120);
   assert.deepEqual(c.notes.map((n) => n.timeMs), [0, 1, 2]);
+  // 사양서: "タイミングが同時である、というEACHの条件を満たしていないので、
+  // TAPが黄色くなることもなく" — 색이 변하면 안 되므로 isEach 가 붙으면 안 된다.
+  assert.deepEqual(c.notes.map((n) => n.isEach), [undefined, undefined, undefined]);
+
+  // 1`2`3/4 → 3 과 4 만 서로 EACH
+  const mixed = parseInote("(120){4}1`2`3/4,", 120);
+  assert.deepEqual(mixed.notes.map((n) => [n.pos, n.timeMs, !!n.isEach]),
+    [[1, 0, false], [2, 1, false], [3, 2, true], [4, 2, true]]);
+});
+
+test("길이 표기: 사양서의 모든 형태", () => {
+  const B = 500;                       // 120BPM 1박
+  const len = (raw) => parseLength(raw, 120);
+  assert.deepEqual(len("8:3"), { delayMs: B, durationMs: 4 / 8 * 3 * B }, "[8:3]");
+  assert.deepEqual(len("160#8:3"), { delayMs: 375, durationMs: 4 / 8 * 3 * 375 }, "[160#8:3] 은 대기도 BPM160");
+  assert.deepEqual(len("160#2"), { delayMs: 375, durationMs: 2000 }, "[160#2] = BPM160 대기 + 2초");
+  assert.deepEqual(len("#5.678"), { delayMs: B, durationMs: 5678 }, "[#5.678] = 절대 5.678초");
+  assert.deepEqual(len("3##1.5"), { delayMs: 3000, durationMs: 1500 }, "[3##1.5] = 3초 대기 + 1.5초");
+  assert.deepEqual(len("3##8:3"), { delayMs: 3000, durationMs: 4 / 8 * 3 * B }, "[3##8:3] = 3초 대기 + 현재 BPM");
+  assert.deepEqual(len("3##160#8:3"), { delayMs: 3000, durationMs: 4 / 8 * 3 * 375 }, "[3##160#8:3]");
+});
+
+test("길이를 생략한 HOLD/TOUCH HOLD 는 [1280:1] 의사 TAP", () => {
+  // 사양서: "この記述は内部的には【[1280:1]】の長さを指定したものとして扱われます"
+  const expected = 4 / 1280 * 1 * 500;
+  assert.equal(parseInote("(120){4}3h,", 120).notes[0].durationMs, expected);
+  const ch = parseInote("(120){4}Ch,", 120).notes[0];
+  assert.equal(ch.type, "touchHold");
+  assert.equal(ch.durationMs, expected);
+});
+
+test("연결 SLIDE: 구간별 속도를 지정하면 묶음으로 나눈다", () => {
+  const c = parseInote("(120){4}1-4[2:1]q7[2:1]-2[1:1],", 120);
+  const b = c.notes[0].slides[0];
+  assert.deepEqual(b.segments, [
+    { type: "-", from: 1, to: 4 },
+    { type: "q", from: 4, to: 7 },
+    { type: "-", from: 7, to: 2 },
+  ]);
+  assert.deepEqual(b.groups, [
+    { count: 1, durationMs: 1000 },
+    { count: 1, durationMs: 1000 },
+    { count: 1, durationMs: 2000 },
+  ]);
+  assert.equal(b.durationMs, 4000, "전체 길이는 구간 합");
+
+  // 길이를 하나만 쓰면 전체가 일정 속도 → groups 없음
+  const whole = parseInote("(120){4}1-4q7-2[1:2],", 120).notes[0].slides[0];
+  assert.equal(whole.groups, undefined);
+  assert.equal(whole.durationMs, 4 * 2 * 500, "온음표 2개분");
+  assert.equal(whole.segments.length, 3);
+});
+
+test("동시작 SLIDE(*)는 EACH 로 취급된다", () => {
+  const n = parseInote("(120){4}1-4[4:3]*-6[8:5],", 120).notes[0];
+  assert.equal(n.slides.length, 2);
+  assert.equal(n.isEach, true, "사양서: 이들 SLIDE 는 EACH 로 취급");
+  assert.equal(n.slides[0].durationMs, 4 / 4 * 3 * 500);
+  assert.equal(n.slides[1].durationMs, 4 / 8 * 5 * 500);
+});
+
+test("특수 표기: $ $$ @ ? !", () => {
+  const c = parseInote("(120){4}1$,2$$,3@-7[8:1],4?-8[8:1],5!-1[8:1],", 120);
+  assert.equal(c.notes[0].starTap, 1, "$ = 별 모양 TAP");
+  assert.equal(c.notes[1].starTap, 2, "$$ = 회전하는 별");
+  assert.equal(c.notes[2].plainStar, true, "@ = 슬라이드 별을 일반 TAP 으로");
+  assert.equal(c.notes[3].starless, "fade", "? = 별 없음(이동하는 별은 페이드인)");
+  assert.equal(c.notes[4].starless, "none", "! = 별 없음(출발 순간 등장)");
+  // 별 표기가 붙어도 슬라이드는 정상 처리된다
+  assert.equal(c.notes[2].slides[0].segments.length, 1);
+});
+
+test("b/h/x 는 순서가 자유롭고, TOUCH 의 h/f 도 마찬가지", () => {
+  for (const src of ["5hb[2:1]", "5bh[2:1]", "5hxb[2:1]", "5bxh[2:1]"]) {
+    const n = parseInote("(120){4}" + src + ",", 120).notes[0];
+    assert.equal(n.type, "hold", src);
+    assert.equal(n.isBreak, true, src + " 는 BREAK");
+  }
+  assert.equal(parseInote("(120){4}7bxh[4:1],", 120).notes[0].isEx, true, "EX-BREAK HOLD");
+  for (const src of ["Chf[1:2]", "Cfh[1:2]"]) {
+    const n = parseInote("(120){4}" + src + ",", 120).notes[0];
+    assert.equal(n.type, "touchHold", src);
+    assert.equal(n.hasFirework, true, src);
+    assert.equal(n.durationMs, 4 * 2 * 500, src);
+  }
+});
+
+test("C1/C2 는 사양서상 C 와 같은 한가운데 하나", () => {
+  const c = parseInote("(120){4}C,C1,C2,", 120);
+  assert.deepEqual(c.notes.map((n) => [n.area, n.pos]), [["C", 1], ["C", 1], ["C", 1]]);
 });
 
 test("TOUCH: 영역/번호/불꽃/홀드", () => {
