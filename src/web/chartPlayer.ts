@@ -465,25 +465,38 @@ function strokeArc(r, a0, a1){
  * 노트와 함께 바깥으로 커지는 레인 안내 호 (MajdataView 의 tapLine).
  * 노트마다 하나씩 붙어 있고, 노트 크기가 0.3 을 넘을 때부터 보인다.
  */
-var LANE_SPAN = Math.PI / 4;   // 레인 한 칸 = 45도
+// 가이드 호는 레인 한 칸이 아니라 반원 정도를 덮고, 양끝으로 갈수록 사라진다
+// (Normal/Each/Break.png 스프라이트 모양).
+var LANE_SPAN = Math.PI;
 function laneArc(pos, rf, color, alpha){
-  ctx.save(); ctx.globalAlpha = alpha;
-  ctx.strokeStyle = color; ctx.lineWidth = Math.max(2, R * 0.011);
-  strokeArc(R * rf, ang(pos) - LANE_SPAN / 2, ang(pos) + LANE_SPAN / 2);
+  var steps = 16, half = LANE_SPAN / 2, c = ang(pos), r = R * rf;
+  ctx.save();
+  ctx.lineWidth = Math.max(1.5, R * 0.009);
+  ctx.strokeStyle = color;
+  for (var i = 0; i < steps; i++){
+    var f0 = i / steps, f1 = (i + 1) / steps;
+    ctx.globalAlpha = alpha * Math.pow(1 - f1, 1.6);
+    strokeArc(r, c + half * f0, c + half * f1);
+    strokeArc(r, c - half * f1, c - half * f0);
+  }
   ctx.restore();
 }
 /**
- * EACH 노트를 잇는 호 (MajdataView 의 EachLineDrop).
- * 직선이 아니라 두 노트 사이를 원을 따라 잇는 곡선이고, 노트와 같이 커진다.
+ * EACH 노트를 잇는 호 (EachLine1~4 스프라이트).
+ * 간격 1~3 칸은 그만큼의 호이고, 정반대(4칸)는 어느 쪽으로 이어도 되므로
+ * 스프라이트가 통째로 원이다.
  */
 function eachArc(p1, p2, rf, alpha){
   var d = ((p2 - p1) % 8 + 8) % 8;
-  var from = d <= 4 ? p1 : p2;
-  var span = Math.min(d, 8 - d) * Math.PI / 4;
-  if (span <= 0) return;
+  if (d === 0) return;
   ctx.save(); ctx.globalAlpha = alpha;
-  ctx.strokeStyle = C_EACH; ctx.lineWidth = Math.max(3, R * 0.016);
-  strokeArc(R * rf, ang(from), ang(from) + span);
+  ctx.strokeStyle = C_EACH; ctx.lineWidth = Math.max(2.5, R * 0.012);
+  if (d === 4){
+    ctx.beginPath(); ctx.arc(CX, CY, R * rf, 0, TAU); ctx.stroke();
+  } else {
+    var from = d < 4 ? p1 : p2;
+    strokeArc(R * rf, ang(from), ang(from) + Math.min(d, 8 - d) * Math.PI / 4);
+  }
   ctx.restore();
 }
 /** HOLD 꼬리의 발광 (MajdataView 의 Hold_End 스프라이트). */
@@ -506,10 +519,10 @@ function noteDonut(x, y, size, color){
   ctx.beginPath(); ctx.arc(x, y, size, 0, TAU);
   ctx.fillStyle = color; ctx.fill();
   ctx.lineWidth = Math.max(1, size * 0.15); ctx.strokeStyle = '#fff'; ctx.stroke();
-  ctx.beginPath(); ctx.arc(x, y, size * 0.5, 0, TAU);
+  ctx.beginPath(); ctx.arc(x, y, size * 0.57, 0, TAU);
   ctx.fillStyle = FIELD_BG; ctx.fill();
-  ctx.lineWidth = Math.max(1, size * 0.11); ctx.strokeStyle = '#fff'; ctx.stroke();
-  ctx.beginPath(); ctx.arc(x, y, size * 0.17, 0, TAU);
+  ctx.lineWidth = Math.max(1, size * 0.1); ctx.strokeStyle = '#fff'; ctx.stroke();
+  ctx.beginPath(); ctx.arc(x, y, size * 0.14, 0, TAU);
   ctx.fillStyle = color; ctx.fill();
 }
 /** BREAK 는 바깥으로 네 갈래 반짝임이 더 붙는다. */
@@ -537,39 +550,46 @@ function inset(a, b, d){
   var vx = b.x - a.x, vy = b.y - a.y, L = Math.sqrt(vx*vx + vy*vy) || 1;
   return { x: a.x + vx / L * d, y: a.y + vy / L * d };
 }
-/** 레인 방향으로 늘어난 육각형 경로. 양 끝이 뾰족하고 가운데가 평행하다. */
-function hexPath(a, b, w, cap){
+/**
+ * 레인 방향으로 늘어난 팔각형 경로 — 직사각형의 네 모서리를 45도로 잘라낸 모양.
+ * 실기의 HOLD 가 이 형태다(끝이 뾰족한 육각형이 아니라 짧은 평면 + 모따기).
+ */
+function octPath(a, b, w, cut){
   var vx = b.x - a.x, vy = b.y - a.y, L = Math.sqrt(vx*vx + vy*vy) || 1;
   var ux = vx / L, uy = vy / L, px = -uy, py = ux;
-  var c = Math.min(cap, L / 2);
+  var c = Math.min(cut, L / 2, w * 0.95);
+  function pt(along, across){
+    return [a.x + ux * along + px * across, a.y + uy * along + py * across];
+  }
+  var pts = [
+    pt(L, w - c), pt(L - c, w), pt(c, w), pt(0, w - c),
+    pt(0, -(w - c)), pt(c, -w), pt(L - c, -w), pt(L, -(w - c)),
+  ];
   ctx.beginPath();
-  ctx.moveTo(b.x, b.y);
-  ctx.lineTo(b.x - ux*c + px*w, b.y - uy*c + py*w);
-  ctx.lineTo(a.x + ux*c + px*w, a.y + uy*c + py*w);
-  ctx.lineTo(a.x, a.y);
-  ctx.lineTo(a.x + ux*c - px*w, a.y + uy*c - py*w);
-  ctx.lineTo(b.x - ux*c - px*w, b.y - uy*c - py*w);
+  ctx.moveTo(pts[0][0], pts[0][1]);
+  for (var i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
   ctx.closePath();
 }
 /**
- * HOLD 는 실기에서 레인 방향으로 늘어난 육각형이다. 스킨 스프라이트가
- * 9-슬라이스(위아래 58px 고정)라 양 끝 모양은 유지된 채 가운데만 늘어난다.
+ * HOLD. 실기는 두꺼운 색 테두리 + 안팎 흰 선 + 비어 있는 속이고, 양 끝 한가운데에
+ * 점이 하나씩 찍힌다. 스킨 스프라이트가 9-슬라이스라 끝 모양은 늘어나지 않는다.
  */
 function holdBody(a, b, size, color){
-  var cap = R * HOLD_CAP;
-  var bw = Math.max(3, size * 0.16);          // 흰 테두리 두께
-  var rail = size * 0.44;                     // 색 레일 두께
-  hexPath(a, b, size, cap);
-  ctx.fillStyle = '#fff'; ctx.fill();
-  var a1 = inset(a, b, bw), b1 = inset(b, a, bw);
-  hexPath(a1, b1, size - bw, cap);
-  ctx.fillStyle = color; ctx.fill();
-  var d2 = bw + rail;
-  if (size - d2 > 1){
-    var a2 = inset(a, b, d2), b2 = inset(b, a, d2);
-    hexPath(a2, b2, size - d2, cap);
-    ctx.fillStyle = FIELD_BG; ctx.fill();
+  var cut = size * 0.75;
+  function layer(t, fill){
+    var d = size * (1 - t);
+    var a2 = d > 0 ? inset(a, b, d) : a, b2 = d > 0 ? inset(b, a, d) : b;
+    octPath(a2, b2, size * t, cut * t);
+    ctx.fillStyle = fill; ctx.fill();
   }
+  layer(1.00, '#fff');       // 바깥 흰 선
+  layer(0.89, color);        // 두꺼운 색 테두리
+  layer(0.54, '#fff');       // 안쪽 흰 선
+  layer(0.43, FIELD_BG);     // 비어 있는 속
+  // 양 끝 한가운데 점
+  var dot = size * 0.17;
+  ctx.beginPath(); ctx.arc(a.x, a.y, dot, 0, TAU); ctx.fillStyle = color; ctx.fill();
+  ctx.beginPath(); ctx.arc(b.x, b.y, dot, 0, TAU); ctx.fillStyle = '#fff'; ctx.fill();
 }
 
 /** 슬라이드 별: 흰 별 위에 색 별, 그 안에 별 윤곽이 한 겹 더 들어간 이중 구조. */
@@ -716,11 +736,12 @@ function drawField(){
     ctx.stroke();
   }
   // 판정 링 + 버튼
-  ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.lineWidth = 4;
+  // 실기의 판정 링은 가는 선이다. 두꺼우면 필드가 좁아 보여 노트가 커 보인다.
+  ctx.strokeStyle = 'rgba(255,255,255,.8)'; ctx.lineWidth = Math.max(1.5, R * 0.008);
   ctx.beginPath(); ctx.arc(CX, CY, R, 0, TAU); ctx.stroke();
   for (var j = 1; j <= 8; j++){
     var p = btn(j);
-    ctx.beginPath(); ctx.arc(p.x, p.y, 12, 0, TAU);
+    ctx.beginPath(); ctx.arc(p.x, p.y, R * 0.026, 0, TAU);
     ctx.fillStyle = '#fff'; ctx.fill();
   }
 }
@@ -786,10 +807,10 @@ function draw(){
     if (n.type === 'touch' || n.type === 'touchHold') continue;
     st = fall(n.timeMs - t, ap);
     if (st){
-      if (st.grow > 0.3) laneArc(n.pos, st.rf, rgba(colorOf(n), 0.5), 1);
+      if (st.grow > 0.3) laneArc(n.pos, st.rf, colorOf(n), 0.8);
     } else if (n.type === 'hold' && t <= n.timeMs + (n.durationMs || 0)){
       // 홀드는 누르고 있는 동안 레인 호가 판정선에 남는다
-      laneArc(n.pos, 1, rgba(colorOf(n), 0.5), 1);
+      laneArc(n.pos, 1, colorOf(n), 0.8);
     }
   }
 
@@ -878,14 +899,11 @@ function draw(){
       var tailRf = ts ? ts.rf : (tLead > ap ? SPAWN_R : 1);
       if (tailRf > headRf) tailRf = headRf;
       var hp = rayPt(n.pos, R * headRf), tpt = rayPt(n.pos, R * tailRf);
+      if (hs && n.isEx) exGlow(hp.x, hp.y, size2);
       holdBody(tpt, hp, size2, hcol);
-      // 꼬리가 떠오른 뒤에는 그 끝에서 빛이 난다 (Hold_End)
-      if (ts && ts.grow > 0.3) holdGlow(tpt.x, tpt.y, size2 * 1.7, hcol);
-      if (hs){
-        if (n.isEx) exGlow(hp.x, hp.y, size2);
-        noteDonut(hp.x, hp.y, size2, hcol);
-        if (n.isBreak) breakSpark(hp.x, hp.y, size2, spin);
-      }
+      // 꼬리 끝의 옅은 발광 (Hold_End)
+      if (ts && ts.grow > 0.3) holdGlow(tpt.x, tpt.y, size2 * 0.85, hcol);
+      if (hs && n.isBreak) breakSpark(hp.x, hp.y, size2, spin);
     }
     if (hLead <= 0 && -hLead <= FLASH_MS){
       var bp2 = btn(n.pos); hitFlash(bp2.x, bp2.y, NOTE_R * 1.1, hcol, -hLead / FLASH_MS);
