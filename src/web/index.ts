@@ -11,6 +11,7 @@ import { computeRatingTarget, getAllSongTitles } from "../constants";
 import { settingsPage } from "./settingsPage";
 import { aliasAdminPage } from "./aliasAdminPage";
 import { chartPlayerPage, chartNotFoundPage } from "./chartPlayer";
+import { parseMaidata } from "../simai/parse";
 import { messagesAdminPage, type MessageRowVM } from "./messagesAdminPage";
 import {
   MESSAGE_KEYS, defaultOf, getOverride, rawText, placeholdersOf,
@@ -226,7 +227,14 @@ export function startWebServer(port: number): void {
       }
       let chart;
       try {
-        chart = JSON.parse(row.chartJson);
+        // 원본 maidata 가 있으면 열 때마다 다시 파싱한다. 저장된 chart_json 은
+        // 업로드 시점의 파서 결과라, 파서를 고쳐도 옛 채보에는 반영되지 않는다.
+        chart = null;
+        if (row.maidata) {
+          const re = parseMaidata(row.maidata);
+          chart = re.charts[row.difficulty] ?? Object.values(re.charts)[0] ?? null;
+        }
+        if (!chart) chart = JSON.parse(row.chartJson);
       } catch {
         res.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
         res.end("chart_corrupt");

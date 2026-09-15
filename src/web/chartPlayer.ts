@@ -194,9 +194,14 @@ function straightP(from, to){ return [btnRaw(from), btnRaw(to)]; }
 // 「>」「<」「^」外周形 — 画面の外側をなぞる
 function ringArc(from, to, cw){
   var a0 = ang(from), d = ang(to) - a0;
-  while (d <= 0) d += Math.PI * 2;
-  if (!cw) d -= Math.PI * 2;
-  return arcP(CX, CY, R, a0, d, 28);
+  if (from === to){
+    // 시작과 도착이 같으면 한 바퀴 ('7<7' 등). 각도차가 0 이라 그냥 두면 사라진다.
+    d = cw ? Math.PI * 2 : -Math.PI * 2;
+  } else {
+    while (d <= 0) d += Math.PI * 2;
+    if (!cw) d -= Math.PI * 2;
+  }
+  return arcP(CX, CY, R, a0, d, 36);
 }
 // 「^」は距離が全体の半分未満のときだけ使え、向きを考えずに短い方を回る
 function shortCw(from, to){ var d = (to - from + 8) % 8; return d !== 0 && d <= 4; }
@@ -471,6 +476,8 @@ function touchFall(lead){
 
 // ── 노트 그리기 ────────────────────────────────────────────────────────────
 var NOTE_R = R * 0.107;                // mai-notes 실측: 노트 반지름 / 판정 링 반지름
+var STAR_R = NOTE_R * 1.35;            // 별은 뾰족해서 같은 반지름이면 작아 보인다
+var EDGE_W = R * 0.0192;               // 흰 테두리 두께 (홀드 육각형과 동일)
 var ARROW_GAP = Math.PI * R / 32;      // MajGeo.DefaultDistance = 판정원 둘레의 1/64
 var FLASH_MS = 130;
 
@@ -543,10 +550,10 @@ function eachArc(p1, p2, rf, alpha){
 function noteDonut(x, y, size, color){
   ctx.beginPath(); ctx.arc(x, y, size, 0, TAU);
   ctx.fillStyle = color; ctx.fill();
-  ctx.lineWidth = Math.max(1, size * 0.15); ctx.strokeStyle = '#fff'; ctx.stroke();
+  ctx.lineWidth = EDGE_W * (size / NOTE_R); ctx.strokeStyle = '#fff'; ctx.stroke();
   ctx.beginPath(); ctx.arc(x, y, size * 0.42, 0, TAU);
   ctx.fillStyle = FIELD_BG; ctx.fill();
-  ctx.lineWidth = Math.max(1, size * 0.1); ctx.strokeStyle = '#fff'; ctx.stroke();
+  ctx.lineWidth = EDGE_W * 0.7 * (size / NOTE_R); ctx.strokeStyle = '#fff'; ctx.stroke();
   ctx.beginPath(); ctx.arc(x, y, size * 0.11, 0, TAU);
   ctx.fillStyle = color; ctx.fill();
 }
@@ -593,12 +600,19 @@ function holdHexPath(a, head, tail, capH, capT, k){
 function holdBody(pos, headRf, tailRf, capH, capT, color){
   var a = ang(pos);
   var head = polRaw(a, R * headRf), tail = polRaw(a, R * tailRf);
+  var k = capH / HOLD_CAP;
   holdHexPath(a, head, tail, capH, capT, 1);
   ctx.fillStyle = color; ctx.fill();
-  ctx.lineWidth = Math.max(2, HOLD_CAP * 0.16); ctx.strokeStyle = '#fff'; ctx.stroke();
+  ctx.lineWidth = EDGE_W * k; ctx.strokeStyle = '#fff'; ctx.stroke();
   holdHexPath(a, head, tail, capH, capT, HOLD_INNER);
   ctx.fillStyle = FIELD_BG; ctx.fill();
-  ctx.lineWidth = Math.max(1.5, HOLD_CAP * 0.12); ctx.strokeStyle = '#fff'; ctx.stroke();
+  ctx.lineWidth = EDGE_W * 0.7 * k; ctx.strokeStyle = '#fff'; ctx.stroke();
+  // 탭처럼 양 끝 한가운데에 점이 하나씩 있다
+  var dot = capH * 0.19;
+  var hp2 = mir(head), tp2 = mir(tail);
+  ctx.fillStyle = color;
+  ctx.beginPath(); ctx.arc(hp2.x, hp2.y, dot, 0, TAU); ctx.fill();
+  ctx.beginPath(); ctx.arc(tp2.x, tp2.y, dot, 0, TAU); ctx.fill();
 }
 
 /** 슬라이드 별: 흰 별 위에 색 별, 그 안에 별 윤곽이 한 겹 더 들어간 이중 구조. */
@@ -627,7 +641,7 @@ function starNote(x, y, size, color, spin, dbl){
   ctx.fillStyle = color; ctx.fill();
   starPath(x, y, size * 0.46, size * 0.21, rot);
   ctx.strokeStyle = 'rgba(255,255,255,.9)';
-  ctx.lineWidth = Math.max(1.2, size * 0.09); ctx.stroke();
+  ctx.lineWidth = EDGE_W * 0.7 * (size / STAR_R); ctx.stroke();
 }
 
 /**
@@ -684,7 +698,7 @@ function touchHoldNote(x, y, size, offPx, left){
   ctx.save();
   // 남은 시간만큼만 남기는 부채꼴 마스크
   ctx.beginPath(); ctx.moveTo(x, y);
-  ctx.arc(x, y, r * 2, -Math.PI / 2, -Math.PI / 2 + TAU * Math.max(0, Math.min(1, left)));
+  ctx.arc(x, y, r * 2, -Math.PI / 2, -Math.PI / 2 + TAU * Math.max(0, Math.min(1, 1 - left)));
   ctx.closePath(); ctx.clip();
   var pts = [];
   for (var i = 0; i < 4; i++){
@@ -718,7 +732,7 @@ function slideArrows(pc, passedLen, color, alpha){
   var arrows = pc.arrows;
   if (!arrows || !arrows.length) return;
   ctx.save(); ctx.globalAlpha = alpha; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-  var half = ARROW_GAP * 0.62, wide = ARROW_GAP * 0.56, notch = ARROW_GAP * 0.24;
+  var half = ARROW_GAP * 0.68, wide = ARROW_GAP * 0.74, notch = ARROW_GAP * 0.26;
   var sh = ARROW_GAP * 0.1, hw = Math.max(2, ARROW_GAP * 0.11);
   for (var i = 0; i < arrows.length; i++){
     var a = arrows[i];
@@ -750,7 +764,7 @@ function wifiBars(pc, progress, color, alpha){
   if (!pc.bars) return;
   ctx.save(); ctx.globalAlpha = alpha;
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  var w = ARROW_GAP * 0.46, off = ARROW_GAP * 0.12;
+  var w = ARROW_GAP * 0.62, off = ARROW_GAP * 0.13;
   for (var i = 0; i < pc.bars.length; i++){
     var b = pc.bars[i];
     if (b.f < progress) continue;
@@ -873,12 +887,13 @@ function draw(){
   var ap = approachMs();
   var spin = t / 260;
   var i, n, st, k;
-  // 지금 화면에 나올 수 있는 노트 구간 [lo, hi)
+  // 지금 화면에 나올 수 있는 노트 구간 [lo, hi).
+  // 나중에 오는 노트가 아래에 깔리도록 뒤에서부터 그린다.
   var lo = firstAtOrAfter(t - MAX_SPAN - FLASH_MS - 50);
   var hi = firstAtOrAfter(t + ap + 1);
 
   // 1) 레인 안내 호 — 노트마다 하나씩 붙어서 함께 커진다 (MajdataView 의 tapLine)
-  for (i = lo; i < hi; i++){
+  for (i = hi - 1; i >= lo; i--){
     n = NOTES[i];
     if (n.type === 'touch' || n.type === 'touchHold') continue;
     st = fall(n.timeMs - t, ap);
@@ -899,7 +914,7 @@ function draw(){
   }
 
   // 3) 슬라이드 궤적 — 별이 닿기 한참 전부터 옅게 떠오르고, 착지 직전 또렷해진다
-  for (i = lo; i < hi; i++){
+  for (i = hi - 1; i >= lo; i--){
     n = NOTES[i];
     if (n.type !== 'slide') continue;
     var fadeStart = n.timeMs - slideFadeMs();
@@ -921,7 +936,7 @@ function draw(){
   }
 
   // 4) TOUCH / TOUCH HOLD
-  for (i = lo; i < hi; i++){
+  for (i = hi - 1; i >= lo; i--){
     n = NOTES[i];
     if (n.type !== 'touch' && n.type !== 'touchHold') continue;
     var tail = n.type === 'touchHold' ? (n.durationMs || 0) : 0;
@@ -957,7 +972,7 @@ function draw(){
   }
 
   // 5) HOLD — 머리·꼬리가 각자 커지고, 둘 사이가 몸통이 된다
-  for (i = lo; i < hi; i++){
+  for (i = hi - 1; i >= lo; i--){
     n = NOTES[i];
     if (n.type !== 'hold') continue;
     var hold = n.durationMs || 0;
@@ -989,7 +1004,7 @@ function draw(){
   }
 
   // 6) TAP
-  for (i = lo; i < hi; i++){
+  for (i = hi - 1; i >= lo; i--){
     n = NOTES[i];
     if (n.type !== 'tap') continue;
     var col = colorOf(n);
@@ -997,7 +1012,7 @@ function draw(){
     if (st){
       var p3 = rayPt(n.pos, R * st.rf), sz = NOTE_R * st.grow;
       if (n.isEx) exGlow(p3.x, p3.y, sz);
-      if (n.starTap) starNote(p3.x, p3.y, sz * 1.15, col, n.starTap === 2 ? spin * 2 : 0);
+      if (n.starTap) starNote(p3.x, p3.y, STAR_R * st.grow, col, n.starTap === 2 ? spin * 2 : 0);
       else noteDonut(p3.x, p3.y, sz, col);
       if (n.isBreak) breakSpark(p3.x, p3.y, sz, spin);
     } else if (t >= n.timeMs && t - n.timeMs <= FLASH_MS){
@@ -1007,7 +1022,7 @@ function draw(){
   }
 
   // 7) 슬라이드 별
-  for (i = lo; i < hi; i++){
+  for (i = hi - 1; i >= lo; i--){
     n = NOTES[i];
     if (n.type !== 'slide') continue;
     var scol = colorOf(n);
@@ -1019,7 +1034,7 @@ function draw(){
       var scol2 = b2.isBreak ? C_BREAK : scol;
       var mp = slidePos(pc2, b2, t - m0);
       var ahead = slidePos(pc2, b2, Math.min(b2.durationMs, t - m0 + 30));
-      starNote(mp.x, mp.y, NOTE_R * 1.05, scol2,
+      starNote(mp.x, mp.y, STAR_R, scol2,
         Math.atan2(ahead.y - mp.y, ahead.x - mp.x) + Math.PI / 2);
       // 扇形(w)은 별이 세 갈래로 동시에 흐른다 (WifiDrop 의 star_slide[0..2])
       var pf = Math.max(0, Math.min(1, (t - m0) / (b2.durationMs || 1)));
@@ -1027,7 +1042,7 @@ function draw(){
         var fp = pc2.fans[fi], ftot = fp.len[fp.len.length - 1];
         var q0 = atLen(fp.pts, fp.len, ftot * pf);
         var q1 = atLen(fp.pts, fp.len, Math.min(ftot, ftot * pf + 12));
-        starNote(q0.x, q0.y, NOTE_R * 1.05, scol2,
+        starNote(q0.x, q0.y, STAR_R, scol2,
           Math.atan2(q1.y - q0.y, q1.x - q0.x) + Math.PI / 2);
       }
     }
@@ -1039,7 +1054,7 @@ function draw(){
         var sp = rayPt(n.pos, R * st.rf), ssz = NOTE_R * st.grow;
         if (n.isEx) exGlow(sp.x, sp.y, ssz);
         if (n.plainStar) noteDonut(sp.x, sp.y, ssz, scol);
-        else starNote(sp.x, sp.y, ssz * 1.1, scol, spin, n.starDouble);
+        else starNote(sp.x, sp.y, STAR_R * st.grow, scol, spin, n.starDouble);
         if (n.isBreak) breakSpark(sp.x, sp.y, ssz, spin);
       }
     } else if (t <= n.timeMs + delay){
@@ -1047,7 +1062,7 @@ function draw(){
       var f3 = delay > 0 ? (t - n.timeMs) / delay : 1;
       var bp4 = btn(n.pos), bsz = NOTE_R * (0.5 + f3);
       if (n.plainStar) noteDonut(bp4.x, bp4.y, NOTE_R, scol);
-      else starNote(bp4.x, bp4.y, bsz, scol, spin, n.starDouble);
+      else starNote(bp4.x, bp4.y, STAR_R * (0.5 + f3) / 1.5, scol, spin, n.starDouble);
     }
     if (t >= n.timeMs && t - n.timeMs <= FLASH_MS){
       var sbp = btn(n.pos);
