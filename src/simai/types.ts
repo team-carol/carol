@@ -81,6 +81,8 @@ export interface Chart {
   durationMs: number;
   /** 마디 수(1-based, 마지막 노트가 속한 마디). */
   measures: number;
+  /** BPM 표기가 어디에도 없어 120 으로 가정했을 때만 true. 재생 속도가 실제와 다르다. */
+  bpmAssumed?: boolean;
   stats: ChartStats;
 }
 

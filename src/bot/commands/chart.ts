@@ -4,7 +4,7 @@ import {
 } from "discord.js";
 import { randomBytes } from "crypto";
 import { saveSimaiChart, countSimaiChartsByOwner } from "../../storage";
-import { parseMaidata } from "../../simai/parse";
+import { parseMaidata, UNKNOWN_DIFFICULTY } from "../../simai/parse";
 import { getBaseUrl } from "../../web/bookmarklet";
 import { PORT } from "../../config";
 import { msg } from "../../messages";
@@ -75,9 +75,11 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     await interaction.editReply({ content: msg("chart.noChart") });
     return;
   }
-  const diff = want && parsed.charts[want] ? want : available[available.length - 1];
-  if (want && !parsed.charts[want]) {
-    // 요청한 난이도가 없으면 조용히 바꾸지 말고 무엇을 대신 골랐는지 알린다.
+  // 헤더 없이 본문만 공유된 파일은 난이도를 알 수 없어 키가 UNKNOWN_DIFFICULTY 하나뿐이다.
+  // 이때 유저가 난이도를 지정했다면 "이건 MASTER다" 라는 뜻으로 받아 표시에만 쓴다.
+  const bareOnly = available.length === 1 && available[0] === UNKNOWN_DIFFICULTY;
+  if (!bareOnly && want !== null && !parsed.charts[want]) {
+    // 요청한 난이도가 없으면 조용히 바꾸지 말고 무엇이 들어있는지 알린다.
     await interaction.editReply({
       content: msg("chart.diffMissing", {
         want: DIFF_LABEL[want] ?? String(want),
@@ -86,7 +88,10 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     });
     return;
   }
-  const chart: Chart = parsed.charts[diff];
+  const key = bareOnly ? UNKNOWN_DIFFICULTY : (want ?? available[available.length - 1]);
+  const chart: Chart = parsed.charts[key];
+  // 저장·표시에 쓰는 난이도. 본문만 온 파일에 유저가 난이도를 붙여준 경우가 유일한 차이.
+  const diff = bareOnly ? (want ?? UNKNOWN_DIFFICULTY) : key;
   if (chart.notes.length === 0) {
     await interaction.editReply({ content: msg("chart.emptyChart") });
     return;
@@ -106,8 +111,8 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       source: "upload",
       title: parsed.title.slice(0, 200),
       artist: parsed.artist.slice(0, 200),
-      designer: (parsed.designers[diff] ?? "").slice(0, 200),
-      level: (parsed.levels[diff] ?? "").slice(0, 20),
+      designer: (parsed.designers[key] ?? "").slice(0, 200),
+      level: (parsed.levels[key] ?? "").slice(0, 20),
       difficulty: diff,
       maidata: text,
       chartJson: JSON.stringify(chart),
@@ -124,10 +129,12 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   const embed = new EmbedBuilder()
     .setColor(DIFF_COLOR[diff] ?? 0x9333ea)
     .setTitle(parsed.title || msg("chart.untitled"))
-    .setDescription(msg("chart.openLink", { url }))
+    .setDescription(
+      msg("chart.openLink", { url }) + (chart.bpmAssumed ? "\n" + msg("chart.bpmAssumedNote") : ""),
+    )
     .addFields(
-      { name: msg("chart.fieldChart"), value: `\`${DIFF_LABEL[diff] ?? diff}\`${parsed.levels[diff] ? "  ·  Lv." + parsed.levels[diff] : ""}`, inline: true },
-      { name: msg("chart.fieldBpm"), value: `\`${chart.bpm}\`  ·  ${chart.measures}마디`, inline: true },
+      { name: msg("chart.fieldChart"), value: `\`${DIFF_LABEL[diff] ?? msg("chart.diffUnknown")}\`${parsed.levels[key] ? "  ·  Lv." + parsed.levels[key] : ""}`, inline: true },
+      { name: msg("chart.fieldBpm"), value: `\`${chart.bpm}\`${chart.bpmAssumed ? " (추정)" : ""}  ·  ${chart.measures}마디`, inline: true },
       { name: msg("chart.fieldLength"), value: `\`${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}\``, inline: true },
       {
         name: msg("chart.fieldNotes"),

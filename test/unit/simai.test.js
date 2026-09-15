@@ -3,7 +3,7 @@ process.env.DATABASE_URL ||= "postgres://placeholder:placeholder@127.0.0.1:5432/
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { parseMaidata, parseInote, parseSegments } = require("../../dist/simai/parse");
+const { parseMaidata, parseInote, parseSegments, UNKNOWN_DIFFICULTY } = require("../../dist/simai/parse");
 
 // 120 BPM 에서 1박 = 500ms, 한 마디 = 2000ms
 const B = 500;
@@ -183,6 +183,60 @@ test("durationMs: 홀드·슬라이드 꼬리까지 센다", () => {
   assert.equal(c.durationMs, B);
   const s = parseInote("(120){4}1-5[4:1],", 120);
   assert.equal(s.durationMs, B + B, "대기 1박 + 길이 1박");
+});
+
+test("헤더가 하나도 없이 본문만 공유돼도 읽는다", () => {
+  const m = parseMaidata("(160){8}\n1,2,3,4,5,6,7,8,\nE");
+  assert.deepEqual(Object.keys(m.charts), [String(UNKNOWN_DIFFICULTY)], "난이도 미상 키로 들어간다");
+  const c = m.charts[UNKNOWN_DIFFICULTY];
+  assert.equal(c.notes.length, 8);
+  assert.equal(c.bpm, 160);
+  assert.equal(c.bpmAssumed, undefined, "(160) 이 있으므로 추정 아님");
+});
+
+test("&inote_N= 없이 헤더 일부 + 본문 조합도 읽는다", () => {
+  const m = parseMaidata("&title=곡\n&artist=아무개\n&wholebpm=160\n&des=제작자\n1,2,3,4,\nE");
+  assert.equal(m.title, "곡");
+  assert.equal(m.bpm, 160, "&wholebpm= 뒤에 본문이 와도 값이 섞이지 않는다");
+  const c = m.charts[UNKNOWN_DIFFICULTY];
+  assert.equal(c.notes.length, 4);
+  assert.equal(c.notes[1].timeMs, 60000 / 160, "wholebpm 이 타이밍에 실제로 반영된다");
+  assert.equal(m.designers[UNKNOWN_DIFFICULTY], "제작자", "&des= 는 본문 폴백에도 붙는다");
+});
+
+test("&lv_N= 이 딱 하나면 본문 폴백도 그 난이도로 본다", () => {
+  const m = parseMaidata("&lv_4=14+\n(160){4}1,2,");
+  assert.deepEqual(Object.keys(m.charts), ["4"]);
+  assert.equal(m.levels[4], "14+");
+
+  // 여러 개면 어느 쪽인지 알 수 없으므로 미상으로 둔다
+  const two = parseMaidata("&lv_4=14+\n&lv_5=15\n(160){4}1,2,");
+  assert.deepEqual(Object.keys(two.charts), [String(UNKNOWN_DIFFICULTY)]);
+});
+
+test("BPM 표기가 아예 없으면 120 을 가정하고 표시한다", () => {
+  const m = parseMaidata("1,2,3,4,");
+  const c = m.charts[UNKNOWN_DIFFICULTY];
+  assert.equal(c.bpm, 120);
+  assert.equal(c.bpmAssumed, true);
+  assert.equal(c.notes[1].timeMs, 500);
+
+  // &wholebpm= 이 있으면 추정이 아니다
+  assert.equal(parseMaidata("&wholebpm=160\n1,2,").charts[UNKNOWN_DIFFICULTY].bpmAssumed, undefined);
+  // (bpm) 지시자만 있어도 추정이 아니다
+  assert.equal(parseInote("(160){4}1,2,", 0).bpmAssumed, undefined);
+});
+
+test("&inote_N= 이 하나라도 있으면 본문 폴백을 쓰지 않는다", () => {
+  const m = parseMaidata("&wholebpm=160\n&inote_4=(160){4}1,2,3,4,");
+  assert.deepEqual(Object.keys(m.charts), ["4"], "선언된 채보만 쓴다");
+  assert.equal(m.charts[4].notes.length, 4);
+});
+
+test("한 줄짜리 키는 다음 줄을 먹지 않는다", () => {
+  const m = parseMaidata("&title=제목\n두 번째 줄\n&artist=아티스트\n&inote_4=(120){4}1,");
+  assert.equal(m.title, "제목", "title 에 다음 줄이 붙지 않는다");
+  assert.equal(m.artist, "아티스트");
 });
 
 test("깨진 입력에도 무한루프 없이 끝난다", () => {

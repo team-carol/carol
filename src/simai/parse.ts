@@ -19,29 +19,51 @@ const SLIDE_CHARS = "-><^vpqszVw";
 /** 채보가 비정상적으로 길 때(무한루프성 입력) 멈추는 상한. */
 const MAX_NOTES = 20000;
 
+/**
+ * 헤더 없이 본문만 공유돼서 난이도를 알 수 없을 때 쓰는 키.
+ * 호출부는 이 값이면 난이도 뱃지를 숨긴다.
+ */
+export const UNKNOWN_DIFFICULTY = 0;
+
 // ── 헤더 ────────────────────────────────────────────────────────────────────
 
+/** 값이 여러 줄에 걸치는 키. 나머지는 전부 한 줄짜리다. */
+const MULTILINE_KEY = /^(inote_\d+|freemsg)$/;
+
+interface Blocks {
+  blocks: Map<string, string>;
+  /** 어느 `&key=` 에도 속하지 않은 줄들. 헤더 없이 본문만 공유된 경우 여기 담긴다. */
+  loose: string;
+}
+
 /**
- * `&key=value` 블록으로 쪼갠다. 값은 다음 `&key=` 줄을 만날 때까지 이어진다
- * (`&inote_4=` 는 본문이 수백 줄이라 반드시 여러 줄을 먹어야 한다).
+ * `&key=value` 블록으로 쪼갠다.
+ *
+ * `&inote_4=` 는 본문이 수백 줄이라 다음 `&key=` 까지 이어 먹어야 하지만,
+ * `&title=` / `&wholebpm=` 같은 한 줄짜리 키까지 그렇게 먹으면 뒤따르는 채보
+ * 본문이 값에 섞여 들어간다(`&wholebpm=160` 뒤에 본문이 오면 BPM 이 NaN 이 됐다).
+ * 그래서 멀티라인은 화이트리스트로만 허용하고, 남는 줄은 loose 로 모은다.
  */
-function splitBlocks(text: string): Map<string, string> {
-  const out = new Map<string, string>();
+function splitBlocks(text: string): Blocks {
+  const blocks = new Map<string, string>();
+  const loose: string[] = [];
   let key = "";
   let buf: string[] = [];
-  const flush = () => { if (key) out.set(key, buf.join("\n")); };
+  const flush = () => { if (key) blocks.set(key, buf.join("\n")); key = ""; buf = []; };
   for (const line of text.split(/\r?\n/)) {
     const m = /^&([A-Za-z0-9_]+)\s*=(.*)$/.exec(line);
     if (m) {
       flush();
-      key = m[1].toLowerCase();
-      buf = [m[2]];
-    } else if (key) {
-      buf.push(line);
+      const k = m[1].toLowerCase();
+      if (MULTILINE_KEY.test(k)) { key = k; buf = [m[2]]; }
+      else blocks.set(k, m[2]);
+      continue;
     }
+    if (key) buf.push(line);
+    else loose.push(line);
   }
   flush();
-  return out;
+  return { blocks, loose: loose.join("\n") };
 }
 
 /** simai 주석은 `||` 부터 줄 끝까지. 공백 제거 전에 먼저 걷어내야 한다. */
@@ -356,6 +378,9 @@ export function parseInote(src: string, defaultBpm: number, offsetSec = 0): Char
   }
 
   notes.sort((a, b) => a.timeMs - b.timeMs);
+  // BPM 을 어디에서도 못 찾았으면 120 을 가정한 것이다. 재생 속도가 실제와
+  // 다르다는 뜻이라 호출부가 안내할 수 있게 표시해 둔다.
+  const bpmAssumed = !(defaultBpm > 0) && firstBpm === null;
   if (firstBpm === null) firstBpm = bpm;
   if (bpmEvents.length === 0) bpmEvents.push({ beat: 0, timeMs: offsetSec * 1000, bpm: firstBpm });
 
@@ -366,6 +391,7 @@ export function parseInote(src: string, defaultBpm: number, offsetSec = 0): Char
     durationMs: endOf(notes),
     measures: Math.max(1, Math.ceil(beat / MEASURE_BEATS)),
     stats: countStats(notes),
+    ...(bpmAssumed ? { bpmAssumed: true as const } : {}),
   };
 }
 
@@ -409,7 +435,7 @@ function countStats(notes: ChartNote[]): ChartStats {
 
 /** maidata.txt 한 장을 파싱한다. 난이도 본문이 하나도 없으면 charts 가 빈 객체. */
 export function parseMaidata(text: string): Maidata {
-  const blocks = splitBlocks(text);
+  const { blocks, loose } = splitBlocks(text);
   const get = (k: string) => (blocks.get(k) ?? "").trim();
 
   const wholeBpm = num(get("wholebpm"), 0);
@@ -427,6 +453,19 @@ export function parseMaidata(text: string): Maidata {
     if (des) designers[d] = des;
     const inote = blocks.get(`inote_${d}`);
     if (inote && inote.trim()) charts[d] = parseInote(inote, wholeBpm, offsetSec);
+  }
+
+  // 공유될 때 `&inote_N=` 없이 채보 본문만 붙여넣는 경우가 많다. 선언된 채보가
+  // 하나도 없으면 남은 줄(loose)을 본문으로 보고 한 번 더 시도한다.
+  // 난이도는 `&lv_N=` 이 딱 하나일 때만 그걸로 보고, 아니면 UNKNOWN_DIFFICULTY.
+  if (Object.keys(charts).length === 0 && loose.trim()) {
+    const bare = parseInote(loose, wholeBpm, offsetSec);
+    if (bare.notes.length > 0) {
+      const declared = Object.keys(levels).map(Number);
+      const key = declared.length === 1 ? declared[0] : UNKNOWN_DIFFICULTY;
+      charts[key] = bare;
+      if (!designers[key] && commonDes) designers[key] = commonDes;
+    }
   }
 
   const firstChart = Object.values(charts)[0];

@@ -85,7 +85,9 @@ canvas{width:100%;max-width:460px;aspect-ratio:1;touch-action:none;display:block
 </style></head><body><div class="wrap">
 <div class="nav"><a href="/">← carolbot</a></div>
 <div class="head">
-  ${diffName ? `<div class="badge">${esc(diffName)}${data.level ? " " + esc(data.level) : ""}</div>` : ""}
+  ${diffName
+    ? `<div class="badge">${esc(diffName)}${data.level ? " " + esc(data.level) : ""}</div>`
+    : data.level ? `<div class="badge">Lv.${esc(data.level)}</div>` : ""}
   <h1>${esc(data.title || "(제목 없음)")}</h1>
   <div class="sub">${esc(data.artist || "-")}${data.designer ? " · 보면 " + esc(data.designer) : ""}</div>
 </div>
@@ -127,7 +129,8 @@ canvas{width:100%;max-width:460px;aspect-ratio:1;touch-action:none;display:block
     <div class="stat"><div class="k">TOTAL</div><div class="v mono">${s.total}</div></div>
   </div>
   <div class="note">
-    BPM ${data.chart.bpm} · ${data.chart.measures}마디 · 스페이스바로 재생/정지, ← → 로 1마디 이동.<br>
+    BPM ${data.chart.bpm}${data.chart.bpmAssumed ? " (추정)" : ""} · ${data.chart.measures}마디 · 스페이스바로 재생/정지, ← → 로 1마디 이동.<br>
+    ${data.chart.bpmAssumed ? "⚠️ 파일에 BPM 표기가 없어 120으로 가정했습니다. 재생 속도가 실제와 다릅니다.<br>" : ""}
     슬라이드 중 <span class="mono">p q pp qq s z</span> 는 궤적 모양을 근사해서 그립니다. 타이밍과 시작·도착 위치는 정확합니다.
   </div>
 </div>
