@@ -735,34 +735,41 @@ function touchHoldPetals(x, y, size, offPx){
  * 슬라이드 궤적. 판정원 둘레 1/64 간격으로 화살촉을 늘어놓고, 별이 지나간
  * 화살촉부터 지운다. 뒤가 오목한 형태라 실기의 화살표 사슬처럼 보인다.
  */
+/**
+ * 슬라이드 궤적의 화살표. 실기 화면에서 재보면 속이 찬 화살촉이 아니라
+ * 두께가 일정한 V자 획이다(판정 링 반지름 R 기준: 폭 0.156R, 획 두께 0.049R,
+ * V 깊이 0.067R, 간격 0.098R = 판정원 둘레/64).
+ * 앞쪽 모서리에 밝은 띠가 한 줄 들어가고 뒤로 그림자가 진다.
+ */
+var ARW_W = 0.78, ARW_D = 0.67, ARW_T = 0.49;   // ARROW_GAP 배수
+function chevronPath(x, y, ux, uy, w, d){
+  var px = -uy, py = ux;
+  ctx.beginPath();
+  ctx.moveTo(x - ux*d/2 + px*w, y - uy*d/2 + py*w);
+  ctx.lineTo(x + ux*d/2,        y + uy*d/2);
+  ctx.lineTo(x - ux*d/2 - px*w, y - uy*d/2 - py*w);
+}
 function slideArrows(pc, passedLen, color, alpha){
   var arrows = pc.arrows;
   if (!arrows || !arrows.length) return;
-  ctx.save(); ctx.globalAlpha = alpha; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-  var half = ARROW_GAP * 0.68, wide = ARROW_GAP * 0.74, notch = ARROW_GAP * 0.26;
-  var sh = ARROW_GAP * 0.1, hw = Math.max(2, ARROW_GAP * 0.11);
+  var w = ARROW_GAP * ARW_W, d = ARROW_GAP * ARW_D, t = ARROW_GAP * ARW_T;
+  var hw = t * 0.24, sh = ARROW_GAP * 0.1;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.lineJoin = 'miter'; ctx.lineCap = 'butt'; ctx.miterLimit = 4;
   for (var i = 0; i < arrows.length; i++){
     var a = arrows[i];
     if (a.d < passedLen) continue;
-    var ux = a.ux, uy = a.uy, px = -uy, py = ux;
-    var tipX = a.x + ux*half,                 tipY = a.y + uy*half;
-    var rX = a.x - ux*(half - notch) + px*wide, rY = a.y - uy*(half - notch) + py*wide;
-    var bX = a.x - ux*(half - notch*2.4),       bY = a.y - uy*(half - notch*2.4);
-    var lX = a.x - ux*(half - notch) - px*wide, lY = a.y - uy*(half - notch) - py*wide;
-    var ox = -ux*sh, oy = -uy*sh;
-    ctx.beginPath();
-    ctx.moveTo(tipX+ox, tipY+oy); ctx.lineTo(rX+ox, rY+oy);
-    ctx.lineTo(bX+ox, bY+oy);     ctx.lineTo(lX+ox, lY+oy);
-    ctx.closePath(); ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fill();
-    ctx.beginPath();
-    ctx.moveTo(tipX, tipY); ctx.lineTo(rX, rY); ctx.lineTo(bX, bY); ctx.lineTo(lX, lY);
-    ctx.closePath(); ctx.fillStyle = color; ctx.fill();
-    // 진행 방향 쪽 두 모서리만 밝게 (실기 화살표의 입체감)
-    ctx.beginPath();
-    ctx.moveTo(lX, lY); ctx.lineTo(tipX, tipY); ctx.lineTo(rX, rY);
-    ctx.strokeStyle = 'rgba(255,255,255,.92)'; ctx.lineWidth = hw; ctx.stroke();
+    // 뒤로 진 그림자
+    chevronPath(a.x + sh * 0.5, a.y + sh * 0.8, a.ux, a.uy, w, d);
+    ctx.strokeStyle = 'rgba(0,0,0,.5)'; ctx.lineWidth = t; ctx.stroke();
+    // 몸통
+    chevronPath(a.x, a.y, a.ux, a.uy, w, d);
+    ctx.strokeStyle = color; ctx.lineWidth = t; ctx.stroke();
+    // 진행 방향 쪽 모서리를 따라 밝은 띠
+    chevronPath(a.x + a.ux * (t - hw) / 2, a.y + a.uy * (t - hw) / 2, a.ux, a.uy, w, d);
+    ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.lineWidth = hw; ctx.stroke();
   }
-  ctx.lineCap = 'butt';
   ctx.restore();
 }
 
