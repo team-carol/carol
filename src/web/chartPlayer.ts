@@ -103,6 +103,7 @@ canvas{width:100%;max-width:460px;aspect-ratio:1;touch-action:none;display:block
   <div class="ctl">
     <div class="row"><label>노트 속도</label><input type="range" id="spd" min="1" max="12" step="0.25" value="7.5"><span class="val mono" id="spdv">7.50</span></div>
     <div class="row"><label>재생 배속</label><input type="range" id="rate" min="0.25" max="2" step="0.05" value="1"><span class="val mono" id="ratev">1.00x</span></div>
+    <div class="row"><label>표시 오프셋</label><input type="range" id="off" min="-100" max="100" step="5" value="0"><span class="val mono" id="offv">0ms</span></div>
     <div class="row"><label>표시</label>
       <div class="chips">
         <button class="chip on" id="tSound">타격음</button>
@@ -918,6 +919,10 @@ function drawField(){
 var END = CHART.durationMs + 1500;
 var t = 0, playing = false, last = 0;
 var rate = 1, speedIdx = 7.5, sound = true, guide = true;
+// rAF 의 now 는 "지금 합성 중인 프레임" 시각이고 그 내용은 다음 vsync 에 나온다.
+// 그래서 t 기준으로 그리면 화면에는 늘 한 프레임 늦게 보인다. 실측한 프레임
+// 간격만큼 미리 그려 그 지연을 없앤다. userOffset 은 사용자가 더 미세 조정하는 값.
+var frameMs = 16.7, userOffset = 0;
 
 // 같은 타이밍의 링 노트들은 maimai 에서 노란 선으로 이어진다(EACH 표시).
 var EACH_LINKS = (function(){
@@ -970,7 +975,9 @@ function click(kind){
 
 function frame(now){
   if (playing){
-    var dt = Math.min(120, now - last) * rate;
+    var raw = now - last;
+    if (raw > 4 && raw < 40) frameMs = frameMs * 0.9 + raw * 0.1;
+    var dt = Math.min(120, raw) * rate;
     last = now;
     var prev = t;
     if (audioReady && !audioEl.paused) t = audioEl.currentTime * 1000;
@@ -989,6 +996,14 @@ function frame(now){
 }
 
 function draw(){
+  // 표시 지연 보정: 화면에 나오는 시점 기준으로 그린다.
+  var logical = t;
+  t += frameMs + userOffset;
+  drawNotes();
+  t = logical;
+  paintBar();
+}
+function drawNotes(){
   drawField();
   var ap = approachMs();
   var spin = t / 260;
@@ -1175,7 +1190,6 @@ function draw(){
       hitFlash(sbp.x, sbp.y, NOTE_R * 1.2, scol, (t - n.timeMs) / FLASH_MS);
     }
   }
-  paintBar();
 }
 
 // ── 컨트롤 ─────────────────────────────────────────────────────────────────
@@ -1211,6 +1225,11 @@ sk.onpointerup = function(e){ sk.onpointermove = null; sk.releasePointerCapture(
 
 var spd = document.getElementById('spd'), spdv = document.getElementById('spdv');
 spd.oninput = function(){ speedIdx = parseFloat(spd.value); spdv.textContent = speedIdx.toFixed(2); };
+var offEl = document.getElementById('off'), offv = document.getElementById('offv');
+offEl.oninput = function(){
+  userOffset = parseFloat(offEl.value);
+  offv.textContent = (userOffset > 0 ? '+' : '') + userOffset + 'ms';
+};
 var rateEl = document.getElementById('rate'), ratev = document.getElementById('ratev');
 rateEl.oninput = function(){
   rate = parseFloat(rateEl.value); ratev.textContent = rate.toFixed(2) + 'x';
