@@ -131,7 +131,7 @@ canvas{width:100%;max-width:460px;aspect-ratio:1;touch-action:none;display:block
   <div class="note">
     BPM ${data.chart.bpm}${data.chart.bpmAssumed ? " (추정)" : ""} · ${data.chart.measures}마디 · 스페이스바로 재생/정지, ← → 로 1마디 이동.<br>
     ${data.chart.bpmAssumed ? "⚠️ 파일에 BPM 표기가 없어 120으로 가정했습니다. 재생 속도가 실제와 다릅니다.<br>" : ""}
-    슬라이드 중 <span class="mono">p q pp qq s z</span> 는 궤적 모양을 근사해서 그립니다. 타이밍과 시작·도착 위치는 정확합니다.
+    노트는 <span class="mono">0.25R</span> 지점에서 떠오른 뒤 판정선으로 흘러나갑니다. 슬라이드 궤적은 별이 지나간 화살표부터 사라집니다.
   </div>
 </div>
 </div>
@@ -321,9 +321,9 @@ function atLen(pts, L, d){
 // 사양서: "あらゆるSLIDEは必ず始点から終点まで一定のスピードで流れます" —
 // 그래서 기본은 호 길이에 비례해 보간한다. 다만 연결 슬라이드에서 구간마다
 // 길이를 따로 지정하면 구간별로 속도가 달라지므로 그때는 묶음 단위로 나눈다.
-function slidePos(pc, body, elapsed){
+function slideProgressLen(pc, body, elapsed){
   var total = pc.len[pc.len.length-1];
-  if (!pc.groups) return atLen(pc.pts, pc.len, total * clamp01(elapsed / (body.durationMs || 1)));
+  if (!pc.groups) return total * clamp01(elapsed / (body.durationMs || 1));
   var acc = 0, seg = 0;
   for (var g = 0; g < pc.groups.length; g++){
     var d = pc.groups[g].durationMs || 1;
@@ -331,11 +331,14 @@ function slidePos(pc, body, elapsed){
     if (elapsed <= acc + d || g === pc.groups.length - 1){
       var L0 = pc.len[seg === 0 ? 0 : pc.segEnd[seg-1]];
       var L1 = pc.len[pc.segEnd[last]];
-      return atLen(pc.pts, pc.len, L0 + (L1 - L0) * clamp01((elapsed - acc) / d));
+      return L0 + (L1 - L0) * clamp01((elapsed - acc) / d);
     }
     acc += d; seg = last + 1;
   }
-  return pc.pts[pc.pts.length-1];
+  return total;
+}
+function slidePos(pc, body, elapsed){
+  return atLen(pc.pts, pc.len, slideProgressLen(pc, body, elapsed));
 }
 
 // 궤적은 매 프레임 다시 계산하면 비싸다. 노트별로 한 번만 만들어 캐시한다.
@@ -349,69 +352,208 @@ function cachedPath(note, k){
     if (mirror) fans = fans.map(function(f){ return f.map(mir); });
     cache[key] = {
       pts: built.pts, segEnd: built.segEnd, len: pathLen(built.pts),
-      fans: fans, groups: body.groups || null,
+      // 부채꼴 곁가지도 매 프레임 길이를 재지 않도록 같이 캐시한다.
+      fans: fans.map(function(f){ return { pts: f, len: pathLen(f) }; }),
+      groups: body.groups || null,
     };
   }
   return cache[key];
 }
 
 // ── 색 ─────────────────────────────────────────────────────────────────────
-var C_TAP = '#ff5fae', C_EACH = '#ffd63d', C_BREAK = '#ff9500', C_SLIDE = '#00d4e0', C_TOUCH = '#4fc3f7';
+// maimai 의 노트 색: 단일 TAP 은 분홍, EACH 는 노랑, BREAK 는 주황(EACH 여도 안 바뀐다).
+// 슬라이드 별도 같은 규칙을 따르고, 궤적 화살표만 하늘색 계열로 따로 간다.
+var C_TAP = '#ff4f9d', C_EACH = '#ffd42a', C_BREAK = '#ff9016';
+var C_TOUCH = '#39c6f0', C_TOUCH_EACH = '#ffd42a';
+var C_ARROW = '#28c8e6', C_ARROW_BREAK = '#ff9016';
+var FIELD_BG = '#11111e';
+var TAU = Math.PI * 2;
+
 function colorOf(n){
   if (n.isBreak) return C_BREAK;
-  if (n.type === 'slide') return C_SLIDE;
-  if (n.type === 'touch' || n.type === 'touchHold') return C_TOUCH;
+  if (n.type === 'touch' || n.type === 'touchHold') return n.isEach ? C_TOUCH_EACH : C_TOUCH;
   return n.isEach ? C_EACH : C_TAP;
 }
 
-// ── 그리기 ─────────────────────────────────────────────────────────────────
-function drawField(){
-  ctx.clearRect(0, 0, 920, 920);
-  ctx.strokeStyle = '#242424'; ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.arc(CX, CY, R * 0.42, 0, Math.PI*2); ctx.stroke();
-  for (var i = 1; i <= 8; i++){
-    var a = ang(i) - Math.PI/8;
+// ── 등장 방식 ───────────────────────────────────────────────────────────────
+// maimai 의 노트는 한가운데에서 나오지 않는다. 0.25R 위치에서 커지며 떠오른 뒤
+// (전반부), 후반부에 판정선까지 흘러나가고, 판정선을 조금 지나쳐 사라진다.
+// MaiNotes 도 같은 모델을 쓴다(BASE_APPROACH_TIME_MS 2250 / ハイスピ).
+var APPROACH_BASE = 2250;
+var SPAWN_R = 0.25;
+var OVERSHOOT_MS = 60;
+function approachMs(){ return APPROACH_BASE / speedIdx; }
+
+/** 반환 null 이면 아직 안 보이거나 이미 지나간 노트. */
+function approachAt(lead, ap){
+  if (lead > ap || lead < -OVERSHOOT_MS) return null;
+  var half = ap / 2;
+  if (lead > half){
+    var f = 1 - (lead - half) / half;
+    return { rf: SPAWN_R, alpha: f, grow: f };
+  }
+  var t = 1 - lead / half;                        // 판정선에서 1, 지나면 1 초과
+  return { rf: SPAWN_R + (1 - SPAWN_R) * t, alpha: 1, grow: 1 };
+}
+
+// ── 노트 그리기 ────────────────────────────────────────────────────────────
+var NOTE_R = R / 9.5;       // 판정선에서의 기본 노트 반지름 (링 반지름의 약 1/9.5)
+
+/** TAP: 흰 테두리 + 두꺼운 색 링 + 어두운 구멍 + 가운데 점. */
+function noteDonut(x, y, size, color){
+  ctx.beginPath(); ctx.arc(x, y, size, 0, TAU);
+  ctx.fillStyle = color; ctx.fill();
+  ctx.lineWidth = Math.max(1, size * 0.15); ctx.strokeStyle = '#fff'; ctx.stroke();
+  ctx.beginPath(); ctx.arc(x, y, size * 0.5, 0, TAU);
+  ctx.fillStyle = FIELD_BG; ctx.fill();
+  ctx.lineWidth = Math.max(1, size * 0.11); ctx.strokeStyle = '#fff'; ctx.stroke();
+  ctx.beginPath(); ctx.arc(x, y, size * 0.17, 0, TAU);
+  ctx.fillStyle = color; ctx.fill();
+}
+/** BREAK 는 바깥으로 네 갈래 반짝임이 더 붙는다. */
+function breakSpark(x, y, size, spin){
+  ctx.save(); ctx.translate(x, y); ctx.rotate(spin);
+  ctx.fillStyle = '#fff2c4';
+  for (var i = 0; i < 4; i++){
+    ctx.rotate(Math.PI / 2);
     ctx.beginPath();
-    ctx.moveTo(CX + Math.cos(a)*R*0.10, CY + Math.sin(a)*R*0.10);
-    ctx.lineTo(CX + Math.cos(a)*R, CY + Math.sin(a)*R);
-    ctx.stroke();
+    ctx.moveTo(0, -size * 1.45); ctx.lineTo(size * 0.2, -size * 1.02);
+    ctx.lineTo(0, -size * 0.9); ctx.lineTo(-size * 0.2, -size * 1.02);
+    ctx.closePath(); ctx.fill();
   }
-  ctx.strokeStyle = '#3a3a3a'; ctx.lineWidth = 5;
-  ctx.beginPath(); ctx.arc(CX, CY, R, 0, Math.PI*2); ctx.stroke();
-  for (var j = 1; j <= 8; j++){
-    var p = btn(j);
-    ctx.fillStyle = '#2f2f2f';
-    ctx.beginPath(); ctx.arc(p.x, p.y, 21, 0, Math.PI*2); ctx.fill();
-  }
+  ctx.restore();
 }
-function ring(x, y, r, color, fill){
-  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2);
-  if (fill){ ctx.fillStyle = fill; ctx.fill(); }
-  ctx.strokeStyle = color; ctx.lineWidth = 7; ctx.stroke();
+/** EX 노트는 바깥에 흰 후광이 깔린다. */
+function exGlow(x, y, size){
+  ctx.beginPath(); ctx.arc(x, y, size * 1.3, 0, TAU);
+  ctx.fillStyle = 'rgba(255,255,255,.22)'; ctx.fill();
 }
-function star(x, y, r, color){
-  ctx.save(); ctx.translate(x, y); ctx.beginPath();
+
+/** HOLD: 레인 방향으로 늘어난 속 빈 캡슐. 머리와 꼬리에 노트가 하나씩 붙는다. */
+function holdBody(a, b, size, color){
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = size * 2 + Math.max(2, size * 0.3);
+  ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+  ctx.strokeStyle = color; ctx.lineWidth = size * 2;
+  ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+  ctx.strokeStyle = FIELD_BG; ctx.lineWidth = size;
+  ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+  ctx.lineCap = 'butt';
+}
+
+/** 슬라이드 별. 이동 중에는 진행 방향을 따라 돈다. */
+function starNote(x, y, size, color, spin){
+  ctx.save(); ctx.translate(x, y); ctx.rotate(spin || 0);
+  ctx.beginPath();
   for (var i = 0; i < 10; i++){
-    var a = (-90 + i*36) * Math.PI/180, rr = (i % 2 === 0) ? r : r * 0.45;
-    var fx = Math.cos(a)*rr, fy = Math.sin(a)*rr;
+    var a = i * Math.PI / 5 - Math.PI / 2;
+    var rr = (i % 2 === 0) ? size : size * 0.47;
+    var fx = Math.cos(a) * rr, fy = Math.sin(a) * rr;
     if (i === 0) ctx.moveTo(fx, fy); else ctx.lineTo(fx, fy);
   }
-  ctx.closePath(); ctx.fillStyle = color; ctx.fill();
-  ctx.strokeStyle = '#fff'; ctx.lineWidth = 2.5; ctx.stroke(); ctx.restore();
+  ctx.closePath();
+  ctx.fillStyle = color; ctx.fill();
+  ctx.lineWidth = Math.max(1.5, size * 0.16); ctx.strokeStyle = '#fff'; ctx.stroke();
+  ctx.restore();
 }
-function drawGuide(pts){
-  ctx.strokeStyle = 'rgba(0,212,224,.22)'; ctx.lineWidth = 16; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
-  for (var i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
-  ctx.stroke(); ctx.lineCap = 'butt';
+
+/**
+ * TOUCH: 센서를 둘러싼 네 장의 조각이 바깥에서 안쪽으로 모여든다.
+ * spread 1 = 활짝 퍼진 상태, 0 = 센서 위로 모인 상태(판정 순간).
+ */
+function touchNote(x, y, size, spread, color){
+  for (var i = 0; i < 4; i++){
+    var a = i * Math.PI / 2 - Math.PI / 4;
+    var ux = Math.cos(a), uy = Math.sin(a), px = -uy, py = ux;
+    var d = size * (0.62 + 1.9 * spread);
+    var cx = x + ux * d, cy = y + uy * d;
+    ctx.beginPath();
+    ctx.moveTo(cx - ux * size * 0.62, cy - uy * size * 0.62);
+    ctx.lineTo(cx + ux * size * 0.34 + px * size * 0.6, cy + uy * size * 0.34 + py * size * 0.6);
+    ctx.lineTo(cx + ux * size * 0.34 - px * size * 0.6, cy + uy * size * 0.34 - py * size * 0.6);
+    ctx.closePath();
+    ctx.fillStyle = color; ctx.fill();
+    ctx.lineWidth = Math.max(1, size * 0.13); ctx.strokeStyle = '#fff'; ctx.stroke();
+  }
+  ctx.beginPath(); ctx.arc(x, y, size * 0.2, 0, TAU);
+  ctx.fillStyle = '#fff'; ctx.fill();
+}
+/** TOUCH HOLD 는 남은 시간이 게이지로 줄어든다. */
+function touchGauge(x, y, size, left, color){
+  ctx.beginPath();
+  ctx.arc(x, y, size * 1.15, -Math.PI / 2, -Math.PI / 2 + TAU * left);
+  ctx.strokeStyle = color; ctx.lineWidth = Math.max(2, size * 0.3); ctx.stroke();
+}
+
+/**
+ * 슬라이드 궤적. maimai 는 통짜 띠가 아니라 화살표가 늘어선 모양이고,
+ * 별이 지나간 화살표는 차례로 사라진다.
+ */
+var ARROW_GAP = 46;
+function slideArrows(pc, passedLen, color, alpha){
+  var pts = pc.pts, L = pc.len, total = L[L.length - 1];
+  if (total < 1) return;
+  ctx.save(); ctx.globalAlpha = alpha;
+  for (var d = ARROW_GAP * 0.6; d < total; d += ARROW_GAP){
+    if (d < passedLen) continue;                 // 별이 이미 지난 구간
+    var p = atLen(pts, L, d), q = atLen(pts, L, Math.min(total, d + 6));
+    var vx = q.x - p.x, vy = q.y - p.y, m = Math.sqrt(vx*vx + vy*vy) || 1;
+    var ux = vx/m, uy = vy/m, px = -uy, py = ux, w = ARROW_GAP * 0.46;
+    ctx.beginPath();
+    ctx.moveTo(p.x + ux*w*1.15, p.y + uy*w*1.15);
+    ctx.lineTo(p.x + px*w, p.y + py*w);
+    ctx.lineTo(p.x - ux*w*0.35, p.y - uy*w*0.35);
+    ctx.lineTo(p.x - px*w, p.y - py*w);
+    ctx.closePath();
+    ctx.fillStyle = color; ctx.fill();
+    ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(255,255,255,.75)'; ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// ── 필드 ───────────────────────────────────────────────────────────────────
+function drawField(){
+  ctx.clearRect(0, 0, 920, 920);
+  ctx.beginPath(); ctx.arc(CX, CY, R + 30, 0, TAU);
+  ctx.fillStyle = FIELD_BG; ctx.fill();
+  // 센서 구획 안내선
+  ctx.strokeStyle = 'rgba(255,255,255,.08)'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(CX, CY, R * 0.42, 0, TAU); ctx.stroke();
+  for (var i = 1; i <= 8; i++){
+    var a = ang(i) - Math.PI / 8;
+    ctx.beginPath();
+    ctx.moveTo(CX + Math.cos(a) * R * 0.12, CY + Math.sin(a) * R * 0.12);
+    ctx.lineTo(CX + Math.cos(a) * R, CY + Math.sin(a) * R);
+    ctx.stroke();
+  }
+  // 판정 링 + 버튼
+  ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.lineWidth = 4;
+  ctx.beginPath(); ctx.arc(CX, CY, R, 0, TAU); ctx.stroke();
+  for (var j = 1; j <= 8; j++){
+    var p = btn(j);
+    ctx.beginPath(); ctx.arc(p.x, p.y, 12, 0, TAU);
+    ctx.fillStyle = '#fff'; ctx.fill();
+  }
 }
 
 // ── 상태 ───────────────────────────────────────────────────────────────────
 var END = CHART.durationMs + 1500;
 var t = 0, playing = false, last = 0;
 var rate = 1, speedIdx = 6, sound = true, guide = true;
-// 노트 속도: 숫자가 클수록 빨리 날아온다. maimai 의 체감에 맞춰 대략 맞춘 표.
-function approachMs(){ return 3200 / speedIdx; }
+
+// 같은 타이밍의 링 노트들은 maimai 에서 노란 선으로 이어진다(EACH 표시).
+var EACH_LINKS = (function(){
+  var by = {}, out = [];
+  for (var i = 0; i < NOTES.length; i++){
+    var n = NOTES[i];
+    if (n.type === 'touch' || n.type === 'touchHold') continue;
+    var k = String(n.timeMs);
+    if (!by[k]) by[k] = [];
+    by[k].push(n);
+  }
+  for (var k2 in by) if (by[k2].length >= 2) out.push(by[k2]);
+  return out;
+})();
 
 var actx = null, audioEl = null, audioReady = false;
 function click(kind){
@@ -446,75 +588,158 @@ function frame(now){
 function draw(){
   drawField();
   var ap = approachMs();
-  for (var i = 0; i < NOTES.length; i++){
-    var n = NOTES[i];
+  var spin = t / 260;
+  var i, n, st;
+
+  // 1) 슬라이드 궤적 — 노트보다 뒤에 깔린다
+  for (i = 0; i < NOTES.length; i++){
+    n = NOTES[i];
+    if (n.type !== 'slide') continue;
+    for (var k = 0; k < n.slides.length; k++){
+      var b = n.slides[k];
+      var s0 = n.timeMs + b.delayMs, s1 = s0 + b.durationMs;
+      if (t < n.timeMs - ap || t > s1 + 100) continue;
+      var pc = cachedPath(n, k);
+      if (!guide) continue;
+      var total = pc.len[pc.len.length - 1];
+      var passed = 0, alpha = 0.3;
+      if (t >= s0){
+        // 별이 지난 만큼 화살표가 사라지고, 남은 화살표는 진하게 보인다
+        var gp = slideProgressLen(pc, b, t - s0);
+        passed = gp; alpha = 1;
+      } else if (t >= n.timeMs){
+        alpha = 0.3 + 0.5 * Math.min(1, (t - n.timeMs) / Math.max(1, b.delayMs));
+      } else {
+        alpha = 0.3 * Math.max(0, 1 - (n.timeMs - t) / ap);
+      }
+      var acol = b.isBreak ? C_ARROW_BREAK : C_ARROW;
+      slideArrows(pc, passed, acol, alpha);
+      for (var w = 0; w < pc.fans.length; w++){
+        // 곁가지는 본선 진행도에 맞춰 같은 비율만큼 지운다
+        var fl = pc.fans[w].len[pc.fans[w].len.length - 1];
+        slideArrows(pc.fans[w], fl * (passed / (total || 1)), acol, alpha);
+      }
+    }
+  }
+
+  // 2) EACH 연결선
+  ctx.save();
+  for (i = 0; i < EACH_LINKS.length; i++){
+    var grp = EACH_LINKS[i];
+    st = approachAt(grp[0].timeMs - t, ap);
+    if (!st) continue;
+    ctx.globalAlpha = st.alpha * 0.85;
+    ctx.strokeStyle = C_EACH; ctx.lineWidth = 5;
+    for (var a2 = 0; a2 < grp.length - 1; a2++){
+      var p1 = rayPt(grp[a2].pos, R * st.rf), p2 = rayPt(grp[a2 + 1].pos, R * st.rf);
+      ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
+    }
+  }
+  ctx.restore();
+
+  // 3) TOUCH / TOUCH HOLD
+  for (i = 0; i < NOTES.length; i++){
+    n = NOTES[i];
+    if (n.type !== 'touch' && n.type !== 'touchHold') continue;
+    var tail = n.type === 'touchHold' ? (n.durationMs || 0) : 0;
     var lead = n.timeMs - t;
-
-    if (n.type === 'slide'){
-      for (var k = 0; k < n.slides.length; k++){
-        var b = n.slides[k];
-        var s0 = n.timeMs + b.delayMs, s1 = s0 + b.durationMs;
-        if (t < n.timeMs - ap || t > s1 + 120) continue;
-        var pc = cachedPath(n, k);
-        if (guide && t >= n.timeMs){
-          drawGuide(pc.pts);
-          for (var w = 0; w < pc.fans.length; w++) drawGuide(pc.fans[w]);
-        }
-        if (t >= s0 && t <= s1){
-          var p = slidePos(pc, b, t - s0);
-          star(p.x, p.y, 20, b.isBreak ? C_BREAK : C_SLIDE);
-        }
-      }
-      // 시작 별. '?'/'!' 는 별을 아예 표시하지 않고, '@' 는 일반 TAP 모양으로 바꾼다.
-      if (!n.starless){
-        var scol = colorOf(n);
-        if (lead >= 0 && lead <= ap){
-          var pr = 1 - lead / ap, sp = rayPt(n.pos, R * pr);
-          if (n.plainStar) ring(sp.x, sp.y, 18, scol);
-          else star(sp.x, sp.y, 20 * (0.35 + 0.65*pr), scol);
-        } else if (lead < 0 && t < n.timeMs + n.slides[0].delayMs){
-          var sp2 = btn(n.pos);
-          if (n.plainStar) ring(sp2.x, sp2.y, 18, scol);
-          else star(sp2.x, sp2.y, 20, scol);
-        }
-      }
-      continue;
-    }
-
-    if (n.type === 'touch' || n.type === 'touchHold'){
-      var tail = n.type === 'touchHold' ? (n.durationMs || 0) : 0;
-      if (lead > ap || t > n.timeMs + tail + 120) continue;
-      var tp = touchPt(n.area, n.pos);
-      var prog = lead > 0 ? 1 - lead / ap : 1;
-      ctx.globalAlpha = lead > 0 ? Math.min(1, prog * 1.6) : 1;
-      ring(tp.x, tp.y, 13 + 13 * prog, colorOf(n));
+    if (lead > ap || t > n.timeMs + tail + 100) continue;
+    var tp = touchPt(n.area, n.pos);
+    var size = NOTE_R * 0.95;
+    ctx.save();
+    if (lead > 0){
+      // 바깥에서 센서 쪽으로 모여든다
+      ctx.globalAlpha = Math.min(1, (1 - lead / ap) * 1.8);
+      touchNote(tp.x, tp.y, size, lead / ap, colorOf(n));
+    } else {
       ctx.globalAlpha = 1;
-      continue;
+      touchNote(tp.x, tp.y, size, 0, colorOf(n));
+      if (tail > 0) touchGauge(tp.x, tp.y, size, Math.max(0, 1 - (t - n.timeMs) / tail), colorOf(n));
+      if (n.hasFirework && t < n.timeMs + 260){
+        var fw = (t - n.timeMs) / 260;
+        ctx.globalAlpha = 1 - fw;
+        ctx.strokeStyle = '#ffe9a8'; ctx.lineWidth = 3;
+        for (var f2 = 0; f2 < 8; f2++){
+          var fa = f2 * Math.PI / 4;
+          ctx.beginPath();
+          ctx.moveTo(tp.x + Math.cos(fa) * size * (1 + fw * 1.5), tp.y + Math.sin(fa) * size * (1 + fw * 1.5));
+          ctx.lineTo(tp.x + Math.cos(fa) * size * (1.5 + fw * 2.2), tp.y + Math.sin(fa) * size * (1.5 + fw * 2.2));
+          ctx.stroke();
+        }
+      }
     }
+    ctx.restore();
+  }
 
-    // tap / hold
-    var holdMs = n.type === 'hold' ? (n.durationMs || 0) : 0;
-    if (lead > ap || t > n.timeMs + holdMs + 120) continue;
-    var headR = lead > 0 ? R * (1 - lead / ap) : R;
-    var head = rayPt(n.pos, Math.max(0, headR));
-    var col = colorOf(n);
-    if (holdMs > 0){
-      var tailLead = (n.timeMs + holdMs) - t;
-      var tailR = tailLead > 0 ? R * Math.max(0, 1 - tailLead / ap) : R;
-      var tailPt = rayPt(n.pos, Math.max(0, tailR));
-      ctx.strokeStyle = col; ctx.lineWidth = 30; ctx.lineCap = 'round';
-      ctx.beginPath();
-      ctx.moveTo(tailPt.x, tailPt.y);
-      ctx.lineTo(head.x, head.y);
-      ctx.stroke(); ctx.lineCap = 'butt';
+  // 4) HOLD → TAP → 슬라이드 별 순으로 (뒤에 깔릴 것부터)
+  for (i = 0; i < NOTES.length; i++){
+    n = NOTES[i];
+    if (n.type !== 'hold') continue;
+    var hold = n.durationMs || 0;
+    var hLead = n.timeMs - t, tLead = n.timeMs + hold - t;
+    if (hLead > ap || tLead < -OVERSHOOT_MS) continue;
+    // 머리가 판정선을 지난 뒤에도 꼬리가 도착할 때까지 몸통은 계속 보여야 한다.
+    // 머리는 판정선에 붙여 두고 꼬리만 따라 올라오게 그린다.
+    var hs = approachAt(hLead, ap);
+    var headRf = hs ? hs.rf : 1;
+    var hAlpha = hs ? hs.alpha : 1;
+    var size2 = NOTE_R * (hs ? hs.grow : 1);
+    var tailRf;
+    if (tLead > ap) tailRf = SPAWN_R;              // 꼬리는 아직 나오지 않았다
+    else { var ts = approachAt(tLead, ap); tailRf = ts ? ts.rf : 1; }
+    if (tailRf > headRf) tailRf = headRf;
+    var hp = rayPt(n.pos, R * headRf), tpt = rayPt(n.pos, R * tailRf);
+    ctx.save(); ctx.globalAlpha = hAlpha;
+    holdBody(tpt, hp, size2 * 0.82, colorOf(n));
+    if (n.isEx) exGlow(hp.x, hp.y, size2);
+    noteDonut(hp.x, hp.y, size2, colorOf(n));
+    if (n.isBreak) breakSpark(hp.x, hp.y, size2, spin);
+    ctx.restore();
+  }
+
+  for (i = 0; i < NOTES.length; i++){
+    n = NOTES[i];
+    if (n.type !== 'tap') continue;
+    st = approachAt(n.timeMs - t, ap);
+    if (!st) continue;
+    var p3 = rayPt(n.pos, R * st.rf), sz = NOTE_R * st.grow, col = colorOf(n);
+    ctx.save(); ctx.globalAlpha = st.alpha;
+    if (n.isEx) exGlow(p3.x, p3.y, sz);
+    // '$' 가 붙은 TAP 은 별 모양으로 나온다 ('$$' 는 회전)
+    if (n.starTap) starNote(p3.x, p3.y, sz * 1.15, col, n.starTap === 2 ? spin * 2 : 0);
+    else noteDonut(p3.x, p3.y, sz, col);
+    if (n.isBreak) breakSpark(p3.x, p3.y, sz, spin);
+    ctx.restore();
+  }
+
+  for (i = 0; i < NOTES.length; i++){
+    n = NOTES[i];
+    if (n.type !== 'slide') continue;
+    // 이동 중인 별
+    for (var k2 = 0; k2 < n.slides.length; k2++){
+      var b2 = n.slides[k2];
+      var m0 = n.timeMs + b2.delayMs, m1 = m0 + b2.durationMs;
+      if (t < m0 || t > m1) continue;
+      var pc2 = cachedPath(n, k2);
+      var mp = slidePos(pc2, b2, t - m0);
+      var ahead = slidePos(pc2, b2, Math.min(b2.durationMs, t - m0 + 30));
+      starNote(mp.x, mp.y, NOTE_R * 1.1, b2.isBreak ? C_BREAK : colorOf(n),
+        Math.atan2(ahead.y - mp.y, ahead.x - mp.x) + Math.PI / 2);
     }
-    // '$' 로 별 모양이 된 TAP 은 슬라이드 별과 같은 모양으로 그린다.
-    if (n.starTap) star(head.x, head.y, 19, col);
-    else ring(head.x, head.y, 18, col, n.isEx ? 'rgba(255,255,255,.28)' : null);
-    if (n.isBreak){
-      ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(head.x, head.y, 23, 0, Math.PI*2); ctx.stroke();
-    }
+    // 출발 별 ('?'/'!' 는 표시하지 않고, '@' 는 일반 TAP 모양)
+    if (n.starless) continue;
+    var firstEnd = n.timeMs + n.slides[0].delayMs;
+    if (t > firstEnd) continue;
+    // 별이 판정선에 닿은 뒤에는 궤적이 출발할 때까지 그 자리에서 기다린다.
+    st = (t >= n.timeMs) ? { rf: 1, alpha: 1, grow: 1 } : approachAt(n.timeMs - t, ap);
+    if (!st) continue;
+    var sp = rayPt(n.pos, R * st.rf), ssz = NOTE_R * st.grow, scol = colorOf(n);
+    ctx.save(); ctx.globalAlpha = st.alpha;
+    if (n.isEx) exGlow(sp.x, sp.y, ssz);
+    if (n.plainStar) noteDonut(sp.x, sp.y, ssz, scol);
+    else starNote(sp.x, sp.y, ssz * 1.15, scol, spin);
+    if (n.isBreak) breakSpark(sp.x, sp.y, ssz, spin);
+    ctx.restore();
   }
   paintBar();
 }
