@@ -369,16 +369,20 @@ function sensorKey(x, y){
   var k = Math.round((Math.atan2(dy, dx) - ang(1)) / (Math.PI / 4));
   return (r < 0.56 ? 'B' : 'A') + (((k % 8) + 8) % 8);
 }
-/** 묶음마다 "이 호 길이를 지나면 통째로 사라진다" 는 값을 매긴다. */
+/**
+ * 묶음마다 "별이 여기 들어서면 통째로 사라진다" 는 호 길이를 매긴다.
+ * 별이 있는 구역은 이미 손이 닿은 자리이므로, 빠져나갈 때가 아니라
+ * 들어서는 순간 그 구역 몫이 전부 사라진다.
+ */
 function groupBySensor(list, pc){
-  var g = 0, prev = null, ends = [];
+  var g = 0, prev = null, starts = [];
   for (var i = 0; i < list.length; i++){
     var k = sensorKey(list[i].x, list[i].y);
     if (prev !== null && k !== prev) g++;
     list[i].g = g; prev = k;
-    ends[g] = list[i].d + ARROW_GAP * 0.5;
+    if (starts[g] === undefined) starts[g] = Math.max(0, list[i].d - ARROW_GAP * 0.5);
   }
-  pc.groupEnds = ends;
+  pc.groupStarts = starts;
 }
 /** 화살표를 놓을 지점과 방향을 미리 구해 둔다 (매 프레임 경로를 훑지 않도록). */
 function buildArrows(pc){
@@ -406,15 +410,15 @@ function buildWifiBars(pc){
     }
     out.push({ f: f, pts: row });
   }
-  // 가운데 줄 기준으로 구역이 바뀌는 지점에서 끊고, 묶음마다 끝 진행률을 매긴다
-  var keys = [], g = 0, ends = [];
+  // 가운데 줄 기준으로 구역이 바뀌는 지점에서 끊고, 묶음마다 시작 진행률을 매긴다
+  var keys = [], g = 0, starts = [];
   for (var k = 0; k < out.length; k++) keys.push(sensorKey(out[k].pts[1].x, out[k].pts[1].y));
   for (var k2 = 0; k2 < out.length; k2++){
     if (k2 > 0 && keys[k2] !== keys[k2 - 1]) g++;
     out[k2].g = g;
-    ends[g] = out[k2].f + 0.5 / WIFI_BARS;
+    if (starts[g] === undefined) starts[g] = Math.max(0, out[k2].f - 0.5 / WIFI_BARS);
   }
-  for (var k3 = 0; k3 < out.length; k3++) out[k3].gEnd = ends[out[k3].g];
+  for (var k3 = 0; k3 < out.length; k3++) out[k3].gStart = starts[out[k3].g];
   return out;
 }
 function cachedPath(note, k){
@@ -793,8 +797,8 @@ function slideArrows(pc, passedLen, color, alpha){
   ctx.lineJoin = 'miter'; ctx.lineCap = 'butt'; ctx.miterLimit = 4;
   for (var i = 0; i < arrows.length; i++){
     var a = arrows[i];
-    // 별이 그 구역을 빠져나간 순간 묶음 전체가 한 번에 사라진다
-    if (pc.groupEnds[a.g] <= passedLen) continue;
+    // 별이 그 구역에 들어선 순간 묶음 전체가 한 번에 사라진다
+    if (pc.groupStarts[a.g] <= passedLen) continue;
     // 뒤로 진 그림자
     chevronPath(a.x + sh * 0.5, a.y + sh * 0.8, a.ux, a.uy, w, d);
     ctx.strokeStyle = 'rgba(0,0,0,.5)'; ctx.lineWidth = t; ctx.stroke();
@@ -827,7 +831,7 @@ function wifiBars(pc, progress, color, alpha){
   }
   for (var i = 0; i < pc.bars.length; i++){
     var b = pc.bars[i];
-    if (b.gEnd <= progress) continue;
+    if (b.gStart <= progress) continue;
     bar(b.pts, sh * 0.5, sh * 0.8, w, 'rgba(0,0,0,.5)');
     bar(b.pts, 0, 0, w, color);
     // 부채꼴은 바깥으로 퍼지므로 바깥쪽 모서리에 밝은 띠를 둔다
