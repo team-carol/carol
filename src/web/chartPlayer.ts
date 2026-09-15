@@ -499,21 +499,6 @@ function eachArc(p1, p2, rf, alpha){
   }
   ctx.restore();
 }
-/** HOLD 꼬리의 발광 (MajdataView 의 Hold_End 스프라이트). */
-function holdGlow(x, y, size, color){
-  var g = ctx.createRadialGradient(x, y, 0, x, y, size);
-  g.addColorStop(0, 'rgba(255,255,255,.95)');
-  g.addColorStop(0.3, rgba(color, 0.85));
-  g.addColorStop(1, rgba(color, 0));
-  ctx.save();
-  ctx.fillStyle = g;
-  ctx.beginPath(); ctx.arc(x, y, size, 0, TAU); ctx.fill();
-  ctx.restore();
-}
-/**
- * HOLD 몸통: 레인 폭(1.22/4.8 = 0.254R)만큼 넓은 띠.
- * 실기와 같이 머리 쪽은 노트, 꼬리 쪽은 발광으로 마감한다.
- */
 /** TAP: 흰 테두리 + 두꺼운 색 링 + 어두운 구멍 + 가운데 점. */
 function noteDonut(x, y, size, color){
   ctx.beginPath(); ctx.arc(x, y, size, 0, TAU);
@@ -575,7 +560,7 @@ function octPath(a, b, w, cut){
  * 점이 하나씩 찍힌다. 스킨 스프라이트가 9-슬라이스라 끝 모양은 늘어나지 않는다.
  */
 function holdBody(a, b, size, color){
-  var cut = size * 0.75;
+  var cut = size * 0.5;
   function layer(t, fill){
     var d = size * (1 - t);
     var a2 = d > 0 ? inset(a, b, d) : a, b2 = d > 0 ? inset(b, a, d) : b;
@@ -586,10 +571,6 @@ function holdBody(a, b, size, color){
   layer(0.89, color);        // 두꺼운 색 테두리
   layer(0.54, '#fff');       // 안쪽 흰 선
   layer(0.43, FIELD_BG);     // 비어 있는 속
-  // 양 끝 한가운데 점
-  var dot = size * 0.17;
-  ctx.beginPath(); ctx.arc(a.x, a.y, dot, 0, TAU); ctx.fillStyle = color; ctx.fill();
-  ctx.beginPath(); ctx.arc(b.x, b.y, dot, 0, TAU); ctx.fillStyle = '#fff'; ctx.fill();
 }
 
 /** 슬라이드 별: 흰 별 위에 색 별, 그 안에 별 윤곽이 한 겹 더 들어간 이중 구조. */
@@ -701,22 +682,35 @@ function touchHoldPetals(x, y, size, offPx){
 function slideArrows(pc, passedLen, color, alpha){
   var pts = pc.pts, L = pc.len, total = L[L.length - 1];
   if (total < 1) return;
-  ctx.save(); ctx.globalAlpha = alpha; ctx.lineJoin = 'round';
-  var half = ARROW_GAP * 0.6, wide = ARROW_GAP * 0.5, notch = ARROW_GAP * 0.2;
+  ctx.save(); ctx.globalAlpha = alpha; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  var half = ARROW_GAP * 0.62, wide = ARROW_GAP * 0.56, notch = ARROW_GAP * 0.24;
+  var sh = ARROW_GAP * 0.1;
   for (var d = ARROW_GAP * 0.5; d < total; d += ARROW_GAP){
     if (d < passedLen) continue;
     var p = atLen(pts, L, d), q = atLen(pts, L, Math.min(total, d + 4));
     var vx = q.x - p.x, vy = q.y - p.y, m = Math.sqrt(vx*vx + vy*vy) || 1;
     var ux = vx/m, uy = vy/m, px = -uy, py = ux;
+    // 꼭짓점: 앞끝 → 오른 날개 → 뒤 오목한 홈 → 왼 날개
+    var tipX = p.x + ux*half,                 tipY = p.y + uy*half;
+    var rX = p.x - ux*(half - notch) + px*wide, rY = p.y - uy*(half - notch) + py*wide;
+    var bX = p.x - ux*(half - notch*2.4),       bY = p.y - uy*(half - notch*2.4);
+    var lX = p.x - ux*(half - notch) - px*wide, lY = p.y - uy*(half - notch) - py*wide;
+    function body(ox, oy){
+      ctx.beginPath();
+      ctx.moveTo(tipX + ox, tipY + oy); ctx.lineTo(rX + ox, rY + oy);
+      ctx.lineTo(bX + ox, bY + oy);     ctx.lineTo(lX + ox, lY + oy);
+      ctx.closePath();
+    }
+    body(-ux*sh, -uy*sh); ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fill();   // 뒤쪽 그림자
+    body(0, 0); ctx.fillStyle = color; ctx.fill();
+    // 진행 방향 쪽 두 모서리만 밝게 (실기 화살표의 입체감)
     ctx.beginPath();
-    ctx.moveTo(p.x + ux*half, p.y + uy*half);
-    ctx.lineTo(p.x - ux*(half - notch) + px*wide, p.y - uy*(half - notch) + py*wide);
-    ctx.lineTo(p.x - ux*(half - notch*2.3), p.y - uy*(half - notch*2.3));
-    ctx.lineTo(p.x - ux*(half - notch) - px*wide, p.y - uy*(half - notch) - py*wide);
-    ctx.closePath();
-    ctx.fillStyle = color; ctx.fill();
-    ctx.lineWidth = 2.5; ctx.strokeStyle = 'rgba(255,255,255,.8)'; ctx.stroke();
+    ctx.moveTo(lX, lY); ctx.lineTo(tipX, tipY); ctx.lineTo(rX, rY);
+    ctx.strokeStyle = 'rgba(255,255,255,.92)';
+    ctx.lineWidth = Math.max(2, ARROW_GAP * 0.11);
+    ctx.stroke();
   }
+  ctx.lineCap = 'butt';
   ctx.restore();
 }
 
@@ -901,8 +895,6 @@ function draw(){
       var hp = rayPt(n.pos, R * headRf), tpt = rayPt(n.pos, R * tailRf);
       if (hs && n.isEx) exGlow(hp.x, hp.y, size2);
       holdBody(tpt, hp, size2, hcol);
-      // 꼬리 끝의 옅은 발광 (Hold_End)
-      if (ts && ts.grow > 0.3) holdGlow(tpt.x, tpt.y, size2 * 0.85, hcol);
       if (hs && n.isBreak) breakSpark(hp.x, hp.y, size2, spin);
     }
     if (hLead <= 0 && -hLead <= FLASH_MS){
