@@ -101,7 +101,7 @@ canvas{width:100%;max-width:460px;aspect-ratio:1;touch-action:none;display:block
     <div class="time mono"><span id="cur">0:00</span> / ${dur}</div>
   </div>
   <div class="ctl">
-    <div class="row"><label>노트 속도</label><input type="range" id="spd" min="1" max="12" step="0.5" value="6"><span class="val mono" id="spdv">6.0</span></div>
+    <div class="row"><label>노트 속도</label><input type="range" id="spd" min="1" max="10" step="0.25" value="7"><span class="val mono" id="spdv">7.00</span></div>
     <div class="row"><label>재생 배속</label><input type="range" id="rate" min="0.25" max="2" step="0.05" value="1"><span class="val mono" id="ratev">1.00x</span></div>
     <div class="row"><label>표시</label>
       <div class="chips">
@@ -163,10 +163,10 @@ function rayPt(pos, r){ return mir(polRaw(ang(pos), r)); }
 // 터치 센서. 사양서: A=버튼에 인접, B=A와 중앙 사이, C=중앙, D=A끼리의 사이,
 // E=D보다 안쪽으로 B에 인접. A/B 는 버튼과 같은 각도, D/E 는 22.5도 어긋난 선 위.
 function touchPt(area, n){
-  if (area === 'A') return mir(polRaw(ang(n), R * 0.80));
-  if (area === 'B') return mir(polRaw(ang(n), GROUP_B_R));
-  if (area === 'D') return mir(polRaw(ang(n) - Math.PI / 8, R * 0.80));
-  if (area === 'E') return mir(polRaw(ang(n) - Math.PI / 8, GROUP_B_R));
+  if (area === 'A') return mir(polRaw(ang(n), R * (4.1 / MJ_R)));
+  if (area === 'B') return mir(polRaw(ang(n), R * (2.3 / MJ_R)));
+  if (area === 'D') return mir(polRaw(ang(n) - Math.PI / 8, R * (4.1 / MJ_R)));
+  if (area === 'E') return mir(polRaw(ang(n) - Math.PI / 8, R * (3.0 / MJ_R)));
   return mir({ x: CX, y: CY });   // C: 구획은 둘이지만 언제나 한가운데 하나로 나온다
 }
 
@@ -398,13 +398,13 @@ var MJ_APPEAR = -1.275;
 var MJ_TOTAL = MJ_R - MJ_APPEAR;          // 6.075
 var SPAWN_R = MJ_SPAWN / MJ_R;            // 0.2552
 // 터치는 탭보다 늦게 나타난다. MajdataView 의 두 식(6.075/s, 3.209·s^-0.955)의 비.
-var TOUCH_RATIO = 0.575;
-// 슬라이드 궤적이 떠오르기 시작하는 시점 (3.926913/s ÷ 6.075/s).
-var SLIDE_FADE_RATIO = 3.926913 / MJ_TOTAL;
 var SLIDE_FADE_MS = 200;                  // 알파 0 → 0.55 에 걸리는 시간
 var SLIDE_FULL_MS = 50;                   // 별 착지 직전 알파 1 이 되는 구간
-var APPROACH_BASE = 2250;
-function approachMs(){ return APPROACH_BASE / speedIdx; }
+// 실기 기준 기본 속도. JsonDataLoader 의 noteSpeed=7 / touchSpeed=7.5 를 따른다.
+// 접근 시간 = 6.075/speed 초 이므로 기본값에서 868ms 다.
+function approachMs(){ return MJ_TOTAL * 1000 / speedIdx; }
+function touchWholeMs(){ return 3209.385682 * Math.pow(speedIdx + 0.5, -0.9549621752); }
+function slideFadeMs(){ return 3926.913 / speedIdx; }
 
 /** 링 노트(탭·홀드·별)의 현재 반지름 비율과 크기. null 이면 아직/이미 안 보인다. */
 function fall(lead, ap){
@@ -419,8 +419,8 @@ function fall(lead, ap){
  * 조각은 처음엔 바깥에 펼쳐진 채 서서히 나타나다가, 판정이 가까워지면
  * 지수적으로 센서 위로 빨려든다.
  */
-function touchFall(lead, ap){
-  var whole = ap * TOUCH_RATIO;
+function touchFall(lead){
+  var whole = touchWholeMs();
   if (lead > whole || lead < 0) return null;
   var move = whole * 0.8, disp = whole * 0.2;
   var alpha = lead > move ? Math.max(0, Math.min(1, (whole - lead) / disp)) : 1;
@@ -501,18 +501,6 @@ function holdGlow(x, y, size, color){
  * HOLD 몸통: 레인 폭(1.22/4.8 = 0.254R)만큼 넓은 띠.
  * 실기와 같이 머리 쪽은 노트, 꼬리 쪽은 발광으로 마감한다.
  */
-function holdBody(a, b, size, color){
-  ctx.lineCap = 'butt';
-  function rail(w, c){
-    ctx.strokeStyle = c; ctx.lineWidth = w;
-    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
-  }
-  rail(size * 2, '#fff');                                   // 바깥 흰 테두리
-  rail(size * 2 - Math.max(3, size * 0.16), color);          // 색 레일
-  rail(size * 1.16, '#fff');                                 // 안쪽 흰 테두리
-  rail(size * 1.16 - Math.max(3, size * 0.16), FIELD_BG);    // 속은 비운다
-}
-
 /** TAP: 흰 테두리 + 두꺼운 색 링 + 어두운 구멍 + 가운데 점. */
 function noteDonut(x, y, size, color){
   ctx.beginPath(); ctx.arc(x, y, size, 0, TAU);
@@ -541,6 +529,47 @@ function breakSpark(x, y, size, spin){
 function exGlow(x, y, size){
   ctx.beginPath(); ctx.arc(x, y, size * 1.3, 0, TAU);
   ctx.fillStyle = 'rgba(255,255,255,.22)'; ctx.fill();
+}
+
+var HOLD_CAP = 0.58 / MJ_R;   // 9-슬라이스 캡 58px(PPU 100) = 0.58 월드
+/** 두 끝점 중 a 를 b 쪽으로 d 만큼 당긴 점. */
+function inset(a, b, d){
+  var vx = b.x - a.x, vy = b.y - a.y, L = Math.sqrt(vx*vx + vy*vy) || 1;
+  return { x: a.x + vx / L * d, y: a.y + vy / L * d };
+}
+/** 레인 방향으로 늘어난 육각형 경로. 양 끝이 뾰족하고 가운데가 평행하다. */
+function hexPath(a, b, w, cap){
+  var vx = b.x - a.x, vy = b.y - a.y, L = Math.sqrt(vx*vx + vy*vy) || 1;
+  var ux = vx / L, uy = vy / L, px = -uy, py = ux;
+  var c = Math.min(cap, L / 2);
+  ctx.beginPath();
+  ctx.moveTo(b.x, b.y);
+  ctx.lineTo(b.x - ux*c + px*w, b.y - uy*c + py*w);
+  ctx.lineTo(a.x + ux*c + px*w, a.y + uy*c + py*w);
+  ctx.lineTo(a.x, a.y);
+  ctx.lineTo(a.x + ux*c - px*w, a.y + uy*c - py*w);
+  ctx.lineTo(b.x - ux*c - px*w, b.y - uy*c - py*w);
+  ctx.closePath();
+}
+/**
+ * HOLD 는 실기에서 레인 방향으로 늘어난 육각형이다. 스킨 스프라이트가
+ * 9-슬라이스(위아래 58px 고정)라 양 끝 모양은 유지된 채 가운데만 늘어난다.
+ */
+function holdBody(a, b, size, color){
+  var cap = R * HOLD_CAP;
+  var bw = Math.max(3, size * 0.16);          // 흰 테두리 두께
+  var rail = size * 0.44;                     // 색 레일 두께
+  hexPath(a, b, size, cap);
+  ctx.fillStyle = '#fff'; ctx.fill();
+  var a1 = inset(a, b, bw), b1 = inset(b, a, bw);
+  hexPath(a1, b1, size - bw, cap);
+  ctx.fillStyle = color; ctx.fill();
+  var d2 = bw + rail;
+  if (size - d2 > 1){
+    var a2 = inset(a, b, d2), b2 = inset(b, a, d2);
+    hexPath(a2, b2, size - d2, cap);
+    ctx.fillStyle = FIELD_BG; ctx.fill();
+  }
 }
 
 /** 슬라이드 별: 흰 별 위에 색 별, 그 안에 별 윤곽이 한 겹 더 들어간 이중 구조. */
@@ -699,7 +728,7 @@ function drawField(){
 // ── 상태 ───────────────────────────────────────────────────────────────────
 var END = CHART.durationMs + 1500;
 var t = 0, playing = false, last = 0;
-var rate = 1, speedIdx = 6, sound = true, guide = true;
+var rate = 1, speedIdx = 7, sound = true, guide = true;
 
 // 같은 타이밍의 링 노트들은 maimai 에서 노란 선으로 이어진다(EACH 표시).
 var EACH_LINKS = (function(){
@@ -776,7 +805,7 @@ function draw(){
   for (i = 0; i < NOTES.length; i++){
     n = NOTES[i];
     if (n.type !== 'slide') continue;
-    var fadeStart = n.timeMs - ap * SLIDE_FADE_RATIO;
+    var fadeStart = n.timeMs - slideFadeMs();
     if (t < fadeStart || !guide) continue;
     for (k = 0; k < n.slides.length; k++){
       var b = n.slides[k];
@@ -787,7 +816,7 @@ function draw(){
       if (t >= s0){ passed = slideProgressLen(pc, b, t - s0); alpha = 1; }
       else if (t >= n.timeMs - SLIDE_FULL_MS) alpha = 1;
       else alpha = 0.55 * Math.min(1, (t - fadeStart) / SLIDE_FADE_MS);
-      var acol = b.isBreak ? C_ARROW_BREAK : C_ARROW;
+      var acol = b.isBreak ? C_ARROW_BREAK : n.isEach ? C_EACH : C_ARROW;
       var total = pc.len[pc.len.length - 1] || 1;
       slideArrows(pc, passed, acol, alpha);
       for (w = 0; w < pc.fans.length; w++){
@@ -806,14 +835,14 @@ function draw(){
     if (over > FLASH_MS) continue;
     var tp = touchPt(n.area, n.pos), tsz = NOTE_R * 0.9, tcol = colorOf(n);
     if (lead > 0){
-      var tf = touchFall(lead, ap);
+      var tf = touchFall(lead);
       if (!tf) continue;
       ctx.save(); ctx.globalAlpha = tf.alpha;
       if (tail > 0) touchHoldNote(tp.x, tp.y, tsz, R * tf.off, tf.moving ? 1 : -1);
       else touchNote(tp.x, tp.y, tsz, R * tf.off, tcol);
       ctx.restore();
     } else if (tail > 0 && over < 0){
-      touchHoldNote(tp.x, tp.y, tsz, R * touchFall(0, ap).off, -over / tail);
+      touchHoldNote(tp.x, tp.y, tsz, R * touchFall(0).off, -over / tail);
     } else {
       ctx.save();
       hitFlash(tp.x, tp.y, tsz * 1.2, tcol, Math.max(0, over) / FLASH_MS);
@@ -894,10 +923,20 @@ function draw(){
       var m0 = n.timeMs + b2.delayMs, m1 = m0 + b2.durationMs;
       if (t < m0 || t > m1) continue;
       var pc2 = cachedPath(n, k);
+      var scol2 = b2.isBreak ? C_BREAK : scol;
       var mp = slidePos(pc2, b2, t - m0);
       var ahead = slidePos(pc2, b2, Math.min(b2.durationMs, t - m0 + 30));
-      starNote(mp.x, mp.y, NOTE_R * 1.05, b2.isBreak ? C_BREAK : scol,
+      starNote(mp.x, mp.y, NOTE_R * 1.05, scol2,
         Math.atan2(ahead.y - mp.y, ahead.x - mp.x) + Math.PI / 2);
+      // 扇形(w)은 별이 세 갈래로 동시에 흐른다 (WifiDrop 의 star_slide[0..2])
+      var pf = Math.max(0, Math.min(1, (t - m0) / (b2.durationMs || 1)));
+      for (var fi = 0; fi < pc2.fans.length; fi++){
+        var fp = pc2.fans[fi], ftot = fp.len[fp.len.length - 1];
+        var q0 = atLen(fp.pts, fp.len, ftot * pf);
+        var q1 = atLen(fp.pts, fp.len, Math.min(ftot, ftot * pf + 12));
+        starNote(q0.x, q0.y, NOTE_R * 1.05, scol2,
+          Math.atan2(q1.y - q0.y, q1.x - q0.x) + Math.PI / 2);
+      }
     }
     if (n.starless) continue;
     var delay = n.slides[0].delayMs;
@@ -956,7 +995,7 @@ sk.onpointerdown = function(e){ seekTo(e.clientX); sk.setPointerCapture(e.pointe
 sk.onpointerup = function(e){ sk.onpointermove = null; sk.releasePointerCapture(e.pointerId); };
 
 var spd = document.getElementById('spd'), spdv = document.getElementById('spdv');
-spd.oninput = function(){ speedIdx = parseFloat(spd.value); spdv.textContent = speedIdx.toFixed(1); };
+spd.oninput = function(){ speedIdx = parseFloat(spd.value); spdv.textContent = speedIdx.toFixed(2); };
 var rateEl = document.getElementById('rate'), ratev = document.getElementById('ratev');
 rateEl.oninput = function(){
   rate = parseFloat(rateEl.value); ratev.textContent = rate.toFixed(2) + 'x';
