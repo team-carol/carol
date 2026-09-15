@@ -317,15 +317,12 @@ function pathLen(pts){
 }
 function atLen(pts, L, d){
   if (d <= 0) return pts[0];
-  var total = L[L.length-1];
-  if (d >= total) return pts[pts.length-1];
-  for (var i = 1; i < L.length; i++){
-    if (L[i] >= d){
-      var f = (d - L[i-1]) / ((L[i] - L[i-1]) || 1);
-      return { x: pts[i-1].x + (pts[i].x - pts[i-1].x)*f, y: pts[i-1].y + (pts[i].y - pts[i-1].y)*f };
-    }
-  }
-  return pts[pts.length-1];
+  var n = L.length;
+  if (d >= L[n-1]) return pts[n-1];
+  var lo = 1, hi = n - 1;
+  while (lo < hi){ var mid = (lo + hi) >> 1; if (L[mid] >= d) hi = mid; else lo = mid + 1; }
+  var f = (d - L[lo-1]) / ((L[lo] - L[lo-1]) || 1);
+  return { x: pts[lo-1].x + (pts[lo].x - pts[lo-1].x)*f, y: pts[lo-1].y + (pts[lo].y - pts[lo-1].y)*f };
 }
 
 // 사양서: "あらゆるSLIDEは必ず始点から終点まで一定のスピードで流れます" —
@@ -353,6 +350,34 @@ function slidePos(pc, body, elapsed){
 
 // 궤적은 매 프레임 다시 계산하면 비싸다. 노트별로 한 번만 만들어 캐시한다.
 var cache = {};
+var WIFI_BARS = 11;   // 실기의 wifi_0 ~ wifi_10
+/** 화살표를 놓을 지점과 방향을 미리 구해 둔다 (매 프레임 경로를 훑지 않도록). */
+function buildArrows(pc){
+  var out = [], total = pc.len[pc.len.length - 1];
+  for (var d = ARROW_GAP * 0.5; d < total; d += ARROW_GAP){
+    var p = atLen(pc.pts, pc.len, d), q = atLen(pc.pts, pc.len, Math.min(total, d + 4));
+    var vx = q.x - p.x, vy = q.y - p.y, m = Math.sqrt(vx*vx + vy*vy) || 1;
+    out.push({ x: p.x, y: p.y, ux: vx/m, uy: vy/m, d: d });
+  }
+  return out;
+}
+/**
+ * 扇形(w)은 화살표가 아니라 "와이파이 아이콘" 처럼 겹겹이 놓인 꺾인 막대다.
+ * 세 갈래 위의 같은 진행률 지점을 이어 막대 하나를 만든다.
+ */
+function buildWifiBars(pc){
+  var lines = [pc.fans[0], { pts: pc.pts, len: pc.len }, pc.fans[1]];
+  var out = [];
+  for (var i = 0; i < WIFI_BARS; i++){
+    var f = (i + 1) / (WIFI_BARS + 0.5), row = [];
+    for (var j = 0; j < 3; j++){
+      var L = lines[j];
+      row.push(atLen(L.pts, L.len, L.len[L.len.length - 1] * f));
+    }
+    out.push({ f: f, pts: row });
+  }
+  return out;
+}
 function cachedPath(note, k){
   var key = note.__idx + ':' + k + ':' + (mirror ? 'm' : 'n');
   if (!cache[key]){
@@ -360,12 +385,15 @@ function cachedPath(note, k){
     var built = pathOf(body);
     var fans = wifiFans(body.segments);
     if (mirror) fans = fans.map(function(f){ return f.map(mir); });
-    cache[key] = {
+    var pc = {
       pts: built.pts, segEnd: built.segEnd, len: pathLen(built.pts),
-      // 부채꼴 곁가지도 매 프레임 길이를 재지 않도록 같이 캐시한다.
       fans: fans.map(function(f){ return { pts: f, len: pathLen(f) }; }),
       groups: body.groups || null,
     };
+    pc.isWifi = pc.fans.length === 2;
+    if (pc.isWifi) pc.bars = buildWifiBars(pc);
+    else pc.arrows = buildArrows(pc);
+    cache[key] = pc;
   }
   return cache[key];
 }
@@ -430,7 +458,7 @@ function touchFall(lead){
 }
 
 // ── 노트 그리기 ────────────────────────────────────────────────────────────
-var NOTE_R = R * 0.127;                // 실기의 홀드 폭 1.22/4.8 의 절반
+var NOTE_R = R * 0.107;                // mai-notes 실측: 노트 반지름 / 판정 링 반지름
 var ARROW_GAP = Math.PI * R / 32;      // MajGeo.DefaultDistance = 판정원 둘레의 1/64
 var FLASH_MS = 130;
 
@@ -469,7 +497,7 @@ function strokeArc(r, a0, a1){
 // (Normal/Each/Break.png 스프라이트 모양).
 var LANE_SPAN = Math.PI;
 function laneArc(pos, rf, color, alpha){
-  var steps = 16, half = LANE_SPAN / 2, c = ang(pos), r = R * rf;
+  var steps = 10, half = LANE_SPAN / 2, c = ang(pos), r = R * rf;
   ctx.save();
   ctx.lineWidth = Math.max(1.5, R * 0.009);
   ctx.strokeStyle = color;
@@ -504,10 +532,10 @@ function noteDonut(x, y, size, color){
   ctx.beginPath(); ctx.arc(x, y, size, 0, TAU);
   ctx.fillStyle = color; ctx.fill();
   ctx.lineWidth = Math.max(1, size * 0.15); ctx.strokeStyle = '#fff'; ctx.stroke();
-  ctx.beginPath(); ctx.arc(x, y, size * 0.57, 0, TAU);
+  ctx.beginPath(); ctx.arc(x, y, size * 0.42, 0, TAU);
   ctx.fillStyle = FIELD_BG; ctx.fill();
   ctx.lineWidth = Math.max(1, size * 0.1); ctx.strokeStyle = '#fff'; ctx.stroke();
-  ctx.beginPath(); ctx.arc(x, y, size * 0.14, 0, TAU);
+  ctx.beginPath(); ctx.arc(x, y, size * 0.11, 0, TAU);
   ctx.fillStyle = color; ctx.fill();
 }
 /** BREAK 는 바깥으로 네 갈래 반짝임이 더 붙는다. */
@@ -680,34 +708,53 @@ function touchHoldPetals(x, y, size, offPx){
  * 화살촉부터 지운다. 뒤가 오목한 형태라 실기의 화살표 사슬처럼 보인다.
  */
 function slideArrows(pc, passedLen, color, alpha){
-  var pts = pc.pts, L = pc.len, total = L[L.length - 1];
-  if (total < 1) return;
+  var arrows = pc.arrows;
+  if (!arrows || !arrows.length) return;
   ctx.save(); ctx.globalAlpha = alpha; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
   var half = ARROW_GAP * 0.62, wide = ARROW_GAP * 0.56, notch = ARROW_GAP * 0.24;
-  var sh = ARROW_GAP * 0.1;
-  for (var d = ARROW_GAP * 0.5; d < total; d += ARROW_GAP){
-    if (d < passedLen) continue;
-    var p = atLen(pts, L, d), q = atLen(pts, L, Math.min(total, d + 4));
-    var vx = q.x - p.x, vy = q.y - p.y, m = Math.sqrt(vx*vx + vy*vy) || 1;
-    var ux = vx/m, uy = vy/m, px = -uy, py = ux;
-    // 꼭짓점: 앞끝 → 오른 날개 → 뒤 오목한 홈 → 왼 날개
-    var tipX = p.x + ux*half,                 tipY = p.y + uy*half;
-    var rX = p.x - ux*(half - notch) + px*wide, rY = p.y - uy*(half - notch) + py*wide;
-    var bX = p.x - ux*(half - notch*2.4),       bY = p.y - uy*(half - notch*2.4);
-    var lX = p.x - ux*(half - notch) - px*wide, lY = p.y - uy*(half - notch) - py*wide;
-    function body(ox, oy){
-      ctx.beginPath();
-      ctx.moveTo(tipX + ox, tipY + oy); ctx.lineTo(rX + ox, rY + oy);
-      ctx.lineTo(bX + ox, bY + oy);     ctx.lineTo(lX + ox, lY + oy);
-      ctx.closePath();
-    }
-    body(-ux*sh, -uy*sh); ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fill();   // 뒤쪽 그림자
-    body(0, 0); ctx.fillStyle = color; ctx.fill();
+  var sh = ARROW_GAP * 0.1, hw = Math.max(2, ARROW_GAP * 0.11);
+  for (var i = 0; i < arrows.length; i++){
+    var a = arrows[i];
+    if (a.d < passedLen) continue;
+    var ux = a.ux, uy = a.uy, px = -uy, py = ux;
+    var tipX = a.x + ux*half,                 tipY = a.y + uy*half;
+    var rX = a.x - ux*(half - notch) + px*wide, rY = a.y - uy*(half - notch) + py*wide;
+    var bX = a.x - ux*(half - notch*2.4),       bY = a.y - uy*(half - notch*2.4);
+    var lX = a.x - ux*(half - notch) - px*wide, lY = a.y - uy*(half - notch) - py*wide;
+    var ox = -ux*sh, oy = -uy*sh;
+    ctx.beginPath();
+    ctx.moveTo(tipX+ox, tipY+oy); ctx.lineTo(rX+ox, rY+oy);
+    ctx.lineTo(bX+ox, bY+oy);     ctx.lineTo(lX+ox, lY+oy);
+    ctx.closePath(); ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(tipX, tipY); ctx.lineTo(rX, rY); ctx.lineTo(bX, bY); ctx.lineTo(lX, lY);
+    ctx.closePath(); ctx.fillStyle = color; ctx.fill();
     // 진행 방향 쪽 두 모서리만 밝게 (실기 화살표의 입체감)
     ctx.beginPath();
     ctx.moveTo(lX, lY); ctx.lineTo(tipX, tipY); ctx.lineTo(rX, rY);
-    ctx.strokeStyle = 'rgba(255,255,255,.92)';
-    ctx.lineWidth = Math.max(2, ARROW_GAP * 0.11);
+    ctx.strokeStyle = 'rgba(255,255,255,.92)'; ctx.lineWidth = hw; ctx.stroke();
+  }
+  ctx.lineCap = 'butt';
+  ctx.restore();
+}
+
+/** 扇形(w) 전용. 겹겹이 놓인 꺾인 막대가 별이 지난 것부터 사라진다. */
+function wifiBars(pc, progress, color, alpha){
+  if (!pc.bars) return;
+  ctx.save(); ctx.globalAlpha = alpha;
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  var w = ARROW_GAP * 0.46, off = ARROW_GAP * 0.12;
+  for (var i = 0; i < pc.bars.length; i++){
+    var b = pc.bars[i];
+    if (b.f < progress) continue;
+    var q = b.pts;
+    ctx.strokeStyle = 'rgba(0,0,0,.5)'; ctx.lineWidth = w;
+    ctx.beginPath();
+    ctx.moveTo(q[0].x + off, q[0].y + off); ctx.lineTo(q[1].x + off, q[1].y + off);
+    ctx.lineTo(q[2].x + off, q[2].y + off); ctx.stroke();
+    ctx.strokeStyle = color; ctx.lineWidth = w;
+    ctx.beginPath();
+    ctx.moveTo(q[0].x, q[0].y); ctx.lineTo(q[1].x, q[1].y); ctx.lineTo(q[2].x, q[2].y);
     ctx.stroke();
   }
   ctx.lineCap = 'butt';
@@ -731,7 +778,7 @@ function drawField(){
   }
   // 판정 링 + 버튼
   // 실기의 판정 링은 가는 선이다. 두꺼우면 필드가 좁아 보여 노트가 커 보인다.
-  ctx.strokeStyle = 'rgba(255,255,255,.8)'; ctx.lineWidth = Math.max(1.5, R * 0.008);
+  ctx.strokeStyle = 'rgba(255,255,255,.8)'; ctx.lineWidth = Math.max(1.5, R * 0.012);
   ctx.beginPath(); ctx.arc(CX, CY, R, 0, TAU); ctx.stroke();
   for (var j = 1; j <= 8; j++){
     var p = btn(j);
@@ -759,6 +806,28 @@ var EACH_LINKS = (function(){
   return out;
 })();
 
+// 프레임마다 전 노트를 여러 번 훑으면 물량 채보에서 그대로 프레임이 떨어진다.
+// 노트가 시각순이므로 지금 보일 수 있는 구간만 이진 탐색으로 잘라 쓴다.
+var TIMES = NOTES.map(function(n){ return n.timeMs; });
+var MAX_SPAN = (function(){
+  var m = 0;
+  for (var i = 0; i < NOTES.length; i++){
+    var n = NOTES[i], e = n.durationMs || 0;
+    for (var k = 0; n.slides && k < n.slides.length; k++){
+      var b = n.slides[k];
+      if (b.delayMs + b.durationMs > e) e = b.delayMs + b.durationMs;
+    }
+    if (e > m) m = e;
+  }
+  return m;
+})();
+function firstAtOrAfter(v){
+  var lo = 0, hi = TIMES.length;
+  while (lo < hi){ var mid = (lo + hi) >> 1; if (TIMES[mid] < v) lo = mid + 1; else hi = mid; }
+  return lo;
+}
+
+var soundIdx = 0;
 var actx = null, audioEl = null, audioReady = false;
 function click(kind){
   if (!sound) return;
@@ -779,9 +848,12 @@ function frame(now){
     var prev = t;
     if (audioReady && !audioEl.paused) t = audioEl.currentTime * 1000;
     else t += dt;
-    for (var i = 0; i < NOTES.length; i++){
-      var n = NOTES[i];
-      if (n.timeMs > prev && n.timeMs <= t) click(n.isBreak ? 'break' : n.type === 'slide' ? 'slide' : 'tap');
+    // 지나간 노트를 가리키는 포인터만 앞으로 민다 (매 프레임 전체를 훑지 않는다)
+    if (t < prev) soundIdx = firstAtOrAfter(t);
+    while (soundIdx < NOTES.length && NOTES[soundIdx].timeMs <= t){
+      var sn = NOTES[soundIdx];
+      if (sn.timeMs > prev) click(sn.isBreak ? 'break' : sn.type === 'slide' ? 'slide' : 'tap');
+      soundIdx++;
     }
     if (t >= END) { t = END; pause(); }
   }
@@ -793,10 +865,13 @@ function draw(){
   drawField();
   var ap = approachMs();
   var spin = t / 260;
-  var i, n, st, k, w;
+  var i, n, st, k;
+  // 지금 화면에 나올 수 있는 노트 구간 [lo, hi)
+  var lo = firstAtOrAfter(t - MAX_SPAN - FLASH_MS - 50);
+  var hi = firstAtOrAfter(t + ap + 1);
 
   // 1) 레인 안내 호 — 노트마다 하나씩 붙어서 함께 커진다 (MajdataView 의 tapLine)
-  for (i = 0; i < NOTES.length; i++){
+  for (i = lo; i < hi; i++){
     n = NOTES[i];
     if (n.type === 'touch' || n.type === 'touchHold') continue;
     st = fall(n.timeMs - t, ap);
@@ -817,7 +892,7 @@ function draw(){
   }
 
   // 3) 슬라이드 궤적 — 별이 닿기 한참 전부터 옅게 떠오르고, 착지 직전 또렷해진다
-  for (i = 0; i < NOTES.length; i++){
+  for (i = lo; i < hi; i++){
     n = NOTES[i];
     if (n.type !== 'slide') continue;
     var fadeStart = n.timeMs - slideFadeMs();
@@ -833,16 +908,13 @@ function draw(){
       else alpha = 0.55 * Math.min(1, (t - fadeStart) / SLIDE_FADE_MS);
       var acol = b.isBreak ? C_ARROW_BREAK : n.isEach ? C_EACH : C_ARROW;
       var total = pc.len[pc.len.length - 1] || 1;
-      slideArrows(pc, passed, acol, alpha);
-      for (w = 0; w < pc.fans.length; w++){
-        var fl = pc.fans[w].len[pc.fans[w].len.length - 1];
-        slideArrows(pc.fans[w], fl * (passed / total), acol, alpha);
-      }
+      if (pc.isWifi) wifiBars(pc, passed / total, acol, alpha);
+      else slideArrows(pc, passed, acol, alpha);
     }
   }
 
   // 4) TOUCH / TOUCH HOLD
-  for (i = 0; i < NOTES.length; i++){
+  for (i = lo; i < hi; i++){
     n = NOTES[i];
     if (n.type !== 'touch' && n.type !== 'touchHold') continue;
     var tail = n.type === 'touchHold' ? (n.durationMs || 0) : 0;
@@ -878,7 +950,7 @@ function draw(){
   }
 
   // 5) HOLD
-  for (i = 0; i < NOTES.length; i++){
+  for (i = lo; i < hi; i++){
     n = NOTES[i];
     if (n.type !== 'hold') continue;
     var hold = n.durationMs || 0;
@@ -906,7 +978,7 @@ function draw(){
   }
 
   // 6) TAP
-  for (i = 0; i < NOTES.length; i++){
+  for (i = lo; i < hi; i++){
     n = NOTES[i];
     if (n.type !== 'tap') continue;
     var col = colorOf(n);
@@ -924,7 +996,7 @@ function draw(){
   }
 
   // 7) 슬라이드 별
-  for (i = 0; i < NOTES.length; i++){
+  for (i = lo; i < hi; i++){
     n = NOTES[i];
     if (n.type !== 'slide') continue;
     var scol = colorOf(n);
@@ -999,6 +1071,7 @@ var sk = document.getElementById('sk');
 function seekTo(clientX){
   var r = sk.getBoundingClientRect();
   t = Math.max(0, Math.min(END, (clientX - r.left) / r.width * END));
+  soundIdx = firstAtOrAfter(t);
   if (audioReady) audioEl.currentTime = t/1000;
 }
 sk.onpointerdown = function(e){ seekTo(e.clientX); sk.setPointerCapture(e.pointerId); sk.onpointermove = function(m){ seekTo(m.clientX); }; };
