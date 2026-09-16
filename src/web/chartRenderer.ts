@@ -1041,7 +1041,9 @@ function drawNotes(){
       if (interfere){
         var ekey = n.__idx + ':' + k;
         var eLen = slideErased[ekey] || 0;
-        if (interfStars.length){
+        // 간섭 삭제는 이미 별이 출발한 슬라이드에만 쌓는다. 아직 안 뜬 가이드
+        // 프리뷰까지 지우면, 활성 별이 없는 프레임에 되살아나 깜빡인다.
+        if (t >= s0 && interfStars.length){
           for (var ei = 0; ei < interfStars.length; ei++){
             if (interfStars[ei].ni === i) continue;    // 자기 별은 passed 로 이미 처리
             var np = nearestOnPath(pc, interfStars[ei].x, interfStars[ei].y);
@@ -1049,8 +1051,7 @@ function drawNotes(){
           }
           slideErased[ekey] = eLen;
         }
-        // sticky: 활성 별이 없는 프레임에도 유지해 되살아나지(깜빡이지) 않게 한다.
-        // 이 한 줄이 interfStars 유무와 무관하게 항상 적용되는 게 깜빡임 방지의 핵심.
+        // sticky: 활성 별이 없는 프레임에도 유지해 되살아나지 않게 한다.
         if (eLen > erased) erased = eLen;
       }
       if (pc.isWifi) wifiBars(pc, erased / total, acol, alpha);
