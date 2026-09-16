@@ -289,7 +289,7 @@ export function startWebServer(port: number): void {
       const durationMs = clamp(num("dur", 6), 1, 30) * 1000;
       const size = Math.round(clamp(num("size", 400), 200, 800));
       const fps = Math.round(clamp(num("fps", 15), 10, 30));
-      const speed = clamp(num("speed", 7.5), 1, 12);
+      const speed = clamp(num("speed", 6.5), 1, 12);
       const maxStart = Math.max(0, chart.durationMs - durationMs);
       const startMs = clamp(num("start", 0) * 1000, 0, maxStart);
       const mirror = url.searchParams.get("mirror") === "1";

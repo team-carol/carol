@@ -379,7 +379,7 @@ var SLIDE_FADE_MS = 200;                  // 알파 0 → 0.55 에 걸리는 시
 var SLIDE_FULL_MS = 50;                   // 별 착지 직전 알파 1 이 되는 구간
 
 /**
- * 화면의 속도 설정(TapSpeed, 기본 7.5)은 내부 속도와 다르다.
+ * 화면의 속도 설정(TapSpeed, 기본 6.5)은 내부 속도와 다르다.
  * MajdataPlay 가 쓰는 변환식을 그대로 옮긴다.
  *   NoteSpeed = 107.25 / (71.4184491 * (TapSpeed + 0.9975)^-0.985558604)
  * 7.5 에서 내부 속도 약 12.37 → 접근 시간 7.349/12.37 ≈ 594ms.
@@ -835,7 +835,7 @@ var LEADIN = Math.max(0, MEASURE_MS - FIRST_MS);
 // 왼쪽 끝으로 삼아, 맨 앞으로 돌려도 리드인이 유지된다.
 var T0 = -LEADIN;
 var t = T0, playing = false, last = 0;
-var rate = 1, speedIdx = 7.5, sound = true, guide = true;
+var rate = 1, speedIdx = 6.5, sound = true, guide = true;
 // rAF 의 now 는 "지금 합성 중인 프레임" 시각이고 그 내용은 다음 vsync 에 나온다.
 // 그래서 t 기준으로 그리면 화면에는 늘 한 프레임 늦게 보인다. 실측한 프레임
 // 간격만큼 미리 그려 그 지연을 없앤다. userOffset 은 사용자가 더 미세 조정하는 값.

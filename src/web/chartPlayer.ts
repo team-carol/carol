@@ -114,7 +114,7 @@ canvas{width:100%;max-width:460px;aspect-ratio:1;touch-action:none;display:block
     <div class="time mono"><span id="cur">0:00</span> / ${dur}</div>
   </div>
   <div class="ctl">
-    <div class="row"><label>노트 속도</label><input type="range" id="spd" min="1" max="12" step="0.25" value="7.5"><span class="val mono" id="spdv">7.50</span></div>
+    <div class="row"><label>노트 속도</label><input type="range" id="spd" min="1" max="12" step="0.25" value="6.5"><span class="val mono" id="spdv">6.50</span></div>
     <div class="row"><label>재생 배속</label><input type="range" id="rate" min="0.25" max="2" step="0.05" value="1"><span class="val mono" id="ratev">1.00x</span></div>
     <div class="row"><label>표시 오프셋</label><input type="range" id="off" min="-100" max="100" step="5" value="0"><span class="val mono" id="offv">0ms</span></div>
     <div class="row"><label>표시</label>
