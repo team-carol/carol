@@ -262,6 +262,7 @@ export function startWebServer(port: number): void {
         lastSyncAt: lastSyncAt ? new Date(lastSyncAt).toISOString() : null,
         uptimeSeconds: Math.floor((Date.now() - processStartedAt) / 1000),
         userCount: await getRegisteredUserCount(),
+        version: process.env.RELEASE_VERSION?.trim() || process.env.BUILD_VERSION?.trim() || "local",
       }));
       return;
     }
