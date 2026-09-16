@@ -261,6 +261,7 @@ export function startWebServer(port: number): void {
         gatewayPingMs: getGatewayPing ? getGatewayPing() : -1,
         lastSyncAt: lastSyncAt ? new Date(lastSyncAt).toISOString() : null,
         uptimeSeconds: Math.floor((Date.now() - processStartedAt) / 1000),
+        userCount: await getRegisteredUserCount(),
       }));
       return;
     }
