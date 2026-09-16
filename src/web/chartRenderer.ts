@@ -225,6 +225,17 @@ function slideProgressLen(pc, body, elapsed){
 function slidePos(pc, body, elapsed){
   return atLen(pc.pts, pc.len, slideProgressLen(pc, body, elapsed));
 }
+// 별의 회전각. MajdataView 처럼 경로 기하(접선)만으로 정한다 — 고정 호길이(바 간격
+// ARROW_GAP ≈ MajGeo.DefaultDistance) 만큼의 중심차분으로 접선을 낸다. 시간 기준
+// 앞보기가 아니라 공간 기준이라 슬라이드 속도가 달라도 회전 로직이 같다.
+function starAngle(pts, len, arcLen){
+  var total = len[len.length - 1] || 1;
+  var d = ARROW_GAP * 0.5;
+  var a = atLen(pts, len, Math.min(total, arcLen + d));
+  var b = atLen(pts, len, Math.max(0, arcLen - d));
+  if (a.x === b.x && a.y === b.y) return 0;
+  return Math.atan2(a.y - b.y, a.x - b.x) + Math.PI / 2;
+}
 
 // 궤적은 매 프레임 다시 계산하면 비싸다. 노트별로 한 번만 만들어 캐시한다.
 var cache = {};
@@ -1086,18 +1097,15 @@ function drawNotes(){
       if (t < m0 || t > m1) continue;
       var pc2 = cachedPath(n, k);
       var scol2 = b2.isBreak ? C_BREAK : scol;
-      var mp = slidePos(pc2, b2, t - m0);
-      var ahead = slidePos(pc2, b2, Math.min(b2.durationMs, t - m0 + 30));
-      starNote(mp.x, mp.y, STAR_R, scol2,
-        Math.atan2(ahead.y - mp.y, ahead.x - mp.x) + Math.PI / 2);
+      var mLen = slideProgressLen(pc2, b2, t - m0);
+      var mp = atLen(pc2.pts, pc2.len, mLen);
+      starNote(mp.x, mp.y, STAR_R, scol2, starAngle(pc2.pts, pc2.len, mLen));
       // 扇形(w)은 별이 세 갈래로 동시에 흐른다 (WifiDrop 의 star_slide[0..2])
       var pf = Math.max(0, Math.min(1, (t - m0) / (b2.durationMs || 1)));
       for (var fi = 0; fi < pc2.fans.length; fi++){
         var fp = pc2.fans[fi], ftot = fp.len[fp.len.length - 1];
         var q0 = atLen(fp.pts, fp.len, ftot * pf);
-        var q1 = atLen(fp.pts, fp.len, Math.min(ftot, ftot * pf + 12));
-        starNote(q0.x, q0.y, STAR_R, scol2,
-          Math.atan2(q1.y - q0.y, q1.x - q0.x) + Math.PI / 2);
+        starNote(q0.x, q0.y, STAR_R, scol2, starAngle(fp.pts, fp.len, ftot * pf));
       }
     }
     if (n.starless) continue;
