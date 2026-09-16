@@ -24,7 +24,7 @@ export interface GifOptions {
 }
 
 export const GIF_DEFAULTS: Omit<GifOptions, "startMs"> = {
-  durationMs: 9000, size: 400, fps: 15, speed: 6.5,
+  durationMs: 12000, size: 400, fps: 15, speed: 6.5,
 };
 
 /**
