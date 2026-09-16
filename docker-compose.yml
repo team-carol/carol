@@ -1,3 +1,8 @@
+# 컴포즈 프로젝트 이름을 체크아웃 디렉터리명(달라질 수 있음)이 아니라 고정값으로 박아둔다.
+# carol-ops의 dockerctl.Client가 컨테이너를 com.docker.compose.project=carol 라벨로
+# 스코프하므로, 이 이름이 바뀌면 carol-ops가 아무 컨테이너도 못 찾는다.
+name: carol
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -41,6 +46,13 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    networks:
+      # default: talk to postgres/cloudflared as before. carol-shared: reachable
+      # by carol-ops (separate compose project) for GET /admin/status. Create
+      # once on the host with `docker network create carol-shared` before the
+      # first `docker compose up` that includes this network.
+      - default
+      - carol-shared
 
   cloudflared:
     image: cloudflare/cloudflared:latest
@@ -73,3 +85,7 @@ services:
 
 volumes:
   carol-postgres:
+
+networks:
+  carol-shared:
+    external: true
