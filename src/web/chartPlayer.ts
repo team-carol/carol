@@ -49,9 +49,8 @@ const GIF_EXPORT_JS = [
   "  mk.onclick = function(){",
   "    var start = parseFloat(document.getElementById('gStart').value) || 0;",
   "    var dur = parseFloat(document.getElementById('gDur').value) || 6;",
-  "    var size = document.getElementById('gSize').value;",
   "    var q = '?id=' + encodeURIComponent(DATA.id)",
-  "      + '&start=' + start + '&dur=' + dur + '&size=' + size",
+  "      + '&start=' + start + '&dur=' + dur + '&size=400'",
   "      + '&speed=' + speedIdx + '&fps=15'",
   "      + '&mirror=' + (mirror ? '1' : '0') + '&guide=' + (guide ? '1' : '0');",
   "    mk.disabled = true;",
@@ -186,17 +185,7 @@ canvas{width:100%;max-width:460px;aspect-ratio:1;touch-action:none;display:block
     </div>
     <div class="row">
       <label>길이</label>
-      <input type="number" id="gDur" min="1" max="20" step="0.5" value="6"><span class="unit">초 (최대 20)</span>
-    </div>
-    <div class="row">
-      <label>크기</label>
-      <select id="gSize">
-        <option value="300">300px</option>
-        <option value="400" selected>400px</option>
-        <option value="500">500px</option>
-        <option value="600">600px</option>
-      </select>
-      <span class="unit">노트 속도·미러는 위 설정을 따릅니다</span>
+      <input type="number" id="gDur" min="1" max="20" step="0.5" value="6"><span class="unit">초 (최대 20) · 400px · 노트 속도·미러는 위 설정을 따릅니다</span>
     </div>
     <div class="gifbar">
       <button class="btn" id="gMake" type="button">GIF 만들기</button>
