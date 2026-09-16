@@ -1,10 +1,12 @@
 import {
-  SlashCommandBuilder, ChatInputCommandInteraction, EmbedBuilder,
+  SlashCommandBuilder, ChatInputCommandInteraction, AutocompleteInteraction, EmbedBuilder,
   ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, AttachmentBuilder,
 } from "discord.js";
 import { randomBytes } from "crypto";
 import { saveSimaiChart, countSimaiChartsByOwner } from "../../storage";
 import { parseMaidata, UNKNOWN_DIFFICULTY } from "../../simai/parse";
+import { resolveChart, makeChartKey, ChartUnavailableError } from "../../simai/source";
+import { searchCharts, indexSize } from "../../mainotes";
 import { renderChartGifAsync, densestStart, GIF_DEFAULTS } from "../utils/chartGif";
 import { getBaseUrl } from "../../web/bookmarklet";
 import { PORT } from "../../config";
@@ -25,9 +27,12 @@ const DIFF_COLOR: Record<number, number> = {
 
 export const data = new SlashCommandBuilder()
   .setName("보면")
-  .setDescription("maidata.txt 를 올려서 채보를 재생해봅니다")
+  .setDescription("채보를 재생해봅니다")
+  .addStringOption((o) =>
+    o.setName("곡").setDescription("곡 이름으로 찾기").setRequired(false).setAutocomplete(true),
+  )
   .addAttachmentOption((o) =>
-    o.setName("파일").setDescription("simai maidata.txt").setRequired(true),
+    o.setName("파일").setDescription("simai maidata.txt").setRequired(false),
   )
   .addIntegerOption((o) =>
     o.setName("난이도").setDescription("생략 시 파일에 있는 가장 높은 난이도").setRequired(false)
@@ -38,16 +43,83 @@ export const data = new SlashCommandBuilder()
       .setRequired(false).setMinValue(0),
   );
 
+/** 곡 이름 자동완성. 네트워크를 쓰지 않고 메모리 인덱스만 본다. */
+export async function autocomplete(interaction: AutocompleteInteraction): Promise<void> {
+  if (indexSize() === 0) { await interaction.respond([]); return; }
+  const q = interaction.options.getFocused();
+  const hits = searchCharts(q, 25);
+  await interaction.respond(hits.map((c) => {
+    const diff = DIFF_LABEL[c.difficulty] ?? "?";
+    const lv = c.level ? ` ${c.level}` : "";
+    const dx = c.type === "deluxe" ? " [DX]" : "";
+    // Discord 는 이름을 100자까지만 받는다.
+    const name = `${c.title}${dx} · ${diff}${lv}`.slice(0, 100);
+    return { name, value: makeChartKey("mainotes", c.id) };
+  }));
+}
+
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
-  const file = interaction.options.getAttachment("파일", true);
+  const file = interaction.options.getAttachment("파일");
+  const pick = interaction.options.getString("곡");
   const want = interaction.options.getInteger("난이도");
 
-  if (file.size > MAX_BYTES) {
+  if (file && pick) {
+    await interaction.reply({ content: msg("chart.bothInput"), flags: MessageFlags.Ephemeral });
+    return;
+  }
+  if (!file && !pick) {
+    await interaction.reply({ content: msg("chart.needInput"), flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  // ── 곡 이름으로 고른 경우 ────────────────────────────────────────────────
+  if (pick) {
+    await interaction.deferReply();
+    try {
+      const found = await resolveChart(pick);
+      const parsed = parseMaidata(found.maidata);
+      const available = Object.keys(parsed.charts).map(Number).sort((a, b) => a - b);
+      const key = parsed.charts[found.difficulty] ? found.difficulty : available[available.length - 1];
+      const chart: Chart = parsed.charts[key];
+      if (!chart || chart.notes.length === 0) {
+        await interaction.editReply({ content: msg("chart.emptyChart") });
+        return;
+      }
+      let id = found.storedId;
+      if (!id) {
+        id = randomBytes(12).toString("base64url");
+        await saveSimaiChart({
+          id, ownerId: "", source: "registry",
+          title: found.title.slice(0, 200), artist: found.artist.slice(0, 200),
+          designer: found.designer.slice(0, 200), level: found.level.slice(0, 20),
+          difficulty: key, maidata: found.maidata, chartJson: JSON.stringify(chart),
+        });
+      }
+      await reply(interaction, {
+        id, title: found.title, artist: found.artist,
+        designer: found.designer, level: found.level, diff: key, chart,
+        footer: found.attribution
+          ? msg("chart.footerSource", { source: found.attribution })
+          : msg("chart.footerRegistry"),
+      });
+    } catch (e) {
+      if (e instanceof ChartUnavailableError) {
+        await interaction.editReply({ content: msg(`chart.unavailable.${e.reason}`) });
+        return;
+      }
+      console.error("[보면] 채보 조회 실패:", e);
+      await interaction.editReply({ content: msg("chart.parseFailed") });
+    }
+    return;
+  }
+
+  // ── 파일을 올린 경우 ─────────────────────────────────────────────────────
+  if (file!.size > MAX_BYTES) {
     await interaction.reply({ content: msg("chart.tooLarge"), flags: MessageFlags.Ephemeral });
     return;
   }
   // maidata.txt 는 텍스트다. 확장자/타입 어느 쪽이든 텍스트로 보이면 받는다.
-  const looksText = /\.(txt|simai)$/i.test(file.name ?? "") || (file.contentType ?? "").startsWith("text/");
+  const looksText = /\.(txt|simai)$/i.test(file!.name ?? "") || (file!.contentType ?? "").startsWith("text/");
   if (!looksText) {
     await interaction.reply({ content: msg("chart.notText"), flags: MessageFlags.Ephemeral });
     return;
@@ -57,7 +129,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 
   let text: string;
   try {
-    const res = await fetch(file.url);
+    const res = await fetch(file!.url);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     text = await res.text();
   } catch (e) {
@@ -128,42 +200,53 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     return;
   }
 
-  const url = `${getBaseUrl(PORT)}/chart?id=${id}`;
-  const s = chart.stats;
-  const secs = Math.round(chart.durationMs / 1000);
+  await reply(interaction, {
+    id, title: parsed.title, artist: parsed.artist,
+    designer: parsed.designers[key] ?? "", level: parsed.levels[key] ?? "",
+    diff, chart, footer: msg("chart.footer", { user: interaction.user.username }),
+  });
+}
+
+interface ReplyInput {
+  id: string; title: string; artist: string; designer: string;
+  level: string; diff: number; chart: Chart; footer: string;
+}
+
+/** 링크 + 통계 + 미리보기 GIF 를 붙여 응답한다. 파일/곡 어느 쪽으로 왔든 같다. */
+async function reply(interaction: ChatInputCommandInteraction, x: ReplyInput): Promise<void> {
+  const url = `${getBaseUrl(PORT)}/chart?id=${x.id}`;
+  const s = x.chart.stats;
+  const secs = Math.round(x.chart.durationMs / 1000);
   const embed = new EmbedBuilder()
-    .setColor(DIFF_COLOR[diff] ?? 0x9333ea)
-    .setTitle(parsed.title || msg("chart.untitled"))
+    .setColor(DIFF_COLOR[x.diff] ?? 0x9333ea)
+    .setTitle(x.title || msg("chart.untitled"))
     .setDescription(
-      msg("chart.openLink", { url }) + (chart.bpmAssumed ? "\n" + msg("chart.bpmAssumedNote") : ""),
+      msg("chart.openLink", { url }) + (x.chart.bpmAssumed ? "\n" + msg("chart.bpmAssumedNote") : ""),
     )
     .addFields(
-      { name: msg("chart.fieldChart"), value: `\`${DIFF_LABEL[diff] ?? msg("chart.diffUnknown")}\`${parsed.levels[key] ? "  ·  Lv." + parsed.levels[key] : ""}`, inline: true },
-      { name: msg("chart.fieldBpm"), value: `\`${chart.bpm}\`${chart.bpmAssumed ? " (추정)" : ""}  ·  ${chart.measures}마디`, inline: true },
+      { name: msg("chart.fieldChart"), value: `\`${DIFF_LABEL[x.diff] ?? msg("chart.diffUnknown")}\`${x.level ? "  ·  Lv." + x.level : ""}`, inline: true },
+      { name: msg("chart.fieldBpm"), value: `\`${x.chart.bpm}\`${x.chart.bpmAssumed ? " (추정)" : ""}  ·  ${x.chart.measures}마디`, inline: true },
       { name: msg("chart.fieldLength"), value: `\`${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}\``, inline: true },
       {
         name: msg("chart.fieldNotes"),
         value: `TAP \`${s.tap}\` · HOLD \`${s.hold + s.touchHold}\` · SLIDE \`${s.slide}\` · TOUCH \`${s.touch}\` · BREAK \`${s.break}\`\n합계 \`${s.total}\``,
       },
     )
-    .setFooter({ text: msg("chart.footer", { user: interaction.user.username }) });
-  if (parsed.artist) embed.setAuthor({ name: parsed.artist });
+    .setFooter({ text: x.footer });
+  if (x.artist) embed.setAuthor({ name: x.artist });
 
-  // 링크 버튼은 https 일 때만 단다. baseUrl 이 비어 있는 로컬 개발에서는 URL 이
-  // http://localhost:... 라 Discord 가 거부할 수 있고, 그러면 응답 전체가 실패한다.
-  // 어차피 embed 설명에 같은 링크가 마크다운으로 들어가 있어 기능은 잃지 않는다.
   // 미리보기 GIF. 웹 플레이어와 같은 렌더러를 워커에서 돌려 몇 초치를 잘라낸다.
   const files: AttachmentBuilder[] = [];
   try {
-    const clipMs = Math.min(GIF_DEFAULTS.durationMs, Math.max(2000, chart.durationMs));
+    const clipMs = Math.min(GIF_DEFAULTS.durationMs, Math.max(2000, x.chart.durationMs));
     const asked = interaction.options.getNumber("시작");
-    const maxStart = Math.max(0, chart.durationMs - clipMs);
+    const maxStart = Math.max(0, x.chart.durationMs - clipMs);
     const startMs = asked !== null
       ? Math.min(asked * 1000, maxStart)
-      : Math.min(densestStart(chart, clipMs), maxStart);
+      : Math.min(densestStart(x.chart, clipMs), maxStart);
     const gif = await renderChartGifAsync(
-      { id, title: parsed.title, artist: parsed.artist, designer: parsed.designers[key] ?? "",
-        level: parsed.levels[key] ?? "", difficulty: diff, chart },
+      { id: x.id, title: x.title, artist: x.artist, designer: x.designer,
+        level: x.level, difficulty: x.diff, chart: x.chart },
       { ...GIF_DEFAULTS, durationMs: clipMs, startMs },
     );
     files.push(new AttachmentBuilder(gif, { name: "preview.gif" }));
@@ -182,6 +265,9 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     console.error("[보면] 미리보기 생성 실패:", e);
   }
 
+  // 링크 버튼은 https 일 때만 단다. baseUrl 이 비어 있는 로컬 개발에서는 URL 이
+  // http://localhost:... 라 Discord 가 거부할 수 있고, 그러면 응답 전체가 실패한다.
+  // 어차피 embed 설명에 같은 링크가 마크다운으로 들어가 있어 기능은 잃지 않는다.
   const components = url.startsWith("https://")
     ? [new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder().setStyle(ButtonStyle.Link).setURL(url).setLabel(msg("chart.button")),

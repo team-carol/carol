@@ -52,6 +52,13 @@ export const MESSAGES = {
   "chart.diffUnknown": "난이도 미상",
   "chart.bpmAssumedNote": "⚠️ 파일에 BPM 표기가 없어 120으로 가정했습니다. 재생 속도가 실제와 다릅니다.",
   "chart.footer": "{user} 님이 올린 채보 · 링크를 아는 사람만 볼 수 있습니다 · 30일 보관",
+  "chart.footerRegistry": "등록된 채보 · 링크를 아는 사람만 볼 수 있습니다",
+  "chart.footerSource": "채보 출처: {source} · 링크를 아는 사람만 볼 수 있습니다",
+  "chart.needInput": "재생할 채보를 골라주세요. `곡` 에 곡 이름을 입력하거나, `파일` 로 maidata.txt 를 올리면 됩니다.",
+  "chart.bothInput": "`곡` 과 `파일` 중 하나만 지정해주세요.",
+  "chart.unavailable.not-found": "그 채보를 찾지 못했습니다. 목록에서 다시 골라주세요.",
+  "chart.unavailable.no-data": "이 채보는 목록에는 있지만 아직 데이터가 없습니다. maidata.txt 를 직접 올리면 재생할 수 있습니다.",
+  "chart.unavailable.no-permission": "공식 채보 재생은 아직 준비 중입니다. 채보 제공처에 이용 허락을 문의해 둔 상태라, 답을 받기 전까지는 가져오지 않습니다.\nmaidata.txt 파일을 직접 올리면 지금도 재생할 수 있습니다.",
 
   // ── /공지설정 · 공지 폴링 ───────────────────────────────────────────────
   "news.sourceJp": "maimai でらっくす 공식 (내수판)",

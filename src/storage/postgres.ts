@@ -7,7 +7,7 @@ import { calcSongRating, getConstant, levelToNumber } from "../constants";
 
 pgTypes.setTypeParser(20, (value) => Number(value));
 
-export const MIGRATION_VERSION = 17;
+export const MIGRATION_VERSION = 18;
 
 // Migration text is deliberately kept as separate, immutable units.  In particular,
 // an edit to the current schema must not silently change an old migration checksum.
@@ -124,7 +124,41 @@ CREATE INDEX IF NOT EXISTS idx_user_goals_owner ON user_goals(discord_user_id, c
   );
   CREATE INDEX IF NOT EXISTS simai_charts_owner_idx ON simai_charts(owner_id, created_at DESC);
   CREATE INDEX IF NOT EXISTS simai_charts_created_idx ON simai_charts(created_at);`,],
+
+  // mai-notes.com manifest.json 의 사본. 메타데이터만 들어간다 — 채보 본문은 없다.
+  // 매번 상대 서버에 묻지 않기 위한 캐시라, 통째로 갈아끼우는 방식으로 쓴다.
+  [18, `CREATE TABLE IF NOT EXISTS mainotes_songs (
+    id text PRIMARY KEY,
+    title text NOT NULL DEFAULT '',
+    artist text NOT NULL DEFAULT '',
+    bpm text NOT NULL DEFAULT '',
+    genre text NOT NULL DEFAULT '',
+    version text NOT NULL DEFAULT '',
+    type text NOT NULL DEFAULT ''
+  );
+  CREATE TABLE IF NOT EXISTS mainotes_charts (
+    id text PRIMARY KEY,
+    song_id text NOT NULL,
+    difficulty integer NOT NULL DEFAULT 0,
+    level text NOT NULL DEFAULT '',
+    internal_level double precision NOT NULL DEFAULT 0,
+    designer text NOT NULL DEFAULT '',
+    has_data integer NOT NULL DEFAULT 0,
+    notes integer NOT NULL DEFAULT 0
+  );
+  CREATE INDEX IF NOT EXISTS mainotes_charts_song_idx ON mainotes_charts(song_id);
+  CREATE TABLE IF NOT EXISTS mainotes_sync (
+    key text PRIMARY KEY,
+    etag text NOT NULL DEFAULT '',
+    generated_at text NOT NULL DEFAULT '',
+    synced_at bigint NOT NULL DEFAULT 0
+  );`,],
 ];
+
+export interface MainotesSongRow { id:string; title:string; artist:string; bpm:string; genre:string; version:string; type:string }
+export interface MainotesChartRow { id:string; songId:string; difficulty:number; level:string; internalLevel:number; designer:string; hasData:boolean; notes:number }
+/** 큰 배열을 파라미터 상한에 걸리지 않을 크기로 자른다. */
+function* batches<T>(a:T[],n:number):Generator<T[]>{ for(let i=0;i<a.length;i+=n) yield a.slice(i,i+n); }
 
 function hash(text: string): string { return crypto.createHash("sha256").update(text).digest("hex"); }
 function fcRank(v: string): number { const x=v.trim().toUpperCase().replace(/\s+/g, ""); return x === "AP+" || x === "APP" ? 4 : x === "AP" ? 3 : x === "FC+" || x === "FCP" ? 2 : x === "FC" ? 1 : 0; }
@@ -334,6 +368,44 @@ SELECT u.chart_key AS "chartKey",u.achievement_val AS "achievementVal",u.fc,u.sy
   async deleteSimaiChart(id:string,ownerId:string){
     const r=await this.pool.query("DELETE FROM simai_charts WHERE id=$1 AND owner_id=$2 AND source='upload'",[id,ownerId]);
     return (r.rowCount??0)>0;
+  }
+
+  // ── mai-notes 메타데이터 캐시 ─────────────────────────────────────────────
+  // manifest 는 통째로 받아오므로 부분 갱신하지 않고 트랜잭션 안에서 교체한다.
+  // 중간에 실패해도 이전 인덱스가 그대로 남는다.
+  async replaceMainotesIndex(songs:MainotesSongRow[],charts:MainotesChartRow[],etag:string,generatedAt:string){
+    const c=await this.pool.connect();
+    try{
+      await c.query("BEGIN");
+      await c.query("DELETE FROM mainotes_charts");
+      await c.query("DELETE FROM mainotes_songs");
+      for(const chunk of batches(songs,500)){
+        const vals:any[]=[];const rows=chunk.map((x,i)=>{const b=i*7;vals.push(x.id,x.title,x.artist,x.bpm,x.genre,x.version,x.type);
+          return `($${b+1},$${b+2},$${b+3},$${b+4},$${b+5},$${b+6},$${b+7})`;}).join(",");
+        await c.query(`INSERT INTO mainotes_songs(id,title,artist,bpm,genre,version,type) VALUES${rows} ON CONFLICT(id) DO NOTHING`,vals);
+      }
+      for(const chunk of batches(charts,500)){
+        const vals:any[]=[];const rows=chunk.map((x,i)=>{const b=i*8;vals.push(x.id,x.songId,x.difficulty,x.level,x.internalLevel,x.designer,x.hasData?1:0,x.notes);
+          return `($${b+1},$${b+2},$${b+3},$${b+4},$${b+5},$${b+6},$${b+7},$${b+8})`;}).join(",");
+        await c.query(`INSERT INTO mainotes_charts(id,song_id,difficulty,level,internal_level,designer,has_data,notes) VALUES${rows} ON CONFLICT(id) DO NOTHING`,vals);
+      }
+      await c.query(`INSERT INTO mainotes_sync(key,etag,generated_at,synced_at) VALUES('manifest',$1,$2,$3)
+        ON CONFLICT(key) DO UPDATE SET etag=excluded.etag,generated_at=excluded.generated_at,synced_at=excluded.synced_at`,[etag,generatedAt,Date.now()]);
+      await c.query("COMMIT");
+    }catch(e){ await c.query("ROLLBACK"); throw e; } finally { c.release(); }
+  }
+  async getMainotesSyncState(){
+    const r=await this.q<any>(`SELECT etag,generated_at AS "generatedAt",synced_at AS "syncedAt" FROM mainotes_sync WHERE key='manifest'`);
+    return r[0]?{...r[0],syncedAt:Number(r[0].syncedAt)}:null;
+  }
+  // 메모리 인덱스를 세우기 위한 전량 조회. 6천여 행이라 한 번에 읽어도 된다.
+  async getMainotesIndex(){
+    return this.q<any>(`SELECT c.id,c.song_id AS "songId",c.difficulty,c.level,c.internal_level AS "internalLevel",
+      c.designer,c.has_data AS "hasData",c.notes,s.title,s.artist,s.type
+      FROM mainotes_charts c JOIN mainotes_songs s ON s.id=c.song_id`);
+  }
+  async setMainotesSyncedNow(){
+    await this.q(`UPDATE mainotes_sync SET synced_at=$1 WHERE key='manifest'`,[Date.now()]);
   }
 
   async getGuildSetting(id:string){const r=await this.q<any>("SELECT auto_role FROM guild_settings WHERE guild_id=$1",[id]);return r[0]?.auto_role!==0;} async setGuildSetting(id:string,v:boolean){await this.q("INSERT INTO guild_settings VALUES($1,$2) ON CONFLICT(guild_id) DO UPDATE SET auto_role=excluded.auto_role",[id,v?1:0]);}

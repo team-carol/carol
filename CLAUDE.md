@@ -44,6 +44,8 @@ Key entry points:
 ## Project-specific conventions & anti-patterns
 
 - 업로드된 simai 채보(`simai_charts`, `source='upload'`)는 30일 뒤 자동 삭제된다. 운영자 등록분(`source='registry'`)은 GC 대상이 아니다.
+- **mai-notes.com 에서 채보 본문을 받아오지 말 것.** `src/mainotes/` 는 공개된 `manifest.json`(메타데이터: 곡·난이도·정수·노트 수)만 하루 1회 ETag 조건부로 받는다. simai 본문이 있는 경로는 **의도적으로 찾지 않았다** — mai-notes 이용약관 제7조가 서비스의 해석·리버스 엔지니어링을 금지하고, 운영자에게 이용 허락을 문의해 둔 상태다. 답을 받기 전까지 `src/mainotes/source.ts` 의 `load()` 는 `no-permission` 을 던지는 채로 둔다. 거절되면 `src/mainotes/` 를 지우고 `src/bot/index.ts` 의 `registerChartSource(mainotesSource)` 한 줄만 빼면 된다.
+- mai-notes 운영자가 요구한 유일한 조건은 **대량 통신 금지**다. 요청 하한(24시간)·ETag·User-Agent 식별은 `src/mainotes/client.ts` 와 `index.ts` 에 있다. 이 셋을 약화시키지 말 것.
 - **Slash commands use Korean names.** User `/설정` links to web settings; guild auto-role config is `/서버설정`, not `/설정`.
 - **User-facing strings go through `msg()` from `src/messages.ts`** — do not inline new Korean output text in commands. Fonts for PNG cards must be registered under distinct family names (satori does not fall back within one family); see `src/fonts.ts` `FONT_STACK`.
 - **PostgreSQL migrations are numbered and immutable after release.** Do not reintroduce SQLite runtime storage or the removed catalog baseline crawler.
