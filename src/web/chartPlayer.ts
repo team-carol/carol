@@ -121,6 +121,7 @@ canvas{width:100%;max-width:460px;aspect-ratio:1;touch-action:none;display:block
       <div class="chips">
         <button class="chip on" id="tSound">타격음</button>
         <button class="chip on" id="tGuide">슬라이드 가이드</button>
+        <button class="chip on" id="tInterf">슬라이드 간섭</button>
         <button class="chip" id="tMirror">미러</button>
       </div>
     </div>

@@ -225,6 +225,22 @@ function slideProgressLen(pc, body, elapsed){
 function slidePos(pc, body, elapsed){
   return atLen(pc.pts, pc.len, slideProgressLen(pc, body, elapsed));
 }
+// (x,y) 에서 경로까지 가장 가까운 지점의 호 길이와 거리제곱. 슬라이드 간섭용.
+// 직선 슬라이드는 표본점이 몇 개뿐이라 꼭짓점만 보면 빗나간다. 각 선분에 투영한다.
+function nearestOnPath(pc, x, y){
+  var pts = pc.pts, len = pc.len, best = 1e18, bl = 0;
+  for (var i = 0; i < pts.length - 1; i++){
+    var ax = pts[i].x, ay = pts[i].y;
+    var vx = pts[i+1].x - ax, vy = pts[i+1].y - ay;
+    var seg2 = vx * vx + vy * vy || 1;
+    var tp = ((x - ax) * vx + (y - ay) * vy) / seg2;
+    tp = tp < 0 ? 0 : tp > 1 ? 1 : tp;
+    var px = ax + vx * tp, py = ay + vy * tp;
+    var dx = x - px, dy = y - py, d2 = dx * dx + dy * dy;
+    if (d2 < best){ best = d2; bl = len[i] + (len[i+1] - len[i]) * tp; }
+  }
+  return { len: bl, dist2: best };
+}
 
 // 궤적은 매 프레임 다시 계산하면 비싸다. 노트별로 한 번만 만들어 캐시한다.
 var cache = {};
@@ -289,6 +305,7 @@ function groupBySensor(list, pc){
     rel[gi] = r;
   }
   pc.groupStarts = rel;
+  pc.sensorGroups = g + 1;   // 센서 구역 수 (간섭의 한 칸 보정 허용치 계산용)
 }
 /** 화살표를 놓을 지점과 방향을 미리 구해 둔다 (매 프레임 경로를 훑지 않도록). */
 function buildArrows(pc){
@@ -299,6 +316,9 @@ function buildArrows(pc){
     out.push({ x: p.x, y: p.y, ux: vx/m, uy: vy/m, d: d });
   }
   groupBySensor(out, pc);
+  // 간섭이 순서를 지키되 한 구역만 앞질러도 처리되도록(MajdataPlay 의 second 판정)
+  // 허용 호길이 = 평균 구역 길이 * 1.5.
+  pc.groupSkipLen = total / Math.max(1, pc.sensorGroups) * 1.5;
   return out;
 }
 /**
@@ -322,6 +342,7 @@ function buildWifiBars(pc){
   var fake = {};
   groupBySensor(mid, fake);
   for (var k = 0; k < out.length; k++){ out[k].g = mid[k].g; out[k].gStart = fake.groupStarts[mid[k].g]; }
+  pc.groupSkipLen = (pc.len[pc.len.length - 1] || 1) / Math.max(1, fake.sensorGroups) * 1.5;
   return out;
 }
 function cachedPath(note, k){
@@ -835,7 +856,12 @@ var LEADIN = Math.max(0, MEASURE_MS - FIRST_MS);
 // 왼쪽 끝으로 삼아, 맨 앞으로 돌려도 리드인이 유지된다.
 var T0 = -LEADIN;
 var t = T0, playing = false, last = 0;
-var rate = 1, speedIdx = 6.5, sound = true, guide = true;
+var rate = 1, speedIdx = 6.5, sound = true, guide = true, interfere = true;
+// 슬라이드 간섭: 다른 별이 지나간 슬라이드의 궤적도 지운다. 한 번 지워지면
+// 유지되도록(별이 지나갔다가 멀어져도 되살아나지 않게) 슬라이드별 최대 지움
+// 길이를 저장한다. 되감기/seek 때 비운다. 순서 보장을 위해 항상 앞에서부터(prefix) 지운다.
+var slideErased = {};
+var INTERF_R = STAR_R * 1.2;   // 별이 이 반경 안으로 다른 궤적을 지나면 그 지점까지 지운다
 // rAF 의 now 는 "지금 합성 중인 프레임" 시각이고 그 내용은 다음 vsync 에 나온다.
 // 그래서 t 기준으로 그리면 화면에는 늘 한 프레임 늦게 보인다. 실측한 프레임
 // 간격만큼 미리 그려 그 지연을 없앤다. userOffset 은 사용자가 더 미세 조정하는 값.
@@ -914,7 +940,7 @@ function frame(now){
     if (audioReady && !audioEl.paused) t = audioEl.currentTime * 1000;
     else t += dt;
     // 지나간 노트를 가리키는 포인터만 앞으로 민다 (매 프레임 전체를 훑지 않는다)
-    if (t < prev) soundIdx = firstAtOrAfter(t);
+    if (t < prev){ soundIdx = firstAtOrAfter(t); slideErased = {}; }
     while (soundIdx < NOTES.length && NOTES[soundIdx].timeMs <= t){
       var sn = NOTES[soundIdx];
       if (sn.timeMs > prev) click(sn.isBreak ? 'break' : sn.type === 'slide' ? 'slide' : 'tap');
@@ -965,6 +991,31 @@ function drawNotes(){
     for (var e = 0; e < grp.length - 1; e++) eachArc(grp[e].pos, grp[e + 1].pos, st.rf, 0.85);
   }
 
+  // 간섭용: 지금 이동 중인 모든 슬라이드 별의 현재 위치를 미리 모은다.
+  var interfStars = [];
+  if (interfere && guide){
+    for (var xi = lo; xi < hi; xi++){
+      var xn = NOTES[xi];
+      if (xn.type !== 'slide') continue;
+      for (var xk = 0; xk < xn.slides.length; xk++){
+        var xb = xn.slides[xk];
+        var xm0 = xn.timeMs + xb.delayMs, xm1 = xm0 + xb.durationMs;
+        if (t < xm0 || t > xm1) continue;
+        var xpc = cachedPath(xn, xk);
+        var xsp = slidePos(xpc, xb, t - xm0);
+        interfStars.push({ x: xsp.x, y: xsp.y, ni: xi });
+        if (xpc.isWifi){
+          var xpf = clamp01((t - xm0) / (xb.durationMs || 1));
+          for (var xf = 0; xf < xpc.fans.length; xf++){
+            var xfp = xpc.fans[xf], xft = xfp.len[xfp.len.length - 1];
+            var xq = atLen(xfp.pts, xfp.len, xft * xpf);
+            interfStars.push({ x: xq.x, y: xq.y, ni: xi });
+          }
+        }
+      }
+    }
+  }
+
   // 3) 슬라이드 궤적 — 별이 닿기 한참 전부터 옅게 떠오르고, 착지 직전 또렷해진다
   for (i = hi - 1; i >= lo; i--){
     n = NOTES[i];
@@ -982,8 +1033,24 @@ function drawNotes(){
       else alpha = 0.55 * Math.min(1, (t - fadeStart) / SLIDE_FADE_MS);
       var acol = b.isBreak ? C_ARROW_BREAK : n.slideEach ? C_EACH : C_ARROW;
       var total = pc.len[pc.len.length - 1] || 1;
-      if (pc.isWifi) wifiBars(pc, passed / total, acol, alpha);
-      else slideArrows(pc, passed, acol, alpha);
+      // 다른 별이 이 궤적 위를 지나면 그 지점까지(0~교차점) 함께 지운다. 앞에서부터
+      // 지우므로(prefix) "앞 구역이 안 지워지면 뒤도 안 지워짐" 이 저절로 지켜지고,
+      // 화살표 하나를 건너뛰어도 그 사이가 메워진다(한 칸 보정). 한 번 지워지면
+      // 되살아나지 않도록 슬라이드별 최대 지움 길이를 끈끈하게 유지한다.
+      var erased = passed;
+      if (interfere && interfStars.length){
+        var ekey = n.__idx + ':' + k;
+        var eLen = slideErased[ekey] || 0;
+        for (var ei = 0; ei < interfStars.length; ei++){
+          if (interfStars[ei].ni === i) continue;    // 자기 별은 passed 로 이미 처리
+          var np = nearestOnPath(pc, interfStars[ei].x, interfStars[ei].y);
+          if (np.dist2 <= INTERF_R * INTERF_R && np.len > eLen) eLen = np.len;
+        }
+        slideErased[ekey] = eLen;
+        if (eLen > erased) erased = eLen;
+      }
+      if (pc.isWifi) wifiBars(pc, erased / total, acol, alpha);
+      else slideArrows(pc, erased, acol, alpha);
     }
   }
 
@@ -1151,6 +1218,7 @@ function seekTo(clientX){
   var frac = (clientX - r.left) / r.width;
   t = Math.max(T0, Math.min(END, T0 + frac * (END - T0)));
   soundIdx = firstAtOrAfter(t);
+  slideErased = {};
   if (audioReady) audioEl.currentTime = Math.max(0, t/1000);
 }
 sk.onpointerdown = function(e){ seekTo(e.clientX); sk.setPointerCapture(e.pointerId); sk.onpointermove = function(m){ seekTo(m.clientX); }; };
@@ -1173,6 +1241,7 @@ function toggle(el, get, set){
 }
 toggle(document.getElementById('tSound'), function(){ return sound; }, function(v){ sound = v; });
 toggle(document.getElementById('tGuide'), function(){ return guide; }, function(v){ guide = v; });
+toggle(document.getElementById('tInterf'), function(){ return interfere; }, function(v){ interfere = v; slideErased = {}; });
 toggle(document.getElementById('tMirror'), function(){ return mirror; }, function(v){ mirror = v; cache = {}; });
 
 document.getElementById('audio').onchange = function(e){
@@ -1193,7 +1262,7 @@ document.addEventListener('keydown', function(e){
   if (e.target && e.target.tagName === 'INPUT') return;
   if (e.code === 'Space'){ e.preventDefault(); playing ? pause() : play(); }
   else if (e.code === 'ArrowRight'){ t = Math.min(END, t + measureMs); if (audioReady) audioEl.currentTime = Math.max(0, t/1000); }
-  else if (e.code === 'ArrowLeft'){ t = Math.max(T0, t - measureMs); if (audioReady) audioEl.currentTime = Math.max(0, t/1000); }
+  else if (e.code === 'ArrowLeft'){ t = Math.max(T0, t - measureMs); slideErased = {}; if (audioReady) audioEl.currentTime = Math.max(0, t/1000); }
 });
 
 requestAnimationFrame(frame);

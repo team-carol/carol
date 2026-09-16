@@ -294,13 +294,14 @@ export function startWebServer(port: number): void {
       const startMs = clamp(num("start", 0) * 1000, 0, maxStart);
       const mirror = url.searchParams.get("mirror") === "1";
       const guide = url.searchParams.get("guide") !== "0";
+      const interfere = url.searchParams.get("interfere") !== "0";
 
       gifInFlight++;
       try {
         const gif = await renderChartGifAsync(
           { id: row.id, title: row.title, artist: row.artist, designer: row.designer,
             level: row.level, difficulty: row.difficulty, chart },
-          { startMs, durationMs, size, fps, speed, mirror, guide },
+          { startMs, durationMs, size, fps, speed, mirror, guide, interfere },
         );
         const safe = (row.title || "chart").replace(/[^\w.-]+/g, "_").slice(0, 40) || "chart";
         res.writeHead(200, {

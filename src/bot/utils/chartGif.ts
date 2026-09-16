@@ -21,6 +21,8 @@ export interface GifOptions {
   mirror?: boolean;
   /** 슬라이드 가이드 표시. 생략 시 렌더러 기본값(켜짐). */
   guide?: boolean;
+  /** 슬라이드 간섭. 생략 시 렌더러 기본값(켜짐). */
+  interfere?: boolean;
 }
 
 export const GIF_DEFAULTS: Omit<GifOptions, "startMs"> = {
@@ -101,6 +103,7 @@ export function renderChartGif(
   sandbox.speedIdx = opts.speed;
   if (opts.mirror !== undefined) sandbox.mirror = opts.mirror;
   if (opts.guide !== undefined) sandbox.guide = opts.guide;
+  if (opts.interfere !== undefined) sandbox.interfere = opts.interfere;
 
   const frames = Math.max(1, Math.round(opts.durationMs / 1000 * opts.fps));
   const delay = Math.round(1000 / opts.fps);
