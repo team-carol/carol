@@ -877,10 +877,24 @@ function firstAtOrAfter(v){
 }
 
 var soundIdx = 0;
-var actx = null, audioEl = null, audioReady = false;
+var actx = null, audioEl = null, audioReady = false, audioWarm = false;
+// 오디오 컨텍스트를 준비한다. 처음엔 거의 안 들리는 톤을 한 번 흘려 출력
+// 파이프라인을 깨워, 첫 가이드음이 느리게 나오는 콜드 스타트를 없앤다.
+// 반드시 재생 버튼 같은 사용자 제스처에서 먼저 부른다.
+function ensureAudio(){
+  if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+  if (actx.state === 'suspended') actx.resume();
+  if (!audioWarm){
+    var wg = actx.createGain(); wg.gain.value = 0.0001;
+    var wo = actx.createOscillator(); wo.connect(wg); wg.connect(actx.destination);
+    wo.start(); wo.stop(actx.currentTime + 0.03);
+    audioWarm = true;
+  }
+  return actx;
+}
 function click(kind){
   if (!sound) return;
-  if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+  ensureAudio();
   var o = actx.createOscillator(), g = actx.createGain();
   o.frequency.value = kind === 'break' ? 1500 : kind === 'slide' ? 720 : 1050;
   o.type = 'square';
@@ -1121,7 +1135,8 @@ function paintBar(){
 }
 function play(){
   playing = true; last = performance.now(); ppEl.textContent = '❚❚';
-  if (actx && actx.state === 'suspended') actx.resume();
+  // 사용자 제스처 시점에 오디오를 미리 깨운다(첫 가이드음 지연 방지).
+  if (sound) ensureAudio();
   if (audioReady){ audioEl.currentTime = Math.max(0, t/1000); audioEl.playbackRate = rate; audioEl.play(); }
 }
 function pause(){

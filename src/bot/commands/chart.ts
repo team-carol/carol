@@ -85,6 +85,9 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
         await interaction.editReply({ content: msg("chart.emptyChart") });
         return;
       }
+      // mai-notes 본문은 헤더가 없어 파서 키(key)가 0(미상)이지만, 메타데이터에
+      // 실제 난이도가 있다. 표시·저장에는 그 실제 난이도를 쓴다.
+      const diff = found.difficulty || key;
       let id = found.storedId;
       if (!id) {
         id = randomBytes(12).toString("base64url");
@@ -92,12 +95,12 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
           id, ownerId: "", source: "registry",
           title: found.title.slice(0, 200), artist: found.artist.slice(0, 200),
           designer: found.designer.slice(0, 200), level: found.level.slice(0, 20),
-          difficulty: key, maidata: found.maidata, chartJson: JSON.stringify(chart),
+          difficulty: diff, maidata: found.maidata, chartJson: JSON.stringify(chart),
         });
       }
       await reply(interaction, {
         id, title: found.title, artist: found.artist,
-        designer: found.designer, level: found.level, diff: key, chart,
+        designer: found.designer, level: found.level, diff, chart,
         footer: found.attribution
           ? msg("chart.footerSource", { source: found.attribution })
           : msg("chart.footerRegistry"),
