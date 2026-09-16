@@ -9,6 +9,7 @@
 
 import type { Chart } from "../simai/types";
 import { RENDERER_JS } from "./chartRenderer";
+import { gifWorkerSource, GIF_CLIENT_JS } from "./chartGifClient";
 
 export interface ChartPlayerData {
   id: string;
@@ -30,49 +31,6 @@ const DIFF_COLOR: Record<number, string> = {
 function esc(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
-
-// GIF 내보내기 UI 동작. 렌더러가 노출하는 전역(speedIdx, mirror, guide, t)을 읽어
-// /chart/gif 로 요청하고, 받은 blob 을 내려받으면서 미리보기로도 보여준다.
-// 이 페이지는 아티팩트가 아니라 일반 웹페이지라 blob 다운로드가 정상 동작한다.
-// (백틱과 ${ 를 쓰지 말 것 — chartPlayerPage 의 템플릿 리터럴 안에 인라인된다.)
-const GIF_EXPORT_JS = [
-  "(function(){",
-  "  var mk = document.getElementById('gMake');",
-  "  var st = document.getElementById('gStatus');",
-  "  var pv = document.getElementById('gPreview');",
-  "  var img = document.getElementById('gImg');",
-  "  if(!mk) return;",
-  "  document.getElementById('gHere').onclick = function(){",
-  "    document.getElementById('gStart').value = (Math.max(0, t)/1000).toFixed(1);",
-  "  };",
-  "  var lastUrl = null;",
-  "  mk.onclick = function(){",
-  "    var start = parseFloat(document.getElementById('gStart').value) || 0;",
-  "    var dur = parseFloat(document.getElementById('gDur').value) || 6;",
-  "    var q = '?id=' + encodeURIComponent(DATA.id)",
-  "      + '&start=' + start + '&dur=' + dur + '&size=400'",
-  "      + '&speed=' + speedIdx + '&fps=15'",
-  "      + '&mirror=' + (mirror ? '1' : '0') + '&guide=' + (guide ? '1' : '0');",
-  "    mk.disabled = true;",
-  "    st.textContent = '만드는 중… (길이·크기에 따라 몇 초 걸립니다)';",
-  "    fetch('/chart/gif' + q).then(function(r){",
-  "      if(r.status === 429) throw new Error('서버가 잠시 바쁩니다. 잠시 후 다시 눌러주세요.');",
-  "      if(!r.ok) throw new Error('생성에 실패했습니다.');",
-  "      return r.blob();",
-  "    }).then(function(b){",
-  "      if(lastUrl) URL.revokeObjectURL(lastUrl);",
-  "      lastUrl = URL.createObjectURL(b);",
-  "      var a = document.createElement('a');",
-  "      a.href = lastUrl; a.download = (DATA.title || 'chart') + '.gif';",
-  "      document.body.appendChild(a); a.click(); a.remove();",
-  "      img.src = lastUrl; pv.style.display = 'block';",
-  "      st.textContent = '완료 · ' + (b.size/1048576).toFixed(1) + 'MB';",
-  "    }).catch(function(e){ st.textContent = e.message || '실패'; })",
-  "    .then(function(){ mk.disabled = false; });",
-  "  };",
-  "})();",
-].join("\n");
-
 export function chartPlayerPage(data: ChartPlayerData): string {
   const json = JSON.stringify(data).replace(/</g, "\\u003c").replace(/>/g, "\\u003e");
   const diffName = DIFF_LABEL[data.difficulty] ?? "";
@@ -185,7 +143,18 @@ canvas{width:100%;max-width:460px;aspect-ratio:1;touch-action:none;display:block
     </div>
     <div class="row">
       <label>길이</label>
-      <input type="number" id="gDur" min="1" max="20" step="0.5" value="6"><span class="unit">초 (최대 20) · 400px · 노트 속도·미러는 위 설정을 따릅니다</span>
+      <input type="number" id="gDur" min="1" max="30" step="0.5" value="6"><span class="unit">초 (최대 30)</span>
+    </div>
+    <div class="row">
+      <label>크기</label>
+      <select id="gSize">
+        <option value="300">300px</option>
+        <option value="400" selected>400px</option>
+        <option value="500">500px</option>
+        <option value="600">600px</option>
+        <option value="800">800px</option>
+      </select>
+      <span class="unit">노트 속도·미러는 위 설정을 따릅니다</span>
     </div>
     <div class="gifbar">
       <button class="btn" id="gMake" type="button">GIF 만들기</button>
@@ -217,7 +186,11 @@ canvas{width:100%;max-width:460px;aspect-ratio:1;touch-action:none;display:block
 <script>
 var DATA = ${json};
 ${RENDERER_JS}
-${GIF_EXPORT_JS}</script></body></html>`;
+// GIF 생성은 브라우저에서 한다. __RJS 는 렌더러 소스(워커에서 eval), GIF_WORKER_SRC 는
+// 워커 전체 소스(gifenc 미탑재 시 null → 서버 폴백). 둘 다 문자열이다.
+var __RJS = ${JSON.stringify(RENDERER_JS)};
+var GIF_WORKER_SRC = ${JSON.stringify(gifWorkerSource())};
+${GIF_CLIENT_JS}</script></body></html>`;
 }
 
 /** 링크가 죽었을 때(보관 기간 만료 등) 보여주는 안내 페이지. */
