@@ -154,7 +154,7 @@ canvas{width:100%;max-width:460px;aspect-ratio:1;touch-action:none;display:block
         <div class="rb-h" id="rbR"></div>
       </div>
     </div>
-    <div class="row"><label></label><span class="unit" id="rbInfo">0:00 ~ 0:06 · 6.0초 (드래그로 조정, 최대 30초)</span></div>
+    <div class="row"><label></label><span class="unit" id="rbInfo">0:00 ~ 0:06 · 6.0초 (드래그로 조정, 최대 60초)</span></div>
     <div class="row">
       <label>크기</label>
       <select id="gSize">
@@ -164,7 +164,14 @@ canvas{width:100%;max-width:460px;aspect-ratio:1;touch-action:none;display:block
         <option value="600">600px</option>
         <option value="800">800px</option>
       </select>
-      <span class="unit">노트 속도·미러는 위 설정을 따릅니다</span>
+      <label style="flex:0 0 auto;text-transform:none;letter-spacing:0">FPS</label>
+      <select id="gFps">
+        <option value="15" selected>15</option>
+        <option value="20">20</option>
+        <option value="25">25</option>
+        <option value="30">30</option>
+      </select>
+      <span class="unit">노트 속도·미러는 위 설정</span>
     </div>
     <div class="gifbar">
       <button class="btn" id="gMake" type="button">GIF 만들기</button>

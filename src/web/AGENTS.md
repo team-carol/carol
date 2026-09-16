@@ -46,7 +46,7 @@ src/web/
 | `GET /bookmarklet.js?code=TOKEN` | Serves generated sync JS with enabled presets/extras. |
 | `GET /avatar`, `GET /jacket` | Stored/fetched PNG assets. |
 | `GET /chart?id=TOKEN` | simai 채보 플레이어. 토큰을 아는 사람만 열 수 있고 로그인은 요구하지 않는다. |
-| `GET /chart/gif?id=TOKEN&start&dur&size&fps&speed&mirror&guide` | **폴백 전용** GIF 생성. OffscreenCanvas/Worker 가 없는 브라우저(구형 Safari 등)만 여기로 온다. 서버에서 옵션 클램프(길이 ≤30초, 크기 ≤800px), 동시 실행 `GIF_MAX_CONCURRENT`(2) 초과 시 429. `/chart` 와 `loadChart()` 공유. |
+| `GET /chart/gif?id=TOKEN&start&dur&size&fps&speed&mirror&guide` | **폴백 전용** GIF 생성. OffscreenCanvas/Worker 가 없는 브라우저(구형 Safari 등)만 여기로 온다. 서버에서 옵션 클램프(길이 ≤60초, 크기 ≤800px), 동시 실행 `GIF_MAX_CONCURRENT`(2) 초과 시 429. `/chart` 와 `loadChart()` 공유. |
 
 웹 플레이어의 GIF 생성은 기본적으로 **브라우저에서** 한다(`chartGifClient.ts`): 같은 렌더러(`chartRenderer.ts`)를 Web Worker 안 OffscreenCanvas 에 올리고 gifenc(브라우저 dist 를 워커에 인라인)로 인코딩한다 → 서버 CPU 0. 렌더러는 `__RJS`(문자열)로 워커에 넘겨 eval 하고, DATA/opts 는 postMessage 로 준다. Discord 미리보기(`utils/chartGif.ts`)는 별개로 여전히 서버에서 만든다.
 | `GET /privacy`, `GET /terms` | Static legal pages. |

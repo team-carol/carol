@@ -284,9 +284,9 @@ export function startWebServer(port: number): void {
       }
 
       const { row, chart } = loaded;
-      // 길이 1~30초, 크기 200~800px, 10~30fps, 노트 속도 1~12. 시작은 곡 안으로.
+      // 길이 1~60초, 크기 200~800px, 10~30fps, 노트 속도 1~12. 시작은 곡 안으로.
       // 클라이언트(OffscreenCanvas)가 안 되는 브라우저를 위한 폴백 경로다.
-      const durationMs = clamp(num("dur", 6), 1, 30) * 1000;
+      const durationMs = clamp(num("dur", 6), 1, 60) * 1000;
       const size = Math.round(clamp(num("size", 400), 200, 800));
       const fps = Math.round(clamp(num("fps", 15), 10, 30));
       const speed = clamp(num("speed", 6.5), 1, 12);
