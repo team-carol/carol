@@ -10,6 +10,7 @@
 import { DIFFICULTY_NUMBER, type Manifest } from "./types";
 
 const MANIFEST_URL = "https://mai-notes.com/data/manifest.json";
+const CHART_URL = (id: string) => `https://mai-notes.com/data/charts/${id}.txt`;
 const TIMEOUT_MS = 30_000;
 /** 응답이 비정상적으로 크면 파싱하지 않는다. 실측 약 3.9MB. */
 const MAX_BYTES = 32 * 1024 * 1024;
@@ -93,4 +94,21 @@ export function flatten(m: Manifest): { songs: FlatSong[]; charts: FlatChart[] }
     });
   }
   return { songs, charts };
+}
+
+/** 채보 UUID 하나의 simai 본문을 받아온다. 헤더 없이 inote 본문만 온다. */
+export async function fetchChartBody(id: string): Promise<string> {
+  if (!/^[0-9a-f-]{36}$/i.test(id)) throw new Error("invalid chart id");
+  const res = await fetch(CHART_URL(id), {
+    headers: { "User-Agent": userAgent(), "Accept": "text/plain" },
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+  });
+  if (res.status === 404) throw new Error("chart body not found (404)");
+  if (!res.ok) throw new Error(`chart body HTTP ${res.status}`);
+  const len = Number(res.headers.get("content-length") ?? 0);
+  if (len > MAX_BYTES) throw new Error(`chart body too large: ${len} bytes`);
+  const text = await res.text();
+  if (text.length > MAX_BYTES) throw new Error(`chart body too large: ${text.length} bytes`);
+  if (!text.trim()) throw new Error("chart body empty");
+  return text;
 }

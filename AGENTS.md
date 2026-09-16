@@ -43,8 +43,8 @@ carol/
 
 `src/mainotes/` 는 **메타데이터 인덱스 전용**이다. 곡 검색과 난이도 표시에만 쓰고, simai 본문은 가져오지 않는다.
 
-- 채보 본문이 있는 경로는 **찾지 않았다.** 찾으려면 사이트 내부 통신을 뒤져야 하는데 이용약관 제7조(해석·리버스 엔지니어링 금지)에 걸린다. 운영자에게 허락을 문의해 둔 상태이고, 답이 오기 전에는 하지 않는다.
-- 허락이 나오면 `src/mainotes/source.ts` 의 `load()` 만 채우면 된다. 받은 채보는 `simai_charts` 에 캐시해 다시 묻지 않는다.
+- 채보 본문은 `https://mai-notes.com/data/charts/<UUID>.txt`(공개 /data/ 경로)에서 받는다. **`config.mainotesFetchCharts` 가 켜졌을 때만**이며 커밋 기본값은 false 다 — 이용약관 제7조와 운영자 문의 답변 대기 때문. 지금은 테스트용으로만 로컬에서 켠다.
+- `load()` 는 받은 채보를 `simai_charts`(source='mainotes')에 캐시해 다시 받지 않는다. 본문은 헤더가 없어 제목·아티스트·난이도는 메모리 인덱스(manifest)에서 채운다.
 - 거절되면 `src/mainotes/` 삭제 + `registerChartSource(mainotesSource)` 한 줄 제거로 끝난다. 나머지 기능은 그대로 남는다.
 - 통신은 manifest.json 하루 1회 + ETag 조건부 + User-Agent 식별. 운영자가 요구한 조건이 "대량 통신 금지" 하나뿐이라 이 셋이 그 약속의 구현이다.
 | 미리보기 GIF | `src/bot/utils/chartGif.ts` | 같은 렌더러를 vm+napi-canvas 로 돌려 프레임을 뽑는다. |

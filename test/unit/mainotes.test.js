@@ -93,8 +93,10 @@ test("getChartById: 없는 id 는 null", () => {
 // ── 공급원 경계 ────────────────────────────────────────────────────────────
 // 허락을 받기 전까지 mai-notes 채보 본문은 절대 나오면 안 된다.
 
-test("mainotes 공급원: 데이터가 있어도 아직 no-permission 으로 막힌다", async () => {
+test("mainotes 공급원: 데이터가 있어도 기본값에서는 no-permission (fetch 플래그 off)", async () => {
   seed();
+  const { CONFIG } = require("../../dist/config");
+  CONFIG.mainotesFetchCharts = false;
   await assert.rejects(
     () => mainotesSource.load("c1"),
     (e) => e instanceof ChartUnavailableError && e.reason === "no-permission",
