@@ -1110,21 +1110,32 @@ function drawNotes(){
     }
     if (n.starless) continue;
     var delay = n.slides[0].delayMs;
+    // 등장→판정선 이동, 그리고 출발 대기 동안 별 탭이 회전한다(MaiNotes 의
+    // スライドローテーション 로직). 정규화 슬라이드 속도 r 로 회전율(rad/초)을 정하고
+    // (느리면 1회전/초, 빠르면 최대 7회전/초, 사이는 선형), 등장 후 경과 시간을 곱한다.
+    //   r = (경로길이 / 2R) * (30000 / (bpm * 지속시간))
+    var pc0 = cachedPath(n, 0);
+    var plen0 = pc0.len[pc0.len.length - 1] || 1;
+    var rNorm = (plen0 / (2 * R)) * (30000 / ((CHART.bpm || 120) * (n.slides[0].durationMs || 1)));
+    var revLo = 2 * Math.PI, revHi = 2 * Math.PI * 7;
+    var spinRate = rNorm <= 0.5 ? revLo : rNorm >= 1 ? revHi : revLo + (revHi - revLo) * ((rNorm - 0.5) / 0.5);
+    var elapsedSec = Math.max(0, (t - (n.timeMs - ap)) / 1000);   // 등장(판정시각-접근시간) 이후 경과
+    var starSpin = spinRate * elapsedSec;
     if (t < n.timeMs){
       st = fall(n.timeMs - t, ap);
       if (st){
         var sp = rayPt(n.pos, R * st.rf), ssz = NOTE_R * st.grow;
         if (n.isEx) exGlow(sp.x, sp.y, ssz);
         if (n.plainStar) noteDonut(sp.x, sp.y, ssz, scol);
-        else starNote(sp.x, sp.y, STAR_R * st.grow, scol, spin, n.starDouble);
+        else starNote(sp.x, sp.y, STAR_R * st.grow, scol, starSpin, n.starDouble);
         if (n.isBreak) breakSpark(sp.x, sp.y, ssz, spin);
       }
     } else if (t <= n.timeMs + delay){
-      // 착지 후 출발까지: 별이 제자리에서 0.5 → 1.5 배로 부풀며 기다린다
+      // 착지 후 출발까지: 별이 제자리에서 0.5 → 1.5 배로 부풀며 (계속 돌면서) 기다린다
       var f3 = delay > 0 ? (t - n.timeMs) / delay : 1;
       var bp4 = btn(n.pos), bsz = NOTE_R * (0.5 + f3);
       if (n.plainStar) noteDonut(bp4.x, bp4.y, NOTE_R, scol);
-      else starNote(bp4.x, bp4.y, STAR_R * (0.5 + f3) / 1.5, scol, spin, n.starDouble);
+      else starNote(bp4.x, bp4.y, STAR_R * (0.5 + f3) / 1.5, scol, starSpin, n.starDouble);
     }
     if (t >= n.timeMs && t - n.timeMs <= FLASH_MS){
       var sbp = btn(n.pos);
