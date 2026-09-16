@@ -44,6 +44,36 @@ export function densestStart(chart: Chart, windowMs: number): number {
   return Math.max(0, best - windowMs * 0.15);
 }
 
+/** 길이 windowMs 짜리 창에 들어가는 최대 노트 수. */
+function densestCount(chart: Chart, windowMs: number): number {
+  const notes = chart.notes;
+  let best = 0, lo = 0;
+  for (let hi = 0; hi < notes.length; hi++) {
+    while (notes[hi].timeMs - notes[lo].timeMs > windowMs) lo++;
+    const c = hi - lo + 1;
+    if (c > best) best = c;
+  }
+  return best;
+}
+
+/**
+ * 미리보기 구간을 고른다. 밀도 높은 구간이 얼마나 길게 이어지는지에 따라 클립
+ * 길이를 minMs~maxMs 로 유동 조절한다.
+ *   - 긴 창(max)이 짧은 창(min)보다 노트를 얼마나 더 담는지로 "밀집이 이어지는
+ *     정도"를 잰다. 균등하게 빽빽하면 노트 수가 창 길이에 비례해 늘어(→ max),
+ *     밀집이 min 안에서 끝나면 더 늘려도 노트가 안 늘어(→ min).
+ *   - 시작점은 정해진 길이의 가장 빽빽한 창(densestStart)으로 잡는다.
+ */
+export function densePreviewRange(chart: Chart, minMs: number, maxMs: number): { startMs: number; durationMs: number } {
+  if (chart.notes.length === 0 || maxMs <= minMs) return { startMs: 0, durationMs: minMs };
+  const nMin = densestCount(chart, minMs), nMax = densestCount(chart, maxMs);
+  const full = maxMs / minMs;               // 노트가 창 길이에 완전 비례할 때의 비율
+  const ratio = nMax / Math.max(1, nMin);   // 실제 비율 [1, full]
+  const f = Math.min(1, Math.max(0, (ratio - 1) / (full - 1)));
+  const durationMs = Math.round((minMs + (maxMs - minMs) * f) / 1000) * 1000;
+  return { startMs: densestStart(chart, durationMs), durationMs };
+}
+
 interface Sandbox {
   t: number;
   draw: () => void;

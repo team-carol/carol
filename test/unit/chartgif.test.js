@@ -35,3 +35,27 @@ test("GIF 기본값이 Discord 첨부 한도 안에서 잡혀 있다", () => {
   const frames = GIF_DEFAULTS.durationMs / 1000 * GIF_DEFAULTS.fps;
   assert.ok(frames * GIF_DEFAULTS.size * GIF_DEFAULTS.size < 3.2e7, "프레임×픽셀 예산 초과");
 });
+
+test("densePreviewRange: 밀도 높은 구간이 길면 길이도 길어진다(최대 20초)", () => {
+  const { densePreviewRange } = require("../../dist/bot/utils/chartGif");
+  // 30초 내내 16분음표로 빽빽 → 고밀도 구간이 길다 → 20초(최대)에 수렴
+  let body = "(120){16}";
+  for (let i = 0; i < 30 * 8; i++) body += (i % 8 + 1) + ",";  // 30초분(120bpm, 16분=0.125s → 8/박... 넉넉히)
+  const c = chartOf(body);
+  const r = densePreviewRange(c, 12000, 20000);
+  assert.equal(r.durationMs, 20000, "길게 이어지면 최대 20초");
+});
+
+test("densePreviewRange: 짧은 밀집 뒤 성긴 구간이면 최소 12초", () => {
+  const { densePreviewRange } = require("../../dist/bot/utils/chartGif");
+  // 앞 2초만 빽빽, 이후 길게 성김
+  let body = "(120){16}1,2,3,4,5,6,7,8,1,2,3,4,5,6,7,8,{1}1,,,,,,,,,,,,,,,,";
+  const c = chartOf(body);
+  const r = densePreviewRange(c, 12000, 20000);
+  assert.ok(r.durationMs <= 13000, "밀집 구간이 짧으면 최소 12초 근처: " + r.durationMs);
+});
+
+test("densePreviewRange: 빈 채보는 최소 길이", () => {
+  const { densePreviewRange } = require("../../dist/bot/utils/chartGif");
+  assert.deepEqual(densePreviewRange({ notes: [], durationMs: 0 }, 12000, 20000), { startMs: 0, durationMs: 12000 });
+});
