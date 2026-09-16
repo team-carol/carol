@@ -113,9 +113,6 @@ export const GIF_CLIENT_JS = [
   "  var pv = document.getElementById('gPreview');",
   "  var img = document.getElementById('gImg');",
   "  if(!mk) return;",
-  "  document.getElementById('gHere').onclick = function(){",
-  "    document.getElementById('gStart').value = (Math.max(0, t) / 1000).toFixed(1);",
-  "  };",
   "  var canClient = typeof OffscreenCanvas !== 'undefined' && typeof Worker !== 'undefined'",
   "    && typeof GIF_WORKER_SRC === 'string' && GIF_WORKER_SRC;",
   "  var worker = null, workerUrl = null;",
@@ -169,5 +166,48 @@ export const GIF_CLIENT_JS = [
   "      }).then(finish).catch(function(e){ fail(e.message); });",
   "    }",
   "  };",
+  "})();",
+].join("\n");
+
+/**
+ * GIF 구간 선택 바 컨트롤러. 영상 편집기처럼 재생 구간 위에서 양쪽 핸들을 끌어
+ * 시작·길이를 정한다. 값은 숨은 입력 #gStart/#gDur(초)에 써서 GIF_CLIENT_JS 가
+ * 그대로 읽는다. 전역 t(현재 재생 위치)와 DATA(곡 길이)를 읽는다.
+ * (백틱과 ${ 를 쓰지 말 것 — chartPlayerPage 템플릿 안에 인라인된다.)
+ */
+export const GIF_RANGE_JS = [
+  "(function(){",
+  "  var rb = document.getElementById('rb'); if(!rb) return;",
+  "  var sel = document.getElementById('rbSel'), hl = document.getElementById('rbL'), hr = document.getElementById('rbR');",
+  "  var play = document.getElementById('rbPlay'), info = document.getElementById('rbInfo');",
+  "  var gS = document.getElementById('gStart'), gD = document.getElementById('gDur');",
+  "  var dur = (DATA.chart && DATA.chart.durationMs) || 1;",
+  "  var MAXLEN = Math.min(30000, dur), MINLEN = Math.min(1000, dur);",
+  "  var startMs = 0, lenMs = Math.min(6000, MAXLEN);",
+  "  function fmt(ms){ var s = Math.max(0, Math.round(ms/1000)); return Math.floor(s/60)+':'+String(s%60).padStart(2,'0'); }",
+  "  function W(){ return rb.clientWidth || 1; }",
+  "  function clampAll(){ if(lenMs>MAXLEN)lenMs=MAXLEN; if(lenMs<MINLEN)lenMs=MINLEN; if(startMs<0)startMs=0; if(startMs+lenMs>dur)startMs=dur-lenMs; if(startMs<0)startMs=0; }",
+  "  function render(){ var w=W(); var x0=startMs/dur*w, x1=(startMs+lenMs)/dur*w;",
+  "    sel.style.left=x0+'px'; sel.style.width=Math.max(0,x1-x0)+'px'; hl.style.left=x0+'px'; hr.style.left=x1+'px';",
+  "    gS.value=(startMs/1000).toFixed(2); gD.value=(lenMs/1000).toFixed(2);",
+  "    info.textContent = fmt(startMs)+' ~ '+fmt(startMs+lenMs)+' · '+(lenMs/1000).toFixed(1)+'초'; }",
+  "  function posMs(clientX){ var r=rb.getBoundingClientRect(); return Math.max(0, Math.min(dur, (clientX-r.left)/r.width*dur)); }",
+  "  var drag = null;",
+  "  function start(e, which){ drag={which:which, x:e.clientX, s:startMs, l:lenMs}; try{rb.setPointerCapture(e.pointerId);}catch(_){} e.preventDefault(); e.stopPropagation(); }",
+  "  hl.addEventListener('pointerdown', function(e){ start(e,'L'); });",
+  "  hr.addEventListener('pointerdown', function(e){ start(e,'R'); });",
+  "  rb.addEventListener('pointerdown', function(e){ var m=posMs(e.clientX);",
+  "    if(!(m>=startMs && m<=startMs+lenMs)){ startMs=m-lenMs/2; clampAll(); render(); } start(e,'M'); });",
+  "  rb.addEventListener('pointermove', function(e){ if(!drag) return; var m=posMs(e.clientX);",
+  "    if(drag.which==='L'){ var end=drag.s+drag.l; startMs=Math.min(m, end-MINLEN); lenMs=end-startMs; }",
+  "    else if(drag.which==='R'){ lenMs=Math.max(MINLEN, m-startMs); }",
+  "    else { startMs = drag.s + (e.clientX-drag.x)/W()*dur; }",
+  "    clampAll(); render(); });",
+  "  function end(e){ drag=null; try{rb.releasePointerCapture(e.pointerId);}catch(_){} }",
+  "  rb.addEventListener('pointerup', end); rb.addEventListener('pointercancel', end);",
+  "  function tick(){ var pt = (typeof t !== 'undefined') ? Math.max(0, Math.min(dur, t)) : 0;",
+  "    play.style.left = (pt/dur*W())+'px'; requestAnimationFrame(tick); }",
+  "  window.addEventListener('resize', render);",
+  "  clampAll(); render(); requestAnimationFrame(tick);",
   "})();",
 ].join("\n");

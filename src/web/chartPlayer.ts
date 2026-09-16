@@ -9,7 +9,7 @@
 
 import type { Chart } from "../simai/types";
 import { RENDERER_JS } from "./chartRenderer";
-import { gifWorkerSource, GIF_CLIENT_JS } from "./chartGifClient";
+import { gifWorkerSource, GIF_CLIENT_JS, GIF_RANGE_JS } from "./chartGifClient";
 
 export interface ChartPlayerData {
   id: string;
@@ -95,6 +95,12 @@ canvas{width:100%;max-width:460px;aspect-ratio:1;touch-action:none;display:block
 .gpreview{margin-top:14px;display:none}
 .gpreview img{width:100%;max-width:320px;border-radius:12px;border:1px solid #2a2a2a;display:block}
 .gpreview .hint{font-size:11px;color:#5f5f5f;margin-top:6px}
+.rangebar{position:relative;flex:1;height:34px;min-width:0;cursor:pointer;touch-action:none;user-select:none}
+.rb-track{position:absolute;top:14px;left:0;right:0;height:6px;border-radius:3px;background:#2a2a2a}
+.rb-sel{position:absolute;top:14px;height:6px;background:#9333ea;border-radius:3px}
+.rb-play{position:absolute;top:7px;width:2px;height:20px;background:#fff;opacity:.55;pointer-events:none}
+.rb-h{position:absolute;top:5px;width:12px;height:24px;margin-left:-6px;background:#c084fc;border:1px solid #d8b4fe;border-radius:4px;cursor:ew-resize;box-shadow:0 1px 3px rgba(0,0,0,.45)}
+.rb-h:hover{background:#d8b4fe}
 </style></head><body><div class="wrap">
 <div class="nav"><a href="/">← carolbot</a></div>
 <div class="head">
@@ -136,15 +142,19 @@ canvas{width:100%;max-width:460px;aspect-ratio:1;touch-action:none;display:block
 <div class="card">
   <h2>GIF 내보내기</h2>
   <div class="ctl">
+    <input type="hidden" id="gStart" value="0">
+    <input type="hidden" id="gDur" value="6">
     <div class="row">
-      <label>시작</label>
-      <input type="number" id="gStart" min="0" step="0.5" value="0"><span class="unit">초</span>
-      <button class="chip" id="gHere" type="button">현재 위치</button>
+      <label>구간</label>
+      <div class="rangebar" id="rb">
+        <div class="rb-track"></div>
+        <div class="rb-sel" id="rbSel"></div>
+        <div class="rb-play" id="rbPlay"></div>
+        <div class="rb-h" id="rbL"></div>
+        <div class="rb-h" id="rbR"></div>
+      </div>
     </div>
-    <div class="row">
-      <label>길이</label>
-      <input type="number" id="gDur" min="1" max="30" step="0.5" value="6"><span class="unit">초 (최대 30)</span>
-    </div>
+    <div class="row"><label></label><span class="unit" id="rbInfo">0:00 ~ 0:06 · 6.0초 (드래그로 조정, 최대 30초)</span></div>
     <div class="row">
       <label>크기</label>
       <select id="gSize">
@@ -190,6 +200,7 @@ ${RENDERER_JS}
 // 워커 전체 소스(gifenc 미탑재 시 null → 서버 폴백). 둘 다 문자열이다.
 var __RJS = ${JSON.stringify(RENDERER_JS)};
 var GIF_WORKER_SRC = ${JSON.stringify(gifWorkerSource())};
+${GIF_RANGE_JS}
 ${GIF_CLIENT_JS}</script></body></html>`;
 }
 
