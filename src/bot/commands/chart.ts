@@ -35,7 +35,7 @@ export const data = new SlashCommandBuilder()
     o.setName("파일").setDescription("simai maidata.txt").setRequired(false),
   )
   .addIntegerOption((o) =>
-    o.setName("난이도").setDescription("생략 시 파일에 있는 가장 높은 난이도").setRequired(false)
+    o.setName("난이도").setDescription("파일 업로드 시. 생략하면 가장 높은 난이도 (곡명 검색에는 영향 없음)").setRequired(false)
       .addChoices(...Object.entries(DIFF_LABEL).map(([v, name]) => ({ name, value: Number(v) }))),
   )
   .addNumberOption((o) =>
