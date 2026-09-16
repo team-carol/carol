@@ -1038,15 +1038,20 @@ function drawNotes(){
       // 화살표 하나를 건너뛰어도 그 사이가 메워진다(한 칸 보정). 한 번 지워지면
       // 되살아나지 않도록 슬라이드별 최대 지움 길이를 끈끈하게 유지한다.
       var erased = passed;
-      if (interfere && interfStars.length){
+      if (interfere){
         var ekey = n.__idx + ':' + k;
         var eLen = slideErased[ekey] || 0;
-        for (var ei = 0; ei < interfStars.length; ei++){
-          if (interfStars[ei].ni === i) continue;    // 자기 별은 passed 로 이미 처리
-          var np = nearestOnPath(pc, interfStars[ei].x, interfStars[ei].y);
-          if (np.dist2 <= INTERF_R * INTERF_R && np.len > eLen) eLen = np.len;
+        // 간섭 삭제는 이미 별이 출발한 슬라이드에만 쌓는다. 아직 안 뜬 가이드
+        // 프리뷰까지 지우면, 활성 별이 없는 프레임에 되살아나 깜빡인다.
+        if (t >= s0 && interfStars.length){
+          for (var ei = 0; ei < interfStars.length; ei++){
+            if (interfStars[ei].ni === i) continue;    // 자기 별은 passed 로 이미 처리
+            var np = nearestOnPath(pc, interfStars[ei].x, interfStars[ei].y);
+            if (np.dist2 <= INTERF_R * INTERF_R && np.len > eLen) eLen = np.len;
+          }
+          slideErased[ekey] = eLen;
         }
-        slideErased[ekey] = eLen;
+        // sticky: 활성 별이 없는 프레임에도 유지해 되살아나지 않게 한다.
         if (eLen > erased) erased = eLen;
       }
       if (pc.isWifi) wifiBars(pc, erased / total, acol, alpha);
