@@ -831,7 +831,10 @@ var END = CHART.durationMs + 1500;
 var FIRST_MS = NOTES.length ? NOTES[0].timeMs : 0;
 var MEASURE_MS = 4 * 60000 / (CHART.bpm || 120);
 var LEADIN = Math.max(0, MEASURE_MS - FIRST_MS);
-var t = -LEADIN, playing = false, last = 0;
+// 타임라인 시작점. 리드인이 있으면 음수다. seek/진행바/화살표 모두 이 값을
+// 왼쪽 끝으로 삼아, 맨 앞으로 돌려도 리드인이 유지된다.
+var T0 = -LEADIN;
+var t = T0, playing = false, last = 0;
 var rate = 1, speedIdx = 7.5, sound = true, guide = true;
 // rAF 의 now 는 "지금 합성 중인 프레임" 시각이고 그 내용은 다음 vsync 에 나온다.
 // 그래서 t 기준으로 그리면 화면에는 늘 한 프레임 늦게 보인다. 실측한 프레임
@@ -1113,7 +1116,7 @@ function fmt(ms){
   return Math.floor(s/60) + ':' + String(s%60).padStart(2,'0');
 }
 function paintBar(){
-  fillEl.style.width = (Math.max(0, Math.min(1, t/END)) * 100) + '%';
+  fillEl.style.width = (Math.max(0, Math.min(1, (t - T0) / (END - T0))) * 100) + '%';
   curEl.textContent = fmt(t);
 }
 function play(){
@@ -1130,9 +1133,10 @@ ppEl.onclick = function(){ playing ? pause() : play(); };
 var sk = document.getElementById('sk');
 function seekTo(clientX){
   var r = sk.getBoundingClientRect();
-  t = Math.max(0, Math.min(END, (clientX - r.left) / r.width * END));
+  var frac = (clientX - r.left) / r.width;
+  t = Math.max(T0, Math.min(END, T0 + frac * (END - T0)));
   soundIdx = firstAtOrAfter(t);
-  if (audioReady) audioEl.currentTime = t/1000;
+  if (audioReady) audioEl.currentTime = Math.max(0, t/1000);
 }
 sk.onpointerdown = function(e){ seekTo(e.clientX); sk.setPointerCapture(e.pointerId); sk.onpointermove = function(m){ seekTo(m.clientX); }; };
 sk.onpointerup = function(e){ sk.onpointermove = null; sk.releasePointerCapture(e.pointerId); };
@@ -1173,8 +1177,8 @@ var measureMs = 4 * 60000 / (CHART.bpm || 120);
 document.addEventListener('keydown', function(e){
   if (e.target && e.target.tagName === 'INPUT') return;
   if (e.code === 'Space'){ e.preventDefault(); playing ? pause() : play(); }
-  else if (e.code === 'ArrowRight'){ t = Math.min(END, t + measureMs); if (audioReady) audioEl.currentTime = t/1000; }
-  else if (e.code === 'ArrowLeft'){ t = Math.max(0, t - measureMs); if (audioReady) audioEl.currentTime = t/1000; }
+  else if (e.code === 'ArrowRight'){ t = Math.min(END, t + measureMs); if (audioReady) audioEl.currentTime = Math.max(0, t/1000); }
+  else if (e.code === 'ArrowLeft'){ t = Math.max(T0, t - measureMs); if (audioReady) audioEl.currentTime = Math.max(0, t/1000); }
 });
 
 requestAnimationFrame(frame);
