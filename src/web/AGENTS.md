@@ -46,6 +46,7 @@ src/web/
 | `GET /bookmarklet.js?code=TOKEN` | Serves generated sync JS with enabled presets/extras. |
 | `GET /avatar`, `GET /jacket` | Stored/fetched PNG assets. |
 | `GET /chart?id=TOKEN` | simai 채보 플레이어. 토큰을 아는 사람만 열 수 있고 로그인은 요구하지 않는다. |
+| `GET /chart/gif?id=TOKEN&start&dur&size&fps&speed&mirror&guide` | 구간·길이를 골라 GIF 를 내려받는다(`content-disposition: attachment`). Discord 미리보기와 같은 `renderChartGifAsync` 워커를 쓴다. 옵션은 서버에서 안전 범위로 클램프(길이 ≤20초, 크기 ≤600px). CPU 를 오래 먹어 동시 실행을 `GIF_MAX_CONCURRENT`(2)로 막고 초과 시 429. `/chart` 와 `loadChart()` 를 공유. |
 | `GET /privacy`, `GET /terms` | Static legal pages. |
 
 ## CONVENTIONS

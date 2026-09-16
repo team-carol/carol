@@ -17,6 +17,10 @@ export interface GifOptions {
   fps: number;
   /** 노트 속도(TapSpeed). 웹 플레이어 기본값과 맞춘다. */
   speed: number;
+  /** 좌우 반전. 생략 시 렌더러 기본값(꺼짐). */
+  mirror?: boolean;
+  /** 슬라이드 가이드 표시. 생략 시 렌더러 기본값(켜짐). */
+  guide?: boolean;
 }
 
 export const GIF_DEFAULTS: Omit<GifOptions, "startMs"> = {
@@ -95,6 +99,8 @@ export function renderChartGif(
   vm.createContext(sandbox);
   vm.runInContext(RENDERER_JS, sandbox);
   sandbox.speedIdx = opts.speed;
+  if (opts.mirror !== undefined) sandbox.mirror = opts.mirror;
+  if (opts.guide !== undefined) sandbox.guide = opts.guide;
 
   const frames = Math.max(1, Math.round(opts.durationMs / 1000 * opts.fps));
   const delay = Math.round(1000 / opts.fps);

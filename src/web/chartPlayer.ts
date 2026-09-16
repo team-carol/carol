@@ -31,6 +31,49 @@ function esc(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
+// GIF 내보내기 UI 동작. 렌더러가 노출하는 전역(speedIdx, mirror, guide, t)을 읽어
+// /chart/gif 로 요청하고, 받은 blob 을 내려받으면서 미리보기로도 보여준다.
+// 이 페이지는 아티팩트가 아니라 일반 웹페이지라 blob 다운로드가 정상 동작한다.
+// (백틱과 ${ 를 쓰지 말 것 — chartPlayerPage 의 템플릿 리터럴 안에 인라인된다.)
+const GIF_EXPORT_JS = [
+  "(function(){",
+  "  var mk = document.getElementById('gMake');",
+  "  var st = document.getElementById('gStatus');",
+  "  var pv = document.getElementById('gPreview');",
+  "  var img = document.getElementById('gImg');",
+  "  if(!mk) return;",
+  "  document.getElementById('gHere').onclick = function(){",
+  "    document.getElementById('gStart').value = (Math.max(0, t)/1000).toFixed(1);",
+  "  };",
+  "  var lastUrl = null;",
+  "  mk.onclick = function(){",
+  "    var start = parseFloat(document.getElementById('gStart').value) || 0;",
+  "    var dur = parseFloat(document.getElementById('gDur').value) || 6;",
+  "    var size = document.getElementById('gSize').value;",
+  "    var q = '?id=' + encodeURIComponent(DATA.id)",
+  "      + '&start=' + start + '&dur=' + dur + '&size=' + size",
+  "      + '&speed=' + speedIdx + '&fps=15'",
+  "      + '&mirror=' + (mirror ? '1' : '0') + '&guide=' + (guide ? '1' : '0');",
+  "    mk.disabled = true;",
+  "    st.textContent = '만드는 중… (길이·크기에 따라 몇 초 걸립니다)';",
+  "    fetch('/chart/gif' + q).then(function(r){",
+  "      if(r.status === 429) throw new Error('서버가 잠시 바쁩니다. 잠시 후 다시 눌러주세요.');",
+  "      if(!r.ok) throw new Error('생성에 실패했습니다.');",
+  "      return r.blob();",
+  "    }).then(function(b){",
+  "      if(lastUrl) URL.revokeObjectURL(lastUrl);",
+  "      lastUrl = URL.createObjectURL(b);",
+  "      var a = document.createElement('a');",
+  "      a.href = lastUrl; a.download = (DATA.title || 'chart') + '.gif';",
+  "      document.body.appendChild(a); a.click(); a.remove();",
+  "      img.src = lastUrl; pv.style.display = 'block';",
+  "      st.textContent = '완료 · ' + (b.size/1048576).toFixed(1) + 'MB';",
+  "    }).catch(function(e){ st.textContent = e.message || '실패'; })",
+  "    .then(function(){ mk.disabled = false; });",
+  "  };",
+  "})();",
+].join("\n");
+
 export function chartPlayerPage(data: ChartPlayerData): string {
   const json = JSON.stringify(data).replace(/</g, "\\u003c").replace(/>/g, "\\u003e");
   const diffName = DIFF_LABEL[data.difficulty] ?? "";
@@ -83,6 +126,18 @@ canvas{width:100%;max-width:460px;aspect-ratio:1;touch-action:none;display:block
 .file{font-size:12px;color:#777}
 .file input{display:none}
 .file span{color:#c084fc;cursor:pointer;text-decoration:underline}
+.card h2{font-size:13px;font-weight:600;color:#ccc;margin-bottom:14px;font-family:'JetBrains Mono',monospace;letter-spacing:.5px;text-transform:uppercase}
+.row input[type=number]{width:72px;background:#141414;border:1px solid #2a2a2a;border-radius:8px;color:#e9d5ff;padding:6px 9px;font-family:'JetBrains Mono',monospace;font-size:13px}
+.row select{background:#141414;border:1px solid #2a2a2a;border-radius:8px;color:#e9d5ff;padding:6px 9px;font-family:inherit;font-size:13px}
+.row .unit{color:#666;font-size:12px}
+.gifbar{display:flex;align-items:center;gap:12px;margin-top:4px;flex-wrap:wrap}
+.btn{border:0;border-radius:10px;background:#9333ea;color:#fff;padding:9px 16px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
+.btn:hover{background:#a855f7}
+.btn:disabled{background:#3a2a4a;color:#888;cursor:default}
+.gstatus{font-size:12px;color:#888;font-family:'JetBrains Mono',monospace}
+.gpreview{margin-top:14px;display:none}
+.gpreview img{width:100%;max-width:320px;border-radius:12px;border:1px solid #2a2a2a;display:block}
+.gpreview .hint{font-size:11px;color:#5f5f5f;margin-top:6px}
 </style></head><body><div class="wrap">
 <div class="nav"><a href="/">← carolbot</a></div>
 <div class="head">
@@ -122,6 +177,39 @@ canvas{width:100%;max-width:460px;aspect-ratio:1;touch-action:none;display:block
 </div>
 
 <div class="card">
+  <h2>GIF 내보내기</h2>
+  <div class="ctl">
+    <div class="row">
+      <label>시작</label>
+      <input type="number" id="gStart" min="0" step="0.5" value="0"><span class="unit">초</span>
+      <button class="chip" id="gHere" type="button">현재 위치</button>
+    </div>
+    <div class="row">
+      <label>길이</label>
+      <input type="number" id="gDur" min="1" max="20" step="0.5" value="6"><span class="unit">초 (최대 20)</span>
+    </div>
+    <div class="row">
+      <label>크기</label>
+      <select id="gSize">
+        <option value="300">300px</option>
+        <option value="400" selected>400px</option>
+        <option value="500">500px</option>
+        <option value="600">600px</option>
+      </select>
+      <span class="unit">노트 속도·미러는 위 설정을 따릅니다</span>
+    </div>
+    <div class="gifbar">
+      <button class="btn" id="gMake" type="button">GIF 만들기</button>
+      <span class="gstatus" id="gStatus"></span>
+    </div>
+    <div class="gpreview" id="gPreview">
+      <img id="gImg" alt="생성된 GIF">
+      <div class="hint">다운로드가 자동으로 시작됩니다. 이미지를 길게 눌러(우클릭) 저장할 수도 있습니다.</div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
   <div class="stats">
     <div class="stat"><div class="k">TAP</div><div class="v mono">${s.tap}</div></div>
     <div class="stat"><div class="k">HOLD</div><div class="v mono">${s.hold + s.touchHold}</div></div>
@@ -139,7 +227,8 @@ canvas{width:100%;max-width:460px;aspect-ratio:1;touch-action:none;display:block
 </div>
 <script>
 var DATA = ${json};
-${RENDERER_JS}</script></body></html>`;
+${RENDERER_JS}
+${GIF_EXPORT_JS}</script></body></html>`;
 }
 
 /** 링크가 죽었을 때(보관 기간 만료 등) 보여주는 안내 페이지. */

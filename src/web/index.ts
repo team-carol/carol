@@ -12,6 +12,8 @@ import { settingsPage } from "./settingsPage";
 import { aliasAdminPage } from "./aliasAdminPage";
 import { chartPlayerPage, chartNotFoundPage } from "./chartPlayer";
 import { parseMaidata } from "../simai/parse";
+import { renderChartGifAsync } from "../bot/utils/chartGif";
+import type { Chart } from "../simai/types";
 import { messagesAdminPage, type MessageRowVM } from "./messagesAdminPage";
 import {
   MESSAGE_KEYS, defaultOf, getOverride, rawText, placeholdersOf,
@@ -198,6 +200,26 @@ if(/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)) sw('MB');
 </body></html>`;
 }
 
+/** 저장된 채보를 재생/렌더에 쓸 Chart 로 만든다. /chart 와 /chart/gif 가 공유한다. */
+async function loadChart(id: string): Promise<{ row: NonNullable<Awaited<ReturnType<typeof getSimaiChart>>>; chart: Chart } | null> {
+  const row = /^[A-Za-z0-9_-]{8,64}$/.test(id) ? await getSimaiChart(id) : null;
+  if (!row) return null;
+  // 원본 maidata 가 있으면 열 때마다 다시 파싱한다. 저장된 chart_json 은 업로드
+  // 시점의 파서 결과라, 파서를 고쳐도 옛 채보에는 반영되지 않는다.
+  let chart: Chart | null = null;
+  if (row.maidata) {
+    const re = parseMaidata(row.maidata);
+    chart = (re.charts[row.difficulty] ?? Object.values(re.charts)[0] ?? null) as Chart | null;
+  }
+  if (!chart) chart = JSON.parse(row.chartJson) as Chart;
+  return { row, chart };
+}
+
+// GIF 렌더는 CPU 를 오래 먹는 워커라, 페이지에서 연타로 몰리면 서버가 죽는다.
+// 동시에 도는 수를 막는다. 넘치면 429 로 돌려보내 사용자가 다시 누르게 한다.
+let gifInFlight = 0;
+const GIF_MAX_CONCURRENT = 2;
+
 export function startWebServer(port: number): void {
   const server = http.createServer((req, res) => { void (async () => {
     res.setHeader("Access-Control-Allow-Origin", "*");
@@ -219,32 +241,81 @@ export function startWebServer(port: number): void {
     // 사람만 열 수 있다(비공개가 아니라 "추측 불가"). 로그인은 요구하지 않는다.
     if (req.method === "GET" && url.pathname === "/chart") {
       const id = (url.searchParams.get("id") || "").trim();
-      const row = /^[A-Za-z0-9_-]{8,64}$/.test(id) ? await getSimaiChart(id) : null;
-      if (!row) {
-        res.writeHead(404, { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" });
-        res.end(chartNotFoundPage("채보를 찾을 수 없습니다", "링크가 잘못됐거나, 업로드된 채보의 보관 기간이 지났습니다."));
-        return;
-      }
-      let chart;
+      let loaded;
       try {
-        // 원본 maidata 가 있으면 열 때마다 다시 파싱한다. 저장된 chart_json 은
-        // 업로드 시점의 파서 결과라, 파서를 고쳐도 옛 채보에는 반영되지 않는다.
-        chart = null;
-        if (row.maidata) {
-          const re = parseMaidata(row.maidata);
-          chart = re.charts[row.difficulty] ?? Object.values(re.charts)[0] ?? null;
-        }
-        if (!chart) chart = JSON.parse(row.chartJson);
+        loaded = await loadChart(id);
       } catch {
         res.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
         res.end("chart_corrupt");
         return;
       }
+      if (!loaded) {
+        res.writeHead(404, { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" });
+        res.end(chartNotFoundPage("채보를 찾을 수 없습니다", "링크가 잘못됐거나, 업로드된 채보의 보관 기간이 지났습니다."));
+        return;
+      }
+      const { row, chart } = loaded;
       res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "private, max-age=300" });
       res.end(chartPlayerPage({
         id: row.id, title: row.title, artist: row.artist, designer: row.designer,
         level: row.level, difficulty: row.difficulty, chart,
       }));
+      return;
+    }
+
+    // 플레이어 페이지에서 구간·길이를 골라 GIF 를 내려받는다. Discord 미리보기와
+    // 같은 렌더러/워커를 쓰고, 여기서는 옵션만 안전 범위로 자른다.
+    if (req.method === "GET" && url.pathname === "/chart/gif") {
+      const id = (url.searchParams.get("id") || "").trim();
+      const num = (k: string, def: number) => { const v = parseFloat(url.searchParams.get(k) || ""); return Number.isFinite(v) ? v : def; };
+      const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+
+      let loaded;
+      try {
+        loaded = await loadChart(id);
+      } catch {
+        res.writeHead(500, { "content-type": "text/plain; charset=utf-8" }); res.end("chart_corrupt"); return;
+      }
+      if (!loaded) { res.writeHead(404, { "content-type": "text/plain; charset=utf-8" }); res.end("not_found"); return; }
+
+      if (gifInFlight >= GIF_MAX_CONCURRENT) {
+        res.writeHead(429, { "content-type": "text/plain; charset=utf-8", "retry-after": "5" });
+        res.end("busy"); return;
+      }
+
+      const { row, chart } = loaded;
+      // 길이 1~20초, 크기 200~600px, 15~30fps, 노트 속도 1~12. 시작은 곡 안으로.
+      const durationMs = clamp(num("dur", 6), 1, 20) * 1000;
+      const size = Math.round(clamp(num("size", 400), 200, 600));
+      const fps = Math.round(clamp(num("fps", 15), 10, 30));
+      const speed = clamp(num("speed", 7.5), 1, 12);
+      const maxStart = Math.max(0, chart.durationMs - durationMs);
+      const startMs = clamp(num("start", 0) * 1000, 0, maxStart);
+      const mirror = url.searchParams.get("mirror") === "1";
+      const guide = url.searchParams.get("guide") !== "0";
+
+      gifInFlight++;
+      try {
+        const gif = await renderChartGifAsync(
+          { id: row.id, title: row.title, artist: row.artist, designer: row.designer,
+            level: row.level, difficulty: row.difficulty, chart },
+          { startMs, durationMs, size, fps, speed, mirror, guide },
+        );
+        const safe = (row.title || "chart").replace(/[^\w.-]+/g, "_").slice(0, 40) || "chart";
+        res.writeHead(200, {
+          "content-type": "image/gif",
+          "content-length": gif.length,
+          "content-disposition": `attachment; filename="${safe}.gif"`,
+          "cache-control": "no-store",
+        });
+        res.end(gif);
+      } catch (e) {
+        console.error("[chart/gif] 렌더 실패:", e);
+        res.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
+        res.end("render_failed");
+      } finally {
+        gifInFlight--;
+      }
       return;
     }
 
