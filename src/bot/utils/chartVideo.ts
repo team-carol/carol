@@ -49,16 +49,20 @@ function makeSandbox(ctx: unknown, data: unknown): Sandbox {
   return sandbox as unknown as Sandbox;
 }
 
-/** 가이드 비프를 오프라인 PCM(mono 16bit)으로 합성한다. click() 과 같은 주파수·감쇠. */
-function synthGuideWav(notes: ChartNote[], totalMs: number): Buffer {
-  const n = Math.ceil((totalMs / 1000 + 0.3) * SAMPLE_RATE);
+/**
+ * 가이드 비프를 오프라인 PCM(mono 16bit)으로 합성한다. click() 과 같은 주파수·감쇠.
+ * leadMs 만큼 앞에 무음을 두어 영상의 리드인(노트가 판정선에 붙지 않게 앞에서 시작)과
+ * 오디오를 맞춘다.
+ */
+function synthGuideWav(notes: ChartNote[], spanMs: number, leadMs: number): Buffer {
+  const n = Math.ceil((spanMs / 1000 + 0.3) * SAMPLE_RATE);
   const pcm = new Float32Array(n);
   const dur = 0.055;                       // click() 의 o.stop(+0.055)
   const durN = Math.floor(dur * SAMPLE_RATE);
   for (const note of notes) {
     let freq = note.isBreak ? 1500 : note.type === "slide" ? 720 : 1050;
     if (note.isEx) freq *= 1.5;   // EX 노트는 가이드음을 높게(웹 click() 과 동일)
-    const start = Math.floor((note.timeMs / 1000) * SAMPLE_RATE);
+    const start = Math.floor(((note.timeMs + leadMs) / 1000) * SAMPLE_RATE);
     for (let i = 0; i < durN; i++) {
       const idx = start + i;
       if (idx < 0 || idx >= n) break;
@@ -94,11 +98,6 @@ export async function renderChartVideo(data: ChartVideoData, outPath: string, on
   const { size, fps, speed } = VIDEO;
   const chart = data.chart;
   const totalMs = chart.durationMs;
-  const frames = Math.max(1, Math.round((totalMs / 1000) * fps));
-
-  // 가이드음 WAV 를 임시 파일로.
-  const wavPath = path.join(os.tmpdir(), `carol-guide-${data.id}-${Date.now()}.wav`);
-  fs.writeFileSync(wavPath, synthGuideWav(chart.notes, totalMs));
 
   const cv = createCanvas(size, size);
   const ctx = cv.getContext("2d");
@@ -109,6 +108,17 @@ export async function renderChartVideo(data: ChartVideoData, outPath: string, on
   sandbox.speedIdx = speed;
   sandbox.mirror = false;
   sandbox.sound = false;
+
+  // 렌더러가 계산한 리드인 시작점(T0, 0박 시작 채보는 음수). 그 지점부터 그려야
+  // 첫 노트가 판정선에 붙어 시작하지 않는다. 웹 플레이어와 동일.
+  const T0 = Number((sandbox as unknown as { T0?: number }).T0) || 0;
+  const leadMs = -T0;                          // >= 0
+  const spanMs = totalMs - T0;                  // 리드인 포함 전체 길이
+  const frames = Math.max(1, Math.round((spanMs / 1000) * fps));
+
+  // 가이드음 WAV 를 임시 파일로. 리드인만큼 뒤로 밀어 영상과 맞춘다.
+  const wavPath = path.join(os.tmpdir(), `carol-guide-${data.id}-${Date.now()}.wav`);
+  fs.writeFileSync(wavPath, synthGuideWav(chart.notes, spanMs, leadMs));
 
   const args = [
     "-hide_banner", "-loglevel", "error", "-y",
@@ -128,7 +138,7 @@ export async function renderChartVideo(data: ChartVideoData, outPath: string, on
 
   try {
     for (let i = 0; i < frames; i++) {
-      sandbox.t = (i / fps) * 1000;
+      sandbox.t = T0 + (i / fps) * 1000;
       sandbox.draw();
       // 배경(카드색)을 뒤에 깔아 필드 바깥 투명 영역을 채운다.
       ctx.save();
