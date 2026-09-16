@@ -1,4 +1,4 @@
-import { Client, Events, GatewayIntentBits, ChatInputCommandInteraction, AutocompleteInteraction, ButtonInteraction, REST, Routes, MessageFlags } from "discord.js";
+import { Client, Events, GatewayIntentBits, ChatInputCommandInteraction, AutocompleteInteraction, ButtonInteraction, REST, Routes, MessageFlags, AttachmentBuilder } from "discord.js";
 import { initEncryption } from "../crypto";
 import { startWebServer, setBaseUrl, setGuildCountProvider, getBaseUrl } from "../web";
 import { closeStorage, initializeStorage, loadUserSession, getCachedProfile, clearRatingCardCacheForInactive, getTranslateTitles, getPolicyAck, setPolicyAck, pruneSimaiCharts, getSimaiChart, getOrphanChartVideos, deleteChartVideo } from "../storage";
@@ -146,17 +146,35 @@ async function runSimaiChartGC(): Promise<void> {
 
 // 풀영상 버튼(chartvid:<id>): 캐시가 있으면 즉시 링크, 없으면 렌더 후 링크. 같은
 // 채보 동시 요청은 큐가 하나로 합쳐 렌더한다. 실행자에게만 보이는 응답.
+// Discord 기본 업로드 한도(모든 유저 25MB) 안쪽이면 파일로 첨부, 넘으면 링크.
+const VIDEO_ATTACH_LIMIT = 24 * 1024 * 1024;
+
+async function deliverChartVideo(i: ButtonInteraction, id: string, title: string, path: string, bytes: number): Promise<void> {
+  const url = `${getBaseUrl(PORT)}/chart/video?id=${id}`;
+  if (bytes <= VIDEO_ATTACH_LIMIT) {
+    const safe = (title || "chart").replace(/[^\w.-]+/g, "_").slice(0, 40) || "chart";
+    try {
+      await i.editReply({ content: msg("chart.videoAttached", { title: title || "채보" }),
+        files: [new AttachmentBuilder(path, { name: `${safe}.mp4` })] });
+      return;
+    } catch (e) {
+      // 첨부가 한도 등으로 실패하면 링크로 폴백.
+      console.error("[chartvid] 첨부 실패, 링크로 폴백:", e);
+    }
+  }
+  await i.editReply({ content: msg("chart.videoTooBig", { url }) });
+}
+
 async function handleChartVideoButton(i: ButtonInteraction): Promise<void> {
   const id = i.customId.slice("chartvid:".length);
-  await i.deferReply({ flags: MessageFlags.Ephemeral });
-  const base = getBaseUrl(PORT);
-  const linkMsg = () => base.startsWith("https://")
-    ? msg("chart.videoReady", { url: `${base}/chart/video?id=${id}` })
-    : msg("chart.videoNoBase");
+  // 모두가 보도록 공개로 응답한다(ephemeral 아님).
+  await i.deferReply();
 
-  if (await getReadyVideo(id)) { await i.editReply({ content: linkMsg() }); return; }
-
+  const ready = await getReadyVideo(id);
   const row = await getSimaiChart(id) as any;
+  const title = row?.title || "채보";
+  if (ready) { await deliverChartVideo(i, id, title, ready.path, ready.bytes); return; }
+
   if (!row) { await i.editReply({ content: msg("chart.unavailable.not-found") }); return; }
   let chart: Chart | null = null;
   try {
@@ -167,8 +185,8 @@ async function handleChartVideoButton(i: ButtonInteraction): Promise<void> {
   const depth = queueDepth();
   await i.editReply({ content: depth > 0 ? msg("chart.videoQueued", { n: depth }) : msg("chart.videoRendering") });
   try {
-    await requestVideo({ id: row.id, title: row.title, artist: row.artist, designer: row.designer, level: row.level, difficulty: row.difficulty, chart });
-    await i.editReply({ content: linkMsg() });
+    const out = await requestVideo({ id: row.id, title: row.title, artist: row.artist, designer: row.designer, level: row.level, difficulty: row.difficulty, chart });
+    await deliverChartVideo(i, id, title, out.path, out.bytes);
   } catch (e) {
     console.error("[chartvid] 렌더 실패:", e);
     await i.editReply({ content: msg("chart.videoFailed") });

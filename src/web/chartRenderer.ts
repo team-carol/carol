@@ -892,11 +892,13 @@ function ensureAudio(){
   }
   return actx;
 }
-function click(kind){
+function click(kind, isEx){
   if (!sound) return;
   ensureAudio();
   var o = actx.createOscillator(), g = actx.createGain();
-  o.frequency.value = kind === 'break' ? 1500 : kind === 'slide' ? 720 : 1050;
+  var f = kind === 'break' ? 1500 : kind === 'slide' ? 720 : 1050;
+  if (isEx) f *= 1.5;   // EX 노트는 가이드음을 한 옥타브 반 높게
+  o.frequency.value = f;
   o.type = 'square';
   g.gain.setValueAtTime(0.14, actx.currentTime);
   g.gain.exponentialRampToValueAtTime(0.0008, actx.currentTime + 0.05);
@@ -917,7 +919,7 @@ function frame(now){
     if (t < prev) soundIdx = firstAtOrAfter(t);
     while (soundIdx < NOTES.length && NOTES[soundIdx].timeMs <= t){
       var sn = NOTES[soundIdx];
-      if (sn.timeMs > prev) click(sn.isBreak ? 'break' : sn.type === 'slide' ? 'slide' : 'tap');
+      if (sn.timeMs > prev) click(sn.isBreak ? 'break' : sn.type === 'slide' ? 'slide' : 'tap', sn.isEx);
       soundIdx++;
     }
     if (t >= END) { t = END; pause(); }

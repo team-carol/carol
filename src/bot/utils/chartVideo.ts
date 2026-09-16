@@ -56,7 +56,8 @@ function synthGuideWav(notes: ChartNote[], totalMs: number): Buffer {
   const dur = 0.055;                       // click() 의 o.stop(+0.055)
   const durN = Math.floor(dur * SAMPLE_RATE);
   for (const note of notes) {
-    const freq = note.isBreak ? 1500 : note.type === "slide" ? 720 : 1050;
+    let freq = note.isBreak ? 1500 : note.type === "slide" ? 720 : 1050;
+    if (note.isEx) freq *= 1.5;   // EX 노트는 가이드음을 높게(웹 click() 과 동일)
     const start = Math.floor((note.timeMs / 1000) * SAMPLE_RATE);
     for (let i = 0; i < durN; i++) {
       const idx = start + i;
