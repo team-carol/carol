@@ -13,6 +13,7 @@ import { aliasAdminPage } from "./aliasAdminPage";
 import { chartPlayerPage, chartNotFoundPage } from "./chartPlayer";
 import { parseMaidata } from "../simai/parse";
 import { renderChartGifAsync } from "../bot/utils/chartGif";
+import { getReadyVideo } from "../bot/utils/chartVideoQueue";
 import type { Chart } from "../simai/types";
 import { messagesAdminPage, type MessageRowVM } from "./messagesAdminPage";
 import {
@@ -260,6 +261,31 @@ export function startWebServer(port: number): void {
         id: row.id, title: row.title, artist: row.artist, designer: row.designer,
         level: row.level, difficulty: row.difficulty, chart,
       }));
+      return;
+    }
+
+    // 렌더 완료된 풀영상(MP4)을 스트리밍한다. Range 지원(영상 탐색). 렌더 트리거는
+    // Discord 버튼이 하고, 여기서는 이미 만들어진 파일만 서빙한다.
+    if (req.method === "GET" && url.pathname === "/chart/video") {
+      const id = (url.searchParams.get("id") || "").trim();
+      const ready = /^[A-Za-z0-9_-]{8,64}$/.test(id) ? await getReadyVideo(id) : null;
+      if (!ready) { res.writeHead(404, { "content-type": "text/plain; charset=utf-8" }); res.end("not_ready"); return; }
+      const total = ready.bytes;
+      const range = req.headers.range;
+      const m = range && /^bytes=(\d*)-(\d*)$/.exec(range);
+      const headBase = { "content-type": "video/mp4", "accept-ranges": "bytes", "cache-control": "private, max-age=86400" };
+      if (m) {
+        let start = m[1] ? parseInt(m[1], 10) : 0;
+        let end = m[2] ? parseInt(m[2], 10) : total - 1;
+        if (isNaN(start) || isNaN(end) || start > end || end >= total) {
+          res.writeHead(416, { "content-range": `bytes */${total}` }); res.end(); return;
+        }
+        res.writeHead(206, { ...headBase, "content-range": `bytes ${start}-${end}/${total}`, "content-length": end - start + 1 });
+        fs.createReadStream(ready.path, { start, end }).pipe(res);
+      } else {
+        res.writeHead(200, { ...headBase, "content-length": total });
+        fs.createReadStream(ready.path).pipe(res);
+      }
       return;
     }
 

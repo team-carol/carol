@@ -273,10 +273,14 @@ async function reply(interaction: ChatInputCommandInteraction, x: ReplyInput): P
   // 링크 버튼은 https 일 때만 단다. baseUrl 이 비어 있는 로컬 개발에서는 URL 이
   // http://localhost:... 라 Discord 가 거부할 수 있고, 그러면 응답 전체가 실패한다.
   // 어차피 embed 설명에 같은 링크가 마크다운으로 들어가 있어 기능은 잃지 않는다.
-  const components = url.startsWith("https://")
-    ? [new ActionRowBuilder<ButtonBuilder>().addComponents(
-        new ButtonBuilder().setStyle(ButtonStyle.Link).setURL(url).setLabel(msg("chart.button")),
-      )]
-    : [];
-  await interaction.editReply({ embeds: [embed], components, files });
+  const row = new ActionRowBuilder<ButtonBuilder>();
+  if (url.startsWith("https://")) {
+    row.addComponents(new ButtonBuilder().setStyle(ButtonStyle.Link).setURL(url).setLabel(msg("chart.button")));
+  }
+  // 풀영상(400px/60fps, 가이드음)을 만들어 캐시하는 버튼. 처음 한 번만 렌더되고
+  // 그 뒤로는 캐시로 즉시 나온다.
+  row.addComponents(
+    new ButtonBuilder().setStyle(ButtonStyle.Secondary).setCustomId(`chartvid:${x.id}`).setLabel(msg("chart.videoButton")),
+  );
+  await interaction.editReply({ embeds: [embed], components: [row], files });
 }

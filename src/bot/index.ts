@@ -1,8 +1,12 @@
 import { Client, Events, GatewayIntentBits, ChatInputCommandInteraction, AutocompleteInteraction, ButtonInteraction, REST, Routes, MessageFlags } from "discord.js";
 import { initEncryption } from "../crypto";
 import { startWebServer, setBaseUrl, setGuildCountProvider, getBaseUrl } from "../web";
-import { closeStorage, initializeStorage, loadUserSession, getCachedProfile, clearRatingCardCacheForInactive, getTranslateTitles, getPolicyAck, setPolicyAck, pruneSimaiCharts } from "../storage";
+import { closeStorage, initializeStorage, loadUserSession, getCachedProfile, clearRatingCardCacheForInactive, getTranslateTitles, getPolicyAck, setPolicyAck, pruneSimaiCharts, getSimaiChart, getOrphanChartVideos, deleteChartVideo } from "../storage";
 import { CONFIG, PORT } from "../config";
+import { parseMaidata } from "../simai/parse";
+import { requestVideo, getReadyVideo, queueDepth } from "./utils/chartVideoQueue";
+import type { Chart } from "../simai/types";
+import * as fsp from "fs";
 import { POLICY_VERSION, policyNoticeText } from "../policy";
 import { recentEmbeds, rtTableEmbed, searchResultEmbeds, getSearchCtx, mapAreaEmbed } from "./utils/embeds";
 
@@ -127,6 +131,48 @@ async function runSimaiChartGC(): Promise<void> {
   } catch (e) {
     console.error("[보면] 정리 실패:", e);
   }
+  // 원본 채보가 사라진 풀영상 파일·행도 함께 정리(재생성 가능한 캐시).
+  try {
+    const orphans = await getOrphanChartVideos() as Array<{ id: string; path: string }>;
+    for (const o of orphans) {
+      if (o.path) { try { fsp.unlinkSync(o.path); } catch { /* 이미 없음 */ } }
+      await deleteChartVideo(o.id);
+    }
+    if (orphans.length > 0) console.log(`[보면] 고아 풀영상 ${orphans.length}건 정리`);
+  } catch (e) {
+    console.error("[보면] 풀영상 정리 실패:", e);
+  }
+}
+
+// 풀영상 버튼(chartvid:<id>): 캐시가 있으면 즉시 링크, 없으면 렌더 후 링크. 같은
+// 채보 동시 요청은 큐가 하나로 합쳐 렌더한다. 실행자에게만 보이는 응답.
+async function handleChartVideoButton(i: ButtonInteraction): Promise<void> {
+  const id = i.customId.slice("chartvid:".length);
+  await i.deferReply({ flags: MessageFlags.Ephemeral });
+  const base = getBaseUrl(PORT);
+  const linkMsg = () => base.startsWith("https://")
+    ? msg("chart.videoReady", { url: `${base}/chart/video?id=${id}` })
+    : msg("chart.videoNoBase");
+
+  if (await getReadyVideo(id)) { await i.editReply({ content: linkMsg() }); return; }
+
+  const row = await getSimaiChart(id) as any;
+  if (!row) { await i.editReply({ content: msg("chart.unavailable.not-found") }); return; }
+  let chart: Chart | null = null;
+  try {
+    if (row.maidata) { const re = parseMaidata(row.maidata); chart = (re.charts[row.difficulty] ?? Object.values(re.charts)[0] ?? null) as Chart | null; }
+    if (!chart) chart = JSON.parse(row.chartJson) as Chart;
+  } catch { await i.editReply({ content: msg("chart.videoFailed") }); return; }
+
+  const depth = queueDepth();
+  await i.editReply({ content: depth > 0 ? msg("chart.videoQueued", { n: depth }) : msg("chart.videoRendering") });
+  try {
+    await requestVideo({ id: row.id, title: row.title, artist: row.artist, designer: row.designer, level: row.level, difficulty: row.difficulty, chart });
+    await i.editReply({ content: linkMsg() });
+  } catch (e) {
+    console.error("[chartvid] 렌더 실패:", e);
+    await i.editReply({ content: msg("chart.videoFailed") });
+  }
 }
 
 // 개인정보처리방침이 바뀌면(POLICY_VERSION 상향) 등록 사용자에게 다음 명령 실행 시 1회 고지.
@@ -186,6 +232,10 @@ client.on(Events.InteractionCreate, async (i) => {
     }
     if (i.customId.startsWith("news:")) {
       try { await handleNewsButton(i); } catch (e) { console.error("[news-btn]", e); }
+      return;
+    }
+    if (i.customId.startsWith("chartvid:")) {
+      try { await handleChartVideoButton(i); } catch (e) { console.error("[chartvid-btn]", e); }
       return;
     }
     if (i.customId.startsWith("goal:")) {

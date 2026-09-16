@@ -7,7 +7,7 @@ import { calcSongRating, getConstant, levelToNumber } from "../constants";
 
 pgTypes.setTypeParser(20, (value) => Number(value));
 
-export const MIGRATION_VERSION = 18;
+export const MIGRATION_VERSION = 19;
 
 // Migration text is deliberately kept as separate, immutable units.  In particular,
 // an edit to the current schema must not silently change an old migration checksum.
@@ -152,6 +152,19 @@ CREATE INDEX IF NOT EXISTS idx_user_goals_owner ON user_goals(discord_user_id, c
     etag text NOT NULL DEFAULT '',
     generated_at text NOT NULL DEFAULT '',
     synced_at bigint NOT NULL DEFAULT 0
+  );`,],
+
+  // 채보 풀영상 캐시. 파라미터가 고정(400/60/6.5/no-mirror)이라 채보 1개당 영상 1개.
+  // 파일 자체는 볼륨(/app/data/renders)에 두고, 여기엔 상태·경로만 둔다.
+  //   status: pending(렌더 중) | done(완료) | error(실패)
+  [19, `CREATE TABLE IF NOT EXISTS chart_videos (
+    id text PRIMARY KEY,
+    status text NOT NULL DEFAULT 'pending',
+    path text NOT NULL DEFAULT '',
+    bytes bigint NOT NULL DEFAULT 0,
+    error text NOT NULL DEFAULT '',
+    created_at bigint NOT NULL DEFAULT 0,
+    updated_at bigint NOT NULL DEFAULT 0
   );`,],
 ];
 
@@ -406,6 +419,36 @@ SELECT u.chart_key AS "chartKey",u.achievement_val AS "achievementVal",u.fc,u.sy
   }
   async setMainotesSyncedNow(){
     await this.q(`UPDATE mainotes_sync SET synced_at=$1 WHERE key='manifest'`,[Date.now()]);
+  }
+
+  // ── 채보 풀영상 캐시 ──────────────────────────────────────────────────────
+  async getChartVideo(id:string){
+    const r=await this.q<any>(`SELECT id,status,path,bytes,error,created_at AS "createdAt",updated_at AS "updatedAt" FROM chart_videos WHERE id=$1`,[id]);
+    return r[0]?{...r[0],bytes:Number(r[0].bytes),createdAt:Number(r[0].createdAt),updatedAt:Number(r[0].updatedAt)}:null;
+  }
+  // pending 으로 자리를 맡는다. 이미 있으면(다른 요청이 렌더 중/완료) false 를 돌려
+  // 중복 렌더를 막는다. error 였던 것은 다시 pending 으로 되돌려 재시도 허용.
+  async claimChartVideo(id:string){
+    const now=Date.now();
+    const r=await this.pool.query(
+      `INSERT INTO chart_videos(id,status,created_at,updated_at) VALUES($1,'pending',$2,$2)
+       ON CONFLICT(id) DO UPDATE SET status='pending',updated_at=$2,error='' WHERE chart_videos.status='error'
+       RETURNING id`,[id,now]);
+    return (r.rowCount??0)>0;
+  }
+  async setChartVideoDone(id:string,path:string,bytes:number){
+    await this.q(`UPDATE chart_videos SET status='done',path=$2,bytes=$3,error='',updated_at=$4 WHERE id=$1`,[id,path,bytes,Date.now()]);
+  }
+  async setChartVideoError(id:string,error:string){
+    await this.q(`UPDATE chart_videos SET status='error',error=$2,updated_at=$3 WHERE id=$1`,[id,error.slice(0,500),Date.now()]);
+  }
+  async deleteChartVideo(id:string){
+    const r=await this.q<any>(`DELETE FROM chart_videos WHERE id=$1 RETURNING path`,[id]);
+    return r[0]?.path??null;
+  }
+  // GC: 원본 채보가 사라진(업로드 만료 등) 영상 행을 찾아 지운다. 파일 삭제는 호출부에서.
+  async getOrphanChartVideos(){
+    return this.q<any>(`SELECT v.id,v.path FROM chart_videos v LEFT JOIN simai_charts c ON c.id=v.id WHERE c.id IS NULL`);
   }
 
   async getGuildSetting(id:string){const r=await this.q<any>("SELECT auto_role FROM guild_settings WHERE guild_id=$1",[id]);return r[0]?.auto_role!==0;} async setGuildSetting(id:string,v:boolean){await this.q("INSERT INTO guild_settings VALUES($1,$2) ON CONFLICT(guild_id) DO UPDATE SET auto_role=excluded.auto_role",[id,v?1:0]);}
