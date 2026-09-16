@@ -12,6 +12,8 @@ export const CONFIG = require("../config.json") as {
   carolIssueGuildId?: string;
   geminiApiKey?: string;
   geminiModel?: string;
+  /** carol-ops의 GET /admin/status 인증용 공유 secret. 비어있으면 라우트가 401. */
+  opsSharedSecret?: string;
 };
 
 export const PORT = CONFIG.webPort ?? 3456;

@@ -1,5 +1,6 @@
 import * as http from "http";
 import * as fs from "fs";
+import { createHash, timingSafeEqual } from "crypto";
 import { gunzip } from "zlib";
 import { promisify } from "util";
 import { parseHome, parsePlayerData, parseFriendCode as parseFC, parseRecentRecords, parsePlaylogHistory, parseTop5, parseTopSongs, parseMusicScore, mergeTopRecords, getMaimaiBaseUrl, parseMapAreas, parsePlaylogDetail, chartKey, buildMarkMap, buildKindResolver } from "../scraper";
@@ -32,9 +33,24 @@ const MAX_SYNC_BYTES = 20_000_000;
 
 export { setBaseUrl, getBaseUrl, buildBookmarklet };
 
-// 길드 수는 Discord client에서만 알 수 있어 지연 게터로 주입받는다 (요청 시 호출).
+// 길드 수/게이트웨이 핑은 Discord client에서만 알 수 있어 지연 게터로 주입받는다 (요청 시 호출).
 let getGuildCount: (() => number) | null = null;
 export function setGuildCountProvider(fn: () => number): void { getGuildCount = fn; }
+let getGatewayPing: (() => number) | null = null;
+export function setGatewayPingProvider(fn: () => number): void { getGatewayPing = fn; }
+
+const processStartedAt = Date.now();
+// /admin/status(carol-ops)용 근사값: 파싱 성공 여부와 무관하게 유효한 /sync 요청을
+// 받은 시각. 재시작하면 초기화되며, 별도로 영속화하지 않는다.
+let lastSyncAt: number | null = null;
+
+// sha256으로 먼저 다이제스트해서 timingSafeEqual의 "길이가 같아야 함" 제약을
+// 우회한다 (원문 길이가 달라도 비교 가능, 비교 자체는 여전히 상수 시간).
+function secretsMatch(a: string, b: string): boolean {
+  const digestA = createHash("sha256").update(a).digest();
+  const digestB = createHash("sha256").update(b).digest();
+  return timingSafeEqual(digestA, digestB);
+}
 
 function discordInviteUrl(): string | null {
   const configuredUrl = CONFIG.discordInviteUrl?.trim();
@@ -229,6 +245,23 @@ export function startWebServer(port: number): void {
         "cache-control": "public, max-age=300",
       });
       res.end(JSON.stringify({ userCount, serverCount, version }));
+      return;
+    }
+
+    // carol-ops 전용. carolStatusSecret(carol-ops) == opsSharedSecret(여기) 헤더 인증.
+    if (req.method === "GET" && url.pathname === "/admin/status") {
+      const expected = CONFIG.opsSharedSecret;
+      const provided = req.headers["x-carol-ops-secret"];
+      if (!expected || typeof provided !== "string" || !secretsMatch(provided, expected)) {
+        res.writeHead(401); res.end("unauthorized"); return;
+      }
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({
+        guildCount: getGuildCount ? getGuildCount() : 0,
+        gatewayPingMs: getGatewayPing ? getGatewayPing() : -1,
+        lastSyncAt: lastSyncAt ? new Date(lastSyncAt).toISOString() : null,
+        uptimeSeconds: Math.floor((Date.now() - processStartedAt) / 1000),
+      }));
       return;
     }
 
@@ -712,6 +745,7 @@ a{color:#c084fc}
       const isPreview = isDev && token === "preview" && !userId;
       if (!userId && !isPreview) { res.writeHead(403); res.end("expired"); return; }
       const syncUserId = userId || "preview";
+      lastSyncAt = Date.now();
 
       let raw: string;
       try { raw = await readSyncBody(req); } catch (error) {

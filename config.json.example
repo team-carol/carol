@@ -10,5 +10,6 @@
   "carolSharedSecret": "carol-issue와 동일한 공유 secret (hex)",
   "carolIssueGuildId": "DM 제보용 대표 guildId (선택, 없으면 DM 채널 ID로 폴백)",
   "geminiApiKey": "Google AI Studio API 키 (없으면 내수판 공지 번역 비활성)",
-  "geminiModel": "gemini-3.6-flash (선택, 생략 시 이 값)"
+  "geminiModel": "gemini-3.6-flash (선택, 생략 시 이 값)",
+  "opsSharedSecret": "carol-ops의 carolStatusSecret과 동일한 공유 secret (없으면 /admin/status 비활성)"
 }
