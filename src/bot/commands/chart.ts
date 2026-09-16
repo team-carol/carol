@@ -29,7 +29,7 @@ export const data = new SlashCommandBuilder()
   .setName("보면")
   .setDescription("채보를 재생해봅니다")
   .addStringOption((o) =>
-    o.setName("곡").setDescription("곡 이름으로 찾기").setRequired(false).setAutocomplete(true),
+    o.setName("곡명").setDescription("곡 이름으로 찾기 (별명 가능)").setRequired(false).setAutocomplete(true),
   )
   .addAttachmentOption((o) =>
     o.setName("파일").setDescription("simai maidata.txt").setRequired(false),
@@ -60,7 +60,7 @@ export async function autocomplete(interaction: AutocompleteInteraction): Promis
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   const file = interaction.options.getAttachment("파일");
-  const pick = interaction.options.getString("곡");
+  const pick = interaction.options.getString("곡명");
   const want = interaction.options.getInteger("난이도");
 
   if (file && pick) {
