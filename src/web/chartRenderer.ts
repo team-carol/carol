@@ -824,7 +824,14 @@ function drawField(){
 
 // ── 상태 ───────────────────────────────────────────────────────────────────
 var END = CHART.durationMs + 1500;
-var t = 0, playing = false, last = 0;
+// 0박부터 시작하는 보면은 첫 탭이 곧장 판정선에 있어 보기 어렵다. 첫 노트가
+// 1마디 안에 있으면 그만큼 앞에서(음수 t) 시작해 최소 1마디의 여유를 준다.
+// GIF 는 매 프레임 t 를 직접 지정하므로 이 초기값에 영향받지 않는다. 오디오를
+// 붙여 재생하면 t 가 오디오에 끌려가 리드인은 자연히 생략된다(원하는 동작).
+var FIRST_MS = NOTES.length ? NOTES[0].timeMs : 0;
+var MEASURE_MS = 4 * 60000 / (CHART.bpm || 120);
+var LEADIN = Math.max(0, MEASURE_MS - FIRST_MS);
+var t = -LEADIN, playing = false, last = 0;
 var rate = 1, speedIdx = 7.5, sound = true, guide = true;
 // rAF 의 now 는 "지금 합성 중인 프레임" 시각이고 그 내용은 다음 vsync 에 나온다.
 // 그래서 t 기준으로 그리면 화면에는 늘 한 프레임 늦게 보인다. 실측한 프레임
@@ -1106,7 +1113,7 @@ function fmt(ms){
   return Math.floor(s/60) + ':' + String(s%60).padStart(2,'0');
 }
 function paintBar(){
-  fillEl.style.width = (Math.min(1, t/END) * 100) + '%';
+  fillEl.style.width = (Math.max(0, Math.min(1, t/END)) * 100) + '%';
   curEl.textContent = fmt(t);
 }
 function play(){

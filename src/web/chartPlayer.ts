@@ -99,8 +99,8 @@ canvas{width:100%;max-width:460px;aspect-ratio:1;touch-action:none;display:block
 <div class="nav"><a href="/">← carolbot</a></div>
 <div class="head">
   ${diffName
-    ? '<div class="badge">${esc(diffName)}${data.level ? " " + esc(data.level) : ""}</div>'
-    : data.level ? '<div class="badge">Lv.${esc(data.level)}</div>' : ""}
+    ? `<div class="badge">${esc(diffName)}${data.level ? " " + esc(data.level) : ""}</div>`
+    : data.level ? `<div class="badge">Lv.${esc(data.level)}</div>` : ""}
   <h1>${esc(data.title || "(제목 없음)")}</h1>
   <div class="sub">${esc(data.artist || "-")}${data.designer ? " · 보면 " + esc(data.designer) : ""}</div>
 </div>
