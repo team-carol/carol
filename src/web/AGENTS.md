@@ -29,7 +29,6 @@ src/web/
 | Web-only local preview | `dev.ts` | Starts server without Discord token/login. |
 | 채보 플레이어 껍데기 | `chartPlayer.ts` | HTML/CSS와 컨트롤. 그리기 코어는 `chartRenderer.ts` 를 인라인한다. |
 | 노트·슬라이드 그리기 | `chartRenderer.ts` | canvas 링 렌더러. **백틱과 `${` 를 쓰지 말 것** (템플릿 문자열로 보관). `/보면` 미리보기 GIF도 이 코드를 vm 에 올려 쓴다. |
-| 슬라이드 간섭 | `chartRenderer.ts` (`interfere`, `slideErased`) | 다른 별이 지나간 슬라이드 궤적도 지운다(기본 ON, 칩 `tInterf`). 앞에서부터(prefix)만 지워 순서 보장, 한 번 지우면 유지(seek 시 리셋). `nearestOnPath` 는 선분 투영. GIF 옵션 `interfere` 로 전달. |
 | Scrape sync pipeline | `POST /sync` in `index.ts` | Writes debug HTML, parses, caches, saves session/avatar/jackets. |
 | Jacket/avatar endpoints | `GET /jacket`, `GET /avatar` in `index.ts` | Cache-first asset responses. |
 
