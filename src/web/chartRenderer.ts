@@ -1041,7 +1041,9 @@ function drawNotes(){
       if (interfere){
         var ekey = n.__idx + ':' + k;
         var eLen = slideErased[ekey] || 0;
-        if (interfStars.length){
+        // 노트 시각이 지나 "라이브"가 된 슬라이드만 간섭으로 지운다. 아직 흐릿하게
+        // 떠오르는 먼 미래 가이드까지 지우면 이질적이라, 그 전에는 건드리지 않는다.
+        if (t >= n.timeMs && interfStars.length){
           for (var ei = 0; ei < interfStars.length; ei++){
             if (interfStars[ei].ni === i) continue;    // 자기 별은 passed 로 이미 처리
             var np = nearestOnPath(pc, interfStars[ei].x, interfStars[ei].y);
