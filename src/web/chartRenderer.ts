@@ -347,9 +347,9 @@ function cachedPath(note, k){
 // ── 색 ─────────────────────────────────────────────────────────────────────
 // maimai 의 노트 색: 단일 TAP 은 분홍, EACH 는 노랑, BREAK 는 주황(EACH 여도 안 바뀐다).
 // 슬라이드 별도 같은 규칙을 따르고, 궤적 화살표만 하늘색 계열로 따로 간다.
-var C_TAP = '#ff4f9d', C_EACH = '#ffd42a', C_BREAK = '#ff9016';
+var C_TAP = '#ff4f9d', C_EACH = '#ffd42a', C_BREAK = '#ff6600';
 var C_TOUCH = '#39c6f0', C_TOUCH_EACH = '#ffd42a';
-var C_ARROW = '#28c8e6', C_ARROW_BREAK = '#ff9016';
+var C_ARROW = '#28c8e6', C_ARROW_BREAK = '#ff6600';
 var FIELD_BG = '#11111e';
 var TAU = Math.PI * 2;
 
