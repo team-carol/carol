@@ -104,11 +104,9 @@ export function renderChartGif(
 
   const frames = Math.max(1, Math.round(opts.durationMs / 1000 * opts.fps));
   const delay = Math.round(1000 / opts.fps);
-  const gif = GIFEncoder();
-  let palette: number[][] | null = null;
 
-  for (let i = 0; i < frames; i++) {
-    sandbox.t = opts.startMs + (i / opts.fps) * 1000;
+  const renderFrame = (fi: number): Uint8ClampedArray => {
+    sandbox.t = opts.startMs + (fi / opts.fps) * 1000;
     sandbox.draw();
     // 필드 바깥은 투명하게 남으므로 카드 배경색을 뒤에 깔아 준다.
     ctx.save();
@@ -116,10 +114,28 @@ export function renderChartGif(
     ctx.fillStyle = "#1a1a1a";
     ctx.fillRect(0, 0, SRC, SRC);
     ctx.restore();
-    const rgba = ctx.getImageData(0, 0, opts.size, opts.size).data;
-    // 팔레트는 첫 프레임에서 한 번만 만든다. 배경과 노트 색이 고정이라 충분하고,
-    // 프레임마다 새로 뽑는 것보다 파일이 훨씬 작아진다.
-    if (!palette) palette = quantize(rgba, 128) as number[][];
+    return ctx.getImageData(0, 0, opts.size, opts.size).data;
+  };
+
+  // 팔레트는 첫 프레임 하나가 아니라 클립 전체에서 뽑은 표본으로 만든다. 시작이
+  // 빈 화면이거나 노트가 적으면 그 프레임에 없는 색(분홍·노랑·주황)이 팔레트에서
+  // 빠져 노트가 회색으로 뭉개지기 때문이다.
+  const sampleN = Math.min(frames, 16);
+  const chunks: Uint8ClampedArray[] = [];
+  for (let s = 0; s < sampleN; s++) {
+    const fi = sampleN <= 1 ? 0 : Math.round(s * (frames - 1) / (sampleN - 1));
+    chunks.push(renderFrame(fi));
+  }
+  let totalLen = 0;
+  for (const c of chunks) totalLen += c.length;
+  const merged = new Uint8Array(totalLen);
+  let mo = 0;
+  for (const c of chunks) { merged.set(c, mo); mo += c.length; }
+  const palette = quantize(merged, 128) as number[][];
+
+  const gif = GIFEncoder();
+  for (let i = 0; i < frames; i++) {
+    const rgba = renderFrame(i);
     const indexed = applyPalette(rgba, palette);
     gif.writeFrame(indexed, opts.size, opts.size, { palette: i === 0 ? palette : undefined, delay });
   }
