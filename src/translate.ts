@@ -14,7 +14,18 @@ const TIMEOUT_MS = 30000;
 const MAX_INPUT_CHARS = 12000;
 const MAX_ATTEMPTS = 2;
 const RETRY_DELAY_MS = 3000;
-const RETRYABLE = new Set([429, 500, 502, 503, 504]);
+// 5xx 는 일시적 과부하라 몇 초 뒤 재시도가 통한다. 429 는 여기 넣지 않는다 — 아래 참고.
+const RETRYABLE = new Set([500, 502, 503, 504]);
+
+// 429 는 할당량(quota) 소진이다("exceeded your current quota"). 무료 티어 일일 한도라
+// 3초 재시도로는 회복되지 않고, 계속 때리면 할당량만 더 깎이고 로그가 도배된다. 한 번
+// 맞으면 이 시간 동안 모든 번역 호출을 건너뛴다(전역 쿨다운). 지나면 다시 시도하고,
+// 여전히 429 면 재무장. 새 공지 번역과 백필 재시도 모두 이 가드를 공유한다.
+const QUOTA_COOLDOWN_MS = 60 * 60 * 1000;
+let quotaCooldownUntil = 0;
+export function isQuotaCoolingDown(): boolean {
+  return Date.now() < quotaCooldownUntil;
+}
 
 // 공지문은 날짜·조건 같은 사실이 핵심이라 의역보다 정확성을 요구하고,
 // 곡명/고유명사는 원문을 유지시킨다(검색·대조가 가능해야 하므로).
@@ -102,6 +113,8 @@ export async function translateJaToKo(text: string, extraHint = ""): Promise<str
   if (!key) return undefined;
   const source = text.trim();
   if (!source) return undefined;
+  // 할당량 쿨다운 중이면 API 를 호출하지 않고 즉시 실패로 돌려준다(호출/할당량 낭비 방지).
+  if (Date.now() < quotaCooldownUntil) return undefined;
   const clipped = source.length > MAX_INPUT_CHARS ? source.slice(0, MAX_INPUT_CHARS) : source;
 
   const model = CONFIG.geminiModel?.trim() || DEFAULT_MODEL;
@@ -121,7 +134,13 @@ export async function translateJaToKo(text: string, extraHint = ""): Promise<str
       });
       if (!res.ok) {
         const detail = (await res.text()).slice(0, 200);
-        // 429/503 은 일시적 과부하다(실측: 3.8-flash 가 503 반환). 한 번 더 시도한다.
+        // 429 는 할당량 소진 → 재시도하지 않고 전역 쿨다운을 건다(그동안 모든 호출 스킵).
+        if (res.status === 429) {
+          quotaCooldownUntil = Date.now() + QUOTA_COOLDOWN_MS;
+          console.warn(`[translate] ${model} HTTP 429 할당량 소진 → ${Math.round(QUOTA_COOLDOWN_MS / 60000)}분 쿨다운`);
+          return undefined;
+        }
+        // 5xx 는 일시적 과부하다. 한 번 더 시도한다.
         if (RETRYABLE.has(res.status) && attempt < MAX_ATTEMPTS) {
           await new Promise((r) => setTimeout(r, RETRY_DELAY_MS * attempt));
           continue;
