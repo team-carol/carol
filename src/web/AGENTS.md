@@ -11,6 +11,8 @@ src/web/
 ├── index.ts         # http.createServer routes, inline guide pages, /sync ingest
 ├── bookmarklet.ts   # baseUrl helpers, preset list, generated bookmarklet JS
 ├── settingsPage.ts  # full settings HTML/CSS/JS string
+├── chartPlayer.ts   # simai 채보 플레이어 페이지 껍데기 (HTML/CSS + 컨트롤)
+├── chartRenderer.ts # 플레이어 그리기 코어를 담은 JS 문자열 (서버 GIF 생성과 공용)
 └── dev.ts           # web-only local entrypoint
 ```
 
@@ -25,6 +27,8 @@ src/web/
 | Change bookmarklet payload | `bookmarklet.ts` | Huge embedded JS string plus injection marker. |
 | Add built-in bookmarklet | `BOOKMARKLET_PRESETS` in `bookmarklet.ts` | Add preset object; state stored as ID in DB. |
 | Web-only local preview | `dev.ts` | Starts server without Discord token/login. |
+| 채보 플레이어 껍데기 | `chartPlayer.ts` | HTML/CSS와 컨트롤. 그리기 코어는 `chartRenderer.ts` 를 인라인한다. |
+| 노트·슬라이드 그리기 | `chartRenderer.ts` | canvas 링 렌더러. **백틱과 `${` 를 쓰지 말 것** (템플릿 문자열로 보관). `/보면` 미리보기 GIF도 이 코드를 vm 에 올려 쓴다. |
 | Scrape sync pipeline | `POST /sync` in `index.ts` | Writes debug HTML, parses, caches, saves session/avatar/jackets. |
 | Jacket/avatar endpoints | `GET /jacket`, `GET /avatar` in `index.ts` | Cache-first asset responses. |
 
@@ -41,6 +45,10 @@ src/web/
 | `POST /api/settings/bookmarklet` | Add/delete extra bookmarklets, max 5. |
 | `GET /bookmarklet.js?code=TOKEN` | Serves generated sync JS with enabled presets/extras. |
 | `GET /avatar`, `GET /jacket` | Stored/fetched PNG assets. |
+| `GET /chart?id=TOKEN` | simai 채보 플레이어. 토큰을 아는 사람만 열 수 있고 로그인은 요구하지 않는다. |
+| `GET /chart/gif?id=TOKEN&start&dur&size&fps&speed&mirror&guide` | **폴백 전용** GIF 생성. OffscreenCanvas/Worker 가 없는 브라우저(구형 Safari 등)만 여기로 온다. 서버에서 옵션 클램프(길이 ≤60초, 크기 ≤800px), 동시 실행 `GIF_MAX_CONCURRENT`(2) 초과 시 429. `/chart` 와 `loadChart()` 공유. |
+
+웹 플레이어의 GIF 생성은 기본적으로 **브라우저에서** 한다(`chartGifClient.ts`): 같은 렌더러(`chartRenderer.ts`)를 Web Worker 안 OffscreenCanvas 에 올리고 gifenc(브라우저 dist 를 워커에 인라인)로 인코딩한다 → 서버 CPU 0. 렌더러는 `__RJS`(문자열)로 워커에 넘겨 eval 하고, DATA/opts 는 postMessage 로 준다. Discord 미리보기(`utils/chartGif.ts`)는 별개로 여전히 서버에서 만든다.
 | `GET /privacy`, `GET /terms` | Static legal pages. |
 
 ## CONVENTIONS

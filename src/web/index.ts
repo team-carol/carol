@@ -4,21 +4,30 @@ import { createHash, timingSafeEqual } from "crypto";
 import { gunzip } from "zlib";
 import { promisify } from "util";
 import { parseHome, parsePlayerData, parseFriendCode as parseFC, parseRecentRecords, parsePlaylogHistory, parseTop5, parseTopSongs, parseMusicScore, mergeTopRecords, getMaimaiBaseUrl, parseMapAreas, parsePlaylogDetail, chartKey, buildMarkMap, buildKindResolver } from "../scraper";
-import { cacheProfile, getCachedProfile, saveUserSession, getUserSyncToken, findUserBySyncToken, getUserFriendCodeForServer, saveAvatarBlob, getAvatarBlob, getSongJacket, saveSongJacket, getExtraBookmarklets, getProfilePrivate, setProfilePrivate, addExtraBookmarklet, removeExtraBookmarklet, getEnabledBookmarkletPresetIds, setBookmarkletPresetEnabled, getUserDefaultServer, setUserDefaultServer, isMaimaiServer, getMapImage, saveMapImage, saveAchievementPlayEventLogBatch, upsertChartClears, backfillEventRatingUp, saveRatingSnapshot, getAllAliases, addAlias, deleteAlias, setAliasTranslation, setMessageOverride, deleteMessageOverride, getTranslateTitles, setTranslateTitles, getRegisteredUserCount, getAchievementMinimum, setAchievementMinimum, listGoals, updateGoalProgress, getPolicyAck, setPolicyAck } from "../storage";
+import { cacheProfile, getCachedProfile, saveUserSession, getUserSyncToken, findUserBySyncToken, getUserFriendCodeForServer, saveAvatarBlob, getAvatarBlob, getSongJacket, saveSongJacket, getExtraBookmarklets, getProfilePrivate, setProfilePrivate, addExtraBookmarklet, removeExtraBookmarklet, getEnabledBookmarkletPresetIds, setBookmarkletPresetEnabled, getUserDefaultServer, setUserDefaultServer, isMaimaiServer, getMapImage, saveMapImage, saveAchievementPlayEventLogBatch, upsertChartClears, backfillEventRatingUp, saveRatingSnapshot, getAllAliases, addAlias, deleteAlias, setAliasTranslation, setMessageOverride, deleteMessageOverride, getTranslateTitles, setTranslateTitles, getRegisteredUserCount, getAchievementMinimum, setAchievementMinimum, listGoals, updateGoalProgress, getPolicyAck, setPolicyAck, getSimaiChart, saveSimaiChart, listRegistryCharts } from "../storage";
 import { POLICY_VERSION } from "../policy";
 import type { SongAliasRow } from "../storage/types";
 import { buildBookmarkletJs, setBaseUrl, getBaseUrl, buildBookmarklet, BOOKMARKLET_PRESETS, getBookmarkletPresets } from "./bookmarklet";
 import { computeRatingTarget, getAllSongTitles } from "../constants";
 import { settingsPage } from "./settingsPage";
 import { aliasAdminPage } from "./aliasAdminPage";
+import { chartPlayerPage, chartNotFoundPage } from "./chartPlayer";
+import { parseMaidata } from "../simai/parse";
+import { sanitizeSong, buildMaidata, atwikiChartId, parseAtwikiId } from "../simai/atwiki";
+import { loadRegistryIndex } from "../simai/registryIndex";
+import { importBookmarkletPage } from "./importPage";
+import { IMPORT_CLIENT_JS } from "./importClient";
+import { renderChartGifAsync } from "../bot/utils/chartGif";
+import { getReadyVideo } from "../bot/utils/chartVideoQueue";
+import type { Chart } from "../simai/types";
 import { messagesAdminPage, type MessageRowVM } from "./messagesAdminPage";
 import {
   MESSAGE_KEYS, defaultOf, getOverride, rawText, placeholdersOf,
   validateOverride, loadMessages, type MessageKey,
 } from "../messages";
-import { isValidAdminToken } from "./adminAuth";
+import { isValidAdminToken, issueAdminToken } from "./adminAuth";
 import { loadAliases } from "../aliases";
-import { CONFIG } from "../config";
+import { CONFIG, PORT } from "../config";
 import { hasValidRecordDate, recordPlayedAt, koreaPlayDayKey } from "../achievements";
 import { evaluateGoal, GOAL_KINDS, type GoalKind } from "../goals";
 
@@ -214,6 +223,26 @@ if(/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)) sw('MB');
 </body></html>`;
 }
 
+/** 저장된 채보를 재생/렌더에 쓸 Chart 로 만든다. /chart 와 /chart/gif 가 공유한다. */
+async function loadChart(id: string): Promise<{ row: NonNullable<Awaited<ReturnType<typeof getSimaiChart>>>; chart: Chart } | null> {
+  const row = /^[A-Za-z0-9_-]{8,64}$/.test(id) ? await getSimaiChart(id) : null;
+  if (!row) return null;
+  // 원본 maidata 가 있으면 열 때마다 다시 파싱한다. 저장된 chart_json 은 업로드
+  // 시점의 파서 결과라, 파서를 고쳐도 옛 채보에는 반영되지 않는다.
+  let chart: Chart | null = null;
+  if (row.maidata) {
+    const re = parseMaidata(row.maidata);
+    chart = (re.charts[row.difficulty] ?? Object.values(re.charts)[0] ?? null) as Chart | null;
+  }
+  if (!chart) chart = JSON.parse(row.chartJson) as Chart;
+  return { row, chart };
+}
+
+// GIF 렌더는 CPU 를 오래 먹는 워커라, 페이지에서 연타로 몰리면 서버가 죽는다.
+// 동시에 도는 수를 막는다. 넘치면 429 로 돌려보내 사용자가 다시 누르게 한다.
+let gifInFlight = 0;
+const GIF_MAX_CONCURRENT = 2;
+
 export function startWebServer(port: number): void {
   const server = http.createServer((req, res) => { void (async () => {
     res.setHeader("Access-Control-Allow-Origin", "*");
@@ -228,6 +257,114 @@ export function startWebServer(port: number): void {
       if (!targetUrl) { res.writeHead(500); res.end("missing_client_id"); return; }
       res.writeHead(302, { Location: targetUrl, "cache-control": "no-cache" });
       res.end();
+      return;
+    }
+
+    // simai 채보 플레이어. id 는 업로드 시 발급한 무작위 토큰이고, 링크를 아는
+    // 사람만 열 수 있다(비공개가 아니라 "추측 불가"). 로그인은 요구하지 않는다.
+    if (req.method === "GET" && url.pathname === "/chart") {
+      const id = (url.searchParams.get("id") || "").trim();
+      let loaded;
+      try {
+        loaded = await loadChart(id);
+      } catch {
+        res.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
+        res.end("chart_corrupt");
+        return;
+      }
+      if (!loaded) {
+        res.writeHead(404, { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" });
+        res.end(chartNotFoundPage("채보를 찾을 수 없습니다", "링크가 잘못됐거나, 업로드된 채보의 보관 기간이 지났습니다."));
+        return;
+      }
+      const { row, chart } = loaded;
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "private, max-age=300" });
+      res.end(chartPlayerPage({
+        id: row.id, title: row.title, artist: row.artist, designer: row.designer,
+        level: row.level, difficulty: row.difficulty, chart,
+      }));
+      return;
+    }
+
+    // 렌더 완료된 풀영상(MP4)을 스트리밍한다. Range 지원(영상 탐색). 렌더 트리거는
+    // Discord 버튼이 하고, 여기서는 이미 만들어진 파일만 서빙한다.
+    if (req.method === "GET" && url.pathname === "/chart/video") {
+      const id = (url.searchParams.get("id") || "").trim();
+      const ready = /^[A-Za-z0-9_-]{8,64}$/.test(id) ? await getReadyVideo(id) : null;
+      if (!ready) { res.writeHead(404, { "content-type": "text/plain; charset=utf-8" }); res.end("not_ready"); return; }
+      const total = ready.bytes;
+      const range = req.headers.range;
+      const m = range && /^bytes=(\d*)-(\d*)$/.exec(range);
+      const headBase = { "content-type": "video/mp4", "accept-ranges": "bytes", "cache-control": "private, max-age=86400" };
+      if (m) {
+        let start = m[1] ? parseInt(m[1], 10) : 0;
+        let end = m[2] ? parseInt(m[2], 10) : total - 1;
+        if (isNaN(start) || isNaN(end) || start > end || end >= total) {
+          res.writeHead(416, { "content-range": `bytes */${total}` }); res.end(); return;
+        }
+        res.writeHead(206, { ...headBase, "content-range": `bytes ${start}-${end}/${total}`, "content-length": end - start + 1 });
+        fs.createReadStream(ready.path, { start, end }).pipe(res);
+      } else {
+        res.writeHead(200, { ...headBase, "content-length": total });
+        fs.createReadStream(ready.path).pipe(res);
+      }
+      return;
+    }
+
+    // 플레이어 페이지에서 구간·길이를 골라 GIF 를 내려받는다. Discord 미리보기와
+    // 같은 렌더러/워커를 쓰고, 여기서는 옵션만 안전 범위로 자른다.
+    if (req.method === "GET" && url.pathname === "/chart/gif") {
+      const id = (url.searchParams.get("id") || "").trim();
+      const num = (k: string, def: number) => { const v = parseFloat(url.searchParams.get(k) || ""); return Number.isFinite(v) ? v : def; };
+      const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+
+      let loaded;
+      try {
+        loaded = await loadChart(id);
+      } catch {
+        res.writeHead(500, { "content-type": "text/plain; charset=utf-8" }); res.end("chart_corrupt"); return;
+      }
+      if (!loaded) { res.writeHead(404, { "content-type": "text/plain; charset=utf-8" }); res.end("not_found"); return; }
+
+      if (gifInFlight >= GIF_MAX_CONCURRENT) {
+        res.writeHead(429, { "content-type": "text/plain; charset=utf-8", "retry-after": "5" });
+        res.end("busy"); return;
+      }
+
+      const { row, chart } = loaded;
+      // 길이 1~60초, 크기 200~800px, 10~30fps, 노트 속도 1~12. 시작은 곡 안으로.
+      // 클라이언트(OffscreenCanvas)가 안 되는 브라우저를 위한 폴백 경로다.
+      const durationMs = clamp(num("dur", 6), 1, 60) * 1000;
+      const size = Math.round(clamp(num("size", 400), 200, 800));
+      const fps = Math.round(clamp(num("fps", 15), 10, 30));
+      const speed = clamp(num("speed", 6.5), 1, 12);
+      const maxStart = Math.max(0, chart.durationMs - durationMs);
+      const startMs = clamp(num("start", 0) * 1000, 0, maxStart);
+      const mirror = url.searchParams.get("mirror") === "1";
+      const guide = url.searchParams.get("guide") !== "0";
+
+      gifInFlight++;
+      try {
+        const gif = await renderChartGifAsync(
+          { id: row.id, title: row.title, artist: row.artist, designer: row.designer,
+            level: row.level, difficulty: row.difficulty, chart },
+          { startMs, durationMs, size, fps, speed, mirror, guide },
+        );
+        const safe = (row.title || "chart").replace(/[^\w.-]+/g, "_").slice(0, 40) || "chart";
+        res.writeHead(200, {
+          "content-type": "image/gif",
+          "content-length": gif.length,
+          "content-disposition": `attachment; filename="${safe}.gif"`,
+          "cache-control": "no-store",
+        });
+        res.end(gif);
+      } catch (e) {
+        console.error("[chart/gif] 렌더 실패:", e);
+        res.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
+        res.end("render_failed");
+      } finally {
+        gifInFlight--;
+      }
       return;
     }
 
@@ -489,6 +626,74 @@ a{color:#c084fc}
         const badBody = e instanceof SyntaxError;
         res.writeHead(badBody ? 400 : 500, { "content-type": "application/json" });
         res.end(JSON.stringify({ ok: false, error: badBody ? "invalid_body" : "서버 오류가 발생했습니다" }));
+      }
+      return;
+    }
+
+    // ─── simai 채보 등록 (운영자, atwiki 북마클릿) ─────────────────────────
+    // 북마클릿이 atwiki 페이지에 주입하는 클라이언트 코드. 코드 자체엔 비밀이 없다
+    // (토큰은 window.__carolImport 로 주입). 캐시 없이 최신을 준다.
+    if (req.method === "GET" && url.pathname === "/import.js") {
+      res.writeHead(200, { "content-type": "application/javascript; charset=utf-8", "cache-control": "no-cache" });
+      res.end(IMPORT_CLIENT_JS);
+      return;
+    }
+    // 북마클릿 설치·진행 UI 페이지. 관리 토큰과 baseUrl 을 심어 내려준다.
+    if (req.method === "GET" && url.pathname === "/admin/import") {
+      const token = url.searchParams.get("code") || "";
+      if (!isValidAdminToken(token)) { res.writeHead(403, { "content-type": "text/html; charset=utf-8" }); res.end("<h1>만료된 링크입니다. /관리 로 다시 발급하세요.</h1>"); return; }
+      // 페이지는 /관리 의 짧은 토큰으로 열리지만, 크롤이 길어 북마클릿엔 12h 토큰을 새로 발급한다.
+      const bmToken = issueAdminToken(12 * 60 * 60 * 1000);
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" });
+      res.end(importBookmarkletPage(getBaseUrl(PORT), token, bmToken));
+      return;
+    }
+    // 이미 등록된 atwiki 페이지 번호 목록 → 북마클릿이 미저장분만 고른다.
+    if (req.method === "GET" && url.pathname === "/api/admin/simai/known-pages") {
+      const token = url.searchParams.get("code") || "";
+      if (!isValidAdminToken(token)) { res.writeHead(403, { "content-type": "application/json" }); res.end(JSON.stringify({ ok: false })); return; }
+      try {
+        const rows = await listRegistryCharts() as { id: string }[];
+        const pages = new Set<number>();
+        for (const r of rows) { const p = parseAtwikiId(r.id); if (p) pages.add(p.page); }
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: true, pages: [...pages] }));
+      } catch (e) {
+        console.error("[simai] known-pages 실패:", e);
+        res.writeHead(500, { "content-type": "application/json" }); res.end(JSON.stringify({ ok: false }));
+      }
+      return;
+    }
+    // 곡 한 개 등록. 북마클릿이 추출한 구조를 받아 simai 로 재구성→파싱→난이도별 저장.
+    if (req.method === "POST" && url.pathname === "/api/admin/simai/import") {
+      const token = url.searchParams.get("code") || "";
+      if (!isValidAdminToken(token)) { res.writeHead(403, { "content-type": "application/json" }); res.end(JSON.stringify({ ok: false, error: "expired" })); return; }
+      try {
+        const song = sanitizeSong(JSON.parse(await readBody(req)));
+        if (!song) { res.writeHead(400, { "content-type": "application/json" }); res.end(JSON.stringify({ ok: false, error: "no_valid_chart" })); return; }
+        const maidata = buildMaidata(song);
+        const parsed = parseMaidata(maidata);
+        const saved: number[] = [];
+        for (const c of song.charts) {
+          const chart = parsed.charts[c.diff];
+          if (!chart || chart.notes.length === 0) continue;
+          await saveSimaiChart({
+            id: atwikiChartId(song.page, c.diff), ownerId: "", source: "registry",
+            title: song.title.slice(0, 200), artist: song.artist.slice(0, 200),
+            designer: c.designer.slice(0, 200), level: c.level.slice(0, 20),
+            difficulty: c.diff, maidata, chartJson: JSON.stringify(chart),
+          });
+          saved.push(c.diff);
+        }
+        if (saved.length === 0) { res.writeHead(422, { "content-type": "application/json" }); res.end(JSON.stringify({ ok: false, error: "parse_empty" })); return; }
+        try { await loadRegistryIndex(); } catch (e) { console.error("[simai] 인덱스 갱신 실패:", e); }
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: true, page: song.page, title: song.title, saved }));
+      } catch (e) {
+        console.error("[simai] import 실패:", e);
+        const bad = e instanceof SyntaxError;
+        res.writeHead(bad ? 400 : 500, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: false, error: bad ? "invalid_body" : "server_error" }));
       }
       return;
     }

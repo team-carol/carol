@@ -30,6 +30,43 @@ export const MESSAGES = {
   "ratingImage.snapshotGameUnsupported": "과거 날짜 조회는 maimai DX 레이팅표만 지원합니다. 다른 게임 환산은 전체 클리어 기록이 필요한데, 스냅샷은 레이팅 대상 50곡만 보관합니다.",
   "ratingImage.renderFailed": "이미지 생성에 실패했습니다.",
 
+  // ── /보면 (simai 채보 플레이어) ─────────────────────────────────────────
+  "chart.tooLarge": "파일이 너무 큽니다. maidata.txt 는 보통 수십 KB 입니다. (최대 2MB)",
+  "chart.notText": "maidata.txt 같은 텍스트 파일을 올려주세요.",
+  "chart.downloadFailed": "첨부 파일을 읽지 못했습니다. 다시 시도해주세요.",
+  "chart.parseFailed": "채보를 해석하지 못했습니다. simai 형식의 maidata.txt 가 맞는지 확인해주세요.",
+  "chart.noChart": "파일에서 채보(`&inote_N=`)를 찾지 못했습니다. maidata.txt 전체를 올려주세요.",
+  "chart.emptyChart": "해당 난이도에 노트가 없습니다.",
+  "chart.diffMissing": "이 파일에는 {want} 채보가 없습니다. 들어있는 난이도: {has}",
+  "chart.quota": "올릴 수 있는 채보는 {max}개까지입니다. 오래된 채보는 30일 뒤 자동으로 지워집니다.",
+  "chart.saveFailed": "채보 저장에 실패했습니다. 잠시 후 다시 시도해주세요.",
+  "chart.untitled": "(제목 없음)",
+  "chart.openLink": "[브라우저에서 재생하기]({url})",
+  "chart.button": "채보 열기",
+  "chart.fieldChart": "채보",
+  "chart.fieldBpm": "BPM",
+  "chart.fieldLength": "길이",
+  "chart.fieldNotes": "노트",
+  "chart.fieldPreview": "미리보기",
+  "chart.previewRange": "{from} 부터 {sec}초",
+  "chart.diffUnknown": "난이도 미상",
+  "chart.bpmAssumedNote": "⚠️ 파일에 BPM 표기가 없어 120으로 가정했습니다. 재생 속도가 실제와 다릅니다.",
+  "chart.footer": "{user} 님이 올린 채보 · 링크를 아는 사람만 볼 수 있습니다 · 30일 보관",
+  "chart.videoButton": "영상 만들기",
+  "chart.videoRendering": "🎬 영상을 만들고 있어요… 곡 길이에 따라 1~3분 걸립니다. 완료되면 이 메시지에 링크가 올라옵니다.",
+  "chart.videoQueued": "🎬 영상 렌더 대기 중이에요(앞에 {n}개). 완료되면 이 메시지에 링크가 올라옵니다.",
+  "chart.videoAttached": "🎬 **{title}** · 400px 60fps · 가이드음 포함",
+  "chart.videoTooBig": "🎬 파일이 커서 첨부 대신 링크로 드려요 — [영상 보기]({url}) · 400px 60fps · 가이드음 포함",
+  "chart.videoFailed": "영상 생성에 실패했습니다. 잠시 후 다시 시도해주세요.",
+  "chart.footerRegistry": "등록된 채보 · 링크를 아는 사람만 볼 수 있습니다",
+  "chart.footerSource": "채보 출처: {source} · 링크를 아는 사람만 볼 수 있습니다",
+  "chart.sourceCredit": "채보: [{designer}]({url}) · simai wiki",
+  "chart.needInput": "재생할 채보를 골라주세요. `곡명` 에 곡 이름을 입력하거나, `파일` 로 maidata.txt 를 올리면 됩니다.",
+  "chart.bothInput": "`곡명` 과 `파일` 중 하나만 지정해주세요.",
+  "chart.unavailable.not-found": "그 채보를 찾지 못했습니다. 목록에서 다시 골라주세요.",
+  "chart.unavailable.no-data": "이 채보는 목록에는 있지만 아직 데이터가 없습니다. maidata.txt 를 직접 올리면 재생할 수 있습니다.",
+  "chart.unavailable.no-permission": "공식 채보 재생은 아직 준비 중입니다. 채보 제공처에 이용 허락을 문의해 둔 상태라, 답을 받기 전까지는 가져오지 않습니다.\nmaidata.txt 파일을 직접 올리면 지금도 재생할 수 있습니다.",
+
   // ── /공지설정 · 공지 폴링 ───────────────────────────────────────────────
   "news.sourceJp": "maimai でらっくす 공식 (내수판)",
   "news.untitled": "(제목 없음)",
@@ -267,7 +304,7 @@ export const MESSAGES = {
   "admin.embedTitle": "🛠 캐롤봇 관리",
   "admin.embedBody":
     "아래 버튼으로 관리 페이지를 엽니다.\n" +
-    "곡 별명과 봇 출력 문구를 관리할 수 있습니다.\n\n" +
+    "곡 별명 · 봇 출력 문구 · 채보 등록을 관리할 수 있습니다.\n\n" +
     "⏳ 링크는 **60분** 후 만료됩니다. (본인만 사용하세요)",
   "admin.buttonLabel": "관리 페이지 열기",
 } as const;

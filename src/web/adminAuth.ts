@@ -5,9 +5,10 @@ import * as crypto from "crypto";
 const TOKEN_TTL_MS = 60 * 60 * 1000; // 60분
 const tokens = new Map<string, number>(); // token → 만료시각(ms)
 
-export function issueAdminToken(): string {
+// ttlMs 로 수명을 늘릴 수 있다. 채보 등록처럼 오래 도는 작업은 길게(12h) 발급한다.
+export function issueAdminToken(ttlMs: number = TOKEN_TTL_MS): string {
   const token = crypto.randomBytes(24).toString("hex");
-  tokens.set(token, Date.now() + TOKEN_TTL_MS);
+  tokens.set(token, Date.now() + ttlMs);
   return token;
 }
 

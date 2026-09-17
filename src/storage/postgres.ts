@@ -7,7 +7,7 @@ import { calcSongRating, getConstant, levelToNumber } from "../constants";
 
 pgTypes.setTypeParser(20, (value) => Number(value));
 
-export const MIGRATION_VERSION = 16;
+export const MIGRATION_VERSION = 19;
 
 // Migration text is deliberately kept as separate, immutable units.  In particular,
 // an edit to the current schema must not silently change an old migration checksum.
@@ -105,7 +105,73 @@ CREATE INDEX IF NOT EXISTS idx_user_goals_owner ON user_goals(discord_user_id, c
     created_at bigint NOT NULL DEFAULT 0,
     PRIMARY KEY (source, item_id)
   );`,],
+  // simai 채보. 지금은 유저가 올린 maidata.txt 만 들어오지만(source='upload'),
+  // 나중에 운영자가 등록하는 채보(source='registry')를 같은 테이블에 넣을 수 있게
+  // owner_id 를 비워둘 수 있도록 해 뒀다. chart_json 은 파싱된 타임라인 캐시로,
+  // 파서가 바뀌면 maidata 에서 다시 만들 수 있다.
+  [17, `CREATE TABLE IF NOT EXISTS simai_charts (
+    id text PRIMARY KEY,
+    owner_id text NOT NULL DEFAULT '',
+    source text NOT NULL DEFAULT 'upload',
+    title text NOT NULL DEFAULT '',
+    artist text NOT NULL DEFAULT '',
+    designer text NOT NULL DEFAULT '',
+    level text NOT NULL DEFAULT '',
+    difficulty integer NOT NULL DEFAULT 0,
+    maidata text NOT NULL DEFAULT '',
+    chart_json text NOT NULL DEFAULT '{}',
+    created_at bigint NOT NULL DEFAULT 0
+  );
+  CREATE INDEX IF NOT EXISTS simai_charts_owner_idx ON simai_charts(owner_id, created_at DESC);
+  CREATE INDEX IF NOT EXISTS simai_charts_created_idx ON simai_charts(created_at);`,],
+
+  // mai-notes.com manifest.json 의 사본. 메타데이터만 들어간다 — 채보 본문은 없다.
+  // 매번 상대 서버에 묻지 않기 위한 캐시라, 통째로 갈아끼우는 방식으로 쓴다.
+  [18, `CREATE TABLE IF NOT EXISTS mainotes_songs (
+    id text PRIMARY KEY,
+    title text NOT NULL DEFAULT '',
+    artist text NOT NULL DEFAULT '',
+    bpm text NOT NULL DEFAULT '',
+    genre text NOT NULL DEFAULT '',
+    version text NOT NULL DEFAULT '',
+    type text NOT NULL DEFAULT ''
+  );
+  CREATE TABLE IF NOT EXISTS mainotes_charts (
+    id text PRIMARY KEY,
+    song_id text NOT NULL,
+    difficulty integer NOT NULL DEFAULT 0,
+    level text NOT NULL DEFAULT '',
+    internal_level double precision NOT NULL DEFAULT 0,
+    designer text NOT NULL DEFAULT '',
+    has_data integer NOT NULL DEFAULT 0,
+    notes integer NOT NULL DEFAULT 0
+  );
+  CREATE INDEX IF NOT EXISTS mainotes_charts_song_idx ON mainotes_charts(song_id);
+  CREATE TABLE IF NOT EXISTS mainotes_sync (
+    key text PRIMARY KEY,
+    etag text NOT NULL DEFAULT '',
+    generated_at text NOT NULL DEFAULT '',
+    synced_at bigint NOT NULL DEFAULT 0
+  );`,],
+
+  // 채보 풀영상 캐시. 파라미터가 고정(400/60/6.5/no-mirror)이라 채보 1개당 영상 1개.
+  // 파일 자체는 볼륨(/app/data/renders)에 두고, 여기엔 상태·경로만 둔다.
+  //   status: pending(렌더 중) | done(완료) | error(실패)
+  [19, `CREATE TABLE IF NOT EXISTS chart_videos (
+    id text PRIMARY KEY,
+    status text NOT NULL DEFAULT 'pending',
+    path text NOT NULL DEFAULT '',
+    bytes bigint NOT NULL DEFAULT 0,
+    error text NOT NULL DEFAULT '',
+    created_at bigint NOT NULL DEFAULT 0,
+    updated_at bigint NOT NULL DEFAULT 0
+  );`,],
 ];
+
+export interface MainotesSongRow { id:string; title:string; artist:string; bpm:string; genre:string; version:string; type:string }
+export interface MainotesChartRow { id:string; songId:string; difficulty:number; level:string; internalLevel:number; designer:string; hasData:boolean; notes:number }
+/** 큰 배열을 파라미터 상한에 걸리지 않을 크기로 자른다. */
+function* batches<T>(a:T[],n:number):Generator<T[]>{ for(let i=0;i<a.length;i+=n) yield a.slice(i,i+n); }
 
 function hash(text: string): string { return crypto.createHash("sha256").update(text).digest("hex"); }
 function fcRank(v: string): number { const x=v.trim().toUpperCase().replace(/\s+/g, ""); return x === "AP+" || x === "APP" ? 4 : x === "AP" ? 3 : x === "FC+" || x === "FCP" ? 2 : x === "FC" ? 1 : 0; }
@@ -298,6 +364,105 @@ SELECT u.chart_key AS "chartKey",u.achievement_val AS "achievementVal",u.fc,u.sy
   async getNewsFeedState(source:string){const r=await this.q<any>(`SELECT etag,last_modified AS "lastModified",checked_at AS "checkedAt" FROM news_feed_state WHERE source=$1`,[source]);return r[0]?{...r[0],checkedAt:Number(r[0].checkedAt)}:null;}
   async setNewsFeedState(source:string,etag:string,lastModified:string,checkedAt=Date.now()){
     await this.q(`INSERT INTO news_feed_state(source,etag,last_modified,checked_at) VALUES($1,$2,$3,$4) ON CONFLICT(source) DO UPDATE SET etag=excluded.etag,last_modified=excluded.last_modified,checked_at=excluded.checked_at`,[source,etag,lastModified,checkedAt]);
+  }
+
+  // ── simai 채보 ───────────────────────────────────────────────────────────
+  async saveSimaiChart(c:{id:string;ownerId:string;source:string;title:string;artist:string;designer:string;level:string;difficulty:number;maidata:string;chartJson:string},createdAt=Date.now()){
+    await this.q(`INSERT INTO simai_charts(id,owner_id,source,title,artist,designer,level,difficulty,maidata,chart_json,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+      ON CONFLICT(id) DO UPDATE SET title=excluded.title,artist=excluded.artist,designer=excluded.designer,level=excluded.level,difficulty=excluded.difficulty,maidata=excluded.maidata,chart_json=excluded.chart_json`,
+      [c.id,c.ownerId,c.source,c.title,c.artist,c.designer,c.level,c.difficulty,c.maidata,c.chartJson,createdAt]);
+  }
+  async getSimaiChart(id:string){
+    const r=await this.q<any>(`SELECT id,owner_id AS "ownerId",source,title,artist,designer,level,difficulty,maidata,chart_json AS "chartJson",created_at AS "createdAt" FROM simai_charts WHERE id=$1`,[id]);
+    return r[0]?{...r[0],createdAt:Number(r[0].createdAt)}:null;
+  }
+  // 운영자 등록분(registry) 목록. /보면 곡명 검색 인덱스를 메모리로 올리는 데 쓴다.
+  // 본문(maidata)·chart_json 은 빼서 가볍게 — 검색·표시에 필요한 메타만.
+  async listRegistryCharts(){
+    return this.q<any>(`SELECT id,title,artist,designer,level,difficulty FROM simai_charts WHERE source='registry'`);
+  }
+  // 한 사람이 올릴 수 있는 채보 수를 제한하기 위한 카운트.
+  async countSimaiChartsByOwner(ownerId:string){
+    const r=await this.q<any>("SELECT count(*)::int AS n FROM simai_charts WHERE owner_id=$1 AND source='upload'",[ownerId]);
+    return r[0]?.n??0;
+  }
+  // 오래된 업로드만 지운다. 등록 채보(source='registry')는 보존한다.
+  async pruneSimaiCharts(olderThanMs:number){
+    const r=await this.pool.query("DELETE FROM simai_charts WHERE source='upload' AND created_at < $1",[Date.now()-olderThanMs]);
+    return r.rowCount??0;
+  }
+  // 올린 사람이 자기 업로드를 지울 때. 남의 것은 지워지지 않는다.
+  async deleteSimaiChart(id:string,ownerId:string){
+    const r=await this.pool.query("DELETE FROM simai_charts WHERE id=$1 AND owner_id=$2 AND source='upload'",[id,ownerId]);
+    return (r.rowCount??0)>0;
+  }
+
+  // ── mai-notes 메타데이터 캐시 ─────────────────────────────────────────────
+  // manifest 는 통째로 받아오므로 부분 갱신하지 않고 트랜잭션 안에서 교체한다.
+  // 중간에 실패해도 이전 인덱스가 그대로 남는다.
+  async replaceMainotesIndex(songs:MainotesSongRow[],charts:MainotesChartRow[],etag:string,generatedAt:string){
+    const c=await this.pool.connect();
+    try{
+      await c.query("BEGIN");
+      await c.query("DELETE FROM mainotes_charts");
+      await c.query("DELETE FROM mainotes_songs");
+      for(const chunk of batches(songs,500)){
+        const vals:any[]=[];const rows=chunk.map((x,i)=>{const b=i*7;vals.push(x.id,x.title,x.artist,x.bpm,x.genre,x.version,x.type);
+          return `($${b+1},$${b+2},$${b+3},$${b+4},$${b+5},$${b+6},$${b+7})`;}).join(",");
+        await c.query(`INSERT INTO mainotes_songs(id,title,artist,bpm,genre,version,type) VALUES${rows} ON CONFLICT(id) DO NOTHING`,vals);
+      }
+      for(const chunk of batches(charts,500)){
+        const vals:any[]=[];const rows=chunk.map((x,i)=>{const b=i*8;vals.push(x.id,x.songId,x.difficulty,x.level,x.internalLevel,x.designer,x.hasData?1:0,x.notes);
+          return `($${b+1},$${b+2},$${b+3},$${b+4},$${b+5},$${b+6},$${b+7},$${b+8})`;}).join(",");
+        await c.query(`INSERT INTO mainotes_charts(id,song_id,difficulty,level,internal_level,designer,has_data,notes) VALUES${rows} ON CONFLICT(id) DO NOTHING`,vals);
+      }
+      await c.query(`INSERT INTO mainotes_sync(key,etag,generated_at,synced_at) VALUES('manifest',$1,$2,$3)
+        ON CONFLICT(key) DO UPDATE SET etag=excluded.etag,generated_at=excluded.generated_at,synced_at=excluded.synced_at`,[etag,generatedAt,Date.now()]);
+      await c.query("COMMIT");
+    }catch(e){ await c.query("ROLLBACK"); throw e; } finally { c.release(); }
+  }
+  async getMainotesSyncState(){
+    const r=await this.q<any>(`SELECT etag,generated_at AS "generatedAt",synced_at AS "syncedAt" FROM mainotes_sync WHERE key='manifest'`);
+    return r[0]?{...r[0],syncedAt:Number(r[0].syncedAt)}:null;
+  }
+  // 메모리 인덱스를 세우기 위한 전량 조회. 6천여 행이라 한 번에 읽어도 된다.
+  async getMainotesIndex(){
+    return this.q<any>(`SELECT c.id,c.song_id AS "songId",c.difficulty,c.level,c.internal_level AS "internalLevel",
+      c.designer,c.has_data AS "hasData",c.notes,s.title,s.artist,s.type
+      FROM mainotes_charts c JOIN mainotes_songs s ON s.id=c.song_id`);
+  }
+  async setMainotesSyncedNow(){
+    await this.q(`UPDATE mainotes_sync SET synced_at=$1 WHERE key='manifest'`,[Date.now()]);
+  }
+
+  // ── 채보 풀영상 캐시 ──────────────────────────────────────────────────────
+  async getChartVideo(id:string){
+    const r=await this.q<any>(`SELECT id,status,path,bytes,error,created_at AS "createdAt",updated_at AS "updatedAt" FROM chart_videos WHERE id=$1`,[id]);
+    return r[0]?{...r[0],bytes:Number(r[0].bytes),createdAt:Number(r[0].createdAt),updatedAt:Number(r[0].updatedAt)}:null;
+  }
+  // pending 으로 자리를 맡는다. 이미 있으면(다른 요청이 렌더 중/완료) false 를 돌려
+  // 중복 렌더를 막는다. error 였던 것은 다시 pending 으로 되돌려 재시도 허용.
+  async claimChartVideo(id:string){
+    const now=Date.now();
+    const r=await this.pool.query(
+      `INSERT INTO chart_videos(id,status,created_at,updated_at) VALUES($1,'pending',$2,$2)
+       ON CONFLICT(id) DO UPDATE SET status='pending',updated_at=$2,error='' WHERE chart_videos.status='error'
+       RETURNING id`,[id,now]);
+    return (r.rowCount??0)>0;
+  }
+  async setChartVideoDone(id:string,path:string,bytes:number){
+    await this.q(`UPDATE chart_videos SET status='done',path=$2,bytes=$3,error='',updated_at=$4 WHERE id=$1`,[id,path,bytes,Date.now()]);
+  }
+  async setChartVideoError(id:string,error:string){
+    await this.q(`UPDATE chart_videos SET status='error',error=$2,updated_at=$3 WHERE id=$1`,[id,error.slice(0,500),Date.now()]);
+  }
+  async deleteChartVideo(id:string){
+    const r=await this.q<any>(`DELETE FROM chart_videos WHERE id=$1 RETURNING path`,[id]);
+    return r[0]?.path??null;
+  }
+  // GC: 원본 채보가 사라진(업로드 만료 등) 영상 행을 찾아 지운다. 파일 삭제는 호출부에서.
+  async getOrphanChartVideos(){
+    return this.q<any>(`SELECT v.id,v.path FROM chart_videos v LEFT JOIN simai_charts c ON c.id=v.id WHERE c.id IS NULL`);
   }
 
   async getGuildSetting(id:string){const r=await this.q<any>("SELECT auto_role FROM guild_settings WHERE guild_id=$1",[id]);return r[0]?.auto_role!==0;} async setGuildSetting(id:string,v:boolean){await this.q("INSERT INTO guild_settings VALUES($1,$2) ON CONFLICT(guild_id) DO UPDATE SET auto_role=excluded.auto_role",[id,v?1:0]);}

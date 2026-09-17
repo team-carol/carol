@@ -25,6 +25,10 @@ src/bot/
 | Search command | `commands/search.ts`, `utils/embeds.ts` | `search:{userId}:{encodedQuery}:{pageIdx}` buttons. |
 | Rating table/image | `commands/ratingtable.ts`, `commands/ratingimage.ts` | `/레이팅표` uses PNG cache. |
 | Bot status | `commands/status.ts` | Operational counts/timestamps. |
+| simai 채보 업로드 | `commands/chart.ts`, `src/simai/parse.ts` | `/보면` 이 maidata.txt 첨부를 파싱해 `simai_charts` 에 저장하고 `/chart?id=` 링크를 준다. 업로드본은 30일 뒤 `runSimaiChartGC` 가 정리. |
+| `/보면` 곡 검색 | `commands/chart.ts` 의 `autocomplete()` | `곡` 옵션은 mai-notes 인덱스를 메모리에서 찾는다. 자동완성은 3초 제한이라 DB/네트워크를 타면 안 된다. `InteractionCreate` 의 `isAutocomplete()` 분기가 제일 먼저 실행된다. |
+| 채보 미리보기 GIF | `utils/chartGif.ts`, `utils/gifWorker.ts` | 웹 플레이어와 같은 렌더러(`web/chartRenderer.ts`)를 vm 에 올려 @napi-rs/canvas 로 프레임을 뽑고 gifenc 로 묶는다. 동기 작업이라 반드시 워커에서 돌린다(`renderChartGifAsync`). `GifOptions` 에 mirror·guide 도 있어 웹 `/chart/gif` 가 페이지 설정 그대로 내보낸다. |
+| 채보 풀영상(MP4) | `utils/chartVideo.ts`, `utils/chartVideoWorker.ts`, `utils/chartVideoQueue.ts` | `/보면` 의 `영상 만들기` 버튼(`chartvid:<id>`)이 요청. 400px/60fps/속도6.5/미러없음 고정 + 가이드음(오프라인 PCM 합성 → AAC). 프레임을 ffmpeg stdin 으로 백프레셔 흘려보내 인코딩. 워커에서 돌리고 큐 동시성 1. 완료본은 `DATA_DIR/renders/<id>.mp4`, DB `chart_videos` 에 상태·경로. 웹 `/chart/video?id=` 로 Range 서빙. 원본 채보 만료 시 `runSimaiChartGC` 가 고아 영상도 정리. |
 | Goal tracking | `commands/goal.ts`, `src/goals.ts` | `/목표` 추가/목록/삭제; specs evaluated against cached profile + re-scored on every `/sync`. `spec.baseline` (목표 수립 시 현재값)이 있으면 진행률 바는 그 시점부터의 상대치; `progressPercent`/`progressBar` 는 미달성 목표를 100%/꽉 찬 바로 표시하지 않음. `/목표 목록` 완료 개수는 라이브 평가 기준. |
 | Role assignment | `utils/roles.ts` | Rating-tier roles, guild setting gate. |
 | Rating card renderer | `utils/ratingCard.ts` | Largest file; satori element helper, no JSX. |
@@ -50,6 +54,7 @@ src/bot/
 | `rt:` | rating table button | `rt:{userId}` |
 | `search:` | search pagination | `search:{userId}:{encodedQuery}:{pageIdx}` |
 | `goal:` | `commands/goal.ts` goal list pagination | `goal:{ownerId}:{pageIdx}` (`goal:{ownerId}:page` = inert page counter) |
+| `chartvid:` | `index.ts` 풀영상 버튼 | `chartvid:{chartId}` |
 
 ## ANTI-PATTERNS
 
