@@ -281,6 +281,15 @@ SELECT u.chart_key AS "chartKey",u.achievement_val AS "achievementVal",u.fc,u.sy
     const r=await this.q<any>(`SELECT source,item_id AS "itemId",title,title_ko AS "titleKo",url,body,body_ko AS "bodyKo" FROM news_articles WHERE source=$1 AND item_id=$2`,[source,itemId]);
     return r[0]??null;
   }
+  // 게시 시점에 번역이 실패한(과부하/타임아웃) 공지를 나중에 다시 번역하기 위한 조회.
+  // 본문은 있는데 번역본이 비어 있는 것만, 최근 것부터. sinceMs 로 오래된 것은 제외해
+  // 영구 실패 항목이 무한 재시도되지 않게 한다.
+  async getUntranslatedNewsArticles(source:string,sinceMs:number,limit:number){
+    return this.q<{itemId:string;title:string;url:string;body:string}>(
+      `SELECT item_id AS "itemId",title,url,body FROM news_articles
+       WHERE source=$1 AND body<>'' AND body_ko='' AND created_at>=$2
+       ORDER BY created_at DESC LIMIT $3`,[source,sinceMs,limit]);
+  }
   // 본문은 계속 쌓이기만 하므로 오래된 것은 지운다. 버튼은 "기간 지남" 안내로 응답한다.
   async pruneNewsArticles(olderThanMs:number){
     const r=await this.pool.query("DELETE FROM news_articles WHERE created_at < $1",[Date.now()-olderThanMs]);
