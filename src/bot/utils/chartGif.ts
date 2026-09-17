@@ -1,0 +1,205 @@
+import { createCanvas } from "@napi-rs/canvas";
+import { GIFEncoder, quantize, applyPalette } from "gifenc";
+import * as vm from "vm";
+import { RENDERER_JS } from "../../web/chartRenderer";
+import type { Chart, ChartNote } from "../../simai/types";
+
+/** 렌더러가 그리는 내부 캔버스 크기. chartRenderer 안에 박혀 있는 값이다. */
+const SRC = 920;
+
+export interface GifOptions {
+  /** 잘라낼 구간의 시작(ms). */
+  startMs: number;
+  /** 길이(ms). */
+  durationMs: number;
+  /** 출력 한 변(px). */
+  size: number;
+  fps: number;
+  /** 노트 속도(TapSpeed). 웹 플레이어 기본값과 맞춘다. */
+  speed: number;
+  /** 좌우 반전. 생략 시 렌더러 기본값(꺼짐). */
+  mirror?: boolean;
+  /** 슬라이드 가이드 표시. 생략 시 렌더러 기본값(켜짐). */
+  guide?: boolean;
+}
+
+export const GIF_DEFAULTS: Omit<GifOptions, "startMs"> = {
+  durationMs: 12000, size: 400, fps: 15, speed: 6.5,
+};
+
+/**
+ * 노트가 가장 빽빽한 구간의 시작 시각을 고른다.
+ * 길이 window 짜리 창을 굴리며 노트 수가 가장 많은 자리를 찾는다.
+ */
+export function densestStart(chart: Chart, windowMs: number): number {
+  const notes = chart.notes;
+  if (notes.length === 0) return 0;
+  let best = 0, bestCount = -1, lo = 0;
+  for (let hi = 0; hi < notes.length; hi++) {
+    while (notes[hi].timeMs - notes[lo].timeMs > windowMs) lo++;
+    const count = hi - lo + 1;
+    if (count > bestCount) { bestCount = count; best = notes[lo].timeMs; }
+  }
+  // 노트가 창 한가운데 오도록 조금 앞에서 시작한다.
+  return Math.max(0, best - windowMs * 0.15);
+}
+
+/** 길이 windowMs 짜리 창에 들어가는 최대 노트 수. */
+function densestCount(chart: Chart, windowMs: number): number {
+  const notes = chart.notes;
+  let best = 0, lo = 0;
+  for (let hi = 0; hi < notes.length; hi++) {
+    while (notes[hi].timeMs - notes[lo].timeMs > windowMs) lo++;
+    const c = hi - lo + 1;
+    if (c > best) best = c;
+  }
+  return best;
+}
+
+/**
+ * 미리보기 구간을 고른다. 밀도 높은 구간이 얼마나 길게 이어지는지에 따라 클립
+ * 길이를 minMs~maxMs 로 유동 조절한다.
+ *   - 긴 창(max)이 짧은 창(min)보다 노트를 얼마나 더 담는지로 "밀집이 이어지는
+ *     정도"를 잰다. 균등하게 빽빽하면 노트 수가 창 길이에 비례해 늘어(→ max),
+ *     밀집이 min 안에서 끝나면 더 늘려도 노트가 안 늘어(→ min).
+ *   - 시작점은 정해진 길이의 가장 빽빽한 창(densestStart)으로 잡는다.
+ */
+export function densePreviewRange(chart: Chart, minMs: number, maxMs: number): { startMs: number; durationMs: number } {
+  if (chart.notes.length === 0 || maxMs <= minMs) return { startMs: 0, durationMs: minMs };
+  const nMin = densestCount(chart, minMs), nMax = densestCount(chart, maxMs);
+  const full = maxMs / minMs;               // 노트가 창 길이에 완전 비례할 때의 비율
+  const ratio = nMax / Math.max(1, nMin);   // 실제 비율 [1, full]
+  const f = Math.min(1, Math.max(0, (ratio - 1) / (full - 1)));
+  const durationMs = Math.round((minMs + (maxMs - minMs) * f) / 1000) * 1000;
+  return { startMs: densestStart(chart, durationMs), durationMs };
+}
+
+interface Sandbox {
+  t: number;
+  draw: () => void;
+  speedIdx: number;
+  NOTES: ChartNote[];
+  [k: string]: unknown;
+}
+
+/** 브라우저 렌더러를 그대로 돌리기 위한 최소 DOM 대역. */
+function makeSandbox(ctx: unknown, data: unknown): Sandbox {
+  const el = () => ({
+    style: {}, classList: { toggle() {}, add() {}, remove() {} },
+    getBoundingClientRect: () => ({ left: 0, width: 100 }),
+    setPointerCapture() {}, releasePointerCapture() {},
+    textContent: "", value: "1", files: null,
+    scrollIntoView() {}, addEventListener() {},
+  });
+  const sandbox: Record<string, unknown> = {
+    DATA: data,
+    document: {
+      getElementById: (id: string) =>
+        id === "cv" ? Object.assign(el(), { getContext: () => ctx, width: SRC, height: SRC }) : el(),
+      querySelector: () => el(),
+      addEventListener() {},
+    },
+    window: {},
+    requestAnimationFrame: () => 0,
+    performance: { now: () => 0 },
+    Audio: function () { return { play() {}, pause() {} }; },
+    URL: { createObjectURL: () => "" },
+    Math, console, isNaN, parseFloat, parseInt, String, Number, Array, Object, JSON, Date,
+  };
+  sandbox.globalThis = sandbox;
+  return sandbox as unknown as Sandbox;
+}
+
+/**
+ * 채보 한 구간을 움직이는 GIF 로 만든다.
+ * 웹 플레이어와 같은 렌더러 코드를 vm 에 올려 캔버스만 갈아끼우므로,
+ * 화면에서 보이는 것과 같은 그림이 나온다.
+ */
+export function renderChartGif(
+  data: { id: string; title: string; artist: string; designer: string; level: string; difficulty: number; chart: Chart },
+  opts: GifOptions,
+): Buffer {
+  // 920 로 그린 뒤 줄이면 픽셀을 5배 넘게 낭비한다. 캔버스를 출력 크기로 잡고
+  // 컨텍스트만 축척해서 렌더러가 그대로 920 좌표로 그리게 한다.
+  const cv = createCanvas(opts.size, opts.size);
+  const ctx = cv.getContext("2d");
+  ctx.scale(opts.size / SRC, opts.size / SRC);
+
+  const sandbox = makeSandbox(ctx, data);
+  vm.createContext(sandbox);
+  vm.runInContext(RENDERER_JS, sandbox);
+  sandbox.speedIdx = opts.speed;
+  if (opts.mirror !== undefined) sandbox.mirror = opts.mirror;
+  if (opts.guide !== undefined) sandbox.guide = opts.guide;
+
+  const frames = Math.max(1, Math.round(opts.durationMs / 1000 * opts.fps));
+  const delay = Math.round(1000 / opts.fps);
+
+  const renderFrame = (fi: number): Uint8ClampedArray => {
+    sandbox.t = opts.startMs + (fi / opts.fps) * 1000;
+    sandbox.draw();
+    // 필드 바깥은 투명하게 남으므로 카드 배경색을 뒤에 깔아 준다.
+    ctx.save();
+    ctx.globalCompositeOperation = "destination-over";
+    ctx.fillStyle = "#1a1a1a";
+    ctx.fillRect(0, 0, SRC, SRC);
+    ctx.restore();
+    return ctx.getImageData(0, 0, opts.size, opts.size).data;
+  };
+
+  // 팔레트는 첫 프레임 하나가 아니라 클립 전체에서 뽑은 표본으로 만든다. 시작이
+  // 빈 화면이거나 노트가 적으면 그 프레임에 없는 색(분홍·노랑·주황)이 팔레트에서
+  // 빠져 노트가 회색으로 뭉개지기 때문이다.
+  const sampleN = Math.min(frames, 16);
+  const chunks: Uint8ClampedArray[] = [];
+  for (let s = 0; s < sampleN; s++) {
+    const fi = sampleN <= 1 ? 0 : Math.round(s * (frames - 1) / (sampleN - 1));
+    chunks.push(renderFrame(fi));
+  }
+  let totalLen = 0;
+  for (const c of chunks) totalLen += c.length;
+  const merged = new Uint8Array(totalLen);
+  let mo = 0;
+  for (const c of chunks) { merged.set(c, mo); mo += c.length; }
+  const palette = quantize(merged, 128) as number[][];
+
+  const gif = GIFEncoder();
+  for (let i = 0; i < frames; i++) {
+    const rgba = renderFrame(i);
+    const indexed = applyPalette(rgba, palette);
+    gif.writeFrame(indexed, opts.size, opts.size, { palette: i === 0 ? palette : undefined, delay });
+  }
+  gif.finish();
+  return Buffer.from(gif.bytes());
+}
+
+/**
+ * 프레임 렌더와 GIF 인코딩은 수 초짜리 동기 작업이라 메인 스레드에서 돌리면
+ * 그동안 봇이 멈춘다. 요청이 잦지 않으므로 그때그때 워커를 띄워 처리한다.
+ */
+export function renderChartGifAsync(
+  data: { id: string; title: string; artist: string; designer: string; level: string; difficulty: number; chart: Chart },
+  opts: GifOptions,
+  timeoutMs = 60000,
+): Promise<Buffer> {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { Worker } = require("worker_threads") as typeof import("worker_threads");
+  const path = require("path") as typeof import("path");
+  const ext = path.extname(__filename);            // 프로덕션 .js / ts-node .ts
+  const file = path.join(__dirname, "gifWorker" + ext);
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(file, {
+      resourceLimits: { maxOldGenerationSizeMb: 512, maxYoungGenerationSizeMb: 64 },
+      ...(ext === ".ts" ? { execArgv: ["-r", "ts-node/register/transpile-only"] } : {}),
+    });
+    const timer = setTimeout(() => { worker.terminate(); reject(new Error("gif render timeout")); }, timeoutMs);
+    const done = (fn: () => void) => { clearTimeout(timer); void worker.terminate(); fn(); };
+    worker.on("message", (m: { ok: boolean; gif?: Uint8Array; error?: string }) => {
+      if (m.ok && m.gif) done(() => resolve(Buffer.from(m.gif!)));
+      else done(() => reject(new Error(m.error || "gif render failed")));
+    });
+    worker.on("error", (e) => done(() => reject(e)));
+    worker.on("exit", (code) => { if (code !== 0) done(() => reject(new Error("gif worker exited " + code))); });
+    worker.postMessage({ data, opts });
+  });
+}

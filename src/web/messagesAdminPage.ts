@@ -45,7 +45,7 @@ button.ghost{background:#1f1f1f;color:#aaa;border:1px solid #2a2a2a}
 </style></head><body>
 <div class="wrap">
 <p class="mono">carolbot · admin</p>
-<div class="tabs"><a href="/admin/aliases?code=${token}">곡 별명</a><a class="on" href="/admin/messages?code=${token}">봇 문구</a></div>
+<div class="tabs"><a href="/admin/aliases?code=${token}">곡 별명</a><a class="on" href="/admin/messages?code=${token}">봇 문구</a><a href="/admin/import?code=${token}">채보 등록</a></div>
 <h1>봇 문구 관리</h1>
 <p class="sub">저장하면 즉시 반영됩니다. 슬래시 명령의 이름·설명은 Discord에 기동 시 등록되어 여기서 바꿀 수 없습니다.</p>
 <input id="q" placeholder="키 또는 문구 검색">

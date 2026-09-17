@@ -1,13 +1,18 @@
-import { Client, Events, GatewayIntentBits, ChatInputCommandInteraction, ButtonInteraction, REST, Routes, MessageFlags } from "discord.js";
+import { Client, Events, GatewayIntentBits, ChatInputCommandInteraction, AutocompleteInteraction, ButtonInteraction, REST, Routes, MessageFlags, AttachmentBuilder } from "discord.js";
 import { initEncryption } from "../crypto";
 import { startWebServer, setBaseUrl, setGuildCountProvider, setGatewayPingProvider, getBaseUrl } from "../web";
-import { closeStorage, initializeStorage, loadUserSession, getCachedProfile, clearRatingCardCacheForInactive, getTranslateTitles, getPolicyAck, setPolicyAck } from "../storage";
+import { closeStorage, initializeStorage, loadUserSession, getCachedProfile, clearRatingCardCacheForInactive, getTranslateTitles, getPolicyAck, setPolicyAck, pruneSimaiCharts, getSimaiChart, getOrphanChartVideos, deleteChartVideo } from "../storage";
 import { CONFIG, PORT } from "../config";
+import { parseMaidata } from "../simai/parse";
+import { requestVideo, getReadyVideo, queueDepth } from "./utils/chartVideoQueue";
+import type { Chart } from "../simai/types";
+import * as fsp from "fs";
 import { POLICY_VERSION, policyNoticeText } from "../policy";
 import { recentEmbeds, rtTableEmbed, searchResultEmbeds, getSearchCtx, mapAreaEmbed } from "./utils/embeds";
 
 import { loadConstants } from "../constants";
 import { loadAliases } from "../aliases";
+import { loadRegistryIndex } from "../simai/registryIndex";
 import { loadMessages, msg } from "../messages";
 import { loadFonts } from "../fonts";
 
@@ -29,10 +34,11 @@ import * as areaMap      from "./commands/map";
 import * as report       from "./commands/report";
 import * as admin        from "./commands/admin";
 import * as goal         from "./commands/goal";
+import * as chart        from "./commands/chart";
 
-type Command = { data: { toJSON(): object; name: string }; execute: (i: ChatInputCommandInteraction) => Promise<void> };
+type Command = { data: { toJSON(): object; name: string }; execute: (i: ChatInputCommandInteraction) => Promise<void>; autocomplete?: (i: AutocompleteInteraction) => Promise<void> };
 
-const COMMANDS: Command[] = [profile, bookmarklet, ratingtable, ratingimage, achievement, fortune, settings, serverSettings, newsSettings, search, status, songrec, random, areaMap, report, admin, goal];
+const COMMANDS: Command[] = [profile, bookmarklet, ratingtable, ratingimage, achievement, fortune, settings, serverSettings, newsSettings, search, status, songrec, random, areaMap, report, admin, goal, chart];
 const EPHEMERAL_REPLY = { flags: MessageFlags.Ephemeral } as const;
 
 const RATING_CARD_GC_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000;
@@ -80,12 +86,93 @@ client.once(Events.ClientReady, async (c) => {
   } catch (e) {
     console.error("[messages] 로드 실패:", e);
   }
+  try {
+    await loadRegistryIndex();
+  } catch (e) {
+    console.error("[registry] 채보 인덱스 로드 실패:", e);
+  }
   loadFonts().catch((e) => console.error("[fonts] 초기 로드 실패:", e));
   void runRatingCardGC();
   setInterval(() => void runRatingCardGC(), RATING_CARD_GC_INTERVAL_MS);
+  void runSimaiChartGC();
+  setInterval(() => void runSimaiChartGC(), SIMAI_CHART_GC_INTERVAL_MS);
   startNewsPoller(c);
   console.log("[maimai] 준비 완료");
 });
+
+
+// 업로드된 simai 채보는 링크를 아는 사람만 열 수 있는 임시 자료라 무한히 쌓아둘 이유가 없다.
+// 운영자가 등록한 채보(source='registry')는 지우지 않는다.
+const SIMAI_CHART_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const SIMAI_CHART_GC_INTERVAL_MS = 24 * 60 * 60 * 1000;
+async function runSimaiChartGC(): Promise<void> {
+  try {
+    const n = await pruneSimaiCharts(SIMAI_CHART_TTL_MS);
+    if (n > 0) console.log(`[보면] 만료된 업로드 채보 ${n}건 정리`);
+  } catch (e) {
+    console.error("[보면] 정리 실패:", e);
+  }
+  // 원본 채보가 사라진 풀영상 파일·행도 함께 정리(재생성 가능한 캐시).
+  try {
+    const orphans = await getOrphanChartVideos() as Array<{ id: string; path: string }>;
+    for (const o of orphans) {
+      if (o.path) { try { fsp.unlinkSync(o.path); } catch { /* 이미 없음 */ } }
+      await deleteChartVideo(o.id);
+    }
+    if (orphans.length > 0) console.log(`[보면] 고아 풀영상 ${orphans.length}건 정리`);
+  } catch (e) {
+    console.error("[보면] 풀영상 정리 실패:", e);
+  }
+}
+
+// 풀영상 버튼(chartvid:<id>): 캐시가 있으면 즉시 링크, 없으면 렌더 후 링크. 같은
+// 채보 동시 요청은 큐가 하나로 합쳐 렌더한다. 실행자에게만 보이는 응답.
+// Discord 기본 업로드 한도(모든 유저 25MB) 안쪽이면 파일로 첨부, 넘으면 링크.
+const VIDEO_ATTACH_LIMIT = 24 * 1024 * 1024;
+
+async function deliverChartVideo(i: ButtonInteraction, id: string, title: string, path: string, bytes: number): Promise<void> {
+  const url = `${getBaseUrl(PORT)}/chart/video?id=${id}`;
+  if (bytes <= VIDEO_ATTACH_LIMIT) {
+    const safe = (title || "chart").replace(/[^\w.-]+/g, "_").slice(0, 40) || "chart";
+    try {
+      await i.editReply({ content: msg("chart.videoAttached", { title: title || "채보" }),
+        files: [new AttachmentBuilder(path, { name: `${safe}.mp4` })] });
+      return;
+    } catch (e) {
+      // 첨부가 한도 등으로 실패하면 링크로 폴백.
+      console.error("[chartvid] 첨부 실패, 링크로 폴백:", e);
+    }
+  }
+  await i.editReply({ content: msg("chart.videoTooBig", { url }) });
+}
+
+async function handleChartVideoButton(i: ButtonInteraction): Promise<void> {
+  const id = i.customId.slice("chartvid:".length);
+  // 모두가 보도록 공개로 응답한다(ephemeral 아님).
+  await i.deferReply();
+
+  const ready = await getReadyVideo(id);
+  const row = await getSimaiChart(id) as any;
+  const title = row?.title || "채보";
+  if (ready) { await deliverChartVideo(i, id, title, ready.path, ready.bytes); return; }
+
+  if (!row) { await i.editReply({ content: msg("chart.unavailable.not-found") }); return; }
+  let chart: Chart | null = null;
+  try {
+    if (row.maidata) { const re = parseMaidata(row.maidata); chart = (re.charts[row.difficulty] ?? Object.values(re.charts)[0] ?? null) as Chart | null; }
+    if (!chart) chart = JSON.parse(row.chartJson) as Chart;
+  } catch { await i.editReply({ content: msg("chart.videoFailed") }); return; }
+
+  const depth = queueDepth();
+  await i.editReply({ content: depth > 0 ? msg("chart.videoQueued", { n: depth }) : msg("chart.videoRendering") });
+  try {
+    const out = await requestVideo({ id: row.id, title: row.title, artist: row.artist, designer: row.designer, level: row.level, difficulty: row.difficulty, chart });
+    await deliverChartVideo(i, id, title, out.path, out.bytes);
+  } catch (e) {
+    console.error("[chartvid] 렌더 실패:", e);
+    await i.editReply({ content: msg("chart.videoFailed") });
+  }
+}
 
 // 개인정보처리방침이 바뀌면(POLICY_VERSION 상향) 등록 사용자에게 다음 명령 실행 시 1회 고지.
 // 명령 응답 뒤 ephemeral 팔로업으로 붙이고, 성공하면 policy_ack 를 올려 다시 안 뜨게 한다.
@@ -103,6 +190,13 @@ async function maybeSendPolicyNotice(i: ChatInputCommandInteraction): Promise<vo
 }
 
 client.on(Events.InteractionCreate, async (i) => {
+  // 자동완성은 3초 안에 답해야 하고 deferReply 가 없다. 제일 먼저 처리한다.
+  if (i.isAutocomplete()) {
+    const cmd = COMMANDS.find((c) => c.data.name === i.commandName);
+    if (!cmd?.autocomplete) { try { await i.respond([]); } catch { /* 이미 만료 */ } return; }
+    try { await cmd.autocomplete(i); } catch (e) { console.error(`[autocomplete:${i.commandName}]`, e); }
+    return;
+  }
   if (i.isChatInputCommand()) {
     const cmd = COMMANDS.find((c) => c.data.name === i.commandName);
     if (!cmd) return;
@@ -137,6 +231,10 @@ client.on(Events.InteractionCreate, async (i) => {
     }
     if (i.customId.startsWith("news:")) {
       try { await handleNewsButton(i); } catch (e) { console.error("[news-btn]", e); }
+      return;
+    }
+    if (i.customId.startsWith("chartvid:")) {
+      try { await handleChartVideoButton(i); } catch (e) { console.error("[chartvid-btn]", e); }
       return;
     }
     if (i.customId.startsWith("goal:")) {

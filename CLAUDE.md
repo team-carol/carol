@@ -37,10 +37,15 @@ Key entry points:
 - `src/storage/postgres.ts` — PostgreSQL storage and numbered migrations; main write path after `/sync`.
 - `src/scraper.ts` — Cheerio selectors bound to DX NET markup.
 - `src/bot/utils/ratingCard.ts` — satori + resvg PNG rendering (no JSX; uses a local `el()` helper), cached in DB.
+- `src/simai/parse.ts` — maidata.txt(simai) 파서. 결과 `Chart` JSON 을 canvas 플레이어가 그대로 소비한다. **파싱은 서버에서만** — 브라우저로 옮기지 말 것(채보 출처가 업로드→DB 로 바뀌어도 이 경계는 유지).
+- `src/web/chartRenderer.ts` — 플레이어 그리기 코어를 **JS 소스 문자열**로 보관한다. 브라우저는 `<script>` 에 인라인하고, `/보면` 미리보기 GIF는 같은 문자열을 vm 에 올려 캔버스만 갈아끼운다. 코드를 두 벌 두지 않기 위한 구조이므로 **이 파일 안에서 백틱과 `${` 를 쓰지 말 것.**
 - `src/messages.ts` — single catalog of every user-facing bot string (`msg(key, vars)`). Defaults live here; `/관리` → `/admin/messages` writes overrides to `bot_messages`. Slash command/option names and `RATING_ROLES` names are deliberately NOT in the catalog (registered with Discord / looked up by name).
 
 ## Project-specific conventions & anti-patterns
 
+- 업로드된 simai 채보(`simai_charts`, `source='upload'`)는 30일 뒤 자동 삭제된다. 운영자 등록분(`source='registry'`)은 GC 대상이 아니다.
+- **mai-notes 채보 본문 fetch 는 기본 꺼짐(`config.mainotesFetchCharts`, 기본 false).** `src/mainotes/` 는 `manifest.json`(메타데이터) 을 하루 1회 ETag 조건부로 받아 검색 인덱스를 만든다. 채보 본문은 `https://mai-notes.com/data/charts/<UUID>.txt`(manifest 와 같은 공개 /data/ 경로)에서 받아 `simai_charts`(source='mainotes')에 캐시하고 다시 받지 않는다 — 단, **플래그가 켜졌을 때만**. mai-notes 이용약관 제7조와 운영자 문의 답변 대기 때문에 커밋 기본값은 반드시 false 여야 하고, 지금은 테스트용으로만 로컬 config.json 에서 켠다. 거절되면 `src/mainotes/` 를 지우고 `src/bot/index.ts` 의 `registerChartSource(mainotesSource)` 한 줄을 빼면 된다.
+- mai-notes 운영자가 요구한 유일한 조건은 **대량 통신 금지**다. 요청 하한(24시간)·ETag·User-Agent 식별은 `src/mainotes/client.ts` 와 `index.ts` 에 있다. 이 셋을 약화시키지 말 것.
 - **Slash commands use Korean names.** User `/설정` links to web settings; guild auto-role config is `/서버설정`, not `/설정`.
 - **User-facing strings go through `msg()` from `src/messages.ts`** — do not inline new Korean output text in commands. Fonts for PNG cards must be registered under distinct family names (satori does not fall back within one family); see `src/fonts.ts` `FONT_STACK`.
 - **PostgreSQL migrations are numbered and immutable after release.** Do not reintroduce SQLite runtime storage or the removed catalog baseline crawler.

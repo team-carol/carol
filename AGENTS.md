@@ -33,6 +33,21 @@ carol/
 | Web routes / sync ingest | `src/web/index.ts` | Manual `req.method` + `url.pathname` chains. |
 | Bookmarklet source | `src/web/bookmarklet.ts` | Embedded JS string; preset bookmarklets injected before extras. |
 | Web settings UI | `src/web/settingsPage.ts` | Inline HTML/CSS/JS, no React/templates. |
+| simai 채보 파싱 | `src/simai/parse.ts` | maidata.txt -> 타임라인. 순수 함수, 유닛 테스트 있음. |
+| 채보 플레이어 페이지 | `src/web/chartPlayer.ts` | 페이지 껍데기. 그리기 코어는 `chartRenderer.ts`. |
+| 노트 그리기 코어 | `src/web/chartRenderer.ts` | 브라우저와 서버(GIF)가 공용. 템플릿 문자열이라 백틱 금지. |
+| 채보 공급원 추상화 | `src/simai/source.ts` | `registry:` / `mainotes:` 키로 채보를 찾는다. 공급원 추가·제거는 여기만 건드린다. |
+| mai-notes 메타데이터 | `src/mainotes/` | manifest.json 사본(곡·난이도·정수). **채보 본문은 받지 않는다** — 아래 제약 참고. |
+
+### mai-notes 연동 제약
+
+`src/mainotes/` 는 **메타데이터 인덱스 전용**이다. 곡 검색과 난이도 표시에만 쓰고, simai 본문은 가져오지 않는다.
+
+- 채보 본문은 `https://mai-notes.com/data/charts/<UUID>.txt`(공개 /data/ 경로)에서 받는다. **`config.mainotesFetchCharts` 가 켜졌을 때만**이며 커밋 기본값은 false 다 — 이용약관 제7조와 운영자 문의 답변 대기 때문. 지금은 테스트용으로만 로컬에서 켠다.
+- `load()` 는 받은 채보를 `simai_charts`(source='mainotes')에 캐시해 다시 받지 않는다. 본문은 헤더가 없어 제목·아티스트·난이도는 메모리 인덱스(manifest)에서 채운다.
+- 거절되면 `src/mainotes/` 삭제 + `registerChartSource(mainotesSource)` 한 줄 제거로 끝난다. 나머지 기능은 그대로 남는다.
+- 통신은 manifest.json 하루 1회 + ETag 조건부 + User-Agent 식별. 운영자가 요구한 조건이 "대량 통신 금지" 하나뿐이라 이 셋이 그 약속의 구현이다.
+| 미리보기 GIF | `src/bot/utils/chartGif.ts` | 같은 렌더러를 vm+napi-canvas 로 돌려 프레임을 뽑는다. |
 | DB schema/storage | `src/storage/postgres.ts` | PostgreSQL storage and numbered migrations. |
 | maimai parsing | `src/scraper.ts` | Cheerio selectors tied to DX NET markup. |
 | Song constants/jackets | `src/constants.ts` | otoge-db cache; startup network failure is non-fatal. |
