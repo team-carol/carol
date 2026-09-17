@@ -12,9 +12,7 @@ import { recentEmbeds, rtTableEmbed, searchResultEmbeds, getSearchCtx, mapAreaEm
 
 import { loadConstants } from "../constants";
 import { loadAliases } from "../aliases";
-import { loadMainotesIndex, syncMainotes } from "../mainotes";
-import { mainotesSource } from "../mainotes/source";
-import { registerChartSource } from "../simai/source";
+import { loadRegistryIndex } from "../simai/registryIndex";
 import { loadMessages, msg } from "../messages";
 import { loadFonts } from "../fonts";
 
@@ -37,10 +35,11 @@ import * as report       from "./commands/report";
 import * as admin        from "./commands/admin";
 import * as goal         from "./commands/goal";
 import * as chart        from "./commands/chart";
+import * as chartImport  from "./commands/chartImport";
 
 type Command = { data: { toJSON(): object; name: string }; execute: (i: ChatInputCommandInteraction) => Promise<void>; autocomplete?: (i: AutocompleteInteraction) => Promise<void> };
 
-const COMMANDS: Command[] = [profile, bookmarklet, ratingtable, ratingimage, achievement, fortune, settings, serverSettings, newsSettings, search, status, songrec, random, areaMap, report, admin, goal, chart];
+const COMMANDS: Command[] = [profile, bookmarklet, ratingtable, ratingimage, achievement, fortune, settings, serverSettings, newsSettings, search, status, songrec, random, areaMap, report, admin, goal, chart, chartImport];
 const EPHEMERAL_REPLY = { flags: MessageFlags.Ephemeral } as const;
 
 const RATING_CARD_GC_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000;
@@ -88,14 +87,11 @@ client.once(Events.ClientReady, async (c) => {
   } catch (e) {
     console.error("[messages] 로드 실패:", e);
   }
-  registerChartSource(mainotesSource);
   try {
-    await loadMainotesIndex();
+    await loadRegistryIndex();
   } catch (e) {
-    console.error("[mainotes] 인덱스 로드 실패:", e);
+    console.error("[registry] 채보 인덱스 로드 실패:", e);
   }
-  void runMainotesSync();
-  setInterval(() => void runMainotesSync(), MAINOTES_SYNC_INTERVAL_MS);
   loadFonts().catch((e) => console.error("[fonts] 초기 로드 실패:", e));
   void runRatingCardGC();
   setInterval(() => void runRatingCardGC(), RATING_CARD_GC_INTERVAL_MS);
@@ -105,20 +101,6 @@ client.once(Events.ClientReady, async (c) => {
   console.log("[maimai] 준비 완료");
 });
 
-// mai-notes 메타데이터 동기화. 상대가 요청한 유일한 조건이 "대량 통신 금지" 라서,
-// manifest.json 한 개를 하루 1회 ETag 조건부로만 받는다. 실제 하한은 syncMainotes 안에
-// 있고, 여기 간격은 그 창이 열렸는지 들여다보는 주기다.
-const MAINOTES_SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000;
-async function runMainotesSync(): Promise<void> {
-  try {
-    const r = await syncMainotes();
-    if (r.skipped) return;
-    if (r.changed) console.log(`[mainotes] manifest 갱신: 곡 ${r.songs}개, 채보 ${r.charts}개`);
-    else console.log("[mainotes] manifest 변경 없음 (304)");
-  } catch (e) {
-    console.error("[mainotes] 동기화 실패:", e);
-  }
-}
 
 // 업로드된 simai 채보는 링크를 아는 사람만 열 수 있는 임시 자료라 무한히 쌓아둘 이유가 없다.
 // 운영자가 등록한 채보(source='registry')는 지우지 않는다.

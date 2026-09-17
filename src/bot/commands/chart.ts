@@ -6,7 +6,7 @@ import { randomBytes } from "crypto";
 import { saveSimaiChart, countSimaiChartsByOwner } from "../../storage";
 import { parseMaidata, UNKNOWN_DIFFICULTY } from "../../simai/parse";
 import { resolveChart, makeChartKey, ChartUnavailableError } from "../../simai/source";
-import { searchCharts, indexSize } from "../../mainotes";
+import { searchRegistry, registrySize } from "../../simai/registryIndex";
 import { renderChartGifAsync, densePreviewRange, GIF_DEFAULTS } from "../utils/chartGif";
 import { getBaseUrl } from "../../web/bookmarklet";
 import { PORT } from "../../config";
@@ -45,16 +45,15 @@ export const data = new SlashCommandBuilder()
 
 /** 곡 이름 자동완성. 네트워크를 쓰지 않고 메모리 인덱스만 본다. */
 export async function autocomplete(interaction: AutocompleteInteraction): Promise<void> {
-  if (indexSize() === 0) { await interaction.respond([]); return; }
+  if (registrySize() === 0) { await interaction.respond([]); return; }
   const q = interaction.options.getFocused();
-  const hits = searchCharts(q, 25);
+  const hits = searchRegistry(q, 25);
   await interaction.respond(hits.map((c) => {
     const diff = DIFF_LABEL[c.difficulty] ?? "?";
     const lv = c.level ? ` ${c.level}` : "";
-    const dx = c.type === "deluxe" ? " [DX]" : "";
     // Discord 는 이름을 100자까지만 받는다.
-    const name = `${c.title}${dx} · ${diff}${lv}`.slice(0, 100);
-    return { name, value: makeChartKey("mainotes", c.id) };
+    const name = `${c.title} · ${diff}${lv}`.slice(0, 100);
+    return { name, value: makeChartKey("registry", c.id) };
   }));
 }
 
@@ -101,6 +100,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       await reply(interaction, {
         id, title: found.title, artist: found.artist,
         designer: found.designer, level: found.level, diff, chart,
+        sourceUrl: found.sourceUrl,
         footer: found.attribution
           ? msg("chart.footerSource", { source: found.attribution })
           : msg("chart.footerRegistry"),
@@ -213,6 +213,8 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 interface ReplyInput {
   id: string; title: string; artist: string; designer: string;
   level: string; diff: number; chart: Chart; footer: string;
+  /** 원본 페이지 링크(있으면 출처·원작자 크레딧을 설명에 건다). */
+  sourceUrl?: string;
 }
 
 /** 링크 + 통계 + 미리보기 GIF 를 붙여 응답한다. 파일/곡 어느 쪽으로 왔든 같다. */
@@ -224,7 +226,10 @@ async function reply(interaction: ChatInputCommandInteraction, x: ReplyInput): P
     .setColor(DIFF_COLOR[x.diff] ?? 0x9333ea)
     .setTitle(x.title || msg("chart.untitled"))
     .setDescription(
-      msg("chart.openLink", { url }) + (x.chart.bpmAssumed ? "\n" + msg("chart.bpmAssumedNote") : ""),
+      msg("chart.openLink", { url })
+      + (x.chart.bpmAssumed ? "\n" + msg("chart.bpmAssumedNote") : "")
+      // 원본 링크 + 제작자 크레딧. atwiki 등록분이면 항상 출처를 건다.
+      + (x.sourceUrl ? "\n" + msg("chart.sourceCredit", { url: x.sourceUrl, designer: x.designer || "?" }) : ""),
     )
     .addFields(
       { name: msg("chart.fieldChart"), value: `\`${DIFF_LABEL[x.diff] ?? msg("chart.diffUnknown")}\`${x.level ? "  ·  Lv." + x.level : ""}`, inline: true },

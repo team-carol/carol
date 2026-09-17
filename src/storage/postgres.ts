@@ -367,6 +367,11 @@ SELECT u.chart_key AS "chartKey",u.achievement_val AS "achievementVal",u.fc,u.sy
     const r=await this.q<any>(`SELECT id,owner_id AS "ownerId",source,title,artist,designer,level,difficulty,maidata,chart_json AS "chartJson",created_at AS "createdAt" FROM simai_charts WHERE id=$1`,[id]);
     return r[0]?{...r[0],createdAt:Number(r[0].createdAt)}:null;
   }
+  // 운영자 등록분(registry) 목록. /보면 곡명 검색 인덱스를 메모리로 올리는 데 쓴다.
+  // 본문(maidata)·chart_json 은 빼서 가볍게 — 검색·표시에 필요한 메타만.
+  async listRegistryCharts(){
+    return this.q<any>(`SELECT id,title,artist,designer,level,difficulty FROM simai_charts WHERE source='registry'`);
+  }
   // 한 사람이 올릴 수 있는 채보 수를 제한하기 위한 카운트.
   async countSimaiChartsByOwner(ownerId:string){
     const r=await this.q<any>("SELECT count(*)::int AS n FROM simai_charts WHERE owner_id=$1 AND source='upload'",[ownerId]);

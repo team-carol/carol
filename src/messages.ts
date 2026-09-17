@@ -60,6 +60,7 @@ export const MESSAGES = {
   "chart.videoFailed": "영상 생성에 실패했습니다. 잠시 후 다시 시도해주세요.",
   "chart.footerRegistry": "등록된 채보 · 링크를 아는 사람만 볼 수 있습니다",
   "chart.footerSource": "채보 출처: {source} · 링크를 아는 사람만 볼 수 있습니다",
+  "chart.sourceCredit": "채보: [{designer}]({url}) · simai wiki",
   "chart.needInput": "재생할 채보를 골라주세요. `곡명` 에 곡 이름을 입력하거나, `파일` 로 maidata.txt 를 올리면 됩니다.",
   "chart.bothInput": "`곡명` 과 `파일` 중 하나만 지정해주세요.",
   "chart.unavailable.not-found": "그 채보를 찾지 못했습니다. 목록에서 다시 골라주세요.",
@@ -305,6 +306,13 @@ export const MESSAGES = {
     "곡 별명과 봇 출력 문구를 관리할 수 있습니다.\n\n" +
     "⏳ 링크는 **60분** 후 만료됩니다. (본인만 사용하세요)",
   "admin.buttonLabel": "관리 페이지 열기",
+  "chartImport.embedTitle": "📥 simai wiki 채보 등록",
+  "chartImport.embedBody":
+    "아래 버튼으로 설치 페이지를 엽니다.\n" +
+    "북마클릿을 설치한 뒤 simai wiki 목록 페이지에서 실행하면\n" +
+    "미등록 곡을 사람 속도로 하나씩 가져옵니다.\n\n" +
+    "⏳ 링크는 **12시간** 후 만료됩니다. (본인만 사용하세요)",
+  "chartImport.buttonLabel": "설치 페이지 열기",
 } as const;
 
 export type MessageKey = keyof typeof MESSAGES;

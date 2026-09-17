@@ -11,6 +11,7 @@
 //               거절되면 src/mainotes/ 를 지우고 아래 SOURCES 에서 한 줄만 빼면 된다.
 
 import { getSimaiChart } from "../storage";
+import { atwikiSourceUrlFromId } from "./atwiki";
 
 /** 채보를 줄 수 없는 이유. 유저에게 왜 안 되는지 그대로 알려주기 위해 구분한다. */
 export type UnavailableReason =
@@ -33,8 +34,10 @@ export interface ResolvedChart {
   level: string;
   difficulty: number;
   maidata: string;
-  /** 출처 표기에 쓴다. 예: "mai-notes" */
+  /** 출처 표기에 쓴다. 예: "simai wiki" */
   attribution: string;
+  /** 원본 페이지 링크(크레딧). 있으면 /보면 응답에 걸어 원작자를 알 수 있게 한다. */
+  sourceUrl?: string;
   /** 이미 simai_charts 에 들어 있는 채보면 그 id. 있으면 다시 저장하지 않는다. */
   storedId?: string;
 }
@@ -51,10 +54,12 @@ const registrySource: ChartSource = {
     const row = (await getSimaiChart(id)) as any;
     if (!row || row.source !== "registry") throw new ChartUnavailableError("not-found");
     if (!row.maidata) throw new ChartUnavailableError("no-data");
+    // atwiki 에서 온 채보면 원본 페이지 링크를 붙여 크레딧을 남긴다(id 에서 유도).
+    const sourceUrl = atwikiSourceUrlFromId(id) ?? undefined;
     return {
       title: row.title ?? "", artist: row.artist ?? "", designer: row.designer ?? "",
       level: row.level ?? "", difficulty: Number(row.difficulty ?? 0),
-      maidata: row.maidata, attribution: "", storedId: id,
+      maidata: row.maidata, attribution: sourceUrl ? "simai wiki" : "", sourceUrl, storedId: id,
     };
   },
 };

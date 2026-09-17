@@ -3,7 +3,7 @@ import * as fs from "fs";
 import { gunzip } from "zlib";
 import { promisify } from "util";
 import { parseHome, parsePlayerData, parseFriendCode as parseFC, parseRecentRecords, parsePlaylogHistory, parseTop5, parseTopSongs, parseMusicScore, mergeTopRecords, getMaimaiBaseUrl, parseMapAreas, parsePlaylogDetail, chartKey, buildMarkMap, buildKindResolver } from "../scraper";
-import { cacheProfile, getCachedProfile, saveUserSession, getUserSyncToken, findUserBySyncToken, getUserFriendCodeForServer, saveAvatarBlob, getAvatarBlob, getSongJacket, saveSongJacket, getExtraBookmarklets, getProfilePrivate, setProfilePrivate, addExtraBookmarklet, removeExtraBookmarklet, getEnabledBookmarkletPresetIds, setBookmarkletPresetEnabled, getUserDefaultServer, setUserDefaultServer, isMaimaiServer, getMapImage, saveMapImage, saveAchievementPlayEventLogBatch, upsertChartClears, backfillEventRatingUp, saveRatingSnapshot, getAllAliases, addAlias, deleteAlias, setAliasTranslation, setMessageOverride, deleteMessageOverride, getTranslateTitles, setTranslateTitles, getRegisteredUserCount, getAchievementMinimum, setAchievementMinimum, listGoals, updateGoalProgress, getPolicyAck, setPolicyAck, getSimaiChart } from "../storage";
+import { cacheProfile, getCachedProfile, saveUserSession, getUserSyncToken, findUserBySyncToken, getUserFriendCodeForServer, saveAvatarBlob, getAvatarBlob, getSongJacket, saveSongJacket, getExtraBookmarklets, getProfilePrivate, setProfilePrivate, addExtraBookmarklet, removeExtraBookmarklet, getEnabledBookmarkletPresetIds, setBookmarkletPresetEnabled, getUserDefaultServer, setUserDefaultServer, isMaimaiServer, getMapImage, saveMapImage, saveAchievementPlayEventLogBatch, upsertChartClears, backfillEventRatingUp, saveRatingSnapshot, getAllAliases, addAlias, deleteAlias, setAliasTranslation, setMessageOverride, deleteMessageOverride, getTranslateTitles, setTranslateTitles, getRegisteredUserCount, getAchievementMinimum, setAchievementMinimum, listGoals, updateGoalProgress, getPolicyAck, setPolicyAck, getSimaiChart, saveSimaiChart, listRegistryCharts } from "../storage";
 import { POLICY_VERSION } from "../policy";
 import type { SongAliasRow } from "../storage/types";
 import { buildBookmarkletJs, setBaseUrl, getBaseUrl, buildBookmarklet, BOOKMARKLET_PRESETS, getBookmarkletPresets } from "./bookmarklet";
@@ -12,6 +12,10 @@ import { settingsPage } from "./settingsPage";
 import { aliasAdminPage } from "./aliasAdminPage";
 import { chartPlayerPage, chartNotFoundPage } from "./chartPlayer";
 import { parseMaidata } from "../simai/parse";
+import { sanitizeSong, buildMaidata, atwikiChartId, parseAtwikiId } from "../simai/atwiki";
+import { loadRegistryIndex } from "../simai/registryIndex";
+import { importBookmarkletPage } from "./importPage";
+import { IMPORT_CLIENT_JS } from "./importClient";
 import { renderChartGifAsync } from "../bot/utils/chartGif";
 import { getReadyVideo } from "../bot/utils/chartVideoQueue";
 import type { Chart } from "../simai/types";
@@ -22,7 +26,7 @@ import {
 } from "../messages";
 import { isValidAdminToken } from "./adminAuth";
 import { loadAliases } from "../aliases";
-import { CONFIG } from "../config";
+import { CONFIG, PORT } from "../config";
 import { hasValidRecordDate, recordPlayedAt, koreaPlayDayKey } from "../achievements";
 import { evaluateGoal, GOAL_KINDS, type GoalKind } from "../goals";
 
@@ -583,6 +587,72 @@ a{color:#c084fc}
         const badBody = e instanceof SyntaxError;
         res.writeHead(badBody ? 400 : 500, { "content-type": "application/json" });
         res.end(JSON.stringify({ ok: false, error: badBody ? "invalid_body" : "서버 오류가 발생했습니다" }));
+      }
+      return;
+    }
+
+    // ─── simai 채보 등록 (운영자, atwiki 북마클릿) ─────────────────────────
+    // 북마클릿이 atwiki 페이지에 주입하는 클라이언트 코드. 코드 자체엔 비밀이 없다
+    // (토큰은 window.__carolImport 로 주입). 캐시 없이 최신을 준다.
+    if (req.method === "GET" && url.pathname === "/import.js") {
+      res.writeHead(200, { "content-type": "application/javascript; charset=utf-8", "cache-control": "no-cache" });
+      res.end(IMPORT_CLIENT_JS);
+      return;
+    }
+    // 북마클릿 설치·진행 UI 페이지. 관리 토큰과 baseUrl 을 심어 내려준다.
+    if (req.method === "GET" && url.pathname === "/admin/import") {
+      const token = url.searchParams.get("code") || "";
+      if (!isValidAdminToken(token)) { res.writeHead(403, { "content-type": "text/html; charset=utf-8" }); res.end("<h1>만료된 링크입니다. /관리 로 다시 발급하세요.</h1>"); return; }
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" });
+      res.end(importBookmarkletPage(getBaseUrl(PORT), token));
+      return;
+    }
+    // 이미 등록된 atwiki 페이지 번호 목록 → 북마클릿이 미저장분만 고른다.
+    if (req.method === "GET" && url.pathname === "/api/admin/simai/known-pages") {
+      const token = url.searchParams.get("code") || "";
+      if (!isValidAdminToken(token)) { res.writeHead(403, { "content-type": "application/json" }); res.end(JSON.stringify({ ok: false })); return; }
+      try {
+        const rows = await listRegistryCharts() as { id: string }[];
+        const pages = new Set<number>();
+        for (const r of rows) { const p = parseAtwikiId(r.id); if (p) pages.add(p.page); }
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: true, pages: [...pages] }));
+      } catch (e) {
+        console.error("[simai] known-pages 실패:", e);
+        res.writeHead(500, { "content-type": "application/json" }); res.end(JSON.stringify({ ok: false }));
+      }
+      return;
+    }
+    // 곡 한 개 등록. 북마클릿이 추출한 구조를 받아 simai 로 재구성→파싱→난이도별 저장.
+    if (req.method === "POST" && url.pathname === "/api/admin/simai/import") {
+      const token = url.searchParams.get("code") || "";
+      if (!isValidAdminToken(token)) { res.writeHead(403, { "content-type": "application/json" }); res.end(JSON.stringify({ ok: false, error: "expired" })); return; }
+      try {
+        const song = sanitizeSong(JSON.parse(await readBody(req)));
+        if (!song) { res.writeHead(400, { "content-type": "application/json" }); res.end(JSON.stringify({ ok: false, error: "no_valid_chart" })); return; }
+        const maidata = buildMaidata(song);
+        const parsed = parseMaidata(maidata);
+        const saved: number[] = [];
+        for (const c of song.charts) {
+          const chart = parsed.charts[c.diff];
+          if (!chart || chart.notes.length === 0) continue;
+          await saveSimaiChart({
+            id: atwikiChartId(song.page, c.diff), ownerId: "", source: "registry",
+            title: song.title.slice(0, 200), artist: song.artist.slice(0, 200),
+            designer: c.designer.slice(0, 200), level: c.level.slice(0, 20),
+            difficulty: c.diff, maidata, chartJson: JSON.stringify(chart),
+          });
+          saved.push(c.diff);
+        }
+        if (saved.length === 0) { res.writeHead(422, { "content-type": "application/json" }); res.end(JSON.stringify({ ok: false, error: "parse_empty" })); return; }
+        try { await loadRegistryIndex(); } catch (e) { console.error("[simai] 인덱스 갱신 실패:", e); }
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: true, page: song.page, title: song.title, saved }));
+      } catch (e) {
+        console.error("[simai] import 실패:", e);
+        const bad = e instanceof SyntaxError;
+        res.writeHead(bad ? 400 : 500, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: false, error: bad ? "invalid_body" : "server_error" }));
       }
       return;
     }
