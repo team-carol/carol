@@ -27,6 +27,13 @@ export function isQuotaCoolingDown(): boolean {
   return Date.now() < quotaCooldownUntil;
 }
 
+// 폭주 감지: 최근 창 안의 실제 API 호출 수가 임계 이상이면(백필 루프 오작동 등으로
+// 요청이 몰리는 상황) 쿨다운을 건다. 정상 사용(새 공지 몇 건 + 10분 주기 백필)은
+// 이 값에 한참 못 미치고, 사고 때 같은 폴링 반복 호출은 여기 걸린다.
+const BURST_WINDOW_MS = 10 * 60 * 1000;
+const BURST_LIMIT = 10;
+let callTimes: number[] = [];
+
 // 공지문은 날짜·조건 같은 사실이 핵심이라 의역보다 정확성을 요구하고,
 // 곡명/고유명사는 원문을 유지시킨다(검색·대조가 가능해야 하므로).
 // 제목과 본문을 각각 호출하므로 문맥이 공유되지 않는다. 용어집을 고정해
@@ -119,6 +126,15 @@ export async function translateJaToKo(text: string, extraHint = ""): Promise<str
 
   const model = CONFIG.geminiModel?.trim() || DEFAULT_MODEL;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    // 폭주 감지: 최근 창의 실제 호출 수가 임계 이상이면 쿨다운 걸고 중단.
+    const nowTs = Date.now();
+    callTimes = callTimes.filter((t) => nowTs - t < BURST_WINDOW_MS);
+    if (callTimes.length >= BURST_LIMIT) {
+      quotaCooldownUntil = nowTs + QUOTA_COOLDOWN_MS;
+      console.warn(`[translate] 다중 요청 감지(${callTimes.length}/${Math.round(BURST_WINDOW_MS / 60000)}분) → ${Math.round(QUOTA_COOLDOWN_MS / 60000)}분 쿨다운`);
+      return undefined;
+    }
+    callTimes.push(nowTs);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
     try {
