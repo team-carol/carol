@@ -73,9 +73,9 @@ export function sanitizeSong(raw: unknown): SanitizedSong | null {
   const r = raw as Record<string, unknown>;
   const page = Number(r.page);
   if (!Number.isInteger(page) || page <= 0) return null;
-  // 〈スタンダード〉/〈でらっくす〉 등 변형 구분자를 제거(별명 DB 매칭). 클라이언트에서
-  // 이미 떼지만 서버에서도 방어적으로 한 번 더.
-  const title = String(r.title ?? "").replace(/〈[^〉]*〉/g, "").trim().slice(0, 200);
+  // 〈スタンダード〉/〈でらっくす〉 변형 구분자만 제거(별명 DB 매칭). 실제 곡명의 다른
+  // 괄호는 건드리지 않는다. 클라이언트에서 이미 떼지만 서버에서도 방어적으로 한 번 더.
+  const title = String(r.title ?? "").replace(/〈(スタンダード|でらっくす|デラックス)〉/g, "").trim().slice(0, 200);
   const artist = String(r.artist ?? "").trim().slice(0, 200);
   const bpm = Number(r.bpm) || 0;
   if (!Array.isArray(r.charts)) return null;

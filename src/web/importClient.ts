@@ -30,8 +30,9 @@ export const IMPORT_CLIENT_JS = String.raw`
   // 곡 페이지 하나(Document)에서 메타 + 난이도별 노트를 뽑는다. 서버 sanitizeSong 과 짝.
   function extract(doc){
     var wb = doc.querySelector("#wikibody"); if(!wb) return null;
-    // 〈スタンダード〉/〈でらっくす〉 같은 변형 구분자는 제목에서 뗀다(별명 DB 매칭용).
-    var title = ((doc.querySelector("title")||{}).textContent||"").replace(/\s*-\s*simai.*$/i,"").replace(/〈[^〉]*〉/g,"").trim();
+    // 〈スタンダード〉/〈でらっくす〉 변형 구분자만 뗀다(별명 DB 매칭용). 실제 곡명의
+    // 다른 괄호(（）【】＜＞)는 건드리지 않는다.
+    var title = ((doc.querySelector("title")||{}).textContent||"").replace(/\s*-\s*simai.*$/i,"").replace(/〈(スタンダード|でらっくす|デラックス)〉/g,"").trim();
     var artist="", bpm=0, levels={}, designers={};
     var tables = wb.querySelectorAll("table");
     for(var ti=0; ti<tables.length; ti++){
