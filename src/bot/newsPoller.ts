@@ -1,6 +1,6 @@
 // 공식 사이트 공지 폴링 → 서버별로 지정된 채널에 게시.
 // 조건부 요청이 걸려 있어 변경이 없으면 네트워크 비용이 사실상 0이다.
-import { Client, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, type ButtonInteraction } from "discord.js";
+import { Client, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, type ButtonInteraction } from "discord.js";
 import { fetchNews, fetchArticleImage, NEWS_SOURCES, type NewsItem, type NewsSource } from "../news";
 import {
   listNewsChannels, getSeenNewsIds, markNewsSeen, getNewsFeedState, setNewsFeedState,
@@ -229,7 +229,8 @@ export async function runNewsPoll(client: Client): Promise<void> {
 export async function handleNewsButton(interaction: ButtonInteraction): Promise<void> {
   const [, mode, key] = interaction.customId.split(":");
   if (!key) return;
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  // 원문/번역 보기는 모두가 볼 수 있게 공개로 응답한다(ephemeral 아님).
+  await interaction.deferReply();
   const article = await getNewsArticle("jp", itemIdOfPostKey(key)) as
     { title: string; titleKo: string; url: string; body: string; bodyKo: string } | null;
   if (!article) {
