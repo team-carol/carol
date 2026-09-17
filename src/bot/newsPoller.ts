@@ -202,10 +202,16 @@ async function backfillTranslations(): Promise<void> {
   for (const a of pending) {
     try {
       const ko = await translateNewsItem(a.title, a.body);
-      if (!ko.body && !ko.title) continue; // 여전히 실패 → 다음 폴링에서 재시도
+      // "번역 보기" 버튼은 본문(bodyKo)만 쓴다. 제목만 번역된 상태로 저장하면
+      // 조회 조건(body_ko='')에 계속 걸려 매 폴링마다 "성공" 로그가 뜨는데도 버튼은
+      // 영영 "준비 중"이 된다. 그래서 본문이 실제로 번역됐을 때만 완료로 친다.
+      if (!ko.body) {
+        console.warn(`[news] 번역 백필 본문 미완 ${a.itemId} (title=${!!ko.title}) → 다음 폴링 재시도`);
+        continue;
+      }
       await saveNewsArticle({
         source: "jp", itemId: a.itemId, title: a.title, titleKo: ko.title ?? "",
-        url: a.url, body: a.body, bodyKo: ko.body ?? "",
+        url: a.url, body: a.body, bodyKo: ko.body,
       });
       console.log(`[news] 번역 백필 성공 ${a.itemId}`);
     } catch (e) {
