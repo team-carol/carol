@@ -1,6 +1,6 @@
 import { Client, Events, GatewayIntentBits, ChatInputCommandInteraction, AutocompleteInteraction, ButtonInteraction, REST, Routes, MessageFlags, AttachmentBuilder } from "discord.js";
 import { initEncryption } from "../crypto";
-import { startWebServer, setBaseUrl, setGuildCountProvider, getBaseUrl } from "../web";
+import { startWebServer, setBaseUrl, setGuildCountProvider, setGatewayPingProvider, getBaseUrl } from "../web";
 import { closeStorage, initializeStorage, loadUserSession, getCachedProfile, clearRatingCardCacheForInactive, getTranslateTitles, getPolicyAck, setPolicyAck, pruneSimaiCharts, getSimaiChart, getOrphanChartVideos, deleteChartVideo } from "../storage";
 import { CONFIG, PORT } from "../config";
 import { parseMaidata } from "../simai/parse";
@@ -378,6 +378,7 @@ async function main(): Promise<void> {
   if (CONFIG.baseUrl) setBaseUrl(CONFIG.baseUrl);
   startWebServer(PORT);
   setGuildCountProvider(() => client.guilds.cache.size);
+  setGatewayPingProvider(() => client.ws.ping);
   process.on("SIGINT", () => { void closeStorage().finally(() => process.exit(0)); });
   process.on("SIGTERM", () => { void closeStorage().finally(() => process.exit(0)); });
   await client.login(CONFIG.token);

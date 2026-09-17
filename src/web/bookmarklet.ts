@@ -46,7 +46,7 @@ export function buildBookmarklet(token: string, port: number): string {
 
 export function buildBookmarkletJs(
   extras: Array<{ label: string; code: string; execution?: BookmarkletExecution }>,
-  opts: { policyNotice?: boolean } = {},
+  opts: { policyNotice?: boolean; deprecationCutoff?: string } = {},
 ): string {
   const marker = "addSection('PROFILE');";
   let script = withAchievementInitUi(bookmarkletJs);
@@ -61,6 +61,13 @@ export function buildBookmarkletJs(
   if (opts.policyNotice) {
     prepend(
       `(function(){try{var _pn=doc.createElement('div');_pn.style.cssText='padding:10px 0;margin-bottom:4px;border-bottom:1px solid #202020;color:#c084fc;font-size:11px;line-height:1.5';_pn.innerHTML='carol \\uAC1C\\uC778\\uC815\\uBCF4\\uCC98\\uB9AC\\uBC29\\uCE68\\uC774 \\uC5C5\\uB370\\uC774\\uD2B8\\uB418\\uC5C8\\uC2B5\\uB2C8\\uB2E4 (2026-09) \\u00B7 <a href="'+v+'/privacy" target="_blank" rel="noopener" style="color:#c084fc">\\uC790\\uC138\\uD788</a>';stEl.appendChild(_pn);}catch(_e){}})();`,
+    );
+  }
+
+  // 구 도메인으로 접속된 구북마클릿 전용 경고 — 서버가 요청 Host로 legacy 여부를 판단해 넘겨줌
+  if (opts.deprecationCutoff) {
+    prepend(
+      `(function(){try{var _dn=doc.createElement('div');_dn.style.cssText='padding:10px 0;margin-bottom:4px;border-bottom:1px solid #202020;color:#fb923c;font-size:11px;line-height:1.5';_dn.innerHTML='이 링크는 ${opts.deprecationCutoff}부터 사용할 수 없습니다 · Discord에서 /북마클릿 을 다시 실행해 새 링크를 받아주세요';stEl.appendChild(_dn);}catch(_e){}})();`,
     );
   }
 

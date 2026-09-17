@@ -14,7 +14,25 @@ const TIMEOUT_MS = 30000;
 const MAX_INPUT_CHARS = 12000;
 const MAX_ATTEMPTS = 2;
 const RETRY_DELAY_MS = 3000;
-const RETRYABLE = new Set([429, 500, 502, 503, 504]);
+// 5xx 는 일시적 과부하라 몇 초 뒤 재시도가 통한다. 429 는 여기 넣지 않는다 — 아래 참고.
+const RETRYABLE = new Set([500, 502, 503, 504]);
+
+// 429 는 할당량(quota) 소진이다("exceeded your current quota"). 무료 티어 일일 한도라
+// 3초 재시도로는 회복되지 않고, 계속 때리면 할당량만 더 깎이고 로그가 도배된다. 한 번
+// 맞으면 이 시간 동안 모든 번역 호출을 건너뛴다(전역 쿨다운). 지나면 다시 시도하고,
+// 여전히 429 면 재무장. 새 공지 번역과 백필 재시도 모두 이 가드를 공유한다.
+const QUOTA_COOLDOWN_MS = 60 * 60 * 1000;
+let quotaCooldownUntil = 0;
+export function isQuotaCoolingDown(): boolean {
+  return Date.now() < quotaCooldownUntil;
+}
+
+// 폭주 감지: 최근 창 안의 실제 API 호출 수가 임계 이상이면(백필 루프 오작동 등으로
+// 요청이 몰리는 상황) 쿨다운을 건다. 정상 사용(새 공지 몇 건 + 10분 주기 백필)은
+// 이 값에 한참 못 미치고, 사고 때 같은 폴링 반복 호출은 여기 걸린다.
+const BURST_WINDOW_MS = 10 * 60 * 1000;
+const BURST_LIMIT = 10;
+let callTimes: number[] = [];
 
 // 공지문은 날짜·조건 같은 사실이 핵심이라 의역보다 정확성을 요구하고,
 // 곡명/고유명사는 원문을 유지시킨다(검색·대조가 가능해야 하므로).
@@ -102,10 +120,21 @@ export async function translateJaToKo(text: string, extraHint = ""): Promise<str
   if (!key) return undefined;
   const source = text.trim();
   if (!source) return undefined;
+  // 할당량 쿨다운 중이면 API 를 호출하지 않고 즉시 실패로 돌려준다(호출/할당량 낭비 방지).
+  if (Date.now() < quotaCooldownUntil) return undefined;
   const clipped = source.length > MAX_INPUT_CHARS ? source.slice(0, MAX_INPUT_CHARS) : source;
 
   const model = CONFIG.geminiModel?.trim() || DEFAULT_MODEL;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    // 폭주 감지: 최근 창의 실제 호출 수가 임계 이상이면 쿨다운 걸고 중단.
+    const nowTs = Date.now();
+    callTimes = callTimes.filter((t) => nowTs - t < BURST_WINDOW_MS);
+    if (callTimes.length >= BURST_LIMIT) {
+      quotaCooldownUntil = nowTs + QUOTA_COOLDOWN_MS;
+      console.warn(`[translate] 다중 요청 감지(${callTimes.length}/${Math.round(BURST_WINDOW_MS / 60000)}분) → ${Math.round(QUOTA_COOLDOWN_MS / 60000)}분 쿨다운`);
+      return undefined;
+    }
+    callTimes.push(nowTs);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
     try {
@@ -121,7 +150,13 @@ export async function translateJaToKo(text: string, extraHint = ""): Promise<str
       });
       if (!res.ok) {
         const detail = (await res.text()).slice(0, 200);
-        // 429/503 은 일시적 과부하다(실측: 3.8-flash 가 503 반환). 한 번 더 시도한다.
+        // 429 는 할당량 소진 → 재시도하지 않고 전역 쿨다운을 건다(그동안 모든 호출 스킵).
+        if (res.status === 429) {
+          quotaCooldownUntil = Date.now() + QUOTA_COOLDOWN_MS;
+          console.warn(`[translate] ${model} HTTP 429 할당량 소진 → ${Math.round(QUOTA_COOLDOWN_MS / 60000)}분 쿨다운`);
+          return undefined;
+        }
+        // 5xx 는 일시적 과부하다. 한 번 더 시도한다.
         if (RETRYABLE.has(res.status) && attempt < MAX_ATTEMPTS) {
           await new Promise((r) => setTimeout(r, RETRY_DELAY_MS * attempt));
           continue;

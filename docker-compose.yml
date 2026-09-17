@@ -41,6 +41,13 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    networks:
+      # default: talk to postgres/cloudflared as before. carol-shared: reachable
+      # by carol-ops (separate compose project) for GET /admin/status. Create
+      # once on the host with `docker network create carol-shared` before the
+      # first `docker compose up` that includes this network.
+      - default
+      - carol-shared
 
   cloudflared:
     image: cloudflare/cloudflared:latest
@@ -55,5 +62,25 @@ services:
       bot:
         condition: service_healthy
 
+  # 도메인 이전용 임시 터널 — 구 도메인(config.json baseUrl과 다른 Host)으로 들어오는 트래픽을
+  # 같은 bot 서비스로 계속 서빙. 이전 완료 후(DOMAIN_MIGRATION_CUTOFF 지나면) 이 서비스와
+  # CF_TUNNEL_TOKEN_OLD를 .env에서 제거할 것.
+  cloudflared-old:
+    image: cloudflare/cloudflared:latest
+    container_name: carol-tunnel-old
+    restart: unless-stopped
+    mem_limit: ${CLOUDFLARED_MEM_LIMIT:-64m}
+    memswap_limit: ${CLOUDFLARED_MEM_LIMIT:-64m}
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=${CF_TUNNEL_TOKEN_OLD}
+    depends_on:
+      bot:
+        condition: service_healthy
+
 volumes:
   carol-postgres:
+
+networks:
+  carol-shared:
+    external: true

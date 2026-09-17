@@ -77,6 +77,7 @@ export const MESSAGES = {
   "news.truncated": "…\n\n(내용이 길어 잘렸습니다 · [원문 보기]({url}))",
   "news.detailExpired": "보관 기간이 지난 공지입니다. 임베드 제목의 링크로 원문을 확인해주세요.",
   "news.detailEmpty": "본문을 가져오지 못했습니다. [원문 보기]({url})",
+  "news.translationPending": "번역을 준비 중입니다. 잠시 후 다시 눌러주세요. [원문 보기]({url})",
   "newsSettings.title": "공지 알림 설정",
   "newsSettings.jpField": "내수판 (info-maimai.sega.jp)",
   "newsSettings.intlField": "국제판 (maimai.sega.com)",

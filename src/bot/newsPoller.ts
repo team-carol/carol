@@ -4,11 +4,12 @@ import { Client, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, typ
 import { fetchNews, fetchArticleImage, NEWS_SOURCES, type NewsItem, type NewsSource } from "../news";
 import {
   listNewsChannels, getSeenNewsIds, markNewsSeen, getNewsFeedState, setNewsFeedState,
-  saveNewsArticle, getNewsArticle, pruneNewsArticles,
+  saveNewsArticle, getNewsArticle, getUntranslatedNewsArticles, pruneNewsArticles,
 } from "../storage";
 import { msg } from "../messages";
-import { isConfigured as canTranslate, translateNewsItem } from "../translate";
+import { isConfigured as canTranslate, isQuotaCoolingDown, translateNewsItem } from "../translate";
 import { isNewsSource } from "../news";
+import { CONFIG } from "../config";
 
 // 두 출처 모두 CloudFront 뒤에 있고 ETag/Last-Modified 를 주므로, 변경이 없으면
 // 304(본문 0바이트)로 끝난다. 엣지 캐시가 갱신되는 순간을 빨리 잡으려고 짧게 잡았다.
@@ -73,7 +74,10 @@ export function buildPost(
   if (item.publishedAt) embed.setTimestamp(new Date(item.publishedAt));
   return {
     embeds: [embed],
-    components: hasBody ? [detailButtons(item.id, !!titleKo)] : [],
+    // 번역 버튼은 게시 시점 번역 성공 여부와 무관하게 항상 붙인다. 게시 때 번역이
+    // 실패해도(과부하/타임아웃) 백필로 나중에 채워지고, 버튼 핸들러는 DB 를 라이브로
+    // 읽으므로 그 순간 번역이 있으면 보여준다.
+    components: hasBody ? [detailButtons(item.id, true)] : [],
   };
 }
 
@@ -178,6 +182,61 @@ async function saveState(
   await setNewsFeedState(source, etag, lastModified);
 }
 
+// 게시 시 번역이 실패한(Gemini 과부하/타임아웃) jp 공지를 이후 폴링에서 조금씩 다시
+// 번역해 DB 를 채운다. 버튼 핸들러는 DB 를 라이브로 읽으므로 채워지는 즉시 "번역 보기"가
+// 진짜 번역을 보여준다. 오래된 것(WINDOW 초과)은 제외해 영구 실패 항목의 무한 재시도를 막고,
+// 폴링당 소량만 처리해 과부하를 다시 유발하지 않는다.
+const BACKFILL_WINDOW_MS = 48 * 60 * 60 * 1000;
+const BACKFILL_PER_POLL = 2;
+// 폴링(5분)마다 돌지 않고 최소 이 간격으로만 백필한다(호출량 절반). Gemini 무료
+// 일일 한도가 낮아 폭주하면 금세 소진되므로 보수적으로 잡는다.
+const BACKFILL_INTERVAL_MS = 10 * 60 * 1000;
+let lastBackfillAt = 0;
+
+// 백필 사용 여부. config.newsBackfill 이 명시돼 있으면 그 값, 없으면 릴리스 빌드
+// (RELEASE_VERSION 존재)에서만 켠다. dev(ts-node/비릴리스)는 공유 할당량을 아끼려고 끈다.
+function backfillEnabled(): boolean {
+  if (typeof CONFIG.newsBackfill === "boolean") return CONFIG.newsBackfill;
+  return !!process.env.RELEASE_VERSION?.trim();
+}
+
+async function backfillTranslations(): Promise<void> {
+  if (!canTranslate()) return;
+  if (!backfillEnabled()) return;            // dev 등에서는 비활성
+  // 번역 할당량 쿨다운 중이면 조용히 건너뛴다(매 폴링 헛호출·로그 스팸 방지).
+  if (isQuotaCoolingDown()) return;
+  if (Date.now() - lastBackfillAt < BACKFILL_INTERVAL_MS) return;  // 10분 주기
+  lastBackfillAt = Date.now();
+  let pending: { itemId: string; title: string; url: string; body: string }[];
+  try {
+    pending = await getUntranslatedNewsArticles(
+      "jp", Date.now() - BACKFILL_WINDOW_MS, BACKFILL_PER_POLL,
+    ) as { itemId: string; title: string; url: string; body: string }[];
+  } catch (e) {
+    console.warn("[news] 미번역 공지 조회 실패:", e instanceof Error ? e.message : e);
+    return;
+  }
+  for (const a of pending) {
+    try {
+      const ko = await translateNewsItem(a.title, a.body);
+      // "번역 보기" 버튼은 본문(bodyKo)만 쓴다. 제목만 번역된 상태로 저장하면
+      // 조회 조건(body_ko='')에 계속 걸려 매 폴링마다 "성공" 로그가 뜨는데도 버튼은
+      // 영영 "준비 중"이 된다. 그래서 본문이 실제로 번역됐을 때만 완료로 친다.
+      if (!ko.body) {
+        console.warn(`[news] 번역 백필 본문 미완 ${a.itemId} (title=${!!ko.title}) → 다음 폴링 재시도`);
+        continue;
+      }
+      await saveNewsArticle({
+        source: "jp", itemId: a.itemId, title: a.title, titleKo: ko.title ?? "",
+        url: a.url, body: a.body, bodyKo: ko.body,
+      });
+      console.log(`[news] 번역 백필 성공 ${a.itemId}`);
+    } catch (e) {
+      console.warn(`[news] 번역 백필 실패 ${a.itemId}:`, e instanceof Error ? e.message : e);
+    }
+  }
+}
+
 export async function runNewsPoll(client: Client): Promise<void> {
   for (const source of NEWS_SOURCES) {
     try {
@@ -186,6 +245,7 @@ export async function runNewsPoll(client: Client): Promise<void> {
       console.error(`[news] ${source} 폴링 실패:`, e instanceof Error ? e.message : e);
     }
   }
+  await backfillTranslations();
 }
 
 // 버튼: news:<src|ko>:<글번호>
@@ -204,7 +264,12 @@ export async function handleNewsButton(interaction: ButtonInteraction): Promise<
   const translated = mode === "ko";
   const text = translated ? article.bodyKo : article.body;
   if (!text) {
-    await interaction.editReply({ content: msg("news.detailEmpty", { url: article.url }) });
+    // 번역 보기인데 번역본이 아직 없으면(게시 시 실패 → 백필 대기/실패) 원문은 있으므로
+    // "준비 중" 안내로 구분한다. 원문 자체가 없을 때만 "본문 없음".
+    const pending = translated && !!article.body;
+    await interaction.editReply({
+      content: msg(pending ? "news.translationPending" : "news.detailEmpty", { url: article.url }),
+    });
     return;
   }
   const embed = new EmbedBuilder()
