@@ -7,7 +7,7 @@ import { calcSongRating, getConstant, levelToNumber } from "../constants";
 
 pgTypes.setTypeParser(20, (value) => Number(value));
 
-export const MIGRATION_VERSION = 19;
+export const MIGRATION_VERSION = 20;
 
 // Migration text is deliberately kept as separate, immutable units.  In particular,
 // an edit to the current schema must not silently change an old migration checksum.
@@ -166,6 +166,11 @@ CREATE INDEX IF NOT EXISTS idx_user_goals_owner ON user_goals(discord_user_id, c
     created_at bigint NOT NULL DEFAULT 0,
     updated_at bigint NOT NULL DEFAULT 0
   );`,],
+  // v1.7.1 이전에 등록된 atwiki 채보 제목에 남아있는 변형 구분자(〈スタンダード〉/〈でらっくす〉)
+  // 를 제거한다. 이게 붙어 있으면 별명 DB 와 매칭되지 않는다. 실제 곡명은 이 구분자를
+  // 쓰지 않으므로(（）【】＜＞ 만 사용) 안전하게 뗄 수 있다. 이후 import 는 애초에 정리해 저장.
+  [20, `UPDATE simai_charts SET title = regexp_replace(title, '〈(スタンダード|でらっくす|デラックス)〉', '', 'g')
+    WHERE source='registry' AND title ~ '〈(スタンダード|でらっくす|デラックス)〉';`,],
 ];
 
 export interface MainotesSongRow { id:string; title:string; artist:string; bpm:string; genre:string; version:string; type:string }
