@@ -7,7 +7,7 @@ import {
   saveNewsArticle, getNewsArticle, getUntranslatedNewsArticles, pruneNewsArticles,
 } from "../storage";
 import { msg } from "../messages";
-import { isConfigured as canTranslate, translateNewsItem } from "../translate";
+import { isConfigured as canTranslate, isQuotaCoolingDown, translateNewsItem } from "../translate";
 import { isNewsSource } from "../news";
 
 // 두 출처 모두 CloudFront 뒤에 있고 ETag/Last-Modified 를 주므로, 변경이 없으면
@@ -190,6 +190,8 @@ const BACKFILL_PER_POLL = 2;
 
 async function backfillTranslations(): Promise<void> {
   if (!canTranslate()) return;
+  // 번역 할당량 쿨다운 중이면 조용히 건너뛴다(매 폴링 헛호출·로그 스팸 방지).
+  if (isQuotaCoolingDown()) return;
   let pending: { itemId: string; title: string; url: string; body: string }[];
   try {
     pending = await getUntranslatedNewsArticles(
