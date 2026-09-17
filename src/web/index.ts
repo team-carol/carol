@@ -24,7 +24,7 @@ import {
   MESSAGE_KEYS, defaultOf, getOverride, rawText, placeholdersOf,
   validateOverride, loadMessages, type MessageKey,
 } from "../messages";
-import { isValidAdminToken } from "./adminAuth";
+import { isValidAdminToken, issueAdminToken } from "./adminAuth";
 import { loadAliases } from "../aliases";
 import { CONFIG, PORT } from "../config";
 import { hasValidRecordDate, recordPlayedAt, koreaPlayDayKey } from "../achievements";
@@ -603,8 +603,10 @@ a{color:#c084fc}
     if (req.method === "GET" && url.pathname === "/admin/import") {
       const token = url.searchParams.get("code") || "";
       if (!isValidAdminToken(token)) { res.writeHead(403, { "content-type": "text/html; charset=utf-8" }); res.end("<h1>만료된 링크입니다. /관리 로 다시 발급하세요.</h1>"); return; }
+      // 페이지는 /관리 의 짧은 토큰으로 열리지만, 크롤이 길어 북마클릿엔 12h 토큰을 새로 발급한다.
+      const bmToken = issueAdminToken(12 * 60 * 60 * 1000);
       res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" });
-      res.end(importBookmarkletPage(getBaseUrl(PORT), token));
+      res.end(importBookmarkletPage(getBaseUrl(PORT), token, bmToken));
       return;
     }
     // 이미 등록된 atwiki 페이지 번호 목록 → 북마클릿이 미저장분만 고른다.

@@ -66,7 +66,7 @@ select{width:auto;margin-left:auto;cursor:pointer;font-weight:600;font-size:12px
 </style></head><body>
 <div class="wrap">
 <p class="mono">carolbot · admin</p>
-<div class="tabs"><a class="on" href="/admin/aliases?code=${token}">곡 별명</a><a href="/admin/messages?code=${token}">봇 문구</a></div>
+<div class="tabs"><a class="on" href="/admin/aliases?code=${token}">곡 별명</a><a href="/admin/messages?code=${token}">봇 문구</a><a href="/admin/import?code=${token}">채보 등록</a></div>
 <h1>곡 별명 관리</h1>
 <div class="grid">
   <div class="col left">

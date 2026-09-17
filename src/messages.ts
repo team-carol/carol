@@ -303,16 +303,9 @@ export const MESSAGES = {
   "admin.embedTitle": "🛠 캐롤봇 관리",
   "admin.embedBody":
     "아래 버튼으로 관리 페이지를 엽니다.\n" +
-    "곡 별명과 봇 출력 문구를 관리할 수 있습니다.\n\n" +
+    "곡 별명 · 봇 출력 문구 · 채보 등록을 관리할 수 있습니다.\n\n" +
     "⏳ 링크는 **60분** 후 만료됩니다. (본인만 사용하세요)",
   "admin.buttonLabel": "관리 페이지 열기",
-  "chartImport.embedTitle": "📥 simai wiki 채보 등록",
-  "chartImport.embedBody":
-    "아래 버튼으로 설치 페이지를 엽니다.\n" +
-    "북마클릿을 설치한 뒤 simai wiki 목록 페이지에서 실행하면\n" +
-    "미등록 곡을 사람 속도로 하나씩 가져옵니다.\n\n" +
-    "⏳ 링크는 **12시간** 후 만료됩니다. (본인만 사용하세요)",
-  "chartImport.buttonLabel": "설치 페이지 열기",
 } as const;
 
 export type MessageKey = keyof typeof MESSAGES;

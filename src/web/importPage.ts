@@ -1,28 +1,36 @@
-// 운영자 채보 등록 북마클릿 설치·안내 페이지 (/admin/import?code=token).
+// /관리 의 "채보 등록" 탭 (/admin/import?code=token).
 // 북마클릿은 window.__carolImport 를 세팅하고 /import.js 를 주입하는 작은 로더다.
 // 실제 로직은 importClient.ts(/import.js) 에 있다.
+//
+// pageToken: /관리 가 준 짧은 토큰(탭 링크용). bmToken: 크롤이 길어 따로 발급한 12h 토큰
+// (북마클릿에 심는다). 다른 관리 탭과 같은 룩앤필을 맞춘다.
 
 function esc(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
-export function importBookmarkletPage(baseUrl: string, token: string): string {
+export function importBookmarkletPage(baseUrl: string, pageToken: string, bmToken: string): string {
   const base = baseUrl.replace(/\/+$/, "");
   // 북마클릿: 설정 주입 후 /import.js 주입. href 는 큰따옴표라 내부는 작은따옴표만 쓴다.
   const bm =
-    "javascript:(function(){window.__carolImport={base:'" + base + "',code:'" + token + "'};" +
+    "javascript:(function(){window.__carolImport={base:'" + base + "',code:'" + bmToken + "'};" +
     "var s=document.createElement('script');s.src='" + base + "/import.js?t='+Date.now();" +
     "s.onerror=function(){alert('carol import.js 로드 실패');};document.body.appendChild(s);})();";
 
   return `<!doctype html><html lang="ko"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>채보 등록 · carol</title>
+<title>채보 등록 · carol 관리</title>
 <style>
   :root{color-scheme:dark}
+  *{box-sizing:border-box}
   body{margin:0;background:#0d0d0d;color:#eee;font:15px/1.65 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
-  .wrap{max-width:680px;margin:0 auto;padding:32px 20px 64px}
+  .wrap{max-width:760px;margin:0 auto;padding:28px 20px 64px}
   h1{font-size:22px;margin:0 0 4px}
-  .sub{color:#888;margin:0 0 28px}
+  .sub{color:#888;margin:0 0 20px}
+  .tabs{display:flex;gap:8px;margin:0 0 20px}
+  .tabs a{flex:0 0 auto;background:#1a1a1a;color:#888;border:1px solid #2a2a2a;border-radius:8px;padding:8px 18px;font-size:14px;font-weight:500;text-decoration:none;transition:all .15s}
+  .tabs a:hover{color:#ccc}
+  .tabs a.on{background:#9333ea;color:#fff;border-color:#9333ea}
   .card{background:#1a1a1a;border:1px solid #2a2a2a;border-radius:14px;padding:20px;margin:16px 0}
   .bm{display:inline-block;background:#9333ea;color:#fff !important;text-decoration:none;font-weight:700;padding:12px 22px;border-radius:10px;cursor:grab}
   .bm:active{cursor:grabbing}
@@ -33,8 +41,13 @@ export function importBookmarkletPage(baseUrl: string, token: string): string {
   .muted{color:#888;font-size:13px}
 </style></head>
 <body><div class="wrap">
-  <h1>simai wiki 채보 등록</h1>
-  <p class="sub">atwiki(simai) 공식 채보 데이터를 카롤봇 DB로 가져옵니다. 운영자 전용.</p>
+  <h1>🛠 캐롤봇 관리</h1>
+  <p class="sub">simai wiki 채보를 카롤봇 DB로 가져옵니다.</p>
+  <div class="tabs">
+    <a href="/admin/aliases?code=${pageToken}">곡 별명</a>
+    <a href="/admin/messages?code=${pageToken}">봇 문구</a>
+    <a class="on" href="/admin/import?code=${pageToken}">채보 등록</a>
+  </div>
 
   <div class="card">
     <p style="margin:0 0 14px">아래 버튼을 <b>북마크바로 드래그</b>해서 설치하세요.</p>
@@ -54,7 +67,7 @@ export function importBookmarkletPage(baseUrl: string, token: string): string {
       <li>곡마다 <code>간격</code>(기본 15초) 만큼 쉬며 진행합니다. <b>일시정지 / 중지</b> 가능하고, 중간에 멈춰도 다음에 이어서 됩니다.</li>
     </ol>
     <p class="warn">· 상대 서버 부담을 줄이려 간격을 둡니다. 너무 짧게 낮추지 마세요.</p>
-    <p class="muted">· 이 링크(토큰)는 12시간 뒤 만료됩니다. 만료되면 <code>/채보가져오기</code> 로 다시 여세요.</p>
+    <p class="muted">· 이 북마클릿의 토큰은 12시간 뒤 만료됩니다. 만료되면 이 탭을 새로고침해 다시 드래그하세요.</p>
   </div>
 </div></body></html>`;
 }
