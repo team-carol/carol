@@ -3,7 +3,8 @@ import {
   ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, AttachmentBuilder,
 } from "discord.js";
 import { randomBytes } from "crypto";
-import { saveSimaiChart, countSimaiChartsByOwner } from "../../storage";
+import { saveSimaiChart, countSimaiChartsByOwner, getTranslateTitles } from "../../storage";
+import { displayTitle } from "../../aliases";
 import { parseMaidata, UNKNOWN_DIFFICULTY } from "../../simai/parse";
 import { resolveChart, makeChartKey, ChartUnavailableError } from "../../simai/source";
 import { searchRegistry, registrySize } from "../../simai/registryIndex";
@@ -222,9 +223,13 @@ async function reply(interaction: ChatInputCommandInteraction, x: ReplyInput): P
   const url = `${getBaseUrl(PORT)}/chart?id=${x.id}`;
   const s = x.chart.stats;
   const secs = Math.round(x.chart.durationMs / 1000);
+  // 곡명 한국어 번역: 실행 유저의 표시 설정(translate_titles)이 켜져 있고 번역 별명이
+  // 있으면 치환. 다른 임베드(검색·최근)와 같은 방식.
+  const translate = await getTranslateTitles(interaction.user.id);
+  const shownTitle = displayTitle(x.title, translate);
   const embed = new EmbedBuilder()
     .setColor(DIFF_COLOR[x.diff] ?? 0x9333ea)
-    .setTitle(x.title || msg("chart.untitled"))
+    .setTitle(shownTitle || msg("chart.untitled"))
     .setDescription(
       msg("chart.openLink", { url })
       + (x.chart.bpmAssumed ? "\n" + msg("chart.bpmAssumedNote") : "")

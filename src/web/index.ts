@@ -686,6 +686,7 @@ a{color:#c084fc}
           saved.push(c.diff);
         }
         if (saved.length === 0) { res.writeHead(422, { "content-type": "application/json" }); res.end(JSON.stringify({ ok: false, error: "parse_empty" })); return; }
+        console.log(`[simai] ${song.title || "(제목 없음)"} — ${saved.length}난이도 등록 (p.${song.page})`);
         try { await loadRegistryIndex(); } catch (e) { console.error("[simai] 인덱스 갱신 실패:", e); }
         res.writeHead(200, { "content-type": "application/json" });
         res.end(JSON.stringify({ ok: true, page: song.page, title: song.title, saved }));
