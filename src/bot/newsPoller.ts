@@ -9,6 +9,7 @@ import {
 import { msg } from "../messages";
 import { isConfigured as canTranslate, isQuotaCoolingDown, translateNewsItem } from "../translate";
 import { isNewsSource } from "../news";
+import { CONFIG } from "../config";
 
 // 두 출처 모두 CloudFront 뒤에 있고 ETag/Last-Modified 를 주므로, 변경이 없으면
 // 304(본문 0바이트)로 끝난다. 엣지 캐시가 갱신되는 순간을 빨리 잡으려고 짧게 잡았다.
@@ -187,11 +188,25 @@ async function saveState(
 // 폴링당 소량만 처리해 과부하를 다시 유발하지 않는다.
 const BACKFILL_WINDOW_MS = 48 * 60 * 60 * 1000;
 const BACKFILL_PER_POLL = 2;
+// 폴링(5분)마다 돌지 않고 최소 이 간격으로만 백필한다(호출량 절반). Gemini 무료
+// 일일 한도가 낮아 폭주하면 금세 소진되므로 보수적으로 잡는다.
+const BACKFILL_INTERVAL_MS = 10 * 60 * 1000;
+let lastBackfillAt = 0;
+
+// 백필 사용 여부. config.newsBackfill 이 명시돼 있으면 그 값, 없으면 릴리스 빌드
+// (RELEASE_VERSION 존재)에서만 켠다. dev(ts-node/비릴리스)는 공유 할당량을 아끼려고 끈다.
+function backfillEnabled(): boolean {
+  if (typeof CONFIG.newsBackfill === "boolean") return CONFIG.newsBackfill;
+  return !!process.env.RELEASE_VERSION?.trim();
+}
 
 async function backfillTranslations(): Promise<void> {
   if (!canTranslate()) return;
+  if (!backfillEnabled()) return;            // dev 등에서는 비활성
   // 번역 할당량 쿨다운 중이면 조용히 건너뛴다(매 폴링 헛호출·로그 스팸 방지).
   if (isQuotaCoolingDown()) return;
+  if (Date.now() - lastBackfillAt < BACKFILL_INTERVAL_MS) return;  // 10분 주기
+  lastBackfillAt = Date.now();
   let pending: { itemId: string; title: string; url: string; body: string }[];
   try {
     pending = await getUntranslatedNewsArticles(
