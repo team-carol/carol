@@ -251,8 +251,8 @@ async function reply(interaction: ChatInputCommandInteraction, x: ReplyInput): P
   // 미리보기 GIF. 웹 플레이어와 같은 렌더러를 워커에서 돌려 몇 초치를 잘라낸다.
   const files: AttachmentBuilder[] = [];
   try {
-    // 밀도 높은 구간이 길게 이어질수록 미리보기도 길게(12~20초). 짧으면 12초.
-    const dyn = densePreviewRange(x.chart, 12000, 20000);
+    // 밀도 높은 구간이 길게 이어질수록 미리보기도 길게(15~30초). 짧으면 15초.
+    const dyn = densePreviewRange(x.chart, 15000, 30000);
     const clipMs = Math.min(dyn.durationMs, Math.max(2000, x.chart.durationMs));
     const asked = interaction.options.getNumber("시작");
     const maxStart = Math.max(0, x.chart.durationMs - clipMs);
