@@ -69,5 +69,54 @@ export function importBookmarkletPage(baseUrl: string, pageToken: string, bmToke
     <p class="warn">· 상대 서버 부담을 줄이려 간격을 둡니다. 너무 짧게 낮추지 마세요.</p>
     <p class="muted">· 이 북마클릿의 토큰은 12시간 뒤 만료됩니다. 만료되면 이 탭을 새로고침해 다시 드래그하세요.</p>
   </div>
+
+  <div class="card">
+    <b>채보 점검</b>
+    <p class="muted" style="margin:6px 0 12px">잘린 채보는 재생 길이가 비정상적으로 짧습니다.
+      <b>의심 채보</b>는 짧거나 빈 것만, <b>전체 검사</b>는 등록된 모든 채보의 상태를 보여줍니다.
+      잘린 채보는 위 북마클릿에서 <b>「이미 등록된 곡도 다시 가져오기」</b>로 재수집하면 교체됩니다.</p>
+    <button id="auditBtn" style="padding:9px 18px;border:0;border-radius:9px;background:#2a2a2a;color:#eee;font-weight:600;cursor:pointer">의심 채보 점검</button>
+    <button id="auditAllBtn" style="padding:9px 18px;border:1px solid #444;border-radius:9px;background:#1a1a1a;color:#ccc;font-weight:600;cursor:pointer;margin-left:6px">전체 검사</button>
+    <div id="auditOut" style="margin-top:14px"></div>
+  </div>
+  <script>
+    (function(){
+      var TOKEN = ${JSON.stringify(pageToken)};
+      var DIFF = {1:"BASIC",2:"ADVANCED",3:"EXPERT",4:"MASTER",5:"Re:MASTER"};
+      var btn = document.getElementById("auditBtn"), btnAll = document.getElementById("auditAllBtn"), out = document.getElementById("auditOut");
+      function flagLabel(s){
+        if(s.flags.indexOf("empty")>=0) return ["노트 없음","#f66"];
+        if(s.flags.indexOf("short")>=0) return [(s.durationMs/1000).toFixed(1)+"초","#fbbf24"];
+        return [(s.durationMs/1000).toFixed(0)+"초","#6f6"];
+      }
+      function run(full){
+        btn.disabled = btnAll.disabled = true; out.textContent = "점검 중… (곡이 많으면 몇 초 걸립니다)";
+        fetch("/api/admin/simai/audit?code=" + encodeURIComponent(TOKEN) + (full?"&mode=full":""))
+          .then(function(r){ return r.json(); })
+          .then(function(j){
+            btn.disabled = btnAll.disabled = false;
+            if(!j || !j.ok){ out.textContent = "점검 실패 (토큰 만료 시 이 탭을 새로고침)"; return; }
+            var c = j.counts;
+            var summary = "<div style='margin-bottom:8px'>등록 <b>" + c.total + "</b>곡 · "
+              + "<span style='color:#6f6'>정상 " + c.ok + "</span> · "
+              + "<span style='color:#fbbf24'>짧음 " + c.short + "</span> · "
+              + "<span style='color:#f66'>빈 채보 " + c.empty + "</span></div>";
+            if(!j.list.length){ out.innerHTML = summary + "<span style='color:#6f6'>표시할 항목이 없습니다.</span>"; return; }
+            var rows = j.list.map(function(s){
+              var fl = flagLabel(s);
+              return "<tr><td style='padding:4px 10px 4px 0'><a href='/chart?id=" + encodeURIComponent(s.id) + "' target='_blank' style='color:#c084fc'>" + (s.title||"(제목 없음)") + "</a></td>"
+                + "<td style='padding:4px 10px;color:#aaa'>" + (DIFF[s.difficulty]||s.difficulty) + (s.level?(" "+s.level):"") + "</td>"
+                + "<td style='padding:4px 10px;color:" + fl[1] + "'>" + fl[0] + "</td>"
+                + "<td style='padding:4px 10px;color:#888'>" + (s.notes||0) + "노트</td>"
+                + "<td style='padding:4px 0;color:#888'>p." + (s.page||"?") + "</td></tr>";
+            }).join("");
+            out.innerHTML = summary + "<div style='overflow:auto;max-height:360px'><table style='border-collapse:collapse;font-size:13px'>" + rows + "</table></div>";
+          })
+          .catch(function(e){ btn.disabled = btnAll.disabled = false; out.textContent = "점검 실패: " + (e&&e.message||e); });
+      }
+      btn.onclick = function(){ run(false); };
+      btnAll.onclick = function(){ run(true); };
+    })();
+  </script>
 </div></body></html>`;
 }

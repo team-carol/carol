@@ -7,7 +7,7 @@ import { calcSongRating, getConstant, levelToNumber } from "../constants";
 
 pgTypes.setTypeParser(20, (value) => Number(value));
 
-export const MIGRATION_VERSION = 20;
+export const MIGRATION_VERSION = 21;
 
 // Migration text is deliberately kept as separate, immutable units.  In particular,
 // an edit to the current schema must not silently change an old migration checksum.
@@ -171,6 +171,9 @@ CREATE INDEX IF NOT EXISTS idx_user_goals_owner ON user_goals(discord_user_id, c
   // 쓰지 않으므로(（）【】＜＞ 만 사용) 안전하게 뗄 수 있다. 이후 import 는 애초에 정리해 저장.
   [20, `UPDATE simai_charts SET title = regexp_replace(title, '〈(スタンダード|でらっくす|デラックス)〉', '', 'g')
     WHERE source='registry' AND title ~ '〈(スタンダード|でらっくす|デラックス)〉';`,],
+  // 스탠다드/DX 구분 표시(자동완성·임베드 [ST]/[DX])를 위한 채보 종류. atwiki 등록분은
+  // import 시 채운다. 기존 행은 빈 값이라 태그가 없다가 재수집하면 채워진다.
+  [21, `ALTER TABLE simai_charts ADD COLUMN IF NOT EXISTS chart_type text NOT NULL DEFAULT '';`,],
 ];
 
 export interface MainotesSongRow { id:string; title:string; artist:string; bpm:string; genre:string; version:string; type:string }
@@ -372,19 +375,27 @@ SELECT u.chart_key AS "chartKey",u.achievement_val AS "achievementVal",u.fc,u.sy
   }
 
   // ── simai 채보 ───────────────────────────────────────────────────────────
-  async saveSimaiChart(c:{id:string;ownerId:string;source:string;title:string;artist:string;designer:string;level:string;difficulty:number;maidata:string;chartJson:string},createdAt=Date.now()){
-    await this.q(`INSERT INTO simai_charts(id,owner_id,source,title,artist,designer,level,difficulty,maidata,chart_json,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-      ON CONFLICT(id) DO UPDATE SET title=excluded.title,artist=excluded.artist,designer=excluded.designer,level=excluded.level,difficulty=excluded.difficulty,maidata=excluded.maidata,chart_json=excluded.chart_json`,
-      [c.id,c.ownerId,c.source,c.title,c.artist,c.designer,c.level,c.difficulty,c.maidata,c.chartJson,createdAt]);
+  async saveSimaiChart(c:{id:string;ownerId:string;source:string;title:string;artist:string;designer:string;level:string;difficulty:number;maidata:string;chartJson:string;chartType?:string},createdAt=Date.now()){
+    await this.q(`INSERT INTO simai_charts(id,owner_id,source,title,artist,designer,level,difficulty,maidata,chart_json,chart_type,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+      ON CONFLICT(id) DO UPDATE SET title=excluded.title,artist=excluded.artist,designer=excluded.designer,level=excluded.level,difficulty=excluded.difficulty,maidata=excluded.maidata,chart_json=excluded.chart_json,chart_type=excluded.chart_type`,
+      [c.id,c.ownerId,c.source,c.title,c.artist,c.designer,c.level,c.difficulty,c.maidata,c.chartJson,c.chartType??"",createdAt]);
   }
   async getSimaiChart(id:string){
-    const r=await this.q<any>(`SELECT id,owner_id AS "ownerId",source,title,artist,designer,level,difficulty,maidata,chart_json AS "chartJson",created_at AS "createdAt" FROM simai_charts WHERE id=$1`,[id]);
+    const r=await this.q<any>(`SELECT id,owner_id AS "ownerId",source,title,artist,designer,level,difficulty,maidata,chart_json AS "chartJson",chart_type AS "chartType",created_at AS "createdAt" FROM simai_charts WHERE id=$1`,[id]);
     return r[0]?{...r[0],createdAt:Number(r[0].createdAt)}:null;
   }
   // 운영자 등록분(registry) 목록. /보면 곡명 검색 인덱스를 메모리로 올리는 데 쓴다.
   // 본문(maidata)·chart_json 은 빼서 가볍게 — 검색·표시에 필요한 메타만.
   async listRegistryCharts(){
-    return this.q<any>(`SELECT id,title,artist,designer,level,difficulty FROM simai_charts WHERE source='registry'`);
+    return this.q<any>(`SELECT id,title,artist,designer,level,difficulty,chart_type AS "type" FROM simai_charts WHERE source='registry'`);
+  }
+  // 채보 점검용. 무거운 chart_json 을 통째로 옮기지 않고 SQL 에서 길이·노트수만 뽑는다.
+  // 잘린 채보(추출 절단)는 재생 길이가 비정상적으로 짧다.
+  async auditRegistryCharts(){
+    return this.q<any>(`SELECT id,title,difficulty,level,
+      (chart_json::jsonb->>'durationMs')::float AS "durationMs",
+      (chart_json::jsonb->'stats'->>'total')::int AS "notes"
+      FROM simai_charts WHERE source='registry'`);
   }
   // 한 사람이 올릴 수 있는 채보 수를 제한하기 위한 카운트.
   async countSimaiChartsByOwner(ownerId:string){

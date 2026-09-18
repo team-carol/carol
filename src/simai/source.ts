@@ -38,6 +38,8 @@ export interface ResolvedChart {
   attribution: string;
   /** 원본 페이지 링크(크레딧). 있으면 /보면 응답에 걸어 원작자를 알 수 있게 한다. */
   sourceUrl?: string;
+  /** "standard" | "deluxe" | "" — 임베드 [ST]/[DX] 구분용. */
+  chartType?: string;
   /** 이미 simai_charts 에 들어 있는 채보면 그 id. 있으면 다시 저장하지 않는다. */
   storedId?: string;
 }
@@ -59,7 +61,8 @@ const registrySource: ChartSource = {
     return {
       title: row.title ?? "", artist: row.artist ?? "", designer: row.designer ?? "",
       level: row.level ?? "", difficulty: Number(row.difficulty ?? 0),
-      maidata: row.maidata, attribution: sourceUrl ? "simai wiki" : "", sourceUrl, storedId: id,
+      maidata: row.maidata, attribution: sourceUrl ? "simai wiki" : "", sourceUrl,
+      chartType: row.chartType ?? "", storedId: id,
     };
   },
 };

@@ -20,11 +20,15 @@ const MAX_BYTES = 2 * 1024 * 1024;
 const MAX_PER_USER = 20;
 
 const DIFF_LABEL: Record<number, string> = {
-  1: "BASIC", 2: "ADVANCED", 3: "EXPERT", 4: "MASTER", 5: "Re:MASTER",
+  1: "BASIC", 2: "ADVANCED", 3: "EXPERT", 4: "MASTER", 5: "Re:MASTER", 6: "宴", 7: "宴",
 };
 const DIFF_COLOR: Record<number, number> = {
-  1: 0x16a34a, 2: 0xea580c, 3: 0xdc2626, 4: 0x9333ea, 5: 0xc084fc,
+  1: 0x16a34a, 2: 0xea580c, 3: 0xdc2626, 4: 0x9333ea, 5: 0xc084fc, 6: 0xec4899, 7: 0xec4899,
 };
+/** 스탠다드/DX 구분 태그. 같은 곡이 둘 다 있을 때 이름이 겹치는 걸 막는다. */
+function typeTag(type?: string): string {
+  return type === "deluxe" ? " [DX]" : type === "standard" ? " [ST]" : "";
+}
 
 export const data = new SlashCommandBuilder()
   .setName("보면")
@@ -37,7 +41,7 @@ export const data = new SlashCommandBuilder()
   )
   .addIntegerOption((o) =>
     o.setName("난이도").setDescription("파일 업로드 시. 생략하면 가장 높은 난이도 (곡명 검색에는 영향 없음)").setRequired(false)
-      .addChoices(...Object.entries(DIFF_LABEL).map(([v, name]) => ({ name, value: Number(v) }))),
+      .addChoices(...Object.entries(DIFF_LABEL).filter(([v]) => Number(v) <= 5).map(([v, name]) => ({ name, value: Number(v) }))),
   )
   .addNumberOption((o) =>
     o.setName("시작").setDescription("미리보기를 시작할 시각(초). 생략 시 가장 빽빽한 구간")
@@ -52,8 +56,8 @@ export async function autocomplete(interaction: AutocompleteInteraction): Promis
   await interaction.respond(hits.map((c) => {
     const diff = DIFF_LABEL[c.difficulty] ?? "?";
     const lv = c.level ? ` ${c.level}` : "";
-    // Discord 는 이름을 100자까지만 받는다.
-    const name = `${c.title} · ${diff}${lv}`.slice(0, 100);
+    // 같은 곡의 스탠다드/DX 를 구분(둘 다 있으면 이름이 같아진다).
+    const name = `${c.title}${typeTag(c.type)} · ${diff}${lv}`.slice(0, 100);
     return { name, value: makeChartKey("registry", c.id) };
   }));
 }
@@ -101,7 +105,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       await reply(interaction, {
         id, title: found.title, artist: found.artist,
         designer: found.designer, level: found.level, diff, chart,
-        sourceUrl: found.sourceUrl,
+        sourceUrl: found.sourceUrl, chartType: found.chartType,
         footer: found.attribution
           ? msg("chart.footerSource", { source: found.attribution })
           : msg("chart.footerRegistry"),
@@ -216,6 +220,8 @@ interface ReplyInput {
   level: string; diff: number; chart: Chart; footer: string;
   /** 원본 페이지 링크(있으면 출처·원작자 크레딧을 설명에 건다). */
   sourceUrl?: string;
+  /** "standard" | "deluxe" | "" — 제목 옆 [ST]/[DX] 구분. */
+  chartType?: string;
 }
 
 /** 링크 + 통계 + 미리보기 GIF 를 붙여 응답한다. 파일/곡 어느 쪽으로 왔든 같다. */
@@ -229,7 +235,7 @@ async function reply(interaction: ChatInputCommandInteraction, x: ReplyInput): P
   const shownTitle = displayTitle(x.title, translate);
   const embed = new EmbedBuilder()
     .setColor(DIFF_COLOR[x.diff] ?? 0x9333ea)
-    .setTitle(shownTitle || msg("chart.untitled"))
+    .setTitle((shownTitle || msg("chart.untitled")) + typeTag(x.chartType))
     .setDescription(
       msg("chart.openLink", { url })
       + (x.chart.bpmAssumed ? "\n" + msg("chart.bpmAssumedNote") : "")
@@ -251,8 +257,8 @@ async function reply(interaction: ChatInputCommandInteraction, x: ReplyInput): P
   // 미리보기 GIF. 웹 플레이어와 같은 렌더러를 워커에서 돌려 몇 초치를 잘라낸다.
   const files: AttachmentBuilder[] = [];
   try {
-    // 밀도 높은 구간이 길게 이어질수록 미리보기도 길게(12~20초). 짧으면 12초.
-    const dyn = densePreviewRange(x.chart, 12000, 20000);
+    // 밀도 높은 구간이 길게 이어질수록 미리보기도 길게(15~30초). 짧으면 15초.
+    const dyn = densePreviewRange(x.chart, 15000, 30000);
     const clipMs = Math.min(dyn.durationMs, Math.max(2000, x.chart.durationMs));
     const asked = interaction.options.getNumber("시작");
     const maxStart = Math.max(0, x.chart.durationMs - clipMs);

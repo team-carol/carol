@@ -27,7 +27,7 @@ export interface AtwikiSongInput {
 
 const ID_PREFIX = "atwiki";
 export const ATWIKI_DIFF_NAMES: Record<number, string> = {
-  1: "BASIC", 2: "ADVANCED", 3: "EXPERT", 4: "MASTER", 5: "Re:MASTER",
+  1: "BASIC", 2: "ADVANCED", 3: "EXPERT", 4: "MASTER", 5: "Re:MASTER", 6: "宴", 7: "宴",
 };
 
 /** simai_charts 의 기본키. 페이지 하나에 난이도별로 한 행씩 들어간다. */
@@ -64,6 +64,8 @@ export interface SanitizedSong {
   title: string;
   artist: string;
   bpm: number;
+  /** "standard" | "deluxe" | "" — 자동완성·임베드 [ST]/[DX] 구분용. */
+  type: string;
   charts: { diff: number; level: string; designer: string; notes: string }[];
 }
 
@@ -86,7 +88,8 @@ export function sanitizeSong(raw: unknown): SanitizedSong | null {
     if (!c || typeof c !== "object") continue;
     const cc = c as Record<string, unknown>;
     const diff = Number(cc.diff);
-    if (!Number.isInteger(diff) || diff < 1 || diff > 5 || seen.has(diff)) continue;
+    // 1~5 = BASIC..Re:MASTER, 6~7 = 우타게(宴). inote 파서가 1~7 만 읽는다.
+    if (!Number.isInteger(diff) || diff < 1 || diff > 7 || seen.has(diff)) continue;
     const notes = String(cc.notes ?? "");
     if (!isValidNotes(notes)) continue;
     seen.add(diff);
@@ -99,7 +102,8 @@ export function sanitizeSong(raw: unknown): SanitizedSong | null {
   }
   if (charts.length === 0) return null;
   charts.sort((a, b) => a.diff - b.diff);
-  return { page, title, artist, bpm, charts };
+  const type = r.type === "standard" || r.type === "deluxe" ? r.type : "";
+  return { page, title, artist, bpm, type, charts };
 }
 
 /**
