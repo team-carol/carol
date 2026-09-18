@@ -64,6 +64,8 @@ export interface SanitizedSong {
   title: string;
   artist: string;
   bpm: number;
+  /** "standard" | "deluxe" | "" — 자동완성·임베드 [ST]/[DX] 구분용. */
+  type: string;
   charts: { diff: number; level: string; designer: string; notes: string }[];
 }
 
@@ -99,7 +101,8 @@ export function sanitizeSong(raw: unknown): SanitizedSong | null {
   }
   if (charts.length === 0) return null;
   charts.sort((a, b) => a.diff - b.diff);
-  return { page, title, artist, bpm, charts };
+  const type = r.type === "standard" || r.type === "deluxe" ? r.type : "";
+  return { page, title, artist, bpm, type, charts };
 }
 
 /**

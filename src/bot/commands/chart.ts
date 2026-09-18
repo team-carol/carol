@@ -25,6 +25,10 @@ const DIFF_LABEL: Record<number, string> = {
 const DIFF_COLOR: Record<number, number> = {
   1: 0x16a34a, 2: 0xea580c, 3: 0xdc2626, 4: 0x9333ea, 5: 0xc084fc,
 };
+/** 스탠다드/DX 구분 태그. 같은 곡이 둘 다 있을 때 이름이 겹치는 걸 막는다. */
+function typeTag(type?: string): string {
+  return type === "deluxe" ? " [DX]" : type === "standard" ? " [ST]" : "";
+}
 
 export const data = new SlashCommandBuilder()
   .setName("보면")
@@ -52,8 +56,8 @@ export async function autocomplete(interaction: AutocompleteInteraction): Promis
   await interaction.respond(hits.map((c) => {
     const diff = DIFF_LABEL[c.difficulty] ?? "?";
     const lv = c.level ? ` ${c.level}` : "";
-    // Discord 는 이름을 100자까지만 받는다.
-    const name = `${c.title} · ${diff}${lv}`.slice(0, 100);
+    // 같은 곡의 스탠다드/DX 를 구분(둘 다 있으면 이름이 같아진다).
+    const name = `${c.title}${typeTag(c.type)} · ${diff}${lv}`.slice(0, 100);
     return { name, value: makeChartKey("registry", c.id) };
   }));
 }
@@ -101,7 +105,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       await reply(interaction, {
         id, title: found.title, artist: found.artist,
         designer: found.designer, level: found.level, diff, chart,
-        sourceUrl: found.sourceUrl,
+        sourceUrl: found.sourceUrl, chartType: found.chartType,
         footer: found.attribution
           ? msg("chart.footerSource", { source: found.attribution })
           : msg("chart.footerRegistry"),
@@ -216,6 +220,8 @@ interface ReplyInput {
   level: string; diff: number; chart: Chart; footer: string;
   /** 원본 페이지 링크(있으면 출처·원작자 크레딧을 설명에 건다). */
   sourceUrl?: string;
+  /** "standard" | "deluxe" | "" — 제목 옆 [ST]/[DX] 구분. */
+  chartType?: string;
 }
 
 /** 링크 + 통계 + 미리보기 GIF 를 붙여 응답한다. 파일/곡 어느 쪽으로 왔든 같다. */
@@ -229,7 +235,7 @@ async function reply(interaction: ChatInputCommandInteraction, x: ReplyInput): P
   const shownTitle = displayTitle(x.title, translate);
   const embed = new EmbedBuilder()
     .setColor(DIFF_COLOR[x.diff] ?? 0x9333ea)
-    .setTitle(shownTitle || msg("chart.untitled"))
+    .setTitle((shownTitle || msg("chart.untitled")) + typeTag(x.chartType))
     .setDescription(
       msg("chart.openLink", { url })
       + (x.chart.bpmAssumed ? "\n" + msg("chart.bpmAssumedNote") : "")

@@ -715,7 +715,7 @@ a{color:#c084fc}
             id: atwikiChartId(song.page, c.diff), ownerId: "", source: "registry",
             title: song.title.slice(0, 200), artist: song.artist.slice(0, 200),
             designer: c.designer.slice(0, 200), level: c.level.slice(0, 20),
-            difficulty: c.diff, maidata, chartJson: JSON.stringify(chart),
+            difficulty: c.diff, maidata, chartJson: JSON.stringify(chart), chartType: song.type,
           });
           saved.push(c.diff);
         }

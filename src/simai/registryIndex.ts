@@ -13,6 +13,7 @@ export interface RegistryChart {
   designer: string;
   difficulty: number;
   level: string;
+  type: string;      // "standard" | "deluxe" | "" — 자동완성 [ST]/[DX]
 }
 
 let INDEX: RegistryChart[] = [];
@@ -35,6 +36,7 @@ export async function loadRegistryIndex(): Promise<void> {
     designer: r.designer ?? "",
     difficulty: Number(r.difficulty ?? 0),
     level: r.level ?? "",
+    type: r.type ?? "",
   })));
   console.log(`[registry] 채보 인덱스 ${INDEX.length}개`);
 }

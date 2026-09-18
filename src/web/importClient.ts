@@ -22,6 +22,9 @@ export const IMPORT_CLIENT_JS = String.raw`
   var DIFF = {BASIC:1, ADVANCED:2, EXPERT:3, MASTER:4, "Re:MASTER":5};
   var CJK = /[぀-ヿ㐀-鿿豈-﫿ｦ-ﾟ]/;
   var NAV = {31:1, 32:1, 808:1};
+  // 지금 실행 중인 목록 페이지로 스탠다드/DX 판정(32=스탠다드, 808=でらっくす).
+  // 곡 페이지에 변형 구분자가 있으면 그걸 우선한다.
+  var LIST_TYPE = /\/pages\/808\.html/.test(location.pathname) ? "deluxe" : (/\/pages\/32\.html/.test(location.pathname) ? "standard" : "");
 
   function txt(el){ return el.textContent || ""; }
   function cell(td){ return txt(td).replace(/\s+/g," ").trim(); }
@@ -36,8 +39,10 @@ export const IMPORT_CLIENT_JS = String.raw`
   function extract(doc){
     var wb = doc.querySelector("#wikibody"); if(!wb) return null;
     // 〈スタンダード〉/〈でらっくす〉 변형 구분자만 뗀다(별명 DB 매칭용). 실제 곡명의
-    // 다른 괄호(（）【】＜＞)는 건드리지 않는다.
-    var title = ((doc.querySelector("title")||{}).textContent||"").replace(/\s*-\s*simai.*$/i,"").replace(/〈(スタンダード|でらっくす|デラックス)〉/g,"").trim();
+    // 다른 괄호(（）【】＜＞)는 건드리지 않는다. 구분자에서 스탠다드/DX 종류도 뽑는다.
+    var rawTitle = ((doc.querySelector("title")||{}).textContent||"").replace(/\s*-\s*simai.*$/i,"");
+    var type = /〈でらっくす〉/.test(rawTitle) ? "deluxe" : (/〈スタンダード〉/.test(rawTitle) ? "standard" : LIST_TYPE);
+    var title = rawTitle.replace(/〈(スタンダード|でらっくす|デラックス)〉/g,"").trim();
     var artist="", bpm=0, levels={}, designers={};
     var tables = wb.querySelectorAll("table");
     for(var ti=0; ti<tables.length; ti++){
@@ -67,7 +72,7 @@ export const IMPORT_CLIENT_JS = String.raw`
     }
     var charts=[], order=[1,2,3,4,5];
     for(var d2=0; d2<order.length; d2++){ var d=order[d2]; if(!levels[d]) continue; var n=(notes[d]||"").replace(/\n{2,}/g,"\n").trim(); if(!n) continue; charts.push({diff:d, level:levels[d], designer:designers[d]||"", notes:n}); }
-    return {title:title, artist:artist, bpm:bpm, charts:charts};
+    return {title:title, artist:artist, bpm:bpm, type:type, charts:charts};
   }
 
   // 목록 페이지에서 곡 {page,title} 을 모은다. 레벨 링크(숫자만)·네비·앵커는 뺀다.
