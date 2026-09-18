@@ -35,13 +35,24 @@ test("sanitizeSong: CJK 섞인 본문(코멘트 오수집)·중복·범위밖 �
     charts: [
       { diff: 4, level: "13", designer: "x", notes: "(120){4}1,2,3,4,E" },
       { diff: 4, level: "13", designer: "dup", notes: "(120){4}5,6,7,8,E" }, // 중복 diff → 무시
-      { diff: 6, level: "1", designer: "", notes: "(120){4}1,,,,E" },        // 범위밖 → 무시
+      { diff: 8, level: "1", designer: "", notes: "(120){4}1,,,,E" },        // 범위밖(>7) → 무시
       { diff: 2, level: "7", designer: "", notes: "名前: コメント" },          // CJK → 무시
     ],
   });
   assert.ok(s);
   assert.equal(s.charts.length, 1);
   assert.equal(s.charts[0].diff, 4);
+});
+
+test("sanitizeSong: 우타게(宴) 난이도 6·7 허용", () => {
+  const s = a.sanitizeSong({
+    page: 1867, title: "[招]Re:Unknown X", artist: "", bpm: 190, type: "deluxe",
+    charts: [{ diff: 6, level: "LUNATIC X", designer: "", notes: "(190){4}A1,B2,C1,D5,E4,E" }],
+  });
+  assert.ok(s);
+  assert.equal(s.charts.length, 1);
+  assert.equal(s.charts[0].diff, 6);
+  assert.equal(s.charts[0].level, "LUNATIC X");
 });
 
 test("sanitizeSong: 쓸 채보 없으면 null", () => {

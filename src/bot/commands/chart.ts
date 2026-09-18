@@ -20,10 +20,10 @@ const MAX_BYTES = 2 * 1024 * 1024;
 const MAX_PER_USER = 20;
 
 const DIFF_LABEL: Record<number, string> = {
-  1: "BASIC", 2: "ADVANCED", 3: "EXPERT", 4: "MASTER", 5: "Re:MASTER",
+  1: "BASIC", 2: "ADVANCED", 3: "EXPERT", 4: "MASTER", 5: "Re:MASTER", 6: "宴", 7: "宴",
 };
 const DIFF_COLOR: Record<number, number> = {
-  1: 0x16a34a, 2: 0xea580c, 3: 0xdc2626, 4: 0x9333ea, 5: 0xc084fc,
+  1: 0x16a34a, 2: 0xea580c, 3: 0xdc2626, 4: 0x9333ea, 5: 0xc084fc, 6: 0xec4899, 7: 0xec4899,
 };
 /** 스탠다드/DX 구분 태그. 같은 곡이 둘 다 있을 때 이름이 겹치는 걸 막는다. */
 function typeTag(type?: string): string {
@@ -41,7 +41,7 @@ export const data = new SlashCommandBuilder()
   )
   .addIntegerOption((o) =>
     o.setName("난이도").setDescription("파일 업로드 시. 생략하면 가장 높은 난이도 (곡명 검색에는 영향 없음)").setRequired(false)
-      .addChoices(...Object.entries(DIFF_LABEL).map(([v, name]) => ({ name, value: Number(v) }))),
+      .addChoices(...Object.entries(DIFF_LABEL).filter(([v]) => Number(v) <= 5).map(([v, name]) => ({ name, value: Number(v) }))),
   )
   .addNumberOption((o) =>
     o.setName("시작").setDescription("미리보기를 시작할 시각(초). 생략 시 가장 빽빽한 구간")

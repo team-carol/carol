@@ -44,6 +44,7 @@ export const IMPORT_CLIENT_JS = String.raw`
     var type = /〈でらっくす〉/.test(rawTitle) ? "deluxe" : (/〈スタンダード〉/.test(rawTitle) ? "standard" : LIST_TYPE);
     var title = rawTitle.replace(/〈(スタンダード|でらっくす|デラックス)〉/g,"").trim();
     var artist="", bpm=0, levels={}, designers={};
+    var utComment="", utLevel={};   // 우타게(宴): 테이블 COMMENT, H2 속성명
     var tables = wb.querySelectorAll("table");
     for(var ti=0; ti<tables.length; ti++){
       var trs = tables[ti].querySelectorAll("tr"); var rows=[];
@@ -62,16 +63,32 @@ export const IMPORT_CLIENT_JS = String.raw`
         var val2=null; for(var v2=0;v2<rows.length;v2++){ if(rows[v2].some(function(c){ return /譜面制作者/.test(c); })){ val2=rows[v2]; break; } }
         if(hdr2 && val2){ for(var c3=0;c3<hdr2.length;c3++){ var hh3=hdr2[c3]; if(DIFF[hh3]!=null && val2[c3] && val2[c3]!=="-" && !/譜面制作者/.test(val2[c3])) designers[DIFF[hh3]]=val2[c3]; } }
       }
+      // 우타게(宴): 테이블이 BPM/属性/COMMENT 형식. bpm 과 COMMENT(난이도 표기)를 뽑는다.
+      if(/BPM/.test(flat) && /属性/.test(flat)){
+        var uh=null; for(var uh1=0;uh1<rows.length;uh1++){ if(rows[uh1].some(function(c){ return /BPM/.test(c); })){ uh=rows[uh1]; break; } }
+        var uv=null; if(uh){ for(var uv1=0;uv1<rows.length;uv1++){ if(rows[uv1]!==uh && rows[uv1].length===uh.length){ uv=rows[uv1]; break; } } }
+        if(uh&&uv){ for(var uc=0;uc<uh.length;uc++){ var uhh=uh[uc]; if(/BPM/.test(uhh)){ if(!bpm) bpm=parseFloat(uv[uc])||0; } else if(/COMMENT/.test(uhh) && uv[uc]) utComment=uv[uc]; } }
+      }
     }
-    var notes={}, cur=null, kids=wb.children;
+    var notes={}, cur=null, kids=wb.children, utIdx=0;
     for(var ki=0; ki<kids.length; ki++){ var el=kids[ki];
-      if(el.tagName==="H2"){ var nm=txt(el).trim(); cur = DIFF[nm]!=null ? DIFF[nm] : null; continue; }
+      if(el.tagName==="H2"){ var nm=txt(el).trim();
+        if(DIFF[nm]!=null){ cur=DIFF[nm]; }
+        // 우타게: "属性:招" 같은 헤딩. inote 파서가 1~7 만 읽으므로 6,7 두 개까지만.
+        else if(/^属性/.test(nm) && utIdx<2){ cur=6+utIdx; utIdx++; utLevel[cur]=(nm.split(/[:：]/)[1]||"").trim(); }
+        else { cur=null; }
+        continue;
+      }
       if(cur==null) continue;
       if(isBoundaryEl(el)){ cur=null; continue; }   // 코멘트/푸터 시작 → 노트 구획 끝
       if(el.tagName==="DIV"){ var t=txt(el).replace(/^\n+/,"").replace(/\s+$/,""); if(!t) continue; if(isNoteText(t)) notes[cur]=(notes[cur]?notes[cur]+"\n":"")+t; else cur=null; }
     }
-    var charts=[], order=[1,2,3,4,5];
-    for(var d2=0; d2<order.length; d2++){ var d=order[d2]; if(!levels[d]) continue; var n=(notes[d]||"").replace(/\n{2,}/g,"\n").trim(); if(!n) continue; charts.push({diff:d, level:levels[d], designer:designers[d]||"", notes:n}); }
+    var charts=[];
+    [1,2,3,4,5].forEach(function(d){ if(!levels[d]) return; var n=(notes[d]||"").replace(/\n{2,}/g,"\n").trim(); if(!n) return; charts.push({diff:d, level:levels[d], designer:designers[d]||"", notes:n}); });
+    // 우타게 채보(diff 6,7). 레벨은 COMMENT 우선, 없으면 속성명. 제작자·아티스트는 없음.
+    [6,7].forEach(function(d){ if(!notes[d]) return; var n=notes[d].replace(/\n{2,}/g,"\n").trim(); if(!n) return; charts.push({diff:d, level: utComment || utLevel[d] || "", designer:"", notes:n}); });
+    // 우타게만 있는 곡은 [招] 제목·宴 난이도로 이미 구분되므로 [ST]/[DX] 태그를 붙이지 않는다.
+    if(charts.length && charts.every(function(c){ return c.diff>=6; })) type="";
     return {title:title, artist:artist, bpm:bpm, type:type, charts:charts};
   }
 
