@@ -25,7 +25,12 @@ export const IMPORT_CLIENT_JS = String.raw`
 
   function txt(el){ return el.textContent || ""; }
   function cell(td){ return txt(td).replace(/\s+/g," ").trim(); }
-  function looksLikeNotes(t){ var s=t.trim(); if(!s) return false; if(CJK.test(s)) return false; return /[{(]/.test(s) && /[,{]/.test(s); }
+  // 노트 본문은 순수 ASCII simai(숫자·,·{}·()·[]·/-^*<> 등). 노트 구획이 여러 DIV 로
+  // 쪼개지면 이어지는 DIV 가 {}/() 없이 "3,2,1,," 처럼 시작하기도 하므로 {}/() 유무로
+  // 판단하면 안 된다(그러면 그 뒤가 통째로 잘린다 — Oshama Scramble! 사례). 코멘트/설명은
+  // 일본어(CJK)를 포함하므로 CJK 유무로 가른다. 코멘트 플러그인/푸터 클래스도 경계로 본다.
+  function isNoteText(t){ return !!t && !CJK.test(t); }
+  function isBoundaryEl(el){ var c=el.className||""; return /plugin_comment/.test(c) || /(^|\s)atwiki-/.test(c); }
 
   // 곡 페이지 하나(Document)에서 메타 + 난이도별 노트를 뽑는다. 서버 sanitizeSong 과 짝.
   function extract(doc){
@@ -57,7 +62,8 @@ export const IMPORT_CLIENT_JS = String.raw`
     for(var ki=0; ki<kids.length; ki++){ var el=kids[ki];
       if(el.tagName==="H2"){ var nm=txt(el).trim(); cur = DIFF[nm]!=null ? DIFF[nm] : null; continue; }
       if(cur==null) continue;
-      if(el.tagName==="DIV"){ var t=txt(el).replace(/^\n+/,"").replace(/\s+$/,""); if(!t) continue; if(looksLikeNotes(t)) notes[cur]=(notes[cur]?notes[cur]+"\n":"")+t; else cur=null; }
+      if(isBoundaryEl(el)){ cur=null; continue; }   // 코멘트/푸터 시작 → 노트 구획 끝
+      if(el.tagName==="DIV"){ var t=txt(el).replace(/^\n+/,"").replace(/\s+$/,""); if(!t) continue; if(isNoteText(t)) notes[cur]=(notes[cur]?notes[cur]+"\n":"")+t; else cur=null; }
     }
     var charts=[], order=[1,2,3,4,5];
     for(var d2=0; d2<order.length; d2++){ var d=order[d2]; if(!levels[d]) continue; var n=(notes[d]||"").replace(/\n{2,}/g,"\n").trim(); if(!n) continue; charts.push({diff:d, level:levels[d], designer:designers[d]||"", notes:n}); }
@@ -98,13 +104,14 @@ export const IMPORT_CLIENT_JS = String.raw`
    +"<button id='ciStop' style='padding:7px 10px;border:1px solid #444;border-radius:8px;background:#2a2a2a;color:#eee;cursor:pointer'>중지</button>"
    +"<label style='font-size:12px;color:#999;display:flex;align-items:center;gap:3px'>간격<input id='ciInt' type='number' min='5' max='120' value='15' style='width:42px;background:#2a2a2a;color:#eee;border:1px solid #444;border-radius:6px;padding:3px'>s</label>"
    +"</div>"
+   +"<label style='font-size:12px;color:#999;display:flex;align-items:center;gap:5px;margin:0 0 8px'><input id='ciForce' type='checkbox' style='margin:0'>이미 등록된 곡도 다시 가져오기(잘린 채보 교체)</label>"
    +"<div id='ciLog' style='height:110px;overflow:auto;background:#0d0d0d;border:1px solid #2a2a2a;border-radius:8px;padding:6px;font:11px/1.45 ui-monospace,Menlo,monospace;color:#ccc'></div>"
    +"</div>";
   document.body.appendChild(ui);
   var $=function(id){ return document.getElementById(id); };
   function log(msg, color){ var d=document.createElement("div"); if(color) d.style.color=color; d.textContent=msg; $("ciLog").appendChild(d); $("ciLog").scrollTop=$("ciLog").scrollHeight; }
 
-  var state={running:false, stop:false, idx:0, ok:0, add:0, skip:0, fail:0, todo:[]};
+  var state={running:false, stop:false, idx:0, ok:0, add:0, skip:0, fail:0, todo:[], allSongs:[], known:{}};
 
   function setBar(){ var total=state.todo.length||1; $("ciBar").style.width=Math.round(state.idx/total*100)+"%"; $("ciStat").textContent="진행 "+state.idx+" / "+state.todo.length+"곡  ·  등록 "+state.add+" · 노트없음 "+state.skip+" · 실패 "+state.fail; }
   function setEta(){ var per=(parseInt($("ciInt").value,10)||15); var remain=(state.todo.length-state.idx)*per; $("ciEta").textContent = state.idx<state.todo.length ? ("남은 곡 "+(state.todo.length-state.idx)+" · 예상 "+fmtTime(remain)) : "완료"; }
@@ -135,21 +142,29 @@ export const IMPORT_CLIENT_JS = String.raw`
     }
   }
 
+  // force(재수집) 체크 상태에 따라 대상 목록을 다시 계산한다. 시작 전 · 체크 토글 시 호출.
+  function recompute(){
+    var force = $("ciForce").checked;
+    state.todo = force ? state.allSongs.slice() : state.allSongs.filter(function(s){ return !state.known[s.page]; });
+    state.idx=0; state.add=0; state.skip=0; state.fail=0;
+    var already=state.allSongs.length-state.todo.length;
+    $("ciStat").textContent = "목록 "+state.allSongs.length+"곡 · 이미 등록 "+already+"곡 · 대상 "+state.todo.length+"곡"+(force?" (재수집)":"");
+    setBar(); setEta();
+  }
   async function init(){
     var songs=parseList();
     if(!songs.length){ $("ciStat").textContent="이 페이지에서 곡 목록을 못 찾았습니다."; log("공식 채보 데이터(스탠다드/でらっくす) 목록 페이지에서 실행하세요.","#f66"); return; }
     $("ciStat").textContent="이미 등록된 곡 확인 중… (목록 "+songs.length+"곡)";
-    var known={};
-    try{ var kr=await api("/api/admin/simai/known-pages?code="+encodeURIComponent(CODE)); var kj=await kr.json(); if(kj && kj.pages) for(var i=0;i<kj.pages.length;i++) known[kj.pages[i]]=1; }
+    state.allSongs=songs; state.known={};
+    try{ var kr=await api("/api/admin/simai/known-pages?code="+encodeURIComponent(CODE)); var kj=await kr.json(); if(kj && kj.pages) for(var i=0;i<kj.pages.length;i++) state.known[kj.pages[i]]=1; }
     catch(e){ log("등록 목록 조회 실패: "+(e&&e.message||e)+" (전체를 대상으로 진행)","#fa0"); }
-    state.todo=songs.filter(function(s){ return !known[s.page]; });
-    var already=songs.length-state.todo.length;
-    log("목록 "+songs.length+"곡 · 이미 등록 "+already+"곡 · 대상 "+state.todo.length+"곡","#9cf");
-    setBar(); setEta();
-    if(!state.todo.length){ $("ciStat").textContent="새로 등록할 곡이 없습니다."; $("ciNow").textContent="모두 등록됨 ✓"; }
+    recompute();
+    log("목록 "+songs.length+"곡 · 대상 "+state.todo.length+"곡","#9cf");
+    if(!state.todo.length){ $("ciNow").textContent="모두 등록됨 ✓ (잘린 채보 교체는 위 체크박스)"; }
   }
 
-  $("ciToggle").onclick=function(){ if(state.running){ state.running=false; this.textContent="재개"; } else { if(!state.todo.length){ return; } state.running=true; state.stop=false; this.textContent="일시정지"; run(); } };
+  $("ciForce").onchange=function(){ if(!state.running){ recompute(); } };
+  $("ciToggle").onclick=function(){ if(state.running){ state.running=false; this.textContent="재개"; } else { if(state.idx===0){ recompute(); } if(!state.todo.length){ return; } state.running=true; state.stop=false; this.textContent="일시정지"; run(); } };
   $("ciStop").onclick=function(){ state.running=false; state.stop=true; $("ciToggle").textContent="시작"; $("ciNow").textContent="중지됨"; };
   $("ciClose").onclick=function(){ state.running=false; state.stop=true; ui.remove(); };
 

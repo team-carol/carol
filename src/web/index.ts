@@ -4,7 +4,7 @@ import { createHash, timingSafeEqual } from "crypto";
 import { gunzip } from "zlib";
 import { promisify } from "util";
 import { parseHome, parsePlayerData, parseFriendCode as parseFC, parseRecentRecords, parsePlaylogHistory, parseTop5, parseTopSongs, parseMusicScore, mergeTopRecords, getMaimaiBaseUrl, parseMapAreas, parsePlaylogDetail, chartKey, buildMarkMap, buildKindResolver } from "../scraper";
-import { cacheProfile, getCachedProfile, saveUserSession, getUserSyncToken, findUserBySyncToken, getUserFriendCodeForServer, saveAvatarBlob, getAvatarBlob, getSongJacket, saveSongJacket, getExtraBookmarklets, getProfilePrivate, setProfilePrivate, addExtraBookmarklet, removeExtraBookmarklet, getEnabledBookmarkletPresetIds, setBookmarkletPresetEnabled, getUserDefaultServer, setUserDefaultServer, isMaimaiServer, getMapImage, saveMapImage, saveAchievementPlayEventLogBatch, upsertChartClears, backfillEventRatingUp, saveRatingSnapshot, getAllAliases, addAlias, deleteAlias, setAliasTranslation, setMessageOverride, deleteMessageOverride, getTranslateTitles, setTranslateTitles, getRegisteredUserCount, getAchievementMinimum, setAchievementMinimum, listGoals, updateGoalProgress, getPolicyAck, setPolicyAck, getSimaiChart, saveSimaiChart, listRegistryCharts } from "../storage";
+import { cacheProfile, getCachedProfile, saveUserSession, getUserSyncToken, findUserBySyncToken, getUserFriendCodeForServer, saveAvatarBlob, getAvatarBlob, getSongJacket, saveSongJacket, getExtraBookmarklets, getProfilePrivate, setProfilePrivate, addExtraBookmarklet, removeExtraBookmarklet, getEnabledBookmarkletPresetIds, setBookmarkletPresetEnabled, getUserDefaultServer, setUserDefaultServer, isMaimaiServer, getMapImage, saveMapImage, saveAchievementPlayEventLogBatch, upsertChartClears, backfillEventRatingUp, saveRatingSnapshot, getAllAliases, addAlias, deleteAlias, setAliasTranslation, setMessageOverride, deleteMessageOverride, getTranslateTitles, setTranslateTitles, getRegisteredUserCount, getAchievementMinimum, setAchievementMinimum, listGoals, updateGoalProgress, getPolicyAck, setPolicyAck, getSimaiChart, saveSimaiChart, listRegistryCharts, auditRegistryCharts } from "../storage";
 import { POLICY_VERSION } from "../policy";
 import type { SongAliasRow } from "../storage/types";
 import { buildBookmarkletJs, setBaseUrl, getBaseUrl, buildBookmarklet, BOOKMARKLET_PRESETS, getBookmarkletPresets } from "./bookmarklet";
@@ -660,6 +660,40 @@ a{color:#c084fc}
         res.end(JSON.stringify({ ok: true, pages: [...pages] }));
       } catch (e) {
         console.error("[simai] known-pages 실패:", e);
+        res.writeHead(500, { "content-type": "application/json" }); res.end(JSON.stringify({ ok: false }));
+      }
+      return;
+    }
+    // 채보 점검: 등록분 중 재생 길이가 비정상적으로 짧은(추출 절단 의심) 채보를 찾는다.
+    if (req.method === "GET" && url.pathname === "/api/admin/simai/audit") {
+      const token = url.searchParams.get("code") || "";
+      if (!isValidAdminToken(token)) { res.writeHead(403, { "content-type": "application/json" }); res.end(JSON.stringify({ ok: false })); return; }
+      try {
+        const full = url.searchParams.get("mode") === "full";
+        const rows = await auditRegistryCharts() as { id: string; title: string; difficulty: number; level: string; durationMs: number | null; notes: number | null }[];
+        const SHORT_MS = 40000; // 40초 미만이면 잘렸을 가능성(대부분의 곡은 60초+)
+        const annotated = rows.map((r) => {
+          const dur = Number(r.durationMs) || 0;
+          const notes = Number(r.notes) || 0;
+          const flags: string[] = [];
+          if (notes === 0) flags.push("empty");            // 파싱 안 됨/노트 0
+          else if (dur < SHORT_MS) flags.push("short");    // 재생 길이 비정상적으로 짧음(절단 의심)
+          const p = parseAtwikiId(r.id);
+          return { id: r.id, page: p ? p.page : null, title: r.title, difficulty: r.difficulty, level: r.level, durationMs: dur, notes, flags };
+        });
+        const counts = {
+          total: annotated.length,
+          ok: annotated.filter((r) => r.flags.length === 0).length,
+          short: annotated.filter((r) => r.flags.indexOf("short") >= 0).length,
+          empty: annotated.filter((r) => r.flags.indexOf("empty") >= 0).length,
+        };
+        // full: 모든 채보(문제 먼저). 기본: 의심분만. 목록은 길이 오름차순.
+        const list = (full ? annotated : annotated.filter((r) => r.flags.length > 0))
+          .sort((a, b) => (a.flags.length !== b.flags.length ? b.flags.length - a.flags.length : a.durationMs - b.durationMs));
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: true, mode: full ? "full" : "suspects", counts, list }));
+      } catch (e) {
+        console.error("[simai] audit 실패:", e);
         res.writeHead(500, { "content-type": "application/json" }); res.end(JSON.stringify({ ok: false }));
       }
       return;

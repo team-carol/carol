@@ -386,6 +386,14 @@ SELECT u.chart_key AS "chartKey",u.achievement_val AS "achievementVal",u.fc,u.sy
   async listRegistryCharts(){
     return this.q<any>(`SELECT id,title,artist,designer,level,difficulty FROM simai_charts WHERE source='registry'`);
   }
+  // 채보 점검용. 무거운 chart_json 을 통째로 옮기지 않고 SQL 에서 길이·노트수만 뽑는다.
+  // 잘린 채보(추출 절단)는 재생 길이가 비정상적으로 짧다.
+  async auditRegistryCharts(){
+    return this.q<any>(`SELECT id,title,difficulty,level,
+      (chart_json::jsonb->>'durationMs')::float AS "durationMs",
+      (chart_json::jsonb->'stats'->>'total')::int AS "notes"
+      FROM simai_charts WHERE source='registry'`);
+  }
   // 한 사람이 올릴 수 있는 채보 수를 제한하기 위한 카운트.
   async countSimaiChartsByOwner(ownerId:string){
     const r=await this.q<any>("SELECT count(*)::int AS n FROM simai_charts WHERE owner_id=$1 AND source='upload'",[ownerId]);
