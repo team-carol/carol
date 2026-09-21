@@ -20,6 +20,7 @@ import {
   levelToNumber,
   calcSongRating,
   isNewSong,
+  listCatalogSongKinds,
   getRegionExclusive,
   getSongGenre,
   getSongVersionName,
@@ -450,29 +451,45 @@ export async function searchResultEmbeds(
   const records = getClearList(p);
   const q = normalizeQuery(query);
   const translate = await getTranslateTitles(userId);
-  // 같은 곡명이라도 ST/DX 채보는 별도 결과로 분리 (musicKind 포함 키로 그룹핑)
-  const byChart = new Map<string, PlayRecord[]>();
+  // 같은 곡명이라도 ST/DX 채보는 별도 결과로 분리 (musicKind 포함 키로 그룹핑).
+  // 검색 대상은 클리어기록 스냅샷이 아니라 otoge-db 카탈로그 → 동기화하지 않았어도,
+  // 국제판 프로필이라도 JP 전용곡까지 잡힌다. 기록이 있으면 점수/FC/SYNC 를 덧댄다.
+  type SearchGroup = { title: string; musicKind: string; records: PlayRecord[] };
+  const byChart = new Map<string, SearchGroup>();
+  const matchTitle = (t: string) =>
+    normalizeQuery(t).includes(q) || aliasMatches(t, q);
+  const ensureGroup = (title: string, musicKind: string): SearchGroup => {
+    const key = `${musicKind}|${title}`;
+    let g = byChart.get(key);
+    if (!g) {
+      g = { title, musicKind, records: [] };
+      byChart.set(key, g);
+    }
+    return g;
+  };
+  // 1) 카탈로그(미플레이 곡 포함). ST/DX 타입 필터도 여기서 적용.
+  for (const c of listCatalogSongKinds()) {
+    if (typeFilter && c.musicKind !== typeFilter) continue;
+    if (!matchTitle(c.title)) continue;
+    ensureGroup(c.title, c.musicKind);
+  }
+  // 2) 내 클리어 기록을 덧댄다(카탈로그에 없는 곡이라도 기록이 있으면 노출).
   for (const r of records) {
-    // ST/DX 타입 필터 (선택 시 해당 타입만)
-    if (typeFilter && (r.musicKind || "") !== typeFilter) continue;
-    // 곡명 또는 별명(NeonDB)에 부분 일치
-    if (!normalizeQuery(r.title).includes(q) && !aliasMatches(r.title, q))
-      continue;
-    const key = `${r.musicKind || ""}|${r.title}`;
-    const arr = byChart.get(key) ?? [];
-    arr.push(r);
-    byChart.set(key, arr);
+    const kind = r.musicKind || "";
+    if (typeFilter && kind !== typeFilter) continue;
+    if (!matchTitle(r.title)) continue;
+    ensureGroup(r.title, kind).records.push(r);
   }
   const keys = Array.from(byChart.entries())
     .sort(([, a], [, b]) => {
       // 곡명이 검색어와 완전 일치하는 곡을 최상단으로
-      const exactA = normalizeQuery(a[0].title) === q ? 1 : 0;
-      const exactB = normalizeQuery(b[0].title) === q ? 1 : 0;
+      const exactA = normalizeQuery(a.title) === q ? 1 : 0;
+      const exactB = normalizeQuery(b.title) === q ? 1 : 0;
       if (exactA !== exactB) return exactB - exactA;
-      return (
-        Math.max(...b.map((r) => r.achievementVal)) -
-        Math.max(...a.map((r) => r.achievementVal))
-      );
+      // 그다음 내 최고 달성률 순(미플레이 곡은 0으로 뒤로).
+      const bestA = a.records.reduce((m, r) => Math.max(m, r.achievementVal), 0);
+      const bestB = b.records.reduce((m, r) => Math.max(m, r.achievementVal), 0);
+      return bestB - bestA;
     })
     .map(([k]) => k);
 
@@ -500,14 +517,16 @@ export async function searchResultEmbeds(
 
   const embeds = await Promise.all(
     pageKeys.map(async (key, i) => {
-      const all = byChart.get(key) ?? [];
-      const title = all[0]?.title ?? key;
-      const kind = all[0]?.musicKind ? ` [${all[0].musicKind}]` : "";
+      const group = byChart.get(key)!;
+      const all = group.records;
+      const title = group.title;
+      const musicKind = group.musicKind;
+      const kind = musicKind ? ` [${musicKind}]` : "";
       const lines = DIFF_ORDER.flatMap((d) => {
         const r = all.find((x) => x.diff === d);
         // 검색은 이미 ST/DX로 분리돼 있으므로 exact(상호 폴백 없음)로 조회.
         // (예: ST에만 Re:MASTER가 있는 곡의 DX 카드에 Re:MASTER가 뜨는 문제 방지)
-        const constant = getConstant(title, all[0]?.musicKind, d, p.server, true);
+        const constant = getConstant(title, musicKind, d, p.server, true);
         if (d === "Re:MASTER" && constant === null && !r) return [];
         const lv = constant !== null ? constant.toFixed(1) : (r?.level ?? "?");
         const ach =
@@ -526,7 +545,7 @@ export async function searchResultEmbeds(
             level: "?",
             date: "",
             jacketUrl: "",
-            musicKind: "",
+            musicKind,
             achievementVal: 0,
             track: 0,
             fc: "",
@@ -534,20 +553,22 @@ export async function searchResultEmbeds(
           } as PlayRecord),
       );
       const ytQuery = encodeURIComponent(
-        `maimai ${title} ${all[0]?.musicKind || ""} 外部出力`
+        `maimai ${title} ${musicKind || ""} 外部出力`
           .replace(/\s+/g, " ")
           .trim(),
       );
       const ytUrl = `https://www.youtube.com/results?search_query=${ytQuery}`;
-      // 현재 검색 대상 서버 라벨 (기본 서버 프로필만 출력하므로 그 서버를 표기).
-      // 제목이 아닌 점수표 위 한 줄에 두고, 한 서버 전용 곡이면 "전용"으로 구분.
+      // 지역 라벨: 한 서버 전용 곡이면 곡의 실제 지역을, 양쪽 수록이면 현재 보는 서버를 표기.
+      // (국제판 프로필에서도 JP 전용곡이 검색되므로 프로필 서버가 아니라 곡 기준으로 판정한다.)
+      // 제목이 아닌 점수표 위 한 줄에 둔다.
+      const exclusive = getRegionExclusive(title);
       const verLabel = p.server === "jp" ? "japan ver." : "intl ver.";
       // 장르(catcode)·수록 버전은 OTOGE DB 데이터. 있을 때만 리전 라벨 아래 들여써서 붙인다.
       const genre = getSongGenre(title);
       const versionName = getSongVersionName(title);
       const versionLabel = versionName ? versionName + (isSongPlus(title) ? " PLUS" : "") : null;
       const regionLine =
-        (getRegionExclusive(title) ? msg("searchResult.regionExclusive", { version: verLabel }) : verLabel)
+        (exclusive ? msg("searchResult.regionExclusive", { version: exclusive === "jp" ? "japan ver." : "intl ver." }) : verLabel)
         + (genre ? msg("searchResult.genreSuffix", { genre }) : "")
         + (versionLabel ? msg("searchResult.versionSuffix", { version: versionLabel }) : "")
         + "\n";

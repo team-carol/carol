@@ -429,6 +429,24 @@ export function getChartsInConstantRange(min: number, max: number): ChartInfo[] 
   return charts;
 }
 
+// 검색용: otoge-db 카탈로그의 고유 (곡, 채보종류) 목록. 동기화 여부·프로필 지역과
+// 무관하게(국제판 프로필에서 JP 전용곡까지) /검색 이 클리어기록에 이 목록을 덧대 곡을
+// 노출하기 위한 것. constantMap 은 intl+JP 를 합쳐 담으므로 양쪽 곡이 모두 나온다.
+export function listCatalogSongKinds(): { title: string; musicKind: "ST" | "DX" }[] {
+  const seen = new Set<string>();
+  const out: { title: string; musicKind: "ST" | "DX" }[] = [];
+  for (const key of constantMap.keys()) {
+    const [title, kindRaw] = key.split("|");
+    if (!title || !kindRaw || isUtageSong(title)) continue;
+    const musicKind = kindRaw === "DX" ? "DX" : "ST";
+    const k = musicKind + "|" + title;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push({ title, musicKind });
+  }
+  return out;
+}
+
 // 상수 → 표기 레벨 (X.0~X.5 → "X", X.6~X.9 → "X+")
 export function constantToDisplayLevel(c: number): string {
   const floor = Math.floor(c);
