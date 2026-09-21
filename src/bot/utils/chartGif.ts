@@ -203,3 +203,28 @@ export function renderChartGifAsync(
     worker.postMessage({ data, opts });
   });
 }
+
+/** 미리보기 GIF 메타(렌더러가 요구하는 채보 데이터). */
+export type PreviewMeta = {
+  id: string; title: string; artist: string; designer: string;
+  level: string; difficulty: number; chart: Chart;
+};
+
+/**
+ * 가장 빽빽한 구간을 15~30초(밀도가 길게 이어질수록 길게, 짧으면 15초) 잘라 미리보기
+ * GIF 를 만든다. `/보면`·`/운세` 공용. startOverrideMs 를 주면 그 시각부터 시작하되
+ * 클립이 곡을 넘지 않도록 범위 안으로 클램프한다.
+ */
+export async function renderPreviewGif(
+  meta: PreviewMeta,
+  startOverrideMs?: number,
+): Promise<{ gif: Buffer; startMs: number; clipMs: number }> {
+  const dyn = densePreviewRange(meta.chart, 15000, 30000);
+  const clipMs = Math.min(dyn.durationMs, Math.max(2000, meta.chart.durationMs));
+  const maxStart = Math.max(0, meta.chart.durationMs - clipMs);
+  const startMs = startOverrideMs != null
+    ? Math.min(Math.max(0, startOverrideMs), maxStart)
+    : Math.min(dyn.startMs, maxStart);
+  const gif = await renderChartGifAsync(meta, { ...GIF_DEFAULTS, durationMs: clipMs, startMs });
+  return { gif, startMs, clipMs };
+}
