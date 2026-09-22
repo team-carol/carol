@@ -35,10 +35,11 @@ import * as report       from "./commands/report";
 import * as admin        from "./commands/admin";
 import * as goal         from "./commands/goal";
 import * as chart        from "./commands/chart";
+import * as ratingcalc   from "./commands/ratingcalc";
 
 type Command = { data: { toJSON(): object; name: string }; execute: (i: ChatInputCommandInteraction) => Promise<void>; autocomplete?: (i: AutocompleteInteraction) => Promise<void> };
 
-const COMMANDS: Command[] = [profile, bookmarklet, ratingtable, ratingimage, achievement, fortune, settings, serverSettings, newsSettings, search, status, songrec, random, areaMap, report, admin, goal, chart];
+const COMMANDS: Command[] = [profile, bookmarklet, ratingtable, ratingimage, achievement, fortune, settings, serverSettings, newsSettings, search, status, songrec, random, areaMap, report, admin, goal, chart, ratingcalc];
 const EPHEMERAL_REPLY = { flags: MessageFlags.Ephemeral } as const;
 
 const RATING_CARD_GC_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000;
