@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, ChatInputCommandInteraction, EmbedBuilder, MessageFlags } from "discord.js";
+import { SlashCommandBuilder, ChatInputCommandInteraction, EmbedBuilder } from "discord.js";
 import { getUserFriendCode, getCachedProfile } from "../../storage";
 import { getClearList } from "../utils/embeds";
 import { calcSongRating, getConstant, isNewSong, levelToNumber } from "../../constants";
@@ -19,8 +19,7 @@ export const data = new SlashCommandBuilder()
   .setName("레이팅계산기")
   .setDescription("상수와 달성률로 곡 레이팅과 총합 레이팅 변화를 계산")
   .addNumberOption((o) =>
-    o.setName("상수").setDescription("보면정수 (예: 13.5)").setRequired(true)
-      .setMinValue(1).setMaxValue(15.9),
+    o.setName("상수").setDescription("보면정수 (예: 13.5)").setRequired(true),
   )
   .addNumberOption((o) =>
     o.setName("달성률").setDescription("달성률 % (예: 100.5)").setRequired(true)
@@ -51,7 +50,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   const cached = friendCode ? await getCachedProfile(friendCode) : null;
   if (!cached) {
     emb.addFields({ name: msg("ratingcalc.totalField"), value: msg("ratingcalc.noProfile"), inline: false });
-    await interaction.reply({ embeds: [emb], flags: MessageFlags.Ephemeral });
+    await interaction.reply({ embeds: [emb] });
     return;
   }
 
@@ -78,5 +77,5 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   );
   emb.setFooter({ text: msg("ratingcalc.footer") });
 
-  await interaction.reply({ embeds: [emb], flags: MessageFlags.Ephemeral });
+  await interaction.reply({ embeds: [emb] });
 }
