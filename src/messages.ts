@@ -143,6 +143,18 @@ export const MESSAGES = {
   "fortune.constantField": "상수",
   "fortune.footer": "기준일: {date}",
 
+  // ── /레이팅계산기 ─────────────────────────────────────────────────────────
+  "ratingcalc.title": "레이팅 계산기",
+  "ratingcalc.inputField": "입력",
+  "ratingcalc.songRatingField": "이 채보 레이팅",
+  "ratingcalc.totalField": "총합 레이팅 변화",
+  "ratingcalc.noProfile": "프로필이 등록되어 있지 않아 이 채보 레이팅만 계산했습니다. 총합 변화를 보려면 먼저 동기화해 주세요.",
+  "ratingcalc.currentField": "현재 총 레이팅(계산 기준)",
+  "ratingcalc.asNewField": "신곡으로 획득 시",
+  "ratingcalc.asOldField": "구곡으로 획득 시",
+  "ratingcalc.noChange": "변화 없음",
+  "ratingcalc.footer": "총합은 베스트 50(신곡 15 + 구곡 35) 기준 추정치입니다.",
+
   // ── /검색 ───────────────────────────────────────────────────────────────
   "search.failed": "검색에 실패했습니다.",
 
