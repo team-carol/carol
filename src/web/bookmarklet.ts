@@ -60,14 +60,14 @@ export function buildBookmarkletJs(
   // 방침 변경 1회 고지 — 오버레이 맨 위. 업데이트 = 업데이트, 자세히 = 자세히
   if (opts.policyNotice) {
     prepend(
-      `(function(){try{var _pn=doc.createElement('div');_pn.style.cssText='padding:10px 0;margin-bottom:4px;border-bottom:1px solid #202020;color:#c084fc;font-size:11px;line-height:1.5';_pn.innerHTML='carol \\uAC1C\\uC778\\uC815\\uBCF4\\uCC98\\uB9AC\\uBC29\\uCE68\\uC774 \\uC5C5\\uB370\\uC774\\uD2B8\\uB418\\uC5C8\\uC2B5\\uB2C8\\uB2E4 (2026-09) \\u00B7 <a href="'+v+'/privacy" target="_blank" rel="noopener" style="color:#c084fc">\\uC790\\uC138\\uD788</a>';stEl.appendChild(_pn);}catch(_e){}})();`,
+      `(function(){try{var _pn=doc.createElement('div');_pn.style.cssText='padding:10px 0;margin-bottom:4px;border-bottom:1px solid #2e2e33;color:#f2b3bf;font-size:11px;line-height:1.5';_pn.innerHTML='캐롤봇 \\uAC1C\\uC778\\uC815\\uBCF4\\uCC98\\uB9AC\\uBC29\\uCE68\\uC774 \\uC5C5\\uB370\\uC774\\uD2B8\\uB418\\uC5C8\\uC2B5\\uB2C8\\uB2E4 (2026-09) \\u00B7 <a href="'+v+'/privacy" target="_blank" rel="noopener" style="color:#f2b3bf">\\uC790\\uC138\\uD788</a>';stEl.appendChild(_pn);}catch(_e){}})();`,
     );
   }
 
   // 구 도메인으로 접속된 구북마클릿 전용 경고 — 서버가 요청 Host로 legacy 여부를 판단해 넘겨줌
   if (opts.deprecationCutoff) {
     prepend(
-      `(function(){try{var _dn=doc.createElement('div');_dn.style.cssText='padding:10px 0;margin-bottom:4px;border-bottom:1px solid #202020;color:#fb923c;font-size:11px;line-height:1.5';_dn.innerHTML='이 링크는 ${opts.deprecationCutoff}부터 사용할 수 없습니다 · Discord에서 /북마클릿 을 다시 실행해 새 링크를 받아주세요';stEl.appendChild(_dn);}catch(_e){}})();`,
+      `(function(){try{var _dn=doc.createElement('div');_dn.style.cssText='padding:10px 0;margin-bottom:4px;border-bottom:1px solid #2e2e33;color:#fb923c;font-size:11px;line-height:1.5';_dn.innerHTML='이 링크는 ${opts.deprecationCutoff}부터 사용할 수 없습니다 · Discord에서 /북마클릿 을 다시 실행해 새 링크를 받아주세요';stEl.appendChild(_dn);}catch(_e){}})();`,
     );
   }
 
@@ -85,7 +85,7 @@ function withAchievementInitUi(script: string): string {
   return script
     .replace(
       "var stEl=doc.getElementById('mmsync-st'),hadErr=false;",
-      "var stEl=doc.getElementById('mmsync-st'),hadErr=false;var phaseEl=doc.createElement('div');phaseEl.style.cssText='display:none;color:#c084fc;font-size:11px;line-height:1.4;padding:8px 0 2px;margin-bottom:4px;border-bottom:1px solid #202020';stEl.parentNode.insertBefore(phaseEl,stEl);function phase(tx){phaseEl.textContent=tx;phaseEl.style.display=tx?'block':'none';}",
+      "var stEl=doc.getElementById('mmsync-st'),hadErr=false;var phaseEl=doc.createElement('div');phaseEl.style.cssText='display:none;color:#f2b3bf;font-size:11px;line-height:1.4;padding:8px 0 2px;margin-bottom:4px;border-bottom:1px solid #2e2e33';stEl.parentNode.insertBefore(phaseEl,stEl);function phase(tx){phaseEl.textContent=tx;phaseEl.style.display=tx?'block':'none';}",
     )
     .replace(
       "async function collectDetails(){var reqs=collectDetailRequests(rd),out=[];",
@@ -120,7 +120,7 @@ function withAchievementInitUi(script: string): string {
     )
     .replace(
       "else if(!hadErr){fin.style.color='#4ade80';",
-      "else if(typeof svText!=='undefined'&&svText==='initialized'&&!hadErr){fin.style.color='#c084fc';fin.innerHTML='<span style=\"font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10px\">INIT</span><span>첫 동기화 기준선 설정 완료 · 다음부터 플레이 기록 수집</span>';stEl.appendChild(fin);}else if(!hadErr){fin.style.color='#4ade80';",
+      "else if(typeof svText!=='undefined'&&svText==='initialized'&&!hadErr){fin.style.color='#f2b3bf';fin.innerHTML='<span style=\"font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10px\">INIT</span><span>첫 동기화 기준선 설정 완료 · 다음부터 플레이 기록 수집</span>';stEl.appendChild(fin);}else if(!hadErr){fin.style.color='#4ade80';",
     );
 }
 
@@ -129,22 +129,22 @@ var h=location.hostname,server=h==='maimaidx.jp'?'jp':(h==='maimaidx-eng.com'?'i
 var doc=document,cur=doc.currentScript,s=cur.src,u=new URL(s),c=u.searchParams.get('code')||'',v=u.origin;if(cur&&cur.parentNode)cur.parentNode.removeChild(cur);try{if(performance&&performance.clearResourceTimings)performance.clearResourceTimings();}catch(_pe){}
 var old=doc.getElementById('mm-sync-ov');if(old)old.remove();
 var ov=doc.createElement('div');ov.id='mm-sync-ov';
-ov.style.cssText='position:fixed;top:16px;right:16px;z-index:2147483647;background:#1a1a1a;border:1px solid #2a2a2a;border-radius:12px;padding:16px 18px;font:13px Inter,system-ui,-apple-system,sans-serif;color:#cccccc;min-width:300px;max-width:340px;max-height:calc(100vh - 32px);overflow-y:auto;box-shadow:0 12px 36px rgba(0,0,0,.55),0 0 0 1px rgba(147,51,234,.12)';
-ov.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:10px;margin-bottom:4px;border-bottom:1px solid #1e1e1e"><div style="display:flex;align-items:baseline"><span style="color:#fff;font-size:14px;font-weight:800;letter-spacing:.2px">carol</span><span style="color:#9333ea;font-size:14px;font-weight:800;letter-spacing:.2px">bot</span><span id="mmsync-region" style="color:#666;font-size:10px;font-weight:600;letter-spacing:.6px;margin-left:10px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;text-transform:uppercase">SYNC</span></div><button id="mmsync-x" style="background:none;border:none;color:#888;font-size:14px;cursor:pointer;line-height:1;padding:2px 6px;border-radius:6px;transition:background .15s,color .15s">\u2715</button></div><div id="mmsync-st"></div>';
+ov.style.cssText='position:fixed;top:16px;right:16px;z-index:2147483647;background:#242427;border:1px solid #33333a;border-radius:16px;padding:16px 18px;font:13px Pretendard,"Pretendard Variable",system-ui,-apple-system,sans-serif;color:#cfc6ca;min-width:300px;max-width:340px;max-height:calc(100vh - 32px);overflow-y:auto;box-shadow:0 12px 36px rgba(0,0,0,.55),0 0 0 1px rgba(255,146,148,.14)';
+ov.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:10px;margin-bottom:4px;border-bottom:1px solid #2e2e33"><div style="display:flex;align-items:baseline"><span style="color:#f2edef;font-size:15px;font-weight:600">캐롤봇</span><span id="mmsync-region" style="color:#6f676c;font-size:10px;font-weight:600;letter-spacing:.6px;margin-left:10px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;text-transform:uppercase">SYNC</span></div><button id="mmsync-x" style="background:none;border:none;color:#8a8087;font-size:14px;cursor:pointer;line-height:1;padding:2px 6px;border-radius:6px;transition:background .15s,color .15s">\u2715</button></div><div id="mmsync-st"></div>';
 doc.body.appendChild(ov);
 var xBtn=doc.getElementById('mmsync-x');
-xBtn.onmouseenter=function(){xBtn.style.color='#fff';xBtn.style.background='#252525';};
-xBtn.onmouseleave=function(){xBtn.style.color='#888';xBtn.style.background='none';};
+xBtn.onmouseenter=function(){xBtn.style.color='#f2edef';xBtn.style.background='#2e2e33';};
+xBtn.onmouseleave=function(){xBtn.style.color='#8a8087';xBtn.style.background='none';};
 xBtn.onclick=function(){ov.remove();};
 var stEl=doc.getElementById('mmsync-st'),hadErr=false;
 var serverLabel=server==='jp'?'JP':'INTERNATIONAL';
 var regionEl=doc.getElementById('mmsync-region');if(regionEl)regionEl.textContent=serverLabel;
-function addSection(label){var d=doc.createElement('div');d.style.cssText='display:flex;align-items:baseline;padding:8px 0 4px;margin-top:6px;border-bottom:1px solid #202020';d.innerHTML='<span style="color:#aaa;font-size:10px;font-weight:700;letter-spacing:.6px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;text-transform:uppercase">'+label+'</span>';stEl.appendChild(d);}
-function addRow(id,label){var d=doc.createElement('div');d.style.cssText='display:flex;align-items:center;gap:10px;padding:3px 0';d.innerHTML='<span id="mmsi'+id+'" style="display:inline-block;width:14px;text-align:center;font-size:11px;color:#666">\u00B7</span><span style="flex:1;color:#cccccc;font-size:13px">'+label+'</span><span id="mmst'+id+'" style="color:#666;font-size:10px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.3px"></span>';stEl.appendChild(d);}
+function addSection(label){var d=doc.createElement('div');d.style.cssText='display:flex;align-items:baseline;padding:8px 0 4px;margin-top:6px;border-bottom:1px solid #2e2e33';d.innerHTML='<span style="color:#b3a8ad;font-size:10px;font-weight:700;letter-spacing:.6px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;text-transform:uppercase">'+label+'</span>';stEl.appendChild(d);}
+function addRow(id,label){var d=doc.createElement('div');d.style.cssText='display:flex;align-items:center;gap:10px;padding:3px 0';d.innerHTML='<span id="mmsi'+id+'" style="display:inline-block;width:14px;text-align:center;font-size:11px;color:#6f676c">\u00B7</span><span style="flex:1;color:#cfc6ca;font-size:13px">'+label+'</span><span id="mmst'+id+'" style="color:#6f676c;font-size:10px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.3px"></span>';stEl.appendChild(d);}
 function setRow(id,ic,cl,tx){var ei=doc.getElementById('mmsi'+id),et=doc.getElementById('mmst'+id);if(ei){ei.textContent=ic;if(cl)ei.style.color=cl;}if(et){if(tx!==undefined)et.textContent=tx;if(cl)et.style.color=cl;}}
 function okRow(id,tx){setRow(id,'\u2713','#4ade80',tx===undefined?'':tx);}
 function failRow(id,tx){setRow(id,'\u2715','#f87171',tx||'\uC624\uB958');hadErr=true;}
-function skipRow(id,tx){setRow(id,'\u2014','#666',tx||'\uAC74\uB108\uB871');}
+function skipRow(id,tx){setRow(id,'\u2014','#6f676c',tx||'\uAC74\uB108\uB871');}
 addSection('PROFILE');
 addRow('hm','\uD648 \uB370\uC774\uD130');addRow('pd','\uD50C\uB808\uC774\uC5B4 \uB370\uC774\uD130');addRow('rc','\uCD5C\uADFC \uD50C\uB808\uC774');addRow('fc','\uCE5C\uAD6C\uCF54\uB4DC');
 addSection('CLEAR CHART');
@@ -182,5 +182,5 @@ try{dt=await collectDetails();}catch(e2){console.warn('[carol] detail collection
 try{var avatarMatch=h.match(/src="(https:[^"]*Icon[^"]*)"/);if(avatarMatch){var bl=await fetch(avatarMatch[1]).then(function(r){return r.blob();});a=await new Promise(function(res){var fr=new FileReader();fr.onload=function(){res(fr.result);};fr.readAsDataURL(bl);});okRow('av');}else{skipRow('av','\uC774\uBBF8\uC9C0 \uC5C6\uC74C');}}catch(e1){failRow('av');}
 try{okRow('jk','\uC2A4\uD0B4\uC5D0\uC11C \uC0DD\uB7B5');}catch(e3){failRow('jk');}
 await postSync();}else{if(server==='jp')skipRow('rt','\uD074\uB9AC\uC5B4 \uC218\uC9D1 \uC2E4\uD328');skipRow('av','\uAC74\uB108\uB871');skipRow('jk','\uAC74\uB108\uB871');skipRow('sv','\uC218\uC9D1 \uC2E4\uD328');}
-var fin=doc.createElement('div');fin.style.cssText='display:flex;align-items:center;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid #1e1e1e;font-weight:700;font-size:13px;letter-spacing:.2px';if(typeof svText!=='undefined'&&svText==='no_change'&&!hadErr){fin.style.color='#aaa';fin.innerHTML='<span style="font-size:14px">\u2728</span><span>\uC774\uBBF8 \uCD5C\uC2E0 \uC0C1\uD0DC</span>';stEl.appendChild(fin);setTimeout(function(){ov.style.transition='opacity .3s';ov.style.opacity='0';setTimeout(function(){ov.remove();},300);},2500);}else if(!hadErr){fin.style.color='#4ade80';fin.innerHTML='<span style="font-size:14px">\u2713</span><span>\uB3D9\uAE30\uD654 \uC644\uB8CC</span>';stEl.appendChild(fin);setTimeout(function(){ov.style.transition='opacity .3s';ov.style.opacity='0';setTimeout(function(){ov.remove();},300);},2500);}else{fin.style.color='#f87171';fin.innerHTML='<span style="font-size:14px">\u26A0</span><span>\uC77C\uBD80 \uD56D\uBAA9 \uC2E4\uD328</span>';stEl.appendChild(fin);}
+var fin=doc.createElement('div');fin.style.cssText='display:flex;align-items:center;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid #2e2e33;font-weight:700;font-size:13px;letter-spacing:.2px';if(typeof svText!=='undefined'&&svText==='no_change'&&!hadErr){fin.style.color='#b3a8ad';fin.innerHTML='<span style="font-size:14px">\u2728</span><span>\uC774\uBBF8 \uCD5C\uC2E0 \uC0C1\uD0DC</span>';stEl.appendChild(fin);setTimeout(function(){ov.style.transition='opacity .3s';ov.style.opacity='0';setTimeout(function(){ov.remove();},300);},2500);}else if(!hadErr){fin.style.color='#4ade80';fin.innerHTML='<span style="font-size:14px">\u2713</span><span>\uB3D9\uAE30\uD654 \uC644\uB8CC</span>';stEl.appendChild(fin);setTimeout(function(){ov.style.transition='opacity .3s';ov.style.opacity='0';setTimeout(function(){ov.remove();},300);},2500);}else{fin.style.color='#f87171';fin.innerHTML='<span style="font-size:14px">\u26A0</span><span>\uC77C\uBD80 \uD56D\uBAA9 \uC2E4\uD328</span>';stEl.appendChild(fin);}
 })()`;

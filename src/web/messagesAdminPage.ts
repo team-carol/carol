@@ -1,5 +1,7 @@
 // 봇 출력 문구 관리 페이지. 키별 기본값을 보여주고 오버라이드를 저장/복원한다.
-// 디자인 토큰은 docs/DESIGN.md 및 별명 관리 페이지와 맞춘다.
+// 디자인 토큰은 theme.ts(캐롤봇 랜딩 디자인 시스템)를 따른다.
+
+import { BASE_CSS, ADMIN_CSS, ADMIN_BADGE, pageHead, topbar, adminTabs } from "./theme";
 
 export interface MessageRowVM {
   key: string;
@@ -11,46 +13,36 @@ export interface MessageRowVM {
 }
 
 export function messagesAdminPage(token: string, rows: MessageRowVM[]): string {
-  return `<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>봇 문구 관리 - carolbot</title>
+  return `<!DOCTYPE html><html lang="ko"><head>${pageHead("봇 문구 관리 · 캐롤봇")}
 <style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:#0d0d0d;color:#ccc;font-size:16px;line-height:1.5;-webkit-font-smoothing:antialiased;display:flex;justify-content:center;min-height:100vh;padding:48px 24px}
-.wrap{width:100%;max-width:820px}
-.mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:#888;margin-bottom:12px}
-h1{font-size:34px;font-weight:700;color:#fff;letter-spacing:-.5px;margin-bottom:8px}
-.sub{font-size:14px;color:#777;margin-bottom:20px}
-.tabs{display:flex;gap:8px;margin:0 0 20px}
-.tabs a{flex:0 0 auto;background:#1a1a1a;color:#888;border:1px solid #2a2a2a;border-radius:8px;padding:8px 18px;font-size:14px;font-weight:500;text-decoration:none;transition:all .15s}
-.tabs a:hover{color:#ccc}
-.tabs a.on{background:#9333ea;color:#fff;border-color:#9333ea}
-#q{width:100%;background:#151515;border:1px solid #2a2a2a;border-radius:8px;padding:10px 12px;color:#ccc;font-family:inherit;font-size:14px;margin-bottom:16px}
-#q:focus{outline:none;border-color:#9333ea}
-.group{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:#9333ea;margin:22px 0 8px}
-.item{background:#151515;border:1px solid #2a2a2a;border-radius:10px;padding:14px;margin-bottom:10px}
-.item.on{border-color:#9333ea}
-.k{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12px;color:#ccc;word-break:break-all}
-.badge{display:inline-block;font-size:10px;font-weight:700;color:#fff;background:#9333ea;border-radius:4px;padding:1px 6px;margin-left:6px;vertical-align:middle}
-.vars{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;color:#777;margin-top:4px}
-textarea{width:100%;min-height:64px;background:#0f0f0f;border:1px solid #2a2a2a;border-radius:8px;padding:10px;color:#ddd;font-family:inherit;font-size:14px;line-height:1.5;resize:vertical;margin-top:8px}
-textarea:focus{outline:none;border-color:#9333ea}
-.act{display:flex;gap:8px;align-items:center;margin-top:8px}
-button{background:#9333ea;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;transition:opacity .15s}
-button:active{opacity:.8}
-button.ghost{background:#1f1f1f;color:#aaa;border:1px solid #2a2a2a}
-.st{font-size:12px;margin-left:auto}
-.st.ok{color:#4ade80}
-.st.err{color:#f87171}
-.def{font-size:12px;color:#666;margin-top:6px;white-space:pre-wrap;word-break:break-word}
+${BASE_CSS}
+${ADMIN_CSS}
+#q{width:100%;background:var(--canvas-alt);border:1px solid var(--border);border-radius:12px;padding:11px 14px;color:var(--ink);font-size:15px;margin-bottom:12px;outline:none;transition:border-color .15s}
+#q::placeholder{color:var(--faint)}
+#q:focus{border-color:var(--accent)}
+.group{font-size:13px;font-weight:500;color:var(--accent-soft);margin:28px 0 10px}
+.item{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:16px 18px;margin-bottom:10px}
+.item.on{border-color:rgba(255,146,148,.55)}
+.k{font-family:var(--font-mono);font-size:12.5px;color:var(--ink-2);word-break:break-all}
+.badge{display:inline-block;font-family:var(--font-sans);font-size:11px;font-weight:600;color:var(--accent-ink);background:var(--accent);border-radius:6px;padding:1px 7px;margin-left:8px;vertical-align:middle}
+.vars{font-family:var(--font-mono);font-size:11.5px;color:var(--dim);margin-top:4px}
+textarea{width:100%;min-height:68px;background:var(--canvas-alt);border:1px solid var(--border);border-radius:12px;padding:11px 12px;color:var(--ink);font-size:14.5px;line-height:1.55;resize:vertical;margin-top:10px;outline:none;transition:border-color .15s}
+textarea:focus{border-color:var(--accent)}
+.act{display:flex;gap:8px;align-items:center;margin-top:10px}
+.act .btn{padding:8px 16px;font-size:13.5px}
+.st{font-size:12.5px;margin-left:auto;color:var(--dim)}
+.st.ok{color:var(--ok)}
+.st.err{color:var(--err)}
+.def{font-size:12.5px;color:var(--dim);margin-top:8px;white-space:pre-wrap;word-break:break-word}
 </style></head><body>
-<div class="wrap">
-<p class="mono">carolbot · admin</p>
-<div class="tabs"><a href="/admin/aliases?code=${token}">곡 별명</a><a class="on" href="/admin/messages?code=${token}">봇 문구</a><a href="/admin/import?code=${token}">채보 등록</a></div>
-<h1>봇 문구 관리</h1>
-<p class="sub">저장하면 즉시 반영됩니다. 슬래시 명령의 이름·설명은 Discord에 기동 시 등록되어 여기서 바꿀 수 없습니다.</p>
+${topbar(ADMIN_BADGE)}
+<main class="page">
+${adminTabs(token, "messages")}
+<h1 class="admin-title">봇 문구 관리</h1>
+<p class="admin-sub">저장하면 즉시 반영됩니다. 슬래시 명령의 이름·설명은 Discord에 기동 시 등록되어 여기서 바꿀 수 없습니다.</p>
 <input id="q" placeholder="키 또는 문구 검색">
 <div id="list"></div>
-</div>
+</main>
 <script>
 const TOKEN=${JSON.stringify(token)};
 const ROWS=${JSON.stringify(rows)};
@@ -66,13 +58,13 @@ function render(){
       +'<div class="k">'+esc(r.key)+(r.overridden?'<span class="badge">수정됨</span>':'')+'</div>'
       +(r.vars.length?'<div class="vars">자리표시자: '+r.vars.map(v=>'{'+esc(v)+'}').join(" ")+'</div>':'')
       +'<textarea spellcheck="false">'+esc(r.text)+'</textarea>'
-      +'<div class="act"><button class="save">저장</button>'
-      +(r.overridden?'<button class="ghost reset">기본값으로</button>':'')
+      +'<div class="act"><button class="btn btn-primary save">저장</button>'
+      +(r.overridden?'<button class="btn btn-secondary reset">기본값으로</button>':'')
       +'<span class="st"></span></div>'
       +(r.overridden?'<div class="def">기본값: '+esc(r.def)+'</div>':'')
       +'</div>';
   }
-  $("list").innerHTML=html||'<div class="sub">일치하는 문구가 없습니다.</div>';
+  $("list").innerHTML=html||'<div class="admin-sub">일치하는 문구가 없습니다.</div>';
 }
 async function post(path,body){
   const res=await fetch(path+'?code='+encodeURIComponent(TOKEN),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});

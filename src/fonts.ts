@@ -61,6 +61,14 @@ const FONT_SOURCES: { file: string; url: string; weight: 400 | 700; family: stri
     url: "https://cdn.jsdelivr.net/npm/@expo-google-fonts/noto-sans-symbols-2@0.2.3/NotoSansSymbols2_400Regular.ttf",
     weight: 400,
   },
+  // 레이팅표 우상단 레이팅 플레이트 숫자 전용(mai-log Figma RatingSection 과 같은 Pretendard SemiBold).
+  // FONT_STACK 에는 넣지 않고 플레이트에서만 fontFamily 로 직접 지정한다.
+  {
+    family: "Pretendard",
+    file: "Pretendard-SemiBold.otf",
+    url: "https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/public/static/Pretendard-SemiBold.otf",
+    weight: 700,
+  },
   // 이모지(흑백). resvg가 컬러 이모지 폰트(CBDT)를 지원하지 않아 단색 폰트를 쓴다.
   {
     family: "NotoEmoji",

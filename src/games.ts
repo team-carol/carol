@@ -2,6 +2,7 @@
 // 레이팅 계산식은 mai-log 원본을 그대로 유지한다 (수치·반올림 순서 포함).
 // maimai 기록(달성률 0~101%, 상수 0~15.0)을 각 게임 스케일로 선형 보간해 환산한다.
 
+import { BRAND } from "./brand";
 import type { PlayRecord } from "./scraper";
 
 export type GameId = "maimai" | "chunithm" | "sdvx" | "arcaea";
@@ -450,7 +451,7 @@ export const GAMES: Record<GameId, GameConfig> = {
   maimai: {
     id: "maimai",
     label: "maimai DX",
-    accent: "#9333ea",
+    accent: BRAND.accent,
     ratingLabel: "RATING",
     select: "newOld",
     sections: [

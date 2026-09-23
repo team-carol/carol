@@ -49,7 +49,7 @@ Key entry points:
 - **Slash commands use Korean names.** User `/설정` links to web settings; guild auto-role config is `/서버설정`, not `/설정`.
 - **User-facing strings go through `msg()` from `src/messages.ts`** — do not inline new Korean output text in commands. Fonts for PNG cards must be registered under distinct family names (satori does not fall back within one family); see `src/fonts.ts` `FONT_STACK`.
 - **PostgreSQL migrations are numbered and immutable after release.** Do not reintroduce SQLite runtime storage or the removed catalog baseline crawler.
-- **Web UI is inline string HTML/CSS/JS** in `src/web/index.ts` / `src/web/settingsPage.ts` — no React/templates. Match `docs/DESIGN.md` tokens: `#0d0d0d` canvas, `#1a1a1a` surface, `#2a2a2a` border, `#9333ea` accent, Inter + JetBrains Mono.
+- **Web UI is inline string HTML/CSS/JS** in `src/web/index.ts` / `src/web/settingsPage.ts` — no React/templates. Web pages use the carol-web (landing) design system from `src/web/theme.ts`: `BASE_CSS` CSS variables (`--canvas #1a1a1c`, `--surface #242427`, `--border #33333a`, `--accent #ff9294`), Pretendard, shared `pageHead()`/`topbar()`/`siteFooter()`/`.btn-primary`. Use the variables — don't hard-code colors. Raw values live in `src/brand.ts` (`BRAND`), which the PNG rating/achievement cards also use; game colors (difficulty, FC/AP, DX) stay separate.
 - **Do not change `customId` formats casually** — the builder code (`src/bot/utils/embeds.ts`) and the router in `src/bot/index.ts` must change together.
 - `src/auth.ts` is a full login/session client but is **not** wired into the current bookmarklet sync flow — don't rely on it.
 - **Never store SEGA credentials.** Bookmarklet-pushed HTML/cookies are the only sync path.

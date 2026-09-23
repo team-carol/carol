@@ -16,7 +16,7 @@ export const IMPORT_CLIENT_JS = String.raw`
   var CFG = window.__carolImport || {};
   var BASE = String(CFG.base||"").replace(/\/+$/,"");
   var CODE = String(CFG.code||"");
-  if(!BASE || !CODE){ alert("carol 채보등록: 설정이 없습니다. 설치 페이지에서 다시 실행하세요."); return; }
+  if(!BASE || !CODE){ alert("캐롤봇 채보 등록: 설정이 없습니다. 설치 페이지에서 다시 실행하세요."); return; }
   if(document.getElementById("carolImportUI")){ alert("이미 실행 중입니다."); return; }
 
   var DIFF = {BASIC:1, ADVANCED:2, EXPERT:3, MASTER:4, "Re:MASTER":5};
@@ -113,21 +113,21 @@ export const IMPORT_CLIENT_JS = String.raw`
 
   // ── UI ────────────────────────────────────────────────────────────────
   var ui=document.createElement("div"); ui.id="carolImportUI";
-  ui.setAttribute("style","position:fixed;right:16px;bottom:16px;z-index:2147483647;width:340px;max-width:92vw;background:#1a1a1a;color:#eee;border:1px solid #9333ea;border-radius:12px;font:13px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;box-shadow:0 8px 30px rgba(0,0,0,.5);overflow:hidden");
+  ui.setAttribute("style","position:fixed;right:16px;bottom:16px;z-index:2147483647;width:340px;max-width:92vw;background:#242427;color:#f2edef;border:1px solid #33333a;border-radius:16px;font:13px/1.55 Pretendard,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;box-shadow:0 8px 30px rgba(0,0,0,.5);overflow:hidden");
   ui.innerHTML=""
-   +"<div style='padding:10px 12px;background:#9333ea;color:#fff;font-weight:700;display:flex;justify-content:space-between;align-items:center'>carol 채보 등록<span id='ciClose' style='cursor:pointer;font-weight:400;opacity:.85'>✕</span></div>"
+   +"<div style='padding:10px 14px;background:#ff9294;color:#3a1e1e;font-weight:600;display:flex;justify-content:space-between;align-items:center'>캐롤봇 채보 등록<span id='ciClose' style='cursor:pointer;font-weight:400;opacity:.85'>✕</span></div>"
    +"<div style='padding:12px'>"
-   +"<div id='ciStat' style='margin-bottom:6px;color:#bbb'>목록을 읽는 중…</div>"
-   +"<div style='height:8px;background:#2a2a2a;border-radius:99px;overflow:hidden;margin:8px 0'><div id='ciBar' style='height:100%;width:0;background:#9333ea;transition:width .2s'></div></div>"
-   +"<div id='ciNow' style='color:#eee;min-height:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis'></div>"
-   +"<div id='ciEta' style='color:#888;font-size:12px;margin:4px 0 8px'></div>"
+   +"<div id='ciStat' style='margin-bottom:6px;color:#cfc6ca'>목록을 읽는 중…</div>"
+   +"<div style='height:8px;background:#2e2e33;border-radius:99px;overflow:hidden;margin:8px 0'><div id='ciBar' style='height:100%;width:0;background:#ff9294;transition:width .2s'></div></div>"
+   +"<div id='ciNow' style='color:#f2edef;min-height:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis'></div>"
+   +"<div id='ciEta' style='color:#8a8087;font-size:12px;margin:4px 0 8px'></div>"
    +"<div style='display:flex;gap:6px;align-items:center;margin-bottom:8px'>"
-   +"<button id='ciToggle' style='flex:1;padding:7px;border:0;border-radius:8px;background:#9333ea;color:#fff;font-weight:600;cursor:pointer'>시작</button>"
-   +"<button id='ciStop' style='padding:7px 10px;border:1px solid #444;border-radius:8px;background:#2a2a2a;color:#eee;cursor:pointer'>중지</button>"
-   +"<label style='font-size:12px;color:#999;display:flex;align-items:center;gap:3px'>간격<input id='ciInt' type='number' min='5' max='120' value='15' style='width:42px;background:#2a2a2a;color:#eee;border:1px solid #444;border-radius:6px;padding:3px'>s</label>"
+   +"<button id='ciToggle' style='flex:1;padding:7px;border:0;border-radius:10px;background:#ff9294;color:#3a1e1e;font-weight:600;cursor:pointer'>시작</button>"
+   +"<button id='ciStop' style='padding:7px 10px;border:1px solid #3a353d;border-radius:8px;background:#2e2e33;color:#f2edef;cursor:pointer'>중지</button>"
+   +"<label style='font-size:12px;color:#b3a8ad;display:flex;align-items:center;gap:3px'>간격<input id='ciInt' type='number' min='5' max='120' value='15' style='width:42px;background:#2e2e33;color:#f2edef;border:1px solid #3a353d;border-radius:6px;padding:3px'>s</label>"
    +"</div>"
-   +"<label style='font-size:12px;color:#999;display:flex;align-items:center;gap:5px;margin:0 0 8px'><input id='ciForce' type='checkbox' style='margin:0'>이미 등록된 곡도 다시 가져오기(잘린 채보 교체)</label>"
-   +"<div id='ciLog' style='height:110px;overflow:auto;background:#0d0d0d;border:1px solid #2a2a2a;border-radius:8px;padding:6px;font:11px/1.45 ui-monospace,Menlo,monospace;color:#ccc'></div>"
+   +"<label style='font-size:12px;color:#b3a8ad;display:flex;align-items:center;gap:5px;margin:0 0 8px'><input id='ciForce' type='checkbox' style='margin:0'>이미 등록된 곡도 다시 가져오기(잘린 채보 교체)</label>"
+   +"<div id='ciLog' style='height:110px;overflow:auto;background:#1a1a1c;border:1px solid #2e2e33;border-radius:8px;padding:6px;font:11px/1.45 ui-monospace,Menlo,monospace;color:#cfc6ca'></div>"
    +"</div>";
   document.body.appendChild(ui);
   var $=function(id){ return document.getElementById(id); };
@@ -146,7 +146,7 @@ export const IMPORT_CLIENT_JS = String.raw`
         var html=await fetch("/simai/pages/"+item.page+".html").then(function(r){ return r.text(); });
         var doc=new DOMParser().parseFromString(html,"text/html");
         var song=extract(doc);
-        if(!song || !song.charts.length){ state.skip++; log("· "+item.title+" — 노트 없음, 건너뜀","#888"); }
+        if(!song || !song.charts.length){ state.skip++; log("· "+item.title+" — 노트 없음, 건너뜀","#8a8087"); }
         else{
           song.page=item.page;
           var r=await api("/api/admin/simai/import?code="+encodeURIComponent(CODE),{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(song)});
