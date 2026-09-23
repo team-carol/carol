@@ -60,7 +60,7 @@ export function buildBookmarkletJs(
   // 방침 변경 1회 고지 — 오버레이 맨 위. 업데이트 = 업데이트, 자세히 = 자세히
   if (opts.policyNotice) {
     prepend(
-      `(function(){try{var _pn=doc.createElement('div');_pn.style.cssText='padding:10px 0;margin-bottom:4px;border-bottom:1px solid #2e2e33;color:#f2b3bf;font-size:11px;line-height:1.5';_pn.innerHTML='캐롤봇 \\uAC1C\\uC778\\uC815\\uBCF4\\uCC98\\uB9AC\\uBC29\\uCE68\\uC774 \\uC5C5\\uB370\\uC774\\uD2B8\\uB418\\uC5C8\\uC2B5\\uB2C8\\uB2E4 (2026-09) \\u00B7 <a href="'+v+'/privacy" target="_blank" rel="noopener" style="color:#f2b3bf">\\uC790\\uC138\\uD788</a>';stEl.appendChild(_pn);}catch(_e){}})();`,
+      `(function(){try{var _pn=doc.createElement('div');_pn.style.cssText='padding:10px 0;margin-bottom:4px;border-bottom:1px solid #2e2e33;color:#f2b3bf;font-size:11px;line-height:1.5';_pn.innerHTML='캐롤봇 개인정보처리방침이 업데이트되었습니다 (2026-09-23) · 데이터 저장 방식 설명 정정 · <a href="'+v+'/privacy" target="_blank" rel="noopener" style="color:#f2b3bf">자세히</a>';stEl.appendChild(_pn);}catch(_e){}})();`,
     );
   }
 
