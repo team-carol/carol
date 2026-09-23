@@ -56,7 +56,8 @@ src/web/
 - Do not introduce Express. `index.ts` intentionally uses Node `http` and manual routing.
 - Route auth is `sync_token` query param resolved by `findUserBySyncToken`; production rejects missing/expired tokens with 403.
 - `isDev = !CONFIG.baseUrl` allows local `/sync` and `/settings` preview without a token.
-- Web pages use inline CSS matching `docs/DESIGN.md`: dark canvas/surface, purple accents, Inter + JetBrains Mono.
+- Web pages use inline CSS built on `theme.ts` (tokens copied from team-carol/carol-web `app/globals.css`): start every `<style>` with `BASE_CSS` (admin pages add `ADMIN_CSS`), use `pageHead()`/`topbar()`/`siteFooter()`, and reference `var(--…)` instead of hex colors. Injected overlays (`bookmarklet.ts`, `importClient.ts`) can't use the variables, so they hard-code the same values (`T` in `theme.ts`).
+- `/brand/avatar.png` serves the carolbot avatar embedded as base64 in `brandAvatar.ts` (Docker only ships compiled `src/` → `dist/`).
 - `settingsPage()` serializes data with `<`/`>` escaped before embedding in `<script>`.
 - Extra bookmarklets must start with `javascript:` and are capped at 5.
 - Preset bookmarklets execute before user extra bookmarklets in generated `/bookmarklet.js`.

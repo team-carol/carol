@@ -51,7 +51,7 @@ carol/
 | DB schema/storage | `src/storage/postgres.ts` | PostgreSQL storage and numbered migrations. |
 | maimai parsing | `src/scraper.ts` | Cheerio selectors tied to DX NET markup. |
 | Song constants/jackets | `src/constants.ts` | otoge-db cache; startup network failure is non-fatal. |
-| Visual tokens | `docs/DESIGN.md` | Dark theme shared by web and rating card. |
+| Visual tokens | `src/brand.ts`, `src/web/theme.ts` | carol-web landing palette shared by web pages and PNG cards. Bump `CARD_VERSION`/`ACH_CARD_VERSION` when card colors change. |
 | Deploy/runbook | `docs/DEPLOY.md`, `docs/SETUP.md` | Cloudflare tunnel + GCP VM workflow. |
 
 ## CODE MAP
@@ -80,7 +80,7 @@ TypeScript LSP was unavailable in this workspace, and codegraph is not indexed. 
 - TypeScript is strict CommonJS targeting ES2022. Build output, declarations, and maps go to `dist/`.
 - Runtime storage is PostgreSQL through `DATABASE_URL`; migrations in `src/storage/postgres.ts` are numbered and immutable once released.
 - Slash commands use Korean names. User `/설정` links to web settings; guild auto-role lives in `/서버설정`.
-- Web UI is inline string HTML/CSS/JS. Match `docs/DESIGN.md`: `#0d0d0d` canvas, `#1a1a1a` surface, `#2a2a2a` border, `#9333ea` accent, Inter + JetBrains Mono.
+- Web UI is inline string HTML/CSS/JS. Web pages use the carol-web (landing) design system from `src/web/theme.ts`: `BASE_CSS` CSS variables (`--canvas #1a1a1c`, `--surface #242427`, `--border #33333a`, `--accent #ff9294`), Pretendard, shared `pageHead()`/`topbar()`/`siteFooter()`/`.btn-primary`. Use the variables — don't hard-code colors. Raw values live in `src/brand.ts` (`BRAND`), which the PNG rating/achievement cards also use; game colors (difficulty, FC/AP, DX) stay separate.
 - Rating-card UI uses satori without JSX via the local `el()` helper and NotoSansJP fonts cached under `{DATA_DIR}/fonts/`.
 
 ## ANTI-PATTERNS (THIS PROJECT)

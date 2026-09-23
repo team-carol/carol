@@ -1,3 +1,5 @@
+import { RATING_ROLES } from "./roles";
+import { BRAND } from "../../brand";
 import { renderInWorker } from "./renderPool";
 import type { PlayRecord, ChartMarks, MaimaiServer } from "../../scraper";
 import { buildMarkMap, buildKindResolver, chartKey } from "../../scraper";
@@ -32,13 +34,15 @@ import {
   RS_DOUBLE_COLOR,
 } from "../../games";
 
-// ─── Design tokens (ported from mailog) ──────────────────────────────────
+// ─── Design tokens (ported from mailog, colors from src/brand.ts) ──────────────────────────────────
 const CARD_W = 110;
 const CARD_H = 115;
-const GAP = 4;
-const ACCENT = "#9333ea";
+const GAP = 5;
+const TILE_R = 10; // 자켓 타일 모서리 (랜딩 카드처럼 둥글게)
+const PANEL_R = 16; // 섹션 패널 모서리 (랜딩 rounded-2xl)
+const ACCENT = BRAND.accent;
 // 카드 레이아웃/계산이 바뀌면 올린다 → 기존 렌더 캐시가 자동 무효화됨
-const CARD_VERSION = 8;
+const CARD_VERSION = 17;
 
 // ─── Satori element helper (no JSX) ───────────────────────────────────────
 type El = {
@@ -182,6 +186,7 @@ function jacketCard(
             width: CARD_W,
             height: CARD_H,
             objectFit: "cover",
+            borderRadius: TILE_R,
           },
           undefined,
         ) as any)
@@ -191,7 +196,7 @@ function jacketCard(
           left: 0,
           width: CARD_W,
           height: CARD_H,
-          background: "#1c1c1c",
+          background: BRAND.surface,
         }),
   );
   if (jacketUrl) (layers[0] as any).props.src = jacketUrl;
@@ -213,10 +218,18 @@ function jacketCard(
   layers.push(
     el(
       "div",
-      { position: "absolute", top: 5, left: 6, display: "flex" },
+      {
+        position: "absolute",
+        top: 5,
+        left: 5,
+        display: "flex",
+        padding: "1px 6px",
+        borderRadius: 99,
+        background: "rgba(0,0,0,0.5)",
+      },
       el(
         "span",
-        { fontSize: 8, color: "rgba(255,255,255,0.7)", fontWeight: 600 },
+        { fontSize: 7.5, color: "rgba(255,255,255,0.85)", fontWeight: 700 },
         `#${rank}`,
       ),
     ),
@@ -300,7 +313,7 @@ function jacketCard(
       {
         fontSize: 9,
         fontWeight: 600,
-        color: "#ddd",
+        color: BRAND.ink2,
         lineHeight: 1.25,
         width: "100%",
         whiteSpace: "nowrap",
@@ -333,11 +346,20 @@ function jacketCard(
         justifyContent: "space-between",
         alignItems: "center",
         width: "100%",
+        marginTop: 4,
       },
       [
         el(
           "span",
-          { fontSize: 7, fontWeight: 700, color: vm.diffColor },
+          {
+            fontSize: 6.5,
+            fontWeight: 700,
+            color: "#fff",
+            background: vm.diffColor,
+            borderRadius: 99,
+            padding: "1px 5px",
+            lineHeight: 1.2,
+          },
           vm.diff,
         ),
         el(
@@ -359,7 +381,7 @@ function jacketCard(
         width: CARD_W,
         display: "flex",
         flexDirection: "column",
-        padding: "5px 6px 6px",
+        padding: "5px 7px 7px",
       },
       infoRows,
     ),
@@ -373,11 +395,113 @@ function jacketCard(
       width: CARD_W,
       height: CARD_H,
       overflow: "hidden",
-      border: "1px solid #252525",
-      borderTop: `3px solid ${vm.diffColor}`,
+      borderRadius: TILE_R,
+      border: `1px solid ${BRAND.border}`,
+      background: BRAND.surface2,
     },
     layers,
   );
+}
+
+// ─── Rating plate (mai-log Figma: RatingSection, 197:1971) ────────────────
+// 게임 속 레이팅 플레이트처럼 5칸 숫자 + 별 4개. 티어별로 테두리 색이 바뀐다.
+// Figma 원본에서 숫자 칸 사이 세로선(#4f4a4a)과 아래쪽 가로 빛(#828282 띠)은
+// 뺐다(HyperRainbow 273:2 기준). 크기는 원본 202×56 에 PLATE_S 를 곱한다.
+const PLATE_S = 0.62;
+const PLATE_H = "linear-gradient(90deg, "; // Figma 그라디언트는 거의 수평(좌→우)
+const PLATE_TIERS: { min: number; fill: string }[] = [
+  { min: 16000, fill: PLATE_H + "#cd19ff 0%, #9676ff 20%, #b0d2ff 46%, #c0ff89 75%, #e06880 100%)" }, // HyperRainbow
+  { min: 15000, fill: PLATE_H + "#b6daff 0%, #f4ff78 29%, #ffc0c0 54%, #c0ff89 77%)" }, // Rainbow
+  { min: 14500, fill: PLATE_H + "#fffa8a 0%, #fffedf 40%, #fff9b8 100%)" }, // Platinum
+  { min: 14000, fill: PLATE_H + "#feed07 0%, #fffedf 40%, #edd620 100%)" }, // Gold
+  { min: 13000, fill: PLATE_H + "#6898bb 30%, #c5eef7 100%)" }, // Silver
+  { min: 12000, fill: PLATE_H + "#ba5b43 30%, #f7a573 100%)" }, // Bronze
+  { min: 10000, fill: "#e071e1" }, // Purple
+  { min: 7000, fill: "#ef7476" }, // Red
+  { min: 4000, fill: "#ffee6c" }, // Yellow
+  { min: 2000, fill: "#97ffad" }, // Green
+  { min: 1000, fill: "#a4c4ff" }, // Blue
+  { min: 0, fill: "#ffffff" }, // White
+];
+
+// Figma Stars(48×48) 의 별 하나. 별 묶음은 플레이트 왼쪽에 두므로 플레이트에 가까운
+// 오른쪽 열부터 (24,0)(0,0)(24,24)(0,24) 순서로 채운다.
+const STAR_PATH =
+  "M11.0767 2.21993C11.4183 1.39864 12.5817 1.39864 12.9233 2.21993L14.9395 7.06735C15.0835 7.41358 15.4091 7.65015 15.7829 7.68012L21.0161 8.09966C21.9027 8.17074 22.2623 9.27725 21.5867 9.85592L17.5996 13.2713C17.3148 13.5153 17.1904 13.8981 17.2774 14.2628L18.4956 19.3695C18.702 20.2348 17.7607 20.9186 17.0016 20.455L12.5213 17.7184C12.2012 17.5229 11.7988 17.5229 11.4787 17.7184L6.9984 20.455C6.2393 20.9186 5.29805 20.2348 5.50444 19.3695L6.72257 14.2628C6.80958 13.8981 6.68521 13.5153 6.40042 13.2713L2.41328 9.85592C1.73774 9.27725 2.09727 8.17074 2.98392 8.09966L8.21712 7.68012C8.59091 7.65015 8.91652 7.41358 9.06052 7.06735L11.0767 2.21993Z";
+const STAR_SLOTS = [[24, 0], [0, 0], [24, 24], [0, 24]];
+const starsSvgCache = new Map<number, string>();
+function starsSvg(count: number): string {
+  const memo = starsSvgCache.get(count);
+  if (memo) return memo;
+  const offs = STAR_SLOTS.slice(0, count);
+  // drop shadow: y+2, 검정 60% (Figma effect 그대로)
+  const shadow = offs.map(([x, y]) => `<path transform="translate(${x} ${y + 2})" d="${STAR_PATH}" fill="#000" fill-opacity="0.6"/>`).join("");
+  const stars = offs.map(([x, y]) => `<path transform="translate(${x} ${y})" d="${STAR_PATH}" fill="#F0DA83"/>`).join("");
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="48" height="50" viewBox="0 0 48 50">${shadow}${stars}</svg>`;
+  const url = `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`;
+  starsSvgCache.set(count, url);
+  return url;
+}
+
+// 별 개수 = /레이팅기준표(RATING_ROLES)의 단계 번호. 금 I(14000)부터만 센다
+// (그 아래 구간은 기준표가 게임과 달라 쓰지 않는다). 예: 금 II → 2, 무지개(극) III → 3.
+const ROMAN_STARS: Record<string, number> = { I: 1, II: 2, III: 3, IV: 4 };
+function plateStars(value: number): number {
+  if (value < 14000) return 0;
+  const role = RATING_ROLES.find(([min]) => value >= min);
+  if (!role) return 0;
+  return ROMAN_STARS[role[1].split(" ").pop() ?? ""] ?? 0;
+}
+
+function ratingPlate(value: number): El {
+  const s = (v: number) => Math.round(v * PLATE_S * 100) / 100;
+  const tier = PLATE_TIERS.find((t) => value >= t.min) ?? PLATE_TIERS[PLATE_TIERS.length - 1];
+  // 5칸 고정. 자릿수가 모자라면 앞칸을 비운다(게임 표시와 동일).
+  const digits = String(Math.max(0, Math.floor(value))).slice(-5).padStart(5, " ").split("");
+  const frame = el(
+    "div",
+    {
+      display: "flex",
+      width: s(150),
+      height: s(56),
+      padding: s(4),
+      borderRadius: s(8),
+      ...(tier.fill.startsWith("linear-gradient") ? { backgroundImage: tier.fill } : { background: tier.fill }),
+    },
+    el(
+      "div",
+      {
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        width: "100%",
+        height: "100%",
+        borderRadius: s(7.5),
+        // Figma 원본 회색 그라디언트(#5d5d5d→#6b6b6b)를 어두운 카드에 맞게 조금 낮췄다.
+        backgroundImage: "linear-gradient(180deg, #484848 0%, #565656 100%)",
+        overflow: "hidden",
+      },
+      digits.map((d) =>
+        el(
+          "div",
+          { display: "flex", alignItems: "center", justifyContent: "center", width: s(28.4), height: "100%" },
+          el(
+            "span",
+            { fontFamily: "Pretendard", fontWeight: 700, fontSize: s(32), color: "#ffe788", lineHeight: 1 },
+            d === " " ? "" : d,
+          ),
+        ),
+      ),
+    ),
+  );
+  const starCount = plateStars(value);
+  if (starCount === 0) return frame;
+  const stars = {
+    type: "img",
+    props: { src: starsSvg(starCount), style: { width: s(48), height: s(50) } },
+  } as unknown as El;
+  // 별 묶음과 플레이트 사이는 Figma(4)보다 넉넉히 띄운다.
+  return el("div", { display: "flex", alignItems: "center", gap: 8 }, [stars, frame]);
 }
 
 function sectionLabel(
@@ -390,19 +514,30 @@ function sectionLabel(
     "div",
     {
       display: "flex",
-      alignItems: "baseline",
+      alignItems: "center",
       width: "100%",
-      padding: "8px 0 4px",
-      borderBottom: "1px solid #202020",
-      marginTop: 8,
+      padding: "0 2px 8px",
     },
     [
-      el("span", { fontSize: 10, fontWeight: 700, color: "#aaa" }, label),
-      el("span", { fontSize: 9, color: "#666", marginLeft: 8 }, `TOP ${count}`),
+      el("span", { fontSize: 11, fontWeight: 700, color: BRAND.ink }, label),
       el(
         "span",
-        { fontSize: 9, color: "#777", marginLeft: "auto" },
-        `avg ${formatRS(avg)}`,
+        {
+          fontSize: 8,
+          fontWeight: 700,
+          color: BRAND.ink2,
+          background: BRAND.surface2,
+          borderRadius: 99,
+          padding: "2px 8px",
+          marginLeft: 8,
+        },
+        `TOP ${count}`,
+      ),
+      el("span", { fontSize: 9, color: BRAND.dim, marginLeft: "auto" }, "avg"),
+      el(
+        "span",
+        { fontSize: 11, fontWeight: 700, color: BRAND.accentSoft, marginLeft: 5 },
+        formatRS(avg),
       ),
     ],
   );
@@ -426,7 +561,7 @@ function cardGrid(
   );
   return el(
     "div",
-    { display: "flex", flexWrap: "wrap", width, marginTop: 5, gap: GAP },
+    { display: "flex", flexWrap: "wrap", width, gap: GAP },
     cards,
   );
 }
@@ -566,18 +701,15 @@ export async function renderRatingCard(
   );
 
   const gridWidth = (cols: number) => CARD_W * cols + GAP * (cols - 1);
-  // 첫 섹션을 살짝 밝은 패널로 감싸고 두 섹션 사이에 구분선
-  const NEW_PAD = 6; // 패널 안쪽 여백 (틴트가 카드 둘레로 보이게)
-  const DIV_W = 1; // 섹션 구분선 두께
-  const COL_GAP = 12;
+  // 섹션마다 랜딩 카드처럼 테두리 있는 둥근 패널로 감싼다.
+  const PANEL_PAD = 12;
+  const COL_GAP = 14;
   const twoCol = sections.length > 1;
-  const leftWidth = gridWidth(sections[0].cols);
-  const rightWidth = twoCol ? gridWidth(sections[1].cols) : 0;
-  const newPanelWidth = leftWidth + NEW_PAD * 2;
+  const panelWidth = (cols: number) => gridWidth(cols) + PANEL_PAD * 2 + 2; // +2 = 테두리
   const bodyWidth = twoCol
-    ? newPanelWidth + COL_GAP + DIV_W + COL_GAP + rightWidth
-    : leftWidth;
-  const PAD = 16;
+    ? panelWidth(sections[0].cols) + COL_GAP + panelWidth(sections[1].cols)
+    : panelWidth(sections[0].cols);
+  const PAD = 20;
   const totalWidth = bodyWidth + PAD * 2;
 
   // header
@@ -593,13 +725,14 @@ export async function renderRatingCard(
             type: "img",
             props: {
               src: avatarUrl,
-              style: { width: 38, height: 38, objectFit: "cover" },
+              style: { width: 38, height: 38, objectFit: "cover", borderRadius: 10 },
             },
           } as any)
         : el("div", {
             width: 38,
             height: 38,
-            background: "#242424",
+            borderRadius: 10,
+            background: BRAND.surface2,
             display: "flex",
           }),
       el("div", { display: "flex", flexDirection: "column" }, [
@@ -607,14 +740,14 @@ export async function renderRatingCard(
           ? [
               el(
                 "span",
-                { fontSize: 8, color: "#888", marginBottom: 1 },
+                { fontSize: 8, color: BRAND.dim, marginBottom: 1 },
                 profile.trophy,
               ),
             ]
           : []),
         el(
           "span",
-          { fontSize: 12, fontWeight: 700, color: "#fff" },
+          { fontSize: 12, fontWeight: 700, color: BRAND.ink },
           profile.playerName || "—",
         ),
       ]),
@@ -624,18 +757,20 @@ export async function renderRatingCard(
   const wordmark = el("div", { display: "flex", alignItems: "baseline" }, [
     el(
       "span",
-      { fontSize: 13, fontWeight: 700, color: "#888", marginRight: 6 },
+      { fontSize: 13, fontWeight: 700, color: BRAND.dim, marginRight: 6 },
       "Created by",
     ),
-    el("span", { fontSize: 13, fontWeight: 800, color: "#fff" }, "carol"),
+    el("span", { fontSize: 13, fontWeight: 800, color: BRAND.ink }, "carol"),
     el("span", { fontSize: 13, fontWeight: 800, color: ACCENT }, "bot"),
   ]);
 
-  const ratingBlock = el(
+  const ratingBlock = game === "maimai"
+    ? ratingPlate(Number(totalRs) || 0)
+    : el(
     "div",
     { display: "flex", flexDirection: "column", alignItems: "flex-end" },
     [
-      el("span", { fontSize: 8, color: "#777" }, cfg.ratingLabel),
+      el("span", { fontSize: 8, color: BRAND.dim }, cfg.ratingLabel),
       el(
         "span",
         { fontSize: 20, fontWeight: 800, color: cfg.accent, lineHeight: 1.1 },
@@ -651,8 +786,8 @@ export async function renderRatingCard(
       display: "flex",
       alignItems: "center",
       width: bodyWidth,
-      paddingBottom: 10,
-      borderBottom: "1px solid #1e1e1e",
+      paddingBottom: 14,
+      borderBottom: `1px solid ${BRAND.border}`,
     },
     [
       el(
@@ -673,29 +808,18 @@ export async function renderRatingCard(
     ],
   );
 
-  const sectionPanel = (
-    sec: { label: string; cols: number; vms: CardVM[] },
-    tinted: boolean,
-  ): El =>
+  const sectionPanel = (sec: { label: string; cols: number; vms: CardVM[] }): El =>
     el(
       "div",
-      tinted
-        ? {
-            display: "flex",
-            flexDirection: "column",
-            width: gridWidth(sec.cols) + NEW_PAD * 2,
-            padding: NEW_PAD,
-            background: "rgba(255,255,255,0.06)",
-            borderRadius: 6,
-          }
-        : {
-            display: "flex",
-            flexDirection: "column",
-            width: gridWidth(sec.cols),
-            // 틴트 패널의 상하 패딩만큼 맞춰 섹션 라벨/카드 높이를 정렬 (가로 패딩은 없음 → 폭 유지)
-            paddingTop: NEW_PAD,
-            paddingBottom: NEW_PAD,
-          },
+      {
+        display: "flex",
+        flexDirection: "column",
+        width: panelWidth(sec.cols),
+        padding: PANEL_PAD,
+        background: BRAND.surface,
+        border: `1px solid ${BRAND.border}`,
+        borderRadius: PANEL_R,
+      },
       [
         sectionLabel(sec.label, sec.vms.length, avg(sec.vms), formatAvg),
         cardGrid(sec.vms, sec.cols, 1, jackets, cmColor),
@@ -707,25 +831,16 @@ export async function renderRatingCard(
         "div",
         {
           display: "flex",
-          marginTop: 10,
+          marginTop: 14,
           gap: COL_GAP,
-          alignItems: "flex-start",
+          alignItems: "stretch",
         },
-        [
-          sectionPanel(sections[0], true),
-          // 섹션 구분선
-          el("div", {
-            width: DIV_W,
-            alignSelf: "stretch",
-            background: "rgba(255,255,255,0.12)",
-          }),
-          sectionPanel(sections[1], false),
-        ],
+        [sectionPanel(sections[0]), sectionPanel(sections[1])],
       )
     : el(
         "div",
-        { display: "flex", flexDirection: "column", marginTop: 10 },
-        [sectionPanel(sections[0], false)],
+        { display: "flex", flexDirection: "column", marginTop: 14 },
+        [sectionPanel(sections[0])],
       );
 
   const root = el(
@@ -733,7 +848,7 @@ export async function renderRatingCard(
     {
       display: "flex",
       flexDirection: "column",
-      background: "#0d0d0d",
+      background: BRAND.canvas,
       padding: PAD,
     },
     [header, body],

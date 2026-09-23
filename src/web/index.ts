@@ -21,6 +21,8 @@ import { renderChartGifAsync } from "../bot/utils/chartGif";
 import { getReadyVideo } from "../bot/utils/chartVideoQueue";
 import type { Chart } from "../simai/types";
 import { messagesAdminPage, type MessageRowVM } from "./messagesAdminPage";
+import { BASE_CSS, pageHead, topbar, siteFooter, BRAND_AVATAR_PATH } from "./theme";
+import { BRAND_AVATAR_PNG } from "./brandAvatar";
 import {
   MESSAGE_KEYS, defaultOf, getOverride, rawText, placeholdersOf,
   validateOverride, loadMessages, type MessageKey,
@@ -94,86 +96,87 @@ async function cacheMapImages(areas: readonly { imageUrl: string }[], server: st
   return saved;
 }
 
+const LEGAL_CSS = `${BASE_CSS}
+.page{max-width:760px}
+h1{font-size:clamp(32px,4.4vw,44px);font-weight:500;color:var(--ink);line-height:1.2;letter-spacing:-.01em;padding-bottom:18px;margin-bottom:8px;border-bottom:1px solid var(--border)}
+h1+p{font-size:13.5px;color:var(--dim);margin-bottom:12px}
+h2{font-size:20px;font-weight:500;color:var(--ink);margin:36px 0 10px}
+p{margin:8px 0;font-size:15.5px;line-height:1.75;color:var(--ink-soft)}`;
+
 function guidePage(token: string, bookmarklet: string): string {
   const bmEscaped = bookmarklet.replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/`/g, "\\`");
-  return `<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>북마클릿 설치 - carolbot</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+  return `<!DOCTYPE html><html lang="ko"><head>${pageHead("북마클릿 설치 · 캐롤봇")}
 <style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:#0d0d0d;color:#ccc;font-size:16px;line-height:1.5;-webkit-font-smoothing:antialiased;display:flex;justify-content:center;min-height:100vh;padding:80px 24px}
-.wrap{width:100%;max-width:600px}
-h1{font-size:48px;font-weight:700;color:#fff;letter-spacing:-0.5px;margin-bottom:40px;line-height:1.1}
-.mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:#888;margin-bottom:12px}
-.tabs{display:flex;gap:8px;margin-bottom:24px}
-.tabBtn{flex:1;background:#1a1a1a;color:#888;border:1px solid #2a2a2a;border-radius:8px;padding:10px 20px;font-family:inherit;font-size:14px;font-weight:500;cursor:pointer;transition:all .15s}
-.tabBtn.active{background:#9333ea;color:#fff;border-color:#9333ea}
-.settingsLink{display:inline-flex;align-items:center;justify-content:center;gap:6px;background:#111;color:#c084fc;border:1px solid #9333ea;border-radius:8px;padding:10px 16px;font-size:14px;font-weight:500;text-decoration:none;transition:all .15s;white-space:nowrap}
-.settingsLink:hover{background:#1a1a1a;color:#fff;box-shadow:inset 0 0 0 1px #9333ea}
-.card{background:#1a1a1a;border:1px solid #2a2a2a;border-radius:16px;padding:28px;margin-bottom:16px}
-.bm{display:inline-flex;align-items:center;gap:8px;background:#9333ea;color:#fff;border-radius:8px;padding:12px 24px;font-size:15px;font-weight:600;text-decoration:none;cursor:grab;margin:16px 0 6px;transition:opacity .15s}
-.bm:active{opacity:.8}
-.copy-btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;background:#9333ea;color:#fff;border:none;border-radius:8px;padding:14px 24px;font-family:inherit;font-size:15px;font-weight:600;cursor:pointer;margin:12px 0;transition:opacity .15s}
-.copy-btn:active{opacity:.8}
-.copy-ok{color:#4ade80;font-size:13px;text-align:center;min-height:18px;margin-top:6px}
-.steps{list-style:none;counter-reset:s}
-.step{counter-increment:s;display:flex;gap:14px;margin-bottom:14px;font-size:15px;line-height:1.5}
-.step::before{content:counter(s);flex-shrink:0;width:26px;height:26px;background:#9333ea;color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:400}
-a{color:#c084fc}
+${BASE_CSS}
+.page{max-width:680px}
+h1{font-size:clamp(36px,5vw,52px);font-weight:500;color:var(--ink);letter-spacing:-.01em;line-height:1.15;margin-bottom:14px}
+.lead{font-size:clamp(16px,1.6vw,18px);color:var(--muted);margin-bottom:36px}
+.tabs{display:flex;gap:4px;margin-bottom:16px;padding:4px;background:var(--surface);border:1px solid var(--border);border-radius:14px}
+.tabBtn{flex:1;background:transparent;color:var(--muted);border:0;border-radius:10px;padding:10px 16px;font-size:15px;font-weight:500;cursor:pointer;transition:background-color .15s,color .15s}
+.tabBtn:hover{color:var(--ink)}
+.tabBtn.active{background:var(--surface-2);color:var(--ink);box-shadow:0 0 0 1px var(--border-2)}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px;margin-bottom:14px}
+.card .eyebrow{color:var(--accent-soft)}
+.hint{font-size:13.5px;color:var(--dim);margin-top:8px}
+.bm{margin:18px 0 4px;cursor:grab}
+.bm:active{cursor:grabbing}
+.copy-btn{width:100%;margin:16px 0 0;padding:14px 22px}
+.copy-ok{color:var(--ok);font-size:13px;text-align:center;min-height:18px;margin-top:8px}
+.steps{list-style:none;counter-reset:s;margin-top:4px}
+.step{counter-increment:s;display:flex;gap:14px;margin-bottom:14px;font-size:15.5px;line-height:1.6}
+.step:last-child{margin-bottom:0}
+.step::before{content:counter(s);flex-shrink:0;width:26px;height:26px;margin-top:1px;background:var(--surface-2);color:var(--accent-soft);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:500}
 .tab{display:none}
 .tab.active{display:block}
-code{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:13px;background:#252525;color:#ccc;padding:2px 6px;border-radius:4px}
-.extra{margin-top:40px;padding-top:32px;border-top:1px solid #2a2a2a}
-.extra h2{font-size:22px;color:#fff;margin-bottom:10px;letter-spacing:-.2px}
-.extraIntro{font-size:15px;color:#aaa;margin-bottom:16px;line-height:1.6}
-.extraActions{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
-.extraCard{background:#151515;border:1px solid #2a2a2a;border-radius:12px;padding:16px;text-decoration:none;color:#ccc;transition:all .15s}
-.extraCard:hover{border-color:#9333ea;background:#1a1a1a}
-.extraCard strong{display:block;color:#fff;font-size:15px;margin-bottom:6px}
-.extraCard span{display:block;color:#777;font-size:13px;line-height:1.5}
-@media(max-width:500px){h1{font-size:36px}body{padding:48px 16px}.tabs{gap:6px}.tabBtn,.settingsLink{padding:10px 12px}.card{padding:20px}.extraActions{grid-template-columns:1fr}}
+.extra{margin-top:48px;padding-top:40px;border-top:1px solid var(--border)}
+.extra h2{font-size:clamp(24px,3vw,30px);font-weight:500;color:var(--ink);line-height:1.2;margin-bottom:12px}
+.extraIntro{font-size:15.5px;color:var(--muted);margin-bottom:20px}
+.extraActions{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.extraCard{display:block;background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:20px;color:var(--ink-soft);transition:border-color .15s}
+a.extraCard:hover{border-color:#f2857f;color:var(--ink-soft)}
+.extraCard strong{display:block;color:var(--ink);font-size:17px;font-weight:500;margin-bottom:6px}
+.extraCard span{display:block;color:var(--muted);font-size:14px;line-height:1.55}
+@media(max-width:560px){.card{padding:22px}.extraActions{grid-template-columns:1fr}}
 </style></head><body>
-<div class="wrap">
-<p class="mono">carolbot</p>
-<h1>북마클릿<br>설치</h1>
+${topbar(`<a class="topbar-link on" href="/sync?code=${token}">북마클릿 설치</a><a class="topbar-link" href="/settings?code=${token}">설정</a>`)}
+<main class="page">
+<h1>북마클릿 설치</h1>
+<p class="lead">maimai DX NET에서 한 번 실행하면 기록이 캐롤봇으로 동기화됩니다.</p>
 <div class="tabs">
 <button class="tabBtn active" id="tbPC" onclick="sw('PC')">💻 PC</button>
 <button class="tabBtn" id="tbMB" onclick="sw('MB')">📱 모바일</button>
-<a class="settingsLink" href="/settings?code=${token}">⚙️ 설정</a>
 </div>
 <div class="tab active" id="tPC">
 <div class="card">
-<p class="mono">Step 01</p>
+<p class="eyebrow">Step 01</p>
 <p>아래 버튼을 브라우저 북마크바로 드래그하세요.</p>
-<a class="bm" href="${bookmarklet}" draggable="true">Carol Bot</a>
-<p style="font-size:13px;color:#666;margin-top:6px">북마크바가 없으면 <code>Ctrl+Shift+B</code></p>
+<a class="btn btn-primary bm" href="${bookmarklet}" draggable="true">캐롤봇</a>
+<p class="hint">북마크바가 없으면 <code>Ctrl+Shift+B</code></p>
 </div>
 <div class="card">
-<p class="mono">Step 02</p>
+<p class="eyebrow">Step 02</p>
 <p><a href="/settings?code=${token}">설정</a> 페이지에서 프리셋 북마클릿을 설정하세요.</p>
-<p style="font-size:13px;color:#666;margin-top:6px">캐롤봇 동기화 시 함께 실행할 외부 북마클릿(예: maishift)을 켜고 끌 수 있습니다.</p>
+<p class="hint">캐롤봇 동기화 시 함께 실행할 외부 북마클릿(예: maishift)을 켜고 끌 수 있습니다.</p>
 </div>
 <div class="card">
-<p class="mono">Step 03</p>
+<p class="eyebrow">Step 03</p>
 <p><a href="https://maimaidx-eng.com/maimai-mobile/" target="_blank">maimai DX NET</a> 또는 <a href="https://maimaidx.jp/maimai-mobile/" target="_blank">maimaiでらっくすNET</a>에서 저장한 북마크를 클릭하세요.</p>
 </div>
 </div>
 <div class="tab" id="tMB">
 <div class="card">
-<p class="mono">Step 01</p>
+<p class="eyebrow">Step 01</p>
 <p>아래 버튼으로 북마클릿 코드를 복사하세요.</p>
-<button class="copy-btn" onclick="copyBm()">📋 코드 복사</button>
+<button class="btn btn-primary copy-btn" onclick="copyBm()">📋 코드 복사</button>
 <div class="copy-ok" id="cpOk"></div>
 </div>
 <div class="card">
-<p class="mono">Step 02</p>
+<p class="eyebrow">Step 02</p>
 <p><a href="/settings?code=${token}">설정</a> 페이지에서 프리셋 북마클릿을 설정하세요.</p>
-<p style="font-size:13px;color:#666;margin-top:6px">캐롤봇 동기화 시 함께 실행할 외부 북마클릿(예: maishift)을 켜고 끌 수 있습니다.</p>
+<p class="hint">캐롤봇 동기화 시 함께 실행할 외부 북마클릿(예: maishift)을 켜고 끌 수 있습니다.</p>
 </div>
 <div class="card">
-<p class="mono">Step 03</p>
+<p class="eyebrow">Step 03</p>
 <ol class="steps">
 <li class="step"><strong>빈 페이지를 북마크 저장</strong> (⭐ 또는 공유 → 북마크 추가)</li>
 <li class="step">북마크 목록을 열고, 방금 저장한 북마크를 <strong>편집</strong></li>
@@ -183,7 +186,7 @@ code{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:13px;backgrou
 </div>
 </div>
 <div class="extra">
-<p class="mono">추가 북마클릿</p>
+<p class="eyebrow">추가 북마클릿</p>
 <h2>사설 북마클릿 관리</h2>
 <p class="extraIntro">여러 계정이나 서버를 쓰는 경우, 설정 페이지에서 북마클릿을 최대 <strong>5개</strong>까지 추가로 등록할 수 있습니다.</p>
 <div class="extraActions">
@@ -192,7 +195,8 @@ code{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:13px;backgrou
 <div class="extraCard"><strong>사용</strong><span>기본 북마클릿처럼 maimai DX net에서 실행</span></div>
 </div>
 </div>
-</div>
+</main>
+${siteFooter()}
 <script>
 function sw(t){
   document.getElementById('tPC').className='tab'+(t==='PC'?' active':'');
@@ -426,6 +430,12 @@ export function startWebServer(port: number): void {
       return;
     }
 
+    if (req.method === "GET" && url.pathname === BRAND_AVATAR_PATH) {
+      res.writeHead(200, { "content-type": "image/png", "cache-control": "public, max-age=604800" });
+      res.end(BRAND_AVATAR_PNG);
+      return;
+    }
+
     if (req.method === "GET" && url.pathname === "/avatar") {
       const uid = url.searchParams.get("user") || "";
       const serverParam = url.searchParams.get("server") || "";
@@ -483,16 +493,10 @@ export function startWebServer(port: number): void {
 
     if (req.method === "GET" && url.pathname === "/privacy") {
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-      res.end(`<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>개인정보처리방침 - carolbot</title>
-<style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:system-ui,sans-serif;background:#0d0d0d;color:#ccc;max-width:720px;margin:40px auto;padding:24px;line-height:1.7}
-h1{color:#fff;border-bottom:1px solid #2a2a2a;padding-bottom:12px;margin-bottom:24px}
-h2{color:#ddd;margin:28px 0 12px}
-p{margin:8px 0}
-a{color:#c084fc}
-</style></head><body>
+      res.end(`<!DOCTYPE html><html lang="ko"><head>${pageHead("개인정보처리방침 · 캐롤봇")}
+<style>${LEGAL_CSS}</style></head><body>
+${topbar()}
+<main class="page">
 <h1>개인정보처리방침</h1>
 <p>최종 수정일: 2026년 9월</p>
 <h2>1. 수집하는 정보</h2>
@@ -508,37 +512,35 @@ a{color:#c084fc}
 <p>수집된 데이터를 제3자에게 제공하지 않습니다.</p>
 <h2>6. 데이터 삭제</h2>
 <p>/프로필 데이터는 북마클릿 또는 캐롤익스텐션으로 동기화할 때마다 덮어쓰기됩니다. 완전한 삭제를 원하시면 봇 관리자에게 요청해 주세요.</p>
+</main>
+${siteFooter()}
 </body></html>`);
       return;
     }
 
     if (req.method === "GET" && url.pathname === "/terms") {
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-      res.end(`<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>이용약관 - carolbot</title>
-<style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:system-ui,sans-serif;background:#0d0d0d;color:#ccc;max-width:720px;margin:40px auto;padding:24px;line-height:1.7}
-h1{color:#fff;border-bottom:1px solid #2a2a2a;padding-bottom:12px;margin-bottom:24px}
-h2{color:#ddd;margin:28px 0 12px}
-p{margin:8px 0}
-a{color:#c084fc}
-</style></head><body>
+      res.end(`<!DOCTYPE html><html lang="ko"><head>${pageHead("이용약관 · 캐롤봇")}
+<style>${LEGAL_CSS}</style></head><body>
+${topbar()}
+<main class="page">
 <h1>이용약관</h1>
 <p>최종 수정일: 2026년 9월</p>
 <h2>1. 서비스 설명</h2>
-<p>carolbot은 Discord에서 SEGA의 아케이드 리듬 게임 「maimai DX」의 공식 웹사이트(maimai DX net) 프로필을 조회할 수 있는 비공식 팬 메이드 봇입니다.</p>
+<p>캐롤봇은 Discord에서 SEGA의 아케이드 리듬 게임 「maimai DX」의 공식 웹사이트(maimai DX net) 프로필을 조회할 수 있는 비공식 팬 메이드 봇입니다.</p>
 <h2>2. 저작권</h2>
 <p>본 서비스는 SEGA와 공식적으로 제휴, 후원 또는 승인되지 않았습니다. maimai DX, maimai DX net 및 관련된 모든 게임 자산, 캐릭터, 음악, 이미지, 상표의 저작권 및 모든 권리는 <strong>SEGA Corporation</strong>에 있습니다. 본 봇은 팬 목적으로만 운영됩니다.</p>
 	<h2>3. 사용자 책임</h2>
-	<p>사용자는 maimai DX net에 로그인된 상태에서 북마클릿 또는 캐롤익스텐션(비공식 크롬 확장)을 실행하여 데이터를 전송합니다. 이 과정에서 발생하는 모든 책임은 사용자에게 있습니다. 캐롤익스텐션은 carolbot과 별개로 배포되는 비공식 소프트웨어이며, 사용자가 직접 설치하고 동기화를 활성화한 경우에만 동작합니다.</p>
+	<p>사용자는 maimai DX net에 로그인된 상태에서 북마클릿 또는 캐롤익스텐션(비공식 크롬 확장)을 실행하여 데이터를 전송합니다. 이 과정에서 발생하는 모든 책임은 사용자에게 있습니다. 캐롤익스텐션은 캐롤봇과 별개로 배포되는 비공식 소프트웨어이며, 사용자가 직접 설치하고 동기화를 활성화한 경우에만 동작합니다.</p>
 	<h2>4. 추가 북마클릿 사용 책임</h2>
-	<p>사용자가 직접 추가하거나 활성화한 외부 북마클릿, 프리셋 외 스크립트, 제3자 제공 코드의 실행 여부와 결과는 전적으로 사용자 본인의 판단과 책임에 따릅니다. carolbot은 해당 스크립트를 작성, 검증, 통제하지 않으며, 그로 인해 발생하는 데이터 손실, 계정 문제, 보안 사고, 서비스 이용 제한, 기타 손해에 대해 책임을 지지 않습니다.</p>
+	<p>사용자가 직접 추가하거나 활성화한 외부 북마클릿, 프리셋 외 스크립트, 제3자 제공 코드의 실행 여부와 결과는 전적으로 사용자 본인의 판단과 책임에 따릅니다. 캐롤봇은 해당 스크립트를 작성, 검증, 통제하지 않으며, 그로 인해 발생하는 데이터 손실, 계정 문제, 보안 사고, 서비스 이용 제한, 기타 손해에 대해 책임을 지지 않습니다.</p>
 	<h2>5. 서비스 중단</h2>
 	<p>본 서비스는 언제든지 사전 통지 없이 중단될 수 있습니다. 서비스 제공자는 서비스 중단으로 인한 손해에 대해 책임을 지지 않습니다.</p>
 	<h2>6. 면책 조항</h2>
 	<p>본 서비스는 "있는 그대로" 제공되며, 어떠한 종류의 명시적 또는 묵시적 보증 없이 제공됩니다.</p>
-	</body></html>`);
+	</main>
+${siteFooter()}
+</body></html>`);
       return;
     }
 

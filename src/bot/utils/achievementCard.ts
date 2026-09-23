@@ -1,15 +1,19 @@
+import { BRAND } from "../../brand";
 import { renderInWorker } from "./renderPool";
 import type { CachedProfile } from "../../storage/types";
 import type { PlayRecord } from "../../scraper";
 import { getConstant } from "../../constants";
 import { displayTitle } from "../../aliases";
+import { getScoreRank, MAI_CM_COLOR } from "../../games";
 
-const ACCENT = "#9333ea";
-const SURFACE = "#1a1a1a";
-const BORDER = "#252525";
-const TEXT = "#cccccc";
-const MUTED = "#888888";
-const CANVAS = "#0d0d0d";
+// 색은 랜딩과 같은 src/brand.ts 팔레트. 난이도·FC/AP 색은 게임 고유라 아래에 따로 둔다.
+const ACCENT = BRAND.accent;
+const SURFACE = BRAND.surface;
+const BORDER = BRAND.border;
+const TEXT = BRAND.inkSoft;
+const MUTED = BRAND.dim;
+const CANVAS = BRAND.canvas;
+const INK = BRAND.ink;
 const HEADER_HEIGHT = 160;
 const RECORD_ROW_HEIGHT = 92;
 const ROW_GAP = 8;
@@ -28,6 +32,9 @@ const MARK_COLOR: Record<string, string> = {
   AP: "#d946ef",
   "FC+": "#3b82f6",
   FC: "#60a5fa",
+  // 스크래퍼는 FDX/FDX+ 로 준다. FSD 는 예전 키라 호환용으로 남긴다.
+  "FDX+": "#10b981",
+  FDX: "#34d399",
   "FSD+": "#10b981",
   FSD: "#34d399",
   "FS+": "#22c55e",
@@ -40,7 +47,7 @@ const jacketCache = new Map<string, string | null>();
 // 반복 호출하거나 다른 사람이 조회할 때마다 satori+resvg 전체를 다시 돌린다.
 // (유저·날짜·마지막 동기화 시각·번역여부·페이지) 키로 PNG 를 재사용한다.
 // lastSyncedAt 이 키에 들어가므로 새 동기화 후에는 자연스럽게 무효화된다.
-const ACH_CARD_VERSION = 3;
+const ACH_CARD_VERSION = 7;
 const ACH_CARD_CACHE_MAX = 48;
 const achCardCache = new Map<string, Buffer>();
 
@@ -84,11 +91,16 @@ async function jacketDataUrl(jacketUrl: string): Promise<string | null> {
   }
 }
 
-function stat(label: string, value: string, color = "#ffffff"): El {
-  return el("div", { display: "flex", flexDirection: "column", gap: 2 }, [
-    el("span", { color: MUTED, fontSize: 9, fontWeight: 700 }, label),
-    el("span", { color, fontSize: 20, fontWeight: 800, lineHeight: 1 }, value),
+function stat(label: string, value: string, color: string = INK): El {
+  return el("div", { display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }, [
+    el("span", { color, fontSize: 24, fontWeight: 700, lineHeight: 1 }, value),
+    el("span", { color: MUTED, fontSize: 10 }, label),
   ]);
+}
+
+// 랜딩의 칩(rounded-3xl bg-surface-2) 모양.
+function pill(text: string, style: Record<string, unknown>): El {
+  return el("span", { fontSize: 10, fontWeight: 700, borderRadius: 99, padding: "3px 9px", lineHeight: 1.2, flexShrink: 0, ...style }, text);
 }
 
 // Keep this renderer tolerant of summaries from older and newer backends.
@@ -135,7 +147,7 @@ function achievementBefore(record: PlayRecord): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-function recordRow(record: PlayRecord, rank: number, profile: CachedProfile, jacket: string | null, playDay: string, translate = false): El {
+function recordRow(record: PlayRecord, rankNo: number, profile: CachedProfile, jacket: string | null, playDay: string, translate = false): El {
   const diffColor = DIFF_COLOR[record.diff] ?? MUTED;
   const marks = [record.fc, record.sync].filter((mark) => mark.length > 0);
   const gain = ratingGain(record);
@@ -146,71 +158,63 @@ function recordRow(record: PlayRecord, rank: number, profile: CachedProfile, jac
   const before = achievementBefore(record);
   const after = achievementAfter(record);
   const achievementLabel = before !== null ? `${after.toFixed(4)}%(+${Math.max(0, after - before).toFixed(4)}%)` : `${after.toFixed(4)}%`;
+  const rank = getScoreRank(after);
+  const isAP = record.fc === "AP" || record.fc === "AP+";
+  const markColor = (mark: string) => MARK_COLOR[mark] ?? MAI_CM_COLOR[mark] ?? "rgba(255,255,255,0.7)";
   return el(
     "div",
     {
       display: "flex",
-      alignItems: "stretch",
-      gap: 12,
+      alignItems: "center",
+      gap: 14,
       background: SURFACE,
-      border: `1px solid ${BORDER}`,
-      borderRadius: 2,
-      padding: 0,
-      minHeight: RECORD_ROW_HEIGHT,
+      // AP/AP+ 는 AP 색으로 테두리와 은은한 빛을 준다.
+      border: isAP ? "1px solid rgba(217,70,239,0.6)" : `1px solid ${BORDER}`,
+      ...(isAP
+        ? {
+            boxShadow: "0 0 14px rgba(217,70,239,0.35)",
+            backgroundImage: "linear-gradient(90deg, rgba(217,70,239,0.10) 0%, rgba(217,70,239,0.02) 60%, rgba(217,70,239,0.10) 100%)",
+          }
+        : {}),
+      borderRadius: 16,
+      padding: "0 18px 0 13px",
+      height: RECORD_ROW_HEIGHT,
       width: "100%",
-      overflow: "hidden",
     },
     [
-      el("div", { width: 6, alignSelf: "stretch", background: diffColor, flexShrink: 0 }),
       jacket
-        ? image(jacket, {
-            width: 64,
-            height: 64,
-            objectFit: "cover",
-            alignSelf: "center",
-            marginLeft: 8,
-            borderRadius: 4,
-            flexShrink: 0,
-          })
-        : el("div", {
-            width: 64,
-            height: 64,
-            alignSelf: "center",
-            marginLeft: 8,
-            background: "#151515",
-            border: `1px solid ${BORDER}`,
-            borderRadius: 4,
-            flexShrink: 0,
-          }),
+        ? image(jacket, { width: 66, height: 66, objectFit: "cover", borderRadius: 10, flexShrink: 0 })
+        : el("div", { width: 66, height: 66, background: BRAND.canvasAlt, border: `1px solid ${BORDER}`, borderRadius: 10, flexShrink: 0 }),
+      // 왼쪽 섹션: 곡 정보
       el(
         "div",
-        {
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "center",
-          flex: 1,
-          minWidth: 0,
-          padding: "9px 12px 9px 0",
-        },
+        { display: "flex", flexDirection: "column", justifyContent: "center", flex: 1, minWidth: 0 },
         [
-          el("div", { display: "flex", alignItems: "baseline", gap: 8, minWidth: 0 }, [
-            el("span", { color: "#fff", fontSize: 15, fontWeight: 800, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", flex: 1 }, displayTitle(record.title, translate)),
-            el("span", { color: MUTED, fontSize: 9, fontWeight: 700, flexShrink: 0 }, `#${rank}`),
+          el("div", { display: "flex", alignItems: "center", gap: 8, minWidth: 0 }, [
+            pill(`#${rankNo}`, { color: BRAND.ink2, background: BRAND.surface2, fontSize: 9 }),
+            el("span", { color: INK, fontSize: 15, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", flex: 1 }, displayTitle(record.title, translate)),
           ]),
-          el("span", { color: TEXT, fontSize: 10, marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, `${record.diff} ${constantLabel} · ${record.musicKind || "?"} · ${record.date || playDay}`),
-          el("div", { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginTop: 8 }, [
-            el("div", { display: "flex", alignItems: "baseline", gap: 8 }, [
-              el("span", { color: "#fff", fontSize: 15, fontWeight: 700, lineHeight: 1 }, achievementLabel),
-            ]),
-            el("div", { display: "flex", alignItems: "baseline", gap: 8 }, [
-              el("span", { color: ACCENT, fontSize: 14, fontWeight: 800 }, ratingLabel),
-              el("div", { display: "flex", gap: 4, width: 76, justifyContent: "flex-end" }, marks.map((mark) =>
-                el("span", { color: MARK_COLOR[mark] ?? "rgba(255,255,255,0.7)", fontSize: 10, fontWeight: 800 }, mark),
-              )),
-            ]),
+          el("div", { display: "flex", alignItems: "center", gap: 7, marginTop: 5, minWidth: 0 }, [
+            pill(`${record.diff} ${constantLabel}`, { color: "#fff", background: diffColor, fontSize: 9, padding: "2px 8px" }),
+            el("span", { color: MUTED, fontSize: 10, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, `${record.musicKind || "?"} · ${record.date || playDay}`),
           ]),
+          el("span", { color: INK, fontSize: 15, fontWeight: 700, lineHeight: 1, marginTop: 9 }, achievementLabel),
         ],
       ),
+      // 왼쪽 섹션의 오른쪽: 스코어 랭크 + 플레이 마크를 크게
+      el("div", { display: "flex", flexDirection: "column", alignItems: "flex-end", justifyContent: "center", gap: 9, flexShrink: 0 }, [
+        el("span", { color: MAI_CM_COLOR[rank] ?? INK, fontSize: 26, fontWeight: 700, lineHeight: 1 }, rank),
+        ...(marks.length > 0
+          ? [el("div", { display: "flex", gap: 7 }, marks.map((mark) =>
+              el("span", { color: markColor(mark), fontSize: 14, fontWeight: 700, lineHeight: 1 }, mark),
+            ))]
+          : []),
+      ]),
+      el("div", { width: 1, height: 58, background: BORDER, flexShrink: 0 }),
+      // 오른쪽 섹션: 레이팅 변화 (오른쪽 끝 정렬)
+      el("div", { display: "flex", justifyContent: "flex-end", alignItems: "center", width: 92, flexShrink: 0 }, [
+        pill(ratingLabel, { color: BRAND.accentSoft, background: "rgba(255,146,148,0.14)", fontSize: 11 }),
+      ]),
     ],
   );
 }
@@ -226,12 +230,12 @@ function emptyState(): El {
       height: 170,
       background: SURFACE,
       border: `1px solid ${BORDER}`,
-      borderRadius: 14,
+      borderRadius: 16,
       color: TEXT,
       gap: 8,
     },
     [
-      el("span", { color: "#fff", fontSize: 18, fontWeight: 800 }, "오늘의 의미 있는 성과가 없습니다"),
+      el("span", { color: INK, fontSize: 18, fontWeight: 800 }, "오늘의 의미 있는 성과가 없습니다"),
       el("span", { color: MUTED, fontSize: 11 }, "한국시간 오전 4시부터 다음 오전 4시까지의 성과입니다"),
     ],
   );
@@ -240,7 +244,7 @@ function emptyState(): El {
 function wordmark(): El {
   return el("div", { display: "flex", alignItems: "baseline" }, [
     el("span", { fontSize: 13, fontWeight: 700, color: MUTED, marginRight: 6 }, "Created by"),
-    el("span", { fontSize: 13, fontWeight: 800, color: "#fff" }, "carol"),
+    el("span", { fontSize: 13, fontWeight: 800, color: INK }, "carol"),
     el("span", { fontSize: 13, fontWeight: 800, color: ACCENT }, "bot"),
   ]);
 }
@@ -292,22 +296,22 @@ export async function renderAchievementCard(
       fontFamily: "Noto Sans JP",
     },
     [
-      el("div", { display: "flex", alignItems: "center", paddingBottom: 16, borderBottom: "1px solid #1e1e1e" }, [
+      el("div", { display: "flex", alignItems: "center", paddingBottom: 16, borderBottom: `1px solid ${BORDER}` }, [
         avatarUrl
-          ? image(avatarUrl, { width: 44, height: 44, objectFit: "cover", marginRight: 12 })
-          : el("div", { width: 44, height: 44, background: "#242424", marginRight: 12 }),
+          ? image(avatarUrl, { width: 44, height: 44, objectFit: "cover", marginRight: 12, borderRadius: 12 })
+          : el("div", { width: 44, height: 44, background: BRAND.surface2, marginRight: 12, borderRadius: 12 }),
         el("div", { display: "flex", flexDirection: "column", flex: 1 }, [
           el("span", { color: MUTED, fontSize: 10, fontWeight: 700 }, "DAILY ACHIEVEMENTS"),
-          el("span", { color: "#fff", fontSize: 18, fontWeight: 800 }, profile.playerName || "—"),
+          el("span", { color: INK, fontSize: 18, fontWeight: 800 }, profile.playerName || "—"),
         ]),
         wordmark(),
       ]),
       el("div", { display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 18 }, [
         el("div", { display: "flex", flexDirection: "column", gap: 4 }, [
-          el("span", { color: "#fff", fontSize: 28, fontWeight: 800, lineHeight: 1 }, "오늘의 성과"),
+          el("span", { color: INK, fontSize: 28, fontWeight: 700, lineHeight: 1 }, "오늘의 성과"),
           el("span", { color: MUTED, fontSize: 11 }, `${playDay} · 한국시간 오전 4시 기준${totalPages > 1 ? ` · ${clampedPage + 1}/${totalPages}페이지` : ""}`),
         ]),
-        el("div", { display: "flex", gap: 26 }, [
+        el("div", { display: "flex", gap: 30 }, [
           stat("COUNT", String(sortedRecords.length), ACCENT),
           stat("RATING GAIN", `+${sortedRecords.reduce((sum, record) => sum + Math.max(0, ratingGain(record) ?? 0), 0).toFixed(0)}`, ACCENT),
         ]),

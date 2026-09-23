@@ -1,5 +1,6 @@
 import type { ExtraBookmarklet, MaimaiServer } from "../storage/types";
 import { BOOKMARKLET_PRESETS } from "./bookmarklet";
+import { BASE_CSS, pageHead, topbar, siteFooter } from "./theme";
 
 export function settingsPage(token: string, isPrivate: boolean, enabledPresetIds: string[], bookmarklets: ExtraBookmarklet[], defaultServer: MaimaiServer, translate = false): string {
   const presets = BOOKMARKLET_PRESETS.map((preset) => ({ ...preset, enabled: enabledPresetIds.includes(preset.id) }));
@@ -7,68 +8,66 @@ export function settingsPage(token: string, isPrivate: boolean, enabledPresetIds
     .replace(/</g, "\\u003c").replace(/>/g, "\\u003e");
   const tokenJson = JSON.stringify(token);
 
-  return `<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>설정 - carolbot</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+  return `<!DOCTYPE html><html lang="ko"><head>${pageHead("설정 · 캐롤봇")}
 <style>
- .achievement-filter{display:flex;align-items:end;gap:10px}.achievement-filter .input-group{flex:1;margin-bottom:0}.filter-save{background:#9333ea;color:#fff;border:0;border-radius:8px;padding:10px 16px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer}.filter-save:disabled{opacity:.4;cursor:not-allowed}
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:#0d0d0d;color:#ccc;font-size:16px;line-height:1.5;-webkit-font-smoothing:antialiased;display:flex;justify-content:center;min-height:100vh;padding:80px 24px}
-.wrap{width:100%;max-width:600px}
-h1{font-size:48px;font-weight:700;color:#fff;letter-spacing:-0.5px;margin-bottom:24px;line-height:1.1}
-.mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:#888;margin-bottom:12px}
-.nav{margin-bottom:32px}
-.nav a{color:#c084fc;font-size:14px;text-decoration:none;transition:opacity .15s}
-.nav a:hover{opacity:.8}
-.card{background:#1a1a1a;border:1px solid #2a2a2a;border-radius:16px;padding:28px;margin-bottom:16px}
-.section-label{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:#888;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between}
+${BASE_CSS}
+.page{max-width:680px}
+.nav{margin-bottom:36px}
+.back{font-size:14px;color:var(--accent-soft)}
+.back:hover{color:var(--accent)}
+h1{font-size:clamp(36px,5vw,52px);font-weight:500;color:var(--ink);letter-spacing:-.01em;line-height:1.15;margin-bottom:12px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:26px 28px;margin-bottom:14px}
+.section-label{font-size:13px;font-weight:500;color:var(--dim);margin-bottom:16px;display:flex;align-items:center;justify-content:space-between}
 .toggle-row{display:flex;align-items:center;justify-content:space-between;gap:16px}
 .toggle-info{flex:1}
-.toggle-title{color:#fff;font-size:15px;font-weight:600;margin-bottom:4px}
-.toggle-desc{font-size:13px;color:#666;line-height:1.4}
-.toggle{position:relative;width:48px;height:26px;flex-shrink:0}
+.toggle-title{color:var(--ink);font-size:16px;font-weight:500;margin-bottom:4px}
+.toggle-desc{font-size:14px;color:var(--muted);line-height:1.55}
+.toggle{position:relative;width:48px;height:28px;flex-shrink:0}
 .toggle input{opacity:0;width:0;height:0;position:absolute}
-.toggle .slider{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:#333;border-radius:26px;transition:.2s}
-.toggle .slider::before{content:'';position:absolute;height:20px;width:20px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.2s}
-.toggle input:checked+.slider{background:#9333ea}
-.toggle input:checked+.slider::before{transform:translateX(22px)}
-.server-options{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.server-btn{background:#111;border:1px solid #2a2a2a;border-radius:8px;padding:12px 14px;color:#ccc;font-family:inherit;text-align:left;cursor:pointer;transition:all .15s}
-.server-btn strong{display:block;color:#fff;font-size:14px;margin-bottom:2px}
-.server-btn span{display:block;color:#666;font-size:12px}
-.server-btn.active{border-color:#9333ea;background:#20142f;box-shadow:inset 0 0 0 1px rgba(147,51,234,.35)}
+.toggle .slider{position:absolute;cursor:pointer;inset:0;background:var(--surface-2);box-shadow:inset 0 0 0 1px var(--border-2);border-radius:28px;transition:.2s}
+.toggle .slider::before{content:'';position:absolute;height:22px;width:22px;left:3px;top:3px;background:var(--ink-2);border-radius:50%;transition:.2s}
+.toggle input:checked+.slider{background:var(--accent);box-shadow:none}
+.toggle input:checked+.slider::before{transform:translateX(20px);background:#fff}
+.toggle input:focus-visible+.slider{outline:2px solid #3898ec;outline-offset:2px}
+.server-options{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.server-btn{background:var(--canvas-alt);border:1px solid var(--border);border-radius:12px;padding:14px 16px;color:var(--ink-soft);text-align:left;cursor:pointer;transition:border-color .15s,background-color .15s}
+.server-btn:hover{border-color:var(--border-2);background:var(--surface-2)}
+.server-btn strong{display:block;color:var(--ink);font-size:15px;font-weight:500;margin-bottom:2px}
+.server-btn span{display:block;color:var(--dim);font-size:13px}
+.server-btn.active{border-color:var(--accent);background:rgba(255,146,148,.08)}
+.server-btn.active strong{color:var(--accent-soft)}
 .bm-list{list-style:none}
-.bm-item{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid #252525}
-.bm-item:last-child{border-bottom:none}
+.bm-item{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 0;border-top:1px solid var(--border)}
+.bm-item:first-child{border-top:none;padding-top:0}
 .bm-item-info{flex:1;min-width:0}
-.bm-label{color:#fff;font-size:14px;font-weight:500}
-.bm-code-preview{font-family:'JetBrains Mono',monospace;font-size:11px;color:#555;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.bm-del{background:none;border:1px solid #333;color:#888;border-radius:6px;padding:5px 12px;font-family:inherit;font-size:12px;cursor:pointer;transition:all .15s;flex-shrink:0;margin-left:12px}
-.bm-del:hover{border-color:#f87171;color:#f87171}
-.add-form{margin-top:16px;padding-top:16px;border-top:1px solid #252525}
+.bm-label{color:var(--ink);font-size:15px;font-weight:500}
+.bm-code-preview{font-family:var(--font-mono);font-size:11.5px;color:var(--faint);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bm-del{background:none;border:1px solid var(--border-2);color:var(--muted);border-radius:10px;padding:6px 14px;font-size:13px;cursor:pointer;transition:border-color .15s,color .15s;flex-shrink:0}
+.bm-del:hover{border-color:var(--err);color:var(--err)}
+.add-form{margin-top:18px;padding-top:18px;border-top:1px solid var(--border)}
 .input-group{margin-bottom:12px}
-.input-group label{display:block;font-size:11px;color:#888;margin-bottom:6px;font-family:'JetBrains Mono',monospace;letter-spacing:.5px;text-transform:uppercase}
-.input-group input,.input-group textarea{width:100%;background:#111;border:1px solid #2a2a2a;border-radius:8px;padding:10px 14px;color:#fff;font-family:inherit;font-size:14px;outline:none;transition:border-color .15s}
-.input-group input:focus,.input-group textarea:focus{border-color:#9333ea}
-.input-group textarea{resize:vertical;min-height:64px;font-family:'JetBrains Mono',monospace;font-size:12px}
-.add-btn{width:100%;background:#9333ea;color:#fff;border:none;border-radius:8px;padding:12px 24px;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;transition:opacity .15s}
-.add-btn:active{opacity:.8}
-.add-btn:disabled{opacity:.4;cursor:not-allowed}
+.input-group label{display:block;font-size:13px;font-weight:500;color:var(--dim);margin-bottom:6px}
+.input-group input,.input-group textarea{width:100%;background:var(--canvas-alt);border:1px solid var(--border);border-radius:12px;padding:11px 14px;color:var(--ink);font-size:15px;outline:none;transition:border-color .15s}
+.input-group input:focus,.input-group textarea:focus{border-color:var(--accent)}
+.input-group input::placeholder,.input-group textarea::placeholder{color:var(--faint)}
+.input-group textarea{resize:vertical;min-height:72px;font-family:var(--font-mono);font-size:12.5px}
+.add-btn{width:100%;margin-top:4px}
+.achievement-filter{display:flex;align-items:end;gap:10px}
+.achievement-filter .input-group{flex:1;margin-bottom:0}
+.filter-save{padding:11px 20px}
 .status{font-size:13px;text-align:center;min-height:20px;margin-top:8px;transition:opacity .2s}
-.status.ok{color:#4ade80}
-.status.err{color:#f87171}
-.empty{color:#555;font-size:14px;text-align:center;padding:12px 0}
-.count{font-weight:400;color:#555}
-a{color:#c084fc}
-@media(max-width:500px){h1{font-size:36px}body{padding:48px 16px}.card{padding:20px}}
+.status:empty{min-height:0;margin-top:0}
+.status.ok{color:var(--ok)}
+.status.err{color:var(--err)}
+.empty{color:var(--faint);font-size:14px;text-align:center;padding:12px 0}
+.count{font-weight:400;color:var(--faint)}
+@media(max-width:560px){.card{padding:22px}}
 @media(max-width:420px){.server-options{grid-template-columns:1fr}}
 </style></head><body>
-<div class="wrap">
-<p class="mono">carolbot</p>
+${topbar(`<a class="topbar-link" href="/sync?code=${token}">북마클릿 설치</a><a class="topbar-link on" href="/settings?code=${token}">설정</a>`)}
+<main class="page">
 <h1>설정</h1>
-<div class="nav"><a href="/sync?code=${token}">\u2190 북마클릿 설치</a></div>
+<div class="nav"><a class="back" href="/sync?code=${token}">\u2190 북마클릿 설치</a></div>
 <div class="card">
 <p class="section-label">기본 서버</p>
 <div class="server-options">
@@ -102,7 +101,7 @@ a{color:#c084fc}
 <div class="card">
 <p class="section-label">오늘의 성과 필터</p>
 <div class="toggle-desc" style="margin-bottom:14px">이 기준 이상 오른 기록만 표시합니다. FC/FS 이상 플레이는 기준보다 낮아도 계속 표시됩니다.</div>
-<div class="achievement-filter"><div class="input-group"><label for="achievementMin">최소 달성률 (%)</label><input id="achievementMin" type="number" min="0" max="101" step="0.0001" value="95.0000"></div><button class="filter-save" id="achievementSave" onclick="saveAchievementFilter()">저장</button></div>
+<div class="achievement-filter"><div class="input-group"><label for="achievementMin">최소 달성률 (%)</label><input id="achievementMin" type="number" min="0" max="101" step="0.0001" value="95.0000"></div><button class="btn btn-primary filter-save" id="achievementSave" onclick="saveAchievementFilter()">저장</button></div>
 <div class="status" id="achievementStatus"></div>
 </div>
 <div class="card">
@@ -116,11 +115,12 @@ a{color:#c084fc}
 <div class="add-form" id="addForm">
 <div class="input-group"><label>이름</label><input type="text" id="bmName" placeholder="\uC608: \uC2A4\uCF54\uC5B4 \uD45C\uC2DC" maxlength="30"></div>
 <div class="input-group"><label>코드</label><textarea id="bmCode" placeholder="javascript:..."></textarea></div>
-<button class="add-btn" id="addBtn" onclick="addBm()">\uCD94\uAC00</button>
+<button class="btn btn-primary add-btn" id="addBtn" onclick="addBm()">\uCD94\uAC00</button>
 <div class="status" id="bmStatus"></div>
 </div>
 </div>
-</div>
+</main>
+${siteFooter()}
 <script>
 var TOKEN=${tokenJson};
 var DATA=${dataJson};

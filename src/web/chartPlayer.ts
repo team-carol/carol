@@ -10,6 +10,7 @@
 import type { Chart } from "../simai/types";
 import { RENDERER_JS } from "./chartRenderer";
 import { gifWorkerSource, GIF_CLIENT_JS, GIF_RANGE_JS } from "./chartGifClient";
+import { BASE_CSS, pageHead, topbar, siteFooter, LANDING_URL } from "./theme";
 
 export interface ChartPlayerData {
   id: string;
@@ -34,75 +35,69 @@ function esc(s: string): string {
 export function chartPlayerPage(data: ChartPlayerData): string {
   const json = JSON.stringify(data).replace(/</g, "\\u003c").replace(/>/g, "\\u003e");
   const diffName = DIFF_LABEL[data.difficulty] ?? "";
-  const diffColor = DIFF_COLOR[data.difficulty] ?? "#9333ea";
+  const diffColor = DIFF_COLOR[data.difficulty] ?? "var(--surface-2)";
   const s = data.chart.stats;
   const secs = Math.round(data.chart.durationMs / 1000);
   const dur = Math.floor(secs / 60) + ":" + String(secs % 60).padStart(2, "0");
 
-  return `<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${esc(data.title || "채보")} - carolbot</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  return `<!DOCTYPE html><html lang="ko"><head>${pageHead(esc(data.title || "채보") + " · 캐롤봇")}
 <style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:#0d0d0d;color:#ccc;font-size:16px;line-height:1.5;-webkit-font-smoothing:antialiased;display:flex;justify-content:center;min-height:100vh;padding:40px 20px}
-.wrap{width:100%;max-width:560px}
-.mono{font-family:'JetBrains Mono',ui-monospace,monospace}
-.nav{margin-bottom:20px}
-.nav a{color:#c084fc;font-size:14px;text-decoration:none}
-.nav a:hover{opacity:.8}
-.head{margin-bottom:20px}
-.badge{display:inline-block;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:500;letter-spacing:.5px;padding:3px 9px;border-radius:6px;background:${diffColor};color:#fff;margin-bottom:10px}
-h1{font-size:26px;font-weight:700;color:#fff;letter-spacing:-.3px;line-height:1.25;word-break:break-word}
-.sub{font-size:14px;color:#777;margin-top:6px}
-.card{background:#1a1a1a;border:1px solid #2a2a2a;border-radius:16px;padding:20px;margin-bottom:16px}
+${BASE_CSS}
+.page{max-width:600px;padding-top:clamp(28px,5vw,48px)}
+.mono{font-family:var(--font-mono)}
+.head{margin-bottom:22px}
+.badge{display:inline-block;font-family:var(--font-mono);font-size:11.5px;font-weight:500;letter-spacing:.4px;padding:4px 10px;border-radius:8px;background:${diffColor};color:#fff;margin-bottom:12px}
+h1{font-size:clamp(26px,4vw,34px);font-weight:500;color:var(--ink);letter-spacing:-.01em;line-height:1.25;word-break:break-word}
+.sub{font-size:15px;color:var(--muted);margin-top:6px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:22px;margin-bottom:14px}
 .stage{padding:14px;display:flex;justify-content:center}
-canvas{width:100%;max-width:460px;aspect-ratio:1;touch-action:none;display:block}
-.bar{display:flex;align-items:center;gap:12px;margin-bottom:14px}
-.play{width:46px;height:46px;flex:0 0 46px;border:0;border-radius:50%;background:#9333ea;color:#fff;font-size:17px;cursor:pointer;display:flex;align-items:center;justify-content:center}
-.play:hover{background:#a855f7}
+canvas{width:100%;max-width:480px;aspect-ratio:1;touch-action:none;display:block}
+.bar{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+.play{width:46px;height:46px;flex:0 0 46px;border:0;border-radius:50%;background:var(--accent);color:var(--accent-ink);font-size:17px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background-color .15s}
+.play:hover{background:var(--accent-hover)}
 .seek{flex:1;height:26px;position:relative;cursor:pointer;display:flex;align-items:center}
-.seek-track{width:100%;height:5px;border-radius:3px;background:#2a2a2a;overflow:hidden}
-.seek-fill{height:100%;width:0;background:#9333ea}
-.time{font-family:'JetBrains Mono',monospace;font-size:12px;color:#888;min-width:84px;text-align:right}
+.seek-track{width:100%;height:5px;border-radius:3px;background:var(--surface-2);overflow:hidden}
+.seek-fill{height:100%;width:0;background:var(--accent)}
+.time{font-family:var(--font-mono);font-size:12px;color:var(--dim);min-width:84px;text-align:right}
 .ctl{display:flex;flex-direction:column;gap:12px}
-.row{display:flex;align-items:center;gap:12px;font-size:13px;color:#999}
-.row label{flex:0 0 96px;color:#777;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.5px;text-transform:uppercase}
-.row input[type=range]{flex:1;accent-color:#9333ea;min-width:0}
-.row .val{font-family:'JetBrains Mono',monospace;font-size:12px;color:#ccc;min-width:52px;text-align:right}
+.row{display:flex;align-items:center;gap:12px;font-size:14px;color:var(--muted)}
+.row label{flex:0 0 96px;color:var(--dim);font-size:13px;font-weight:500}
+.row input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
+.row .val{font-family:var(--font-mono);font-size:12px;color:var(--ink-soft);min-width:52px;text-align:right}
 .chips{display:flex;gap:6px;flex-wrap:wrap}
-.chip{border:1px solid #2a2a2a;background:#141414;color:#999;border-radius:8px;padding:6px 11px;font-size:12px;cursor:pointer;font-family:inherit}
-.chip:hover{border-color:#3a3a3a;color:#ccc}
-.chip.on{border-color:#9333ea;background:#9333ea22;color:#e9d5ff}
+.chip{border:0;background:var(--surface-2);color:var(--muted);border-radius:24px;padding:6px 14px;font-size:13.5px;cursor:pointer;transition:background-color .15s,color .15s}
+.chip:hover{color:var(--ink)}
+.chip.on{background:rgba(255,146,148,.14);color:var(--accent-soft);box-shadow:inset 0 0 0 1px rgba(255,146,148,.45)}
 .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
-.stat{background:#141414;border:1px solid #2a2a2a;border-radius:10px;padding:10px 12px}
-.stat .k{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.5px;text-transform:uppercase;color:#666}
-.stat .v{font-size:17px;font-weight:600;color:#fff;margin-top:2px}
-.note{font-size:12px;color:#5f5f5f;line-height:1.6;margin-top:14px}
-.file{font-size:12px;color:#777}
+.stat{background:var(--canvas-alt);border:1px solid var(--border);border-radius:12px;padding:10px 12px}
+.stat .k{font-size:12px;font-weight:500;color:var(--dim)}
+.stat .v{font-size:18px;font-weight:500;color:var(--ink);margin-top:2px}
+.note{font-size:13px;color:var(--dim);line-height:1.65;margin-top:14px}
+.file{font-size:13px;color:var(--dim)}
 .file input{display:none}
-.file span{color:#c084fc;cursor:pointer;text-decoration:underline}
-.card h2{font-size:13px;font-weight:600;color:#ccc;margin-bottom:14px;font-family:'JetBrains Mono',monospace;letter-spacing:.5px;text-transform:uppercase}
-.row input[type=number]{width:72px;background:#141414;border:1px solid #2a2a2a;border-radius:8px;color:#e9d5ff;padding:6px 9px;font-family:'JetBrains Mono',monospace;font-size:13px}
-.row select{background:#141414;border:1px solid #2a2a2a;border-radius:8px;color:#e9d5ff;padding:6px 9px;font-family:inherit;font-size:13px}
-.row .unit{color:#666;font-size:12px}
+.file span{color:var(--accent-soft);cursor:pointer;text-decoration:underline}
+.file label{flex:none;font-size:inherit;font-weight:inherit;color:inherit}
+.card h2{font-size:17px;font-weight:500;color:var(--ink);margin-bottom:14px}
+.row input[type=number]{width:72px;background:var(--canvas-alt);border:1px solid var(--border);border-radius:10px;color:var(--ink);padding:6px 9px;font-family:var(--font-mono);font-size:13px}
+.row select{background:var(--canvas-alt);border:1px solid var(--border);border-radius:10px;color:var(--ink);padding:6px 9px;font-size:13.5px}
+.row .unit{color:var(--dim);font-size:12.5px}
 .gifbar{display:flex;align-items:center;gap:12px;margin-top:4px;flex-wrap:wrap}
-.btn{border:0;border-radius:10px;background:#9333ea;color:#fff;padding:9px 16px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
-.btn:hover{background:#a855f7}
-.btn:disabled{background:#3a2a4a;color:#888;cursor:default}
-.gstatus{font-size:12px;color:#888;font-family:'JetBrains Mono',monospace}
+.btn{padding:10px 18px;font-size:14px}
+.btn:disabled{background:var(--surface-2);color:var(--dim);box-shadow:none;opacity:1;cursor:default}
+.gstatus{font-size:12px;color:var(--dim);font-family:var(--font-mono)}
 .gpreview{margin-top:14px;display:none}
-.gpreview img{width:100%;max-width:320px;border-radius:12px;border:1px solid #2a2a2a;display:block}
-.gpreview .hint{font-size:11px;color:#5f5f5f;margin-top:6px}
+.gpreview img{width:100%;max-width:320px;border-radius:12px;border:1px solid var(--border);display:block}
+.gpreview .hint{font-size:12px;color:var(--dim);margin-top:6px}
 .rangebar{position:relative;flex:1;height:34px;min-width:0;cursor:pointer;touch-action:none;user-select:none}
-.rb-track{position:absolute;top:14px;left:0;right:0;height:6px;border-radius:3px;background:#2a2a2a}
-.rb-sel{position:absolute;top:14px;height:6px;background:#9333ea;border-radius:3px}
+.rb-track{position:absolute;top:14px;left:0;right:0;height:6px;border-radius:3px;background:var(--surface-2)}
+.rb-sel{position:absolute;top:14px;height:6px;background:var(--accent);border-radius:3px}
 .rb-play{position:absolute;top:7px;width:2px;height:20px;background:#fff;opacity:.55;pointer-events:none}
-.rb-h{position:absolute;top:5px;width:12px;height:24px;margin-left:-6px;background:#c084fc;border:1px solid #d8b4fe;border-radius:4px;cursor:ew-resize;box-shadow:0 1px 3px rgba(0,0,0,.45)}
-.rb-h:hover{background:#d8b4fe}
-</style></head><body><div class="wrap">
-<div class="nav"><a href="/">← carolbot</a></div>
+.rb-h{position:absolute;top:5px;width:12px;height:24px;margin-left:-6px;background:var(--accent-soft);border:1px solid #fff5f6;border-radius:4px;cursor:ew-resize;box-shadow:0 1px 3px rgba(0,0,0,.45)}
+.rb-h:hover{background:#fff5f6}
+@media(max-width:480px){.row label{flex-basis:78px}}
+</style></head><body>
+${topbar()}
+<main class="page">
 <div class="head">
   ${diffName
     ? `<div class="badge">${esc(diffName)}${data.level ? " " + esc(data.level) : ""}</div>`
@@ -164,7 +159,7 @@ canvas{width:100%;max-width:460px;aspect-ratio:1;touch-action:none;display:block
         <option value="600">600px</option>
         <option value="800">800px</option>
       </select>
-      <label style="flex:0 0 auto;text-transform:none;letter-spacing:0">FPS</label>
+      <label style="flex:0 0 auto">FPS</label>
       <select id="gFps">
         <option value="15" selected>15</option>
         <option value="20">20</option>
@@ -174,7 +169,7 @@ canvas{width:100%;max-width:460px;aspect-ratio:1;touch-action:none;display:block
       <span class="unit">노트 속도·미러는 위 설정</span>
     </div>
     <div class="gifbar">
-      <button class="btn" id="gMake" type="button">GIF 만들기</button>
+      <button class="btn btn-primary" id="gMake" type="button">GIF 만들기</button>
       <span class="gstatus" id="gStatus"></span>
     </div>
     <div class="gpreview" id="gPreview">
@@ -199,7 +194,8 @@ canvas{width:100%;max-width:460px;aspect-ratio:1;touch-action:none;display:block
     노트는 <span class="mono">0.25R</span> 지점에서 떠오른 뒤 판정선으로 흘러나갑니다. 슬라이드 궤적은 별이 지나간 화살표부터 사라집니다.
   </div>
 </div>
-</div>
+</main>
+${siteFooter()}
 <script>
 var DATA = ${json};
 ${RENDERER_JS}
@@ -213,14 +209,11 @@ ${GIF_CLIENT_JS}</script></body></html>`;
 
 /** 링크가 죽었을 때(보관 기간 만료 등) 보여주는 안내 페이지. */
 export function chartNotFoundPage(title: string, desc: string): string {
-  return `<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${esc(title)} - carolbot</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  return `<!DOCTYPE html><html lang="ko"><head>${pageHead(esc(title) + " · 캐롤봇")}
 <style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Inter',system-ui,sans-serif;background:#0d0d0d;color:#ccc;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px;text-align:center}
-h1{font-size:28px;font-weight:700;color:#fff;margin-bottom:10px}
-p{font-size:14px;color:#777;margin-bottom:20px}
-a{color:#c084fc;font-size:14px;text-decoration:none}
-</style></head><body><div><h1>${esc(title)}</h1><p>${esc(desc)}</p><a href="/">← carolbot</a></div></body></html>`;
+${BASE_CSS}
+.page{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;max-width:560px}
+h1{font-size:clamp(28px,4vw,36px);font-weight:500;color:var(--ink);line-height:1.2;margin-bottom:12px}
+p{font-size:15.5px;color:var(--muted);margin-bottom:28px}
+</style></head><body>${topbar()}<main class="page"><h1>${esc(title)}</h1><p>${esc(desc)}</p><a class="btn btn-secondary" href="${LANDING_URL}">캐롤봇 홈으로</a></main>${siteFooter()}</body></html>`;
 }
