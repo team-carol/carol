@@ -491,6 +491,12 @@ export function startWebServer(port: number): void {
       return;
     }
 
+    if (req.method === "HEAD" && (url.pathname === "/privacy" || url.pathname === "/terms")) {
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      res.end();
+      return;
+    }
+
     if (req.method === "GET" && url.pathname === "/privacy") {
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
       res.end(`<!DOCTYPE html><html lang="ko"><head>${pageHead("개인정보처리방침 · 캐롤봇")}
@@ -498,14 +504,14 @@ export function startWebServer(port: number): void {
 ${topbar()}
 <main class="page">
 <h1>개인정보처리방침</h1>
-<p>최종 수정일: 2026년 9월</p>
+<p>최종 수정일: 2026년 9월 23일</p>
 <h2>1. 수집하는 정보</h2>
 <p>본 봇은 Discord 사용자 ID, maimai DX net 프로필 데이터(플레이어명, 레이팅, 칭호, 클래스, 아바타 이미지, 최근 플레이 기록, 재킷 이미지)를 수집합니다.</p>
 <h2>2. 수집 방법</h2>
 <p>사용자가 maimai DX net에 로그인된 브라우저에서 <strong>북마클릿</strong> 또는 <strong>캐롤익스텐션(비공식 크롬 확장)</strong>을 실행하여, 해당 페이지의 HTML을 사용자 브라우저에서 직접 서버로 전송합니다. SEGA ID, 비밀번호 등 계정 정보는 절대 수집하지 않습니다.</p>
 <p>캐롤익스텐션을 쓰는 경우, 사용자가 확장 설정에서 동기화를 명시적으로 켜고 동기화 토큰을 등록해야 합니다. 동기화는 (1) maimai DX net 화면의 버튼을 눌렀을 때, 또는 (2) 사용자가 "자동" 모드를 켠 경우 홈 화면에 접속했고 플레이 횟수가 지난 동기화 이후 변한 것이 확인됐을 때에만 실행됩니다. 백그라운드 상시 수집은 하지 않으며, 전송되는 데이터의 종류와 목적은 북마클릿과 동일합니다.</p>
 <h2>3. 데이터 저장</h2>
-<p>모든 데이터는 서버 내 SQLite 데이터베이스에 암호화하여 저장됩니다. 아바타 및 재킷 이미지는 base64 인코딩되어 저장됩니다.</p>
+<p>프로필 데이터는 PostgreSQL 데이터베이스에 저장됩니다. 세션 정보는 암호화하여 저장하며, 아바타 및 재킷 이미지는 base64 인코딩하여 저장합니다. base64 인코딩은 암호화가 아닙니다.</p>
 <h2>4. 데이터 사용 목적</h2>
 <p>Discord에서 maimai DX 프로필을 표시하는 용도로만 사용됩니다.</p>
 <h2>5. 제3자 제공</h2>
