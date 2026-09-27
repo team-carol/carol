@@ -3,6 +3,11 @@ export type MaimaiServer = (typeof MAIMAI_SERVERS)[number];
 export function isMaimaiServer(value: string): value is MaimaiServer { return value === "intl" || value === "jp"; }
 export interface CachedProfile { profileKey:string; server:MaimaiServer; friendCode:string; playerName:string; rating:number; ratingMax:number; trophy:string; trophyClass:string; avatar:string; gradeImg:string; stars:string; comment:string; playCount:number; totalPlayCount:number; lastSyncedAt:number; recentJson:string; topJson:string; clearJson:string; mapJson:string; }
 export interface ExtraBookmarklet { label:string; code:string; }
+export interface OptionPresetInput { name:string; server:MaimaiServer; values:Record<string,string>; labels:Record<string,[string,string]>; }
+export interface OptionPresetRow extends OptionPresetInput { id:number; updatedAt:number; }
+/** scraper.UserOptionField 와 같은 모양(storage 는 scraper 를 import 하지 않는다). */
+export interface UserOptionField { name:string; label:string; desc:string; value:string; options:[string,string][]; }
+export interface OptionSnapshot { server:MaimaiServer; fields:UserOptionField[]; syncedAt:number; }
 export interface SongAliasRow { id:number; title:string; alias:string; isTranslation:boolean; }
 export interface BotMessageRow { key:string; text:string; }
 export interface AchievementPlayEventInput { profileKey:string; discordUserId?:string; playDay:string; chartKey:string; detailIdx?:string; sourceSequence:number; playedAt:number; firstCapturedAt?:number; sourceKind?:string; legacyUpdatedAt?:number; recordJson:string; achievementVal:number; isNewScore?:boolean; ratingUp?:number|null; title?:string; diff?:string; level?:string; musicKind?:string; achievementText?:string; fc?:string; sync?:string; }

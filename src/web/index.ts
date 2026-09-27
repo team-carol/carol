@@ -3,11 +3,13 @@ import * as fs from "fs";
 import { createHash, timingSafeEqual } from "crypto";
 import { gunzip } from "zlib";
 import { promisify } from "util";
-import { parseHome, parsePlayerData, parseFriendCode as parseFC, parseRecentRecords, parsePlaylogHistory, parseTop5, parseTopSongs, parseMusicScore, mergeTopRecords, getMaimaiBaseUrl, parseMapAreas, parsePlaylogDetail, chartKey, buildMarkMap, buildKindResolver } from "../scraper";
-import { cacheProfile, getCachedProfile, saveUserSession, getUserSyncToken, findUserBySyncToken, getUserFriendCodeForServer, saveAvatarBlob, getAvatarBlob, getSongJacket, saveSongJacket, getExtraBookmarklets, getProfilePrivate, setProfilePrivate, addExtraBookmarklet, removeExtraBookmarklet, getEnabledBookmarkletPresetIds, setBookmarkletPresetEnabled, getUserDefaultServer, setUserDefaultServer, isMaimaiServer, getMapImage, saveMapImage, saveAchievementPlayEventLogBatch, upsertChartClears, backfillEventRatingUp, saveRatingSnapshot, getAllAliases, addAlias, deleteAlias, setAliasTranslation, setMessageOverride, deleteMessageOverride, getTranslateTitles, setTranslateTitles, getRegisteredUserCount, getAchievementMinimum, setAchievementMinimum, listGoals, updateGoalProgress, getPolicyAck, setPolicyAck, getSimaiChart, saveSimaiChart, listRegistryCharts, auditRegistryCharts } from "../storage";
+import { parseHome, parsePlayerData, parseFriendCode as parseFC, parseRecentRecords, parsePlaylogHistory, parseTop5, parseTopSongs, parseMusicScore, mergeTopRecords, getMaimaiBaseUrl, parseMapAreas, parsePlaylogDetail, chartKey, buildMarkMap, buildKindResolver, parseUserOptions } from "../scraper";
+import { cacheProfile, getCachedProfile, saveUserSession, getUserSyncToken, findUserBySyncToken, getUserFriendCodeForServer, saveAvatarBlob, getAvatarBlob, getSongJacket, saveSongJacket, getExtraBookmarklets, getProfilePrivate, setProfilePrivate, addExtraBookmarklet, removeExtraBookmarklet, getEnabledBookmarkletPresetIds, setBookmarkletPresetEnabled, getUserDefaultServer, setUserDefaultServer, isMaimaiServer, getMapImage, saveMapImage, saveAchievementPlayEventLogBatch, upsertChartClears, backfillEventRatingUp, saveRatingSnapshot, getAllAliases, addAlias, deleteAlias, setAliasTranslation, setMessageOverride, deleteMessageOverride, getTranslateTitles, setTranslateTitles, getRegisteredUserCount, getAchievementMinimum, setAchievementMinimum, listGoals, updateGoalProgress, getPolicyAck, setPolicyAck, getSimaiChart, saveSimaiChart, listRegistryCharts, auditRegistryCharts, listOptionPresets, saveOptionPreset, deleteOptionPreset, saveOptionSnapshot, getOptionSnapshots } from "../storage";
 import { POLICY_VERSION } from "../policy";
 import type { SongAliasRow } from "../storage/types";
 import { buildBookmarkletJs, setBaseUrl, getBaseUrl, buildBookmarklet, BOOKMARKLET_PRESETS, getBookmarkletPresets } from "./bookmarklet";
+import { OPTION_CLIENT_JS, OPTION_PRESET_MAX, buildOptionBookmarklet, sanitizeOptionPreset } from "./optionPreset";
+import { optionsPage } from "./optionsPage";
 import { computeRatingTarget, getAllSongTitles } from "../constants";
 import { settingsPage } from "./settingsPage";
 import { aliasAdminPage } from "./aliasAdminPage";
@@ -21,7 +23,7 @@ import { renderChartGifAsync } from "../bot/utils/chartGif";
 import { getReadyVideo } from "../bot/utils/chartVideoQueue";
 import type { Chart } from "../simai/types";
 import { messagesAdminPage, type MessageRowVM } from "./messagesAdminPage";
-import { BASE_CSS, pageHead, topbar, siteFooter, BRAND_AVATAR_PATH } from "./theme";
+import { BASE_CSS, pageHead, topbar, siteFooter, BRAND_AVATAR_PATH, userNav } from "./theme";
 import { BRAND_AVATAR_PNG } from "./brandAvatar";
 import {
   MESSAGE_KEYS, defaultOf, getOverride, rawText, placeholdersOf,
@@ -138,7 +140,7 @@ a.extraCard:hover{border-color:#f2857f;color:var(--ink-soft)}
 .extraCard span{display:block;color:var(--muted);font-size:14px;line-height:1.55}
 @media(max-width:560px){.card{padding:22px}.extraActions{grid-template-columns:1fr}}
 </style></head><body>
-${topbar(`<a class="topbar-link on" href="/sync?code=${token}">북마클릿 설치</a><a class="topbar-link" href="/settings?code=${token}">설정</a>`)}
+${topbar(userNav(token, "sync"))}
 <main class="page">
 <h1>북마클릿 설치</h1>
 <p class="lead">maimai DX NET에서 한 번 실행하면 기록이 캐롤봇으로 동기화됩니다.</p>
@@ -500,7 +502,7 @@ ${topbar()}
 <h1>개인정보처리방침</h1>
 <p>최종 수정일: 2026년 9월</p>
 <h2>1. 수집하는 정보</h2>
-<p>본 봇은 Discord 사용자 ID, maimai DX net 프로필 데이터(플레이어명, 레이팅, 칭호, 클래스, 아바타 이미지, 최근 플레이 기록, 재킷 이미지)를 수집합니다.</p>
+<p>본 봇은 Discord 사용자 ID, maimai DX net 프로필 데이터(플레이어명, 레이팅, 칭호, 클래스, 아바타 이미지, 최근 플레이 기록, 재킷 이미지)를 수집합니다. 게임 옵션 프리셋 기능을 쓰는 경우, 사용자가 저장을 누른 시점의 게임 옵션 설정값(노트 속도, 판정 표시 등)도 저장합니다.</p>
 <h2>2. 수집 방법</h2>
 <p>사용자가 maimai DX net에 로그인된 브라우저에서 <strong>북마클릿</strong> 또는 <strong>캐롤익스텐션(비공식 크롬 확장)</strong>을 실행하여, 해당 페이지의 HTML을 사용자 브라우저에서 직접 서버로 전송합니다. SEGA ID, 비밀번호 등 계정 정보는 절대 수집하지 않습니다.</p>
 <p>캐롤익스텐션을 쓰는 경우, 사용자가 확장 설정에서 동기화를 명시적으로 켜고 동기화 토큰을 등록해야 합니다. 동기화는 (1) maimai DX net 화면의 버튼을 눌렀을 때, 또는 (2) 사용자가 "자동" 모드를 켠 경우 홈 화면에 접속했고 플레이 횟수가 지난 동기화 이후 변한 것이 확인됐을 때에만 실행됩니다. 백그라운드 상시 수집은 하지 않으며, 전송되는 데이터의 종류와 목적은 북마클릿과 동일합니다.</p>
@@ -829,6 +831,66 @@ ${siteFooter()}
       return;
     }
 
+    // ─── 게임 옵션 프리셋 (optionPreset.ts) ────────────────────────────────
+    // 북마클릿이 DX NET 페이지에 주입하는 클라이언트. 토큰은 스크립트 URL 의 code 로 받는다.
+    if (req.method === "GET" && url.pathname === "/option.js") {
+      res.writeHead(200, { "content-type": "application/javascript; charset=utf-8", "cache-control": "no-cache" });
+      res.end(OPTION_CLIENT_JS);
+      return;
+    }
+    // 게임 설정 페이지: 현재 옵션(동기화 스냅샷) + 프리셋 보기·편집.
+    if (req.method === "GET" && url.pathname === "/options") {
+      const token = url.searchParams.get("code") || "";
+      const userId = await findUserBySyncToken(token);
+      if (!userId && !isDev) { res.writeHead(403); res.end("expired"); return; }
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      res.end(optionsPage(token, {
+        bookmarklet: buildOptionBookmarklet(getBaseUrl(port), userId ? token : "preview"),
+        snapshots: userId ? await getOptionSnapshots(userId) : [],
+        presets: userId ? await listOptionPresets(userId) : [],
+        max: OPTION_PRESET_MAX,
+        defaultServer: userId ? await getUserDefaultServer(userId) : "intl",
+      }));
+      return;
+    }
+    if (url.pathname === "/api/options" || url.pathname === "/api/options/snapshot" || url.pathname === "/api/option-presets" || url.pathname === "/api/option-presets/delete") {
+      const userId = await findUserBySyncToken(url.searchParams.get("code") || "");
+      const json = (status: number, data: unknown) => { res.writeHead(status, { "content-type": "application/json" }); res.end(JSON.stringify(data)); };
+      if (!userId) { json(403, { error: "expired" }); return; }
+      if (req.method === "GET" && (url.pathname === "/api/options" || url.pathname === "/api/option-presets")) {
+        json(200, { snapshots: url.pathname === "/api/options" ? await getOptionSnapshots(userId) : undefined, presets: await listOptionPresets(userId), max: OPTION_PRESET_MAX });
+        return;
+      }
+      if (req.method === "POST") {
+        let body: any;
+        try { body = JSON.parse(await readBody(req, url.pathname === "/api/options/snapshot" ? 2_000_000 : 64_000)); } catch { json(400, { error: "invalid_body" }); return; }
+        if (url.pathname === "/api/options/snapshot") {
+          // 옵션 북마클릿이 저장·적용 직후 읽은 옵션 페이지 HTML. 동기화와 같은 파서로 스냅샷을 갱신한다.
+          const server = typeof body?.server === "string" && isMaimaiServer(body.server) ? body.server : null;
+          const fields = server && typeof body.html === "string" ? parseUserOptions(body.html) : [];
+          if (!server || !fields.length) { json(400, { error: "invalid_snapshot" }); return; }
+          await saveOptionSnapshot(userId, server, fields);
+          json(200, { ok: true });
+          return;
+        }
+        if (url.pathname === "/api/option-presets/delete") {
+          const id = Number(body?.id);
+          if (!Number.isSafeInteger(id)) { json(400, { error: "invalid_id" }); return; }
+          json(200, { ok: await deleteOptionPreset(userId, id) });
+          return;
+        }
+        if (url.pathname === "/api/option-presets") {
+          const preset = sanitizeOptionPreset(body);
+          const presetId = body?.id === undefined || body?.id === null ? undefined : Number(body.id);
+          if (!preset || (presetId !== undefined && !Number.isSafeInteger(presetId))) { json(400, { error: "invalid_preset" }); return; }
+          const saved = await saveOptionPreset(userId, preset, OPTION_PRESET_MAX, presetId);
+          if (typeof saved === "string") { json(saved === "not_found" ? 404 : 400, { error: saved, max: OPTION_PRESET_MAX }); return; }
+          json(200, { preset: saved });
+          return;
+        }
+      }
+    }
+
     // ─── Settings API ─────────────────────────────────────────────────────
     if (req.method === "GET" && url.pathname === "/api/settings") {
       const token = url.searchParams.get("code") || "";
@@ -1011,9 +1073,10 @@ ${siteFooter()}
       const top0Html: string = data.tb0 || "";
       const mapHtml: string = data.m || "";
       const eventMapHtml: string = data.em || "";
+      const optionHtml: string = typeof data.uo === "string" ? data.uo : "";
       const avatarBase64: string = data.a || "";
       const detailPayloads = Array.isArray(data.dt) ? data.dt : [];
-      console.log(`[web] user=${syncUserId.slice(-6)}, server=${syncServer}, home=${homeHtml.length}B, player=${playerHtml.length}B, record=${recordHtml.length}B, ratingTarget=${ratingTargetHtml.length}B, fc=${fcHtml.length}B, top4=${top4Html.length}B, top3=${top3Html.length}B, top2=${top2Html.length}B, top1=${top1Html.length}B, top0=${top0Html.length}B, map=${mapHtml.length}B, eventMap=${eventMapHtml.length}B`);
+      console.log(`[web] user=${syncUserId.slice(-6)}, server=${syncServer}, home=${homeHtml.length}B, player=${playerHtml.length}B, record=${recordHtml.length}B, ratingTarget=${ratingTargetHtml.length}B, fc=${fcHtml.length}B, top4=${top4Html.length}B, top3=${top3Html.length}B, top2=${top2Html.length}B, top1=${top1Html.length}B, top0=${top0Html.length}B, map=${mapHtml.length}B, eventMap=${eventMapHtml.length}B, option=${optionHtml.length}B`);
       if (isDev) {
         fs.writeFileSync("debug_home.html", homeHtml, "utf-8");
         fs.writeFileSync("debug_pd.html", playerHtml, "utf-8");
@@ -1022,6 +1085,7 @@ ${siteFooter()}
         fs.writeFileSync("debug_rating_target.html", ratingTargetHtml, "utf-8");
         fs.writeFileSync("debug_map.html", mapHtml, "utf-8");
         fs.writeFileSync("debug_event_map.html", eventMapHtml, "utf-8");
+        if (optionHtml) fs.writeFileSync("debug_option.html", optionHtml, "utf-8");
         detailPayloads.forEach((detail: unknown, idx: number) => {
           if (!detail || typeof detail !== "object") return;
           const html = "html" in detail && typeof detail.html === "string" ? detail.html : "";
@@ -1195,6 +1259,16 @@ ${siteFooter()}
           canonicalStatus = "achievement_error";
         }
         await saveUserSession(syncUserId, "{}", savedProfileKey, syncServer);
+
+        // 게임 옵션 스냅샷(/options 페이지·프리셋 편집용). 부가 기능이라 실패해도 동기화는 계속.
+        if (userId && optionHtml) {
+          try {
+            const fields = parseUserOptions(optionHtml);
+            if (fields.length) await saveOptionSnapshot(userId, syncServer, fields);
+          } catch (optionError) {
+            console.warn("[web] 게임 옵션 저장 실패:", optionError instanceof Error ? optionError.message : optionError);
+          }
+        }
 
         // 목표(todo) 진행률 재평가. 부가 기능이라 실패해도 프로필 저장 등 핵심 동기화에는
         // 영향 없도록 별도 try/catch 로 격리한다. 판정은 이번 동기화의 clearRecords 기준.

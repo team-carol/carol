@@ -511,3 +511,39 @@ export function parseSearchResult(html: string, server: MaimaiServer = "intl"): 
   if (!profile.playerName) return { found: false, message: "찾을 수 없음" };
   return { found: true, profile };
 }
+
+/** 게임 옵션 한 항목. options 는 [value, 표시 텍스트] 목록(계정마다 해금 상태에 따라 다르다). */
+export interface UserOptionField {
+  name: string;
+  label: string;
+  desc: string;
+  value: string;
+  options: [string, string][];
+}
+
+/**
+ * 옵션 설정 페이지(/maimai-mobile/home/userOption/updateUserOption/)의 폼에서 select 들을 읽는다.
+ * 각 select 는 `<tr><td>라벨</td><td class="t_r"><select></td></tr>` 다음 행에 회색 설명이 온다.
+ * 폼이 없으면(로그인 풀림 등) 빈 배열.
+ */
+export function parseUserOptions(html: string): UserOptionField[] {
+  if (!html) return [];
+  const $ = cheerio.load(html);
+  const form = $("form[action*='updateUserOption/update']").first();
+  if (!form.length) return [];
+  const clean = (s: string) => s.replace(/\s+/g, " ").trim();
+  const fields: UserOptionField[] = [];
+  form.find("select[name]").each((_, el) => {
+    const sel = $(el);
+    const name = sel.attr("name") || "";
+    const options: [string, string][] = sel.find("option").toArray().map((o) => [$(o).attr("value") ?? clean($(o).text()), clean($(o).text())]);
+    if (!name || !options.length) return;
+    const picked = sel.find("option[selected]").first();
+    const value = picked.length ? (picked.attr("value") ?? clean(picked.text())) : options[0][0];
+    const tr = sel.closest("tr");
+    const label = clean(tr.children("td").first().text()) || name;
+    const desc = clean(tr.next("tr").find("td.gray").text());
+    fields.push({ name, label, desc, value, options });
+  });
+  return fields;
+}

@@ -34,3 +34,22 @@ test("parsePlaylogDetail: 다른 모드 상세 페이지의 비현실적 (+N) �
   // 이론상 단일 채보 최대치(약 338) 부근까지는 통과 (신규 유저 첫 플레이 등)
   assert.equal(s.parsePlaylogDetail(detailHtml("(+338)")).ratingUp, 338);
 });
+
+test("parseUserOptions: select 값·라벨·설명·선택지를 읽는다", () => {
+  const html = `<form action="https://maimaidx-eng.com/maimai-mobile/home/userOption/updateUserOption/update/" method="post">
+    <table><tbody><tr><td>TAP SPEED</td><td class="t_r"><select name="noteSpeed"><option value="0">1.00</option><option value="1" selected="selected">1.25</option></select></td></tr>
+    <tr><td colspan="2" class="f_11 gray">Setting of the TAP-Ring speed</td></tr></tbody></table>
+    <table><tbody><tr><td>MIRROR MODE</td><td><select name="mirrorMode"><option value="0">OFF</option><option value="1">&#8645;</option></select></td></tr></tbody></table>
+    <input type="hidden" name="token" value="secret"></form>`;
+  const r = s.parseUserOptions(html);
+  assert.equal(r.length, 2);
+  assert.deepEqual(r[0], { name: "noteSpeed", label: "TAP SPEED", desc: "Setting of the TAP-Ring speed", value: "1", options: [["0", "1.00"], ["1", "1.25"]] });
+  assert.equal(r[1].value, "0"); // selected 가 없으면 첫 선택지
+  assert.equal(r[1].desc, "");
+  assert.ok(!JSON.stringify(r).includes("secret"));
+});
+
+test("parseUserOptions: 폼이 없으면 빈 배열", () => {
+  assert.deepEqual(s.parseUserOptions("<html><body>ERROR</body></html>"), []);
+  assert.deepEqual(s.parseUserOptions(""), []);
+});

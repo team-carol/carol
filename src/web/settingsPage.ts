@@ -1,6 +1,6 @@
 import type { ExtraBookmarklet, MaimaiServer } from "../storage/types";
 import { BOOKMARKLET_PRESETS } from "./bookmarklet";
-import { BASE_CSS, pageHead, topbar, siteFooter } from "./theme";
+import { BASE_CSS, pageHead, topbar, siteFooter, userNav } from "./theme";
 
 export function settingsPage(token: string, isPrivate: boolean, enabledPresetIds: string[], bookmarklets: ExtraBookmarklet[], defaultServer: MaimaiServer, translate = false): string {
   const presets = BOOKMARKLET_PRESETS.map((preset) => ({ ...preset, enabled: enabledPresetIds.includes(preset.id) }));
@@ -61,10 +61,13 @@ h1{font-size:clamp(36px,5vw,52px);font-weight:500;color:var(--ink);letter-spacin
 .status.err{color:var(--err)}
 .empty{color:var(--faint);font-size:14px;text-align:center;padding:12px 0}
 .count{font-weight:400;color:var(--faint)}
+.link-card{display:flex;align-items:center;gap:16px;transition:border-color .15s}
+.link-card:hover{border-color:var(--border-2)}
+.link-arrow{font-size:20px;color:var(--accent-soft)}
 @media(max-width:560px){.card{padding:22px}}
 @media(max-width:420px){.server-options{grid-template-columns:1fr}}
 </style></head><body>
-${topbar(`<a class="topbar-link" href="/sync?code=${token}">북마클릿 설치</a><a class="topbar-link on" href="/settings?code=${token}">설정</a>`)}
+${topbar(userNav(token, "settings"))}
 <main class="page">
 <h1>설정</h1>
 <div class="nav"><a class="back" href="/sync?code=${token}">\u2190 북마클릿 설치</a></div>
@@ -104,6 +107,11 @@ ${topbar(`<a class="topbar-link" href="/sync?code=${token}">북마클릿 설치<
 <div class="achievement-filter"><div class="input-group"><label for="achievementMin">최소 달성률 (%)</label><input id="achievementMin" type="number" min="0" max="101" step="0.0001" value="95.0000"></div><button class="btn btn-primary filter-save" id="achievementSave" onclick="saveAchievementFilter()">저장</button></div>
 <div class="status" id="achievementStatus"></div>
 </div>
+<a class="card link-card" href="/options?code=${token}">
+<div class="toggle-info"><div class="toggle-title">게임 설정</div>
+<div class="toggle-desc">maimai DX NET 게임 옵션을 확인하고, 프리셋으로 저장해 두었다가 한 번에 적용할 수 있습니다.</div></div>
+<span class="link-arrow">\u2192</span>
+</a>
 <div class="card">
 <p class="section-label">프리셋 북마클릿 <span class="count" id="presetCount"></span></p>
 <ul class="bm-list" id="presetList"></ul>
@@ -134,6 +142,7 @@ var MAX_BM=5;
   renderPresetList();
   renderBmList();
 })();
+
 
 function renderAchievementFilter(){
   var value=Number(DATA.minimumAchievement);
