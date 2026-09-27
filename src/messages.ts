@@ -122,6 +122,16 @@ export const MESSAGES = {
   "settings.openButton": "웹 설정 열기",
   "settings.termsButton": "이용약관",
 
+  // ── /게임설정 ────────────────────────────────────────────────────────────
+  "gameOptions.title": "🎮 게임 설정",
+  "gameOptions.description": "maimai DX NET 게임 옵션을 확인하고, 옵션 프리셋을 만들거나 편집할 수 있습니다. 프리셋을 게임에 적용할 때는 페이지에 안내된 옵션 프리셋 북마클릿을 DX NET에서 실행합니다.",
+  "gameOptions.currentField": "가져온 현재 설정",
+  "gameOptions.currentLine": "{server} · {time} 기준",
+  "gameOptions.currentNone": "아직 가져온 설정이 없습니다. 프로필 북마클릿으로 동기화하면 현재 설정이 함께 저장됩니다.",
+  "gameOptions.presetField": "옵션 프리셋",
+  "gameOptions.presetValue": "{count}/{max}개 저장됨",
+  "gameOptions.openButton": "게임 설정 열기",
+
   // ── /상태 ───────────────────────────────────────────────────────────────
   "status.title": "서버 상태",
   "status.ping": "핑",
