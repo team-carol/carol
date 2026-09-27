@@ -69,6 +69,12 @@ export function topbar(right = ""): string {
   return `<nav class="topbar"><div class="topbar-in"><a class="brand" href="${LANDING_URL}"><img src="${BRAND_AVATAR_PATH}" alt="" width="30" height="30">캐롤봇</a><span class="topbar-sp"></span>${right}</div></nav>`;
 }
 
+/** 사용자 페이지(북마클릿 설치·게임 설정·설정) 상단바 오른쪽 링크. */
+export function userNav(token: string, active: "sync" | "options" | "settings"): string {
+  const items: [typeof active, string, string][] = [["sync", "/sync", "북마클릿 설치"], ["options", "/options", "게임 설정"], ["settings", "/settings", "설정"]];
+  return items.map(([id, path, label]) => `<a class="topbar-link${id === active ? " on" : ""}" href="${path}?code=${token}">${label}</a>`).join("");
+}
+
 export function siteFooter(): string {
   return `<footer class="site-foot"><div class="site-foot-in"><span>team carol</span><span class="sp"></span><a href="/terms">이용약관</a><a href="/privacy">개인정보처리방침</a><a href="${LANDING_URL}">캐롤봇 홈</a></div></footer>`;
 }

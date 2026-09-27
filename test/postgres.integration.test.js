@@ -218,3 +218,39 @@ test("legacy v1 마이그레이션 체크섬을 다시 쓰지 않는다 + 컬럼
     } finally { await db.close(); }
   } finally { try { await client.end(); } catch {} await pg.stop(); }
 });
+
+// 게임 옵션 프리셋: 이름 기준 덮어쓰기·개수 제한, id 기준 수정·이름 중복, 스냅샷 upsert.
+test("option_presets 저장/수정/제한 + user_options 스냅샷", async () => {
+  const pg = await temporaryPostgres();
+  try {
+    const { PostgresStorage } = require("../dist/storage/postgres");
+    const db = new PostgresStorage(pg.url);
+    try {
+      await db.initialize();
+      const p = (name, v = "1") => ({ name, server: "intl", values: { noteSpeed: v }, labels: { noteSpeed: ["TAP SPEED", v] } });
+      const a = await db.saveOptionPreset("u1", p("a"), 2);
+      const b = await db.saveOptionPreset("u1", p("b"), 2);
+      assert.equal(typeof a, "object");
+      assert.equal(await db.saveOptionPreset("u1", p("c"), 2), "limit");
+      // 같은 이름은 제한에 걸리지 않고 덮어쓴다
+      const a2 = await db.saveOptionPreset("u1", p("a", "5"), 2);
+      assert.equal(a2.id, a.id);
+      // id 수정: 이름 변경 OK, 다른 프리셋과 이름이 겹치면 duplicate, 남의 id 는 not_found
+      assert.equal((await db.saveOptionPreset("u1", p("a-renamed", "7"), 2, a.id)).name, "a-renamed");
+      assert.equal(await db.saveOptionPreset("u1", p("b"), 2, a.id), "duplicate");
+      assert.equal(await db.saveOptionPreset("u2", p("x"), 2, a.id), "not_found");
+      const list = await db.listOptionPresets("u1");
+      assert.deepEqual(list.map((x) => [x.name, x.values.noteSpeed]), [["a-renamed", "7"], ["b", "1"]]);
+      assert.equal(await db.deleteOptionPreset("u2", b.id), false);
+      assert.equal(await db.deleteOptionPreset("u1", b.id), true);
+
+      const f = (v) => [{ name: "noteSpeed", label: "TAP SPEED", desc: "", value: v, options: [["0", "1.00"], ["1", "1.25"]] }];
+      await db.saveOptionSnapshot("u1", "intl", f("0"));
+      await db.saveOptionSnapshot("u1", "intl", f("1"));
+      await db.saveOptionSnapshot("u1", "jp", f("0"));
+      const snaps = await db.getOptionSnapshots("u1");
+      assert.equal(snaps.length, 2);
+      assert.equal(snaps.find((x) => x.server === "intl").fields[0].value, "1");
+    } finally { await db.close(); }
+  } finally { await pg.stop(); }
+});

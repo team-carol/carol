@@ -122,6 +122,16 @@ export const MESSAGES = {
   "settings.openButton": "웹 설정 열기",
   "settings.termsButton": "이용약관",
 
+  // ── /게임설정 ────────────────────────────────────────────────────────────
+  "gameOptions.title": "🎮 게임 설정",
+  "gameOptions.description": "maimai DX NET 게임 옵션을 확인하고, 옵션 프리셋을 만들거나 편집할 수 있습니다. 프리셋을 게임에 적용할 때는 페이지에 안내된 옵션 프리셋 북마클릿을 DX NET에서 실행합니다.",
+  "gameOptions.currentField": "가져온 현재 설정",
+  "gameOptions.currentLine": "{server} · {time} 기준",
+  "gameOptions.currentNone": "아직 가져온 설정이 없습니다. 프로필 북마클릿으로 동기화하면 현재 설정이 함께 저장됩니다.",
+  "gameOptions.presetField": "옵션 프리셋",
+  "gameOptions.presetValue": "{count}/{max}개 저장됨",
+  "gameOptions.openButton": "게임 설정 열기",
+
   // ── /상태 ───────────────────────────────────────────────────────────────
   "status.title": "서버 상태",
   "status.ping": "핑",
@@ -306,10 +316,10 @@ export const MESSAGES = {
   "goalText.noConstantData": "곡 상수 데이터 없음",
 
   // ── 개인정보처리방침 고지 ───────────────────────────────────────────────
-  "policy.updatedTitle": "**캐롤봇 개인정보처리방침이 업데이트되었습니다** (2026년 9월 23일)",
+  "policy.updatedTitle": "**캐롤봇 개인정보처리방침이 업데이트되었습니다** (2026년 9월 28일)",
   "policy.updatedBody":
-    "데이터 저장 방식 설명을 현재 운영 방식에 맞게 정정했습니다. " +
-    "프로필 데이터는 PostgreSQL에 저장되며, 세션 정보는 암호화하여 저장합니다. 자세한 내용은 아래 방침을 확인해 주세요.",
+    "게임 설정 기능이 추가되어, 북마클릿으로 동기화할 때 maimai DX net의 게임 옵션 설정값(노트 속도, 판정 표시 등)도 함께 수집합니다. " +
+    "수집한 설정값은 게임 설정 페이지와 옵션 프리셋에만 사용합니다. 자세한 내용은 아래 방침을 확인해 주세요.",
 
   // ── /관리 (별명·문구 관리) ───────────────────────────────────────────────
   "admin.embedTitle": "🛠 캐롤봇 관리",

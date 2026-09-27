@@ -20,6 +20,7 @@ src/bot/
 | Add/remove slash command | `index.ts`, `commands/*.ts` | Export `data` and `execute`; add to `COMMANDS`. |
 | Bookmarklet install command | `commands/bookmarklet.ts` | Links to `/sync?code=...`; also extra bookmarklet CRUD. |
 | User web settings command | `commands/settings.ts` | Only links to `/settings?code=...`; no privacy buttons. |
+| 게임 설정 안내 | `commands/gameOptions.ts` | `/게임설정` 은 `/options?code=...` 링크와 스냅샷 시각·프리셋 개수만 보여 준다. 적용은 웹/`/option.js` 북마클릿 몫(봇은 DX NET 세션이 없다). |
 | Guild auto-role setting | `commands/serverSettings.ts` | Admin-only `/서버설정`; button IDs are `serverset:*`. |
 | Profile display | `commands/profile.ts`, `utils/embeds.ts` | Uses cached profile and privacy checks. |
 | Search command | `commands/search.ts`, `utils/embeds.ts` | `search:{userId}:{encodedQuery}:{pageIdx}` buttons. |

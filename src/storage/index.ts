@@ -39,6 +39,7 @@ export const replaceMainotesIndex = method("replaceMainotesIndex"); export const
 export const getChartVideo = method("getChartVideo"); export const claimChartVideo = method("claimChartVideo"); export const setChartVideoDone = method("setChartVideoDone"); export const setChartVideoError = method("setChartVideoError"); export const deleteChartVideo = method("deleteChartVideo"); export const getOrphanChartVideos = method("getOrphanChartVideos");
 export const getPolicyAck = method("getPolicyAck"); export const setPolicyAck = method("setPolicyAck");
 export const saveAchievementPlayEventLogBatch = method("saveAchievementPlayEventLogBatch"); export const getAchievementPlayEventLog = method("getAchievementPlayEventLog"); export const getAchievementLogRange = method("getAchievementLogRange"); export const getDailyAchievementSummaries = method("getDailyAchievementSummaries"); export const upsertChartClears = method("upsertChartClears"); export const backfillEventRatingUp = method("backfillEventRatingUp");
+export const listOptionPresets = method("listOptionPresets"); export const saveOptionPreset = method("saveOptionPreset"); export const deleteOptionPreset = method("deleteOptionPreset"); export const saveOptionSnapshot = method("saveOptionSnapshot"); export const getOptionSnapshots = method("getOptionSnapshots");
 export const getTranslateTitles = method("getTranslateTitles"); export const setTranslateTitles = method("setTranslateTitles");
 export const getEnabledBookmarkletPresetIds = method("getEnabledBookmarkletPresetIds"); export const setBookmarkletPresetEnabled = method("setBookmarkletPresetEnabled"); export const getExtraBookmarklets = method("getExtraBookmarklets"); export const addExtraBookmarklet = method("addExtraBookmarklet"); export const removeExtraBookmarklet = method("removeExtraBookmarklet");
 export const getConstantsCache = method("getConstantsCache"); export const saveConstantsCache = method("saveConstantsCache");
@@ -54,4 +55,4 @@ export async function closeStorage(): Promise<void> {
   adapter = undefined;
 }
 
-export type { CachedProfile, ExtraBookmarklet, MaimaiServer, SongAliasRow, BotMessageRow, AchievementPlayEventInput, AchievementPlayEventLogInput, AchievementPlayEventLogRecord, DailyAchievementSummary, ChartClearInput, ChartClearDiff, GoalRow, GoalProgressUpdate } from "./types";
+export type { CachedProfile, ExtraBookmarklet, OptionPresetInput, OptionPresetRow, UserOptionField, OptionSnapshot, MaimaiServer, SongAliasRow, BotMessageRow, AchievementPlayEventInput, AchievementPlayEventLogInput, AchievementPlayEventLogRecord, DailyAchievementSummary, ChartClearInput, ChartClearDiff, GoalRow, GoalProgressUpdate } from "./types";
