@@ -254,3 +254,44 @@ test("option_presets 저장/수정/제한 + user_options 스냅샷", async () =>
     } finally { await db.close(); }
   } finally { await pg.stop(); }
 });
+
+// 패치노트: 게시 시각 기준으로, 세션이 있는 사용자에게 안 본 것만 최신순. 새 세션은 가입 전 노트를 보지 않는다.
+test("patch_notes 게시·미확인 조회·ack", async () => {
+  const pg = await temporaryPostgres();
+  const client = new Client({ connectionString: pg.url });
+  try {
+    await client.connect();
+    const { PostgresStorage } = require("../dist/storage/postgres");
+    const db = new PostgresStorage(pg.url);
+    try {
+      // 마이그레이션 전부터 있던 사용자 흉내: patch_ack 컬럼이 생기기 전 행은 0 이어야 한다.
+      await db.initialize();
+      await client.query("INSERT INTO sessions(discord_user_id, patch_ack) VALUES('old', 0)");
+      const draft = await db.savePatchNote({ version: "1.0.0", title: "", body: "초안" });
+      assert.deepEqual(await db.getUnseenPatchNotes("old", 0, 3), []); // 초안은 안 보인다
+      assert.equal(await db.getUnseenPatchNotes("nobody", 0, 3), null); // 세션 없음
+      await db.setPatchNotePublished(draft.id, true);
+      const [seen] = await db.getUnseenPatchNotes("old", 0, 3);
+      assert.equal(seen.body, "초안");
+      // 가입(세션 생성)이 게시보다 나중이면 보지 않는다
+      await new Promise((r) => setTimeout(r, 5));
+      await client.query("INSERT INTO sessions(discord_user_id) VALUES('new')");
+      assert.deepEqual(await db.getUnseenPatchNotes("new", 0, 3), []);
+      // 보여 준 뒤 ack → 다시 안 보인다. 다시 게시하면 또 보인다.
+      await db.setPatchAck("old", Date.now());
+      assert.deepEqual(await db.getUnseenPatchNotes("old", 0, 3), []);
+      await new Promise((r) => setTimeout(r, 5));
+      await db.setPatchNotePublished(draft.id, true);
+      assert.equal((await db.getUnseenPatchNotes("old", 0, 3)).length, 1);
+      // since(표시 기간) 이전 게시분은 제외
+      assert.deepEqual(await db.getUnseenPatchNotes("old", Date.now() + 1000, 3), []);
+      // 수정·게시 취소·삭제
+      const edited = await db.savePatchNote({ version: "1.0.1", title: "제목", body: "수정" }, draft.id);
+      assert.equal(edited.version, "1.0.1");
+      await db.setPatchNotePublished(draft.id, false);
+      assert.deepEqual(await db.getUnseenPatchNotes("old", 0, 3), []);
+      assert.equal(await db.deletePatchNote(draft.id), true);
+      assert.equal(await db.savePatchNote({ version: "", title: "", body: "x" }, draft.id), null);
+    } finally { await db.close(); }
+  } finally { try { await client.end(); } catch {} await pg.stop(); }
+});
