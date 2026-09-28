@@ -88,8 +88,8 @@ export const ADMIN_CSS = `.page{max-width:880px}
 .admin-title{font-size:clamp(28px,4vw,40px);font-weight:500;color:var(--ink);letter-spacing:-.01em;line-height:1.2;margin-bottom:8px}
 .admin-sub{font-size:15px;color:var(--muted);margin-bottom:24px}`;
 
-type AdminTab = "aliases" | "messages" | "import";
-const ADMIN_TABS: [AdminTab, string][] = [["aliases", "곡 별명"], ["messages", "봇 문구"], ["import", "채보 등록"]];
+type AdminTab = "aliases" | "messages" | "import" | "patch-notes";
+const ADMIN_TABS: [AdminTab, string][] = [["aliases", "곡 별명"], ["messages", "봇 문구"], ["import", "채보 등록"], ["patch-notes", "패치노트"]];
 
 export function adminTabs(token: string, active: AdminTab): string {
   return `<div class="admin-tabs">${ADMIN_TABS.map(([id, label]) =>

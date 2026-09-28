@@ -2,7 +2,8 @@ import { BRAND } from "../../brand";
 import { renderInWorker } from "./renderPool";
 import type { CachedProfile } from "../../storage/types";
 import type { PlayRecord } from "../../scraper";
-import { getConstant } from "../../constants";
+import { getConstant, getJacketFile } from "../../constants";
+import { fetchJacketDataUrl } from "./ratingCard";
 import { displayTitle } from "../../aliases";
 import { getScoreRank, MAI_CM_COLOR } from "../../games";
 
@@ -47,7 +48,7 @@ const jacketCache = new Map<string, string | null>();
 // 반복 호출하거나 다른 사람이 조회할 때마다 satori+resvg 전체를 다시 돌린다.
 // (유저·날짜·마지막 동기화 시각·번역여부·페이지) 키로 PNG 를 재사용한다.
 // lastSyncedAt 이 키에 들어가므로 새 동기화 후에는 자연스럽게 무효화된다.
-const ACH_CARD_VERSION = 7;
+const ACH_CARD_VERSION = 8;
 const ACH_CARD_CACHE_MAX = 48;
 const achCardCache = new Map<string, Buffer>();
 
@@ -276,11 +277,17 @@ export async function renderAchievementCard(
   if (memo) return memo;
 
   const avatarUrl = avatarBuf ? `data:image/png;base64,${avatarBuf.toString("base64")}` : "";
-  const jacketUrls = new Map<string, string | null>();
+  // 자켓: 기록에 담긴 DX NET 자켓을 먼저 쓰고, 없거나 못 받으면 otoge-db 자켓(곡 제목 기준)으로.
+  // 플레이 기록(최근 50곡)에서 못 찾은 성과는 클리어 목록에서 와서 DX NET 자켓 URL 이 없다.
+  const jackets = new Map<PlayRecord, string | null>();
   await Promise.all(
     topRecords.map(async (record) => {
-      if (!record.jacketUrl || jacketUrls.has(record.jacketUrl)) return;
-      jacketUrls.set(record.jacketUrl, await jacketDataUrl(record.jacketUrl));
+      let url = record.jacketUrl ? await jacketDataUrl(record.jacketUrl) : null;
+      if (!url) {
+        const file = getJacketFile(record.title);
+        if (file) url = await fetchJacketDataUrl(file);
+      }
+      jackets.set(record, url);
     }),
   );
   const width = 920;
@@ -326,7 +333,7 @@ export async function renderAchievementCard(
         },
         topRecords.length > 0
           ? topRecords.map((record, index) =>
-              recordRow(record, rankOffset + index + 1, profile, jacketUrls.get(record.jacketUrl) ?? null, playDay, translate),
+              recordRow(record, rankOffset + index + 1, profile, jackets.get(record) ?? null, playDay, translate),
             )
           : emptyState(),
       ),

@@ -145,7 +145,8 @@ function toVM(
 // 인코딩을 반복하지 않도록 파일명 → data URL(또는 null) 결과를 프로세스 메모리에
 // 캐시한다. 곡 수만큼(수천 개)만 늘어나고 갱신될 일이 없어 상한은 두지 않는다.
 const jacketDataUrlCache = new Map<string, string | null>();
-async function fetchJacketDataUrl(file: string): Promise<string | null> {
+/** otoge-db 자켓 파일명 → data URL. 성과표도 DX NET 자켓이 없을 때 이걸 쓴다. */
+export async function fetchJacketDataUrl(file: string): Promise<string | null> {
   const memo = jacketDataUrlCache.get(file);
   if (memo !== undefined) return memo;
   const key = file.replace(/\.png$/, "");

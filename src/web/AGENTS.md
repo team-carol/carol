@@ -13,6 +13,7 @@ src/web/
 ├── settingsPage.ts  # full settings HTML/CSS/JS string
 ├── optionPreset.ts  # 게임 옵션 프리셋: /option.js 클라이언트 + 저장 요청 검증
 ├── optionsPage.ts   # /options 게임 설정 페이지(현재 옵션 + 프리셋 편집)
+├── patchNotesAdminPage.ts # /admin/patch-notes 패치노트 작성·게시 탭
 ├── chartPlayer.ts   # simai 채보 플레이어 페이지 껍데기 (HTML/CSS + 컨트롤)
 ├── chartRenderer.ts # 플레이어 그리기 코어를 담은 JS 문자열 (서버 GIF 생성과 공용)
 └── dev.ts           # web-only local entrypoint
@@ -52,6 +53,8 @@ src/web/
 
 웹 플레이어의 GIF 생성은 기본적으로 **브라우저에서** 한다(`chartGifClient.ts`): 같은 렌더러(`chartRenderer.ts`)를 Web Worker 안 OffscreenCanvas 에 올리고 gifenc(브라우저 dist 를 워커에 인라인)로 인코딩한다 → 서버 CPU 0. 렌더러는 `__RJS`(문자열)로 워커에 넘겨 eval 하고, DATA/opts 는 postMessage 로 준다. Discord 미리보기(`utils/chartGif.ts`)는 별개로 여전히 서버에서 만든다.
 | `GET /privacy`, `GET /terms` | Static legal pages. |
+| `GET /admin/patch-notes?code=ADMIN` | 패치노트 작성·게시(관리 토큰). 게시 시각이 기준이며 배포·버전과 연동하지 않는다. |
+| `POST /api/admin/patch-notes`, `/publish`, `/delete` | 저장(`publish:true` 면 저장과 동시에 게시)·게시/게시 취소·삭제. 응답에 갱신된 목록을 담는다. |
 | `GET /option.js?code=TOKEN` | 게임 옵션 프리셋 북마클릿 클라이언트(`optionPreset.ts`). DX NET 어느 페이지에서든 옵션 페이지를 same-origin fetch 해 읽고, 적용은 폼과 같은 POST(모든 select + CSRF `token`)를 보낸 뒤 다시 읽어 확인한다. |
 | `GET /options?code=TOKEN` | 게임 설정 페이지. 현재 옵션(`user_options` 스냅샷)을 그룹별로 보여 주고 프리셋을 만들고·편집·삭제한다. 편집 선택지는 스냅샷의 option 목록(그 계정에서 고를 수 있는 값)이다. |
 | `GET /api/options` | `{ snapshots, presets, max }`. |

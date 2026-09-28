@@ -4,12 +4,15 @@ import { createHash, timingSafeEqual } from "crypto";
 import { gunzip } from "zlib";
 import { promisify } from "util";
 import { parseHome, parsePlayerData, parseFriendCode as parseFC, parseRecentRecords, parsePlaylogHistory, parseTop5, parseTopSongs, parseMusicScore, mergeTopRecords, getMaimaiBaseUrl, parseMapAreas, parsePlaylogDetail, chartKey, buildMarkMap, buildKindResolver, parseUserOptions } from "../scraper";
-import { cacheProfile, getCachedProfile, saveUserSession, getUserSyncToken, findUserBySyncToken, getUserFriendCodeForServer, saveAvatarBlob, getAvatarBlob, getSongJacket, saveSongJacket, getExtraBookmarklets, getProfilePrivate, setProfilePrivate, addExtraBookmarklet, removeExtraBookmarklet, getEnabledBookmarkletPresetIds, setBookmarkletPresetEnabled, getUserDefaultServer, setUserDefaultServer, isMaimaiServer, getMapImage, saveMapImage, saveAchievementPlayEventLogBatch, upsertChartClears, backfillEventRatingUp, saveRatingSnapshot, getAllAliases, addAlias, deleteAlias, setAliasTranslation, setMessageOverride, deleteMessageOverride, getTranslateTitles, setTranslateTitles, getRegisteredUserCount, getAchievementMinimum, setAchievementMinimum, listGoals, updateGoalProgress, getPolicyAck, setPolicyAck, getSimaiChart, saveSimaiChart, listRegistryCharts, auditRegistryCharts, listOptionPresets, saveOptionPreset, deleteOptionPreset, saveOptionSnapshot, getOptionSnapshots } from "../storage";
+import { cacheProfile, getCachedProfile, saveUserSession, getUserSyncToken, findUserBySyncToken, getUserFriendCodeForServer, saveAvatarBlob, getAvatarBlob, getSongJacket, saveSongJacket, getExtraBookmarklets, getProfilePrivate, setProfilePrivate, addExtraBookmarklet, removeExtraBookmarklet, getEnabledBookmarkletPresetIds, setBookmarkletPresetEnabled, getUserDefaultServer, setUserDefaultServer, isMaimaiServer, getMapImage, saveMapImage, saveAchievementPlayEventLogBatch, upsertChartClears, backfillEventRatingUp, saveRatingSnapshot, getAllAliases, addAlias, deleteAlias, setAliasTranslation, setMessageOverride, deleteMessageOverride, getTranslateTitles, setTranslateTitles, getRegisteredUserCount, getAchievementMinimum, setAchievementMinimum, listGoals, updateGoalProgress, getPolicyAck, setPolicyAck, getSimaiChart, saveSimaiChart, listRegistryCharts, auditRegistryCharts, listOptionPresets, saveOptionPreset, deleteOptionPreset, saveOptionSnapshot, getOptionSnapshots, listPatchNotes, savePatchNote, setPatchNotePublished, deletePatchNote } from "../storage";
 import { POLICY_VERSION } from "../policy";
 import type { SongAliasRow } from "../storage/types";
 import { buildBookmarkletJs, setBaseUrl, getBaseUrl, buildBookmarklet, BOOKMARKLET_PRESETS, getBookmarkletPresets } from "./bookmarklet";
 import { OPTION_CLIENT_JS, OPTION_PRESET_MAX, buildOptionBookmarklet, sanitizeOptionPreset } from "./optionPreset";
 import { optionsPage } from "./optionsPage";
+import { patchNotesAdminPage } from "./patchNotesAdminPage";
+import { sanitizePatchNote } from "../patchNotes";
+import { appVersion } from "../version";
 import { computeRatingTarget, getAllSongTitles } from "../constants";
 import { settingsPage } from "./settingsPage";
 import { aliasAdminPage } from "./aliasAdminPage";
@@ -378,10 +381,7 @@ export function startWebServer(port: number): void {
     if (req.method === "GET" && url.pathname === "/api/stats") {
       const userCount = await getRegisteredUserCount();
       const serverCount = getGuildCount ? getGuildCount() : 0;
-      const version =
-        process.env.RELEASE_VERSION?.trim() ||
-        process.env.BUILD_VERSION?.trim() ||
-        "local";
+      const version = appVersion();
       res.writeHead(200, {
         "content-type": "application/json",
         "access-control-allow-origin": "*",
@@ -405,7 +405,7 @@ export function startWebServer(port: number): void {
         lastSyncAt: lastSyncAt ? new Date(lastSyncAt).toISOString() : null,
         uptimeSeconds: Math.floor((Date.now() - processStartedAt) / 1000),
         userCount: await getRegisteredUserCount(),
-        version: process.env.RELEASE_VERSION?.trim() || process.env.BUILD_VERSION?.trim() || "local",
+        version: appVersion(),
       }));
       return;
     }
@@ -643,6 +643,46 @@ ${siteFooter()}
     // ─── simai 채보 등록 (운영자, atwiki 북마클릿) ─────────────────────────
     // 북마클릿이 atwiki 페이지에 주입하는 클라이언트 코드. 코드 자체엔 비밀이 없다
     // (토큰은 window.__carolImport 로 주입). 캐시 없이 최신을 준다.
+    // ─── 패치노트 관리 (patchNotesAdminPage.ts) ─────────────────────────────
+    if (req.method === "GET" && url.pathname === "/admin/patch-notes") {
+      const token = url.searchParams.get("code") || "";
+      if (!isValidAdminToken(token)) { res.writeHead(403); res.end("expired"); return; }
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" });
+      res.end(patchNotesAdminPage(token, await listPatchNotes(), appVersion()));
+      return;
+    }
+    if (req.method === "POST" && url.pathname.startsWith("/api/admin/patch-notes")) {
+      const json = (status: number, data: unknown) => { res.writeHead(status, { "content-type": "application/json" }); res.end(JSON.stringify(data)); };
+      if (!isValidAdminToken(url.searchParams.get("code") || "")) { json(403, { ok: false, error: "expired" }); return; }
+      let body: any;
+      try { body = JSON.parse(await readBody(req, 64_000)); } catch { json(400, { ok: false, error: "invalid_body" }); return; }
+      const id = body?.id === undefined || body?.id === null ? undefined : Number(body.id);
+      if (id !== undefined && !Number.isSafeInteger(id)) { json(400, { ok: false, error: "invalid_id" }); return; }
+      try {
+        if (url.pathname === "/api/admin/patch-notes") {
+          const note = sanitizePatchNote(body);
+          if (!note) { json(400, { ok: false, error: "본문은 1~4000자, 제목은 200자, 버전은 30자까지입니다" }); return; }
+          const saved = await savePatchNote(note, id);
+          if (!saved) { json(404, { ok: false, error: "패치노트를 찾을 수 없습니다" }); return; }
+          if (body.publish === true && saved.publishedAt === 0) await setPatchNotePublished(saved.id, true);
+          const notes = await listPatchNotes();
+          json(200, { ok: true, note: notes.find((n) => n.id === saved.id) ?? saved, notes });
+          return;
+        }
+        if (id === undefined) { json(400, { ok: false, error: "invalid_id" }); return; }
+        if (url.pathname === "/api/admin/patch-notes/publish") {
+          if (!await setPatchNotePublished(id, body.publish === true)) { json(404, { ok: false, error: "패치노트를 찾을 수 없습니다" }); return; }
+        } else if (url.pathname === "/api/admin/patch-notes/delete") {
+          await deletePatchNote(id);
+        } else { json(404, { ok: false, error: "not_found" }); return; }
+        json(200, { ok: true, notes: await listPatchNotes() });
+      } catch (e) {
+        console.error("[admin] 패치노트 처리 실패:", e);
+        json(500, { ok: false, error: "서버 오류가 발생했습니다" });
+      }
+      return;
+    }
+
     if (req.method === "GET" && url.pathname === "/import.js") {
       res.writeHead(200, { "content-type": "application/javascript; charset=utf-8", "cache-control": "no-cache" });
       res.end(IMPORT_CLIENT_JS);

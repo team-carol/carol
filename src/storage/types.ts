@@ -7,6 +7,9 @@ export interface OptionPresetInput { name:string; server:MaimaiServer; values:Re
 export interface OptionPresetRow extends OptionPresetInput { id:number; updatedAt:number; }
 /** scraper.UserOptionField 와 같은 모양(storage 는 scraper 를 import 하지 않는다). */
 export interface UserOptionField { name:string; label:string; desc:string; value:string; options:[string,string][]; }
+export interface PatchNoteInput { version:string; title:string; body:string; }
+/** publishedAt=0 이면 초안. seen: 공개 후 이 노트를 본 등록 사용자 수(목록 조회 때만 채운다). */
+export interface PatchNoteRow extends PatchNoteInput { id:number; publishedAt:number; createdAt:number; updatedAt:number; seen:number; }
 export interface OptionSnapshot { server:MaimaiServer; fields:UserOptionField[]; syncedAt:number; }
 export interface SongAliasRow { id:number; title:string; alias:string; isTranslation:boolean; }
 export interface BotMessageRow { key:string; text:string; }

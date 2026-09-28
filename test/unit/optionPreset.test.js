@@ -29,3 +29,11 @@ test("sanitizeOptionPreset: token·이상한 키/값·빈 값·잘못된 서버�
   assert.equal(op.sanitizeOptionPreset({ ...base, name: "x".repeat(31) }), null);
   assert.equal(op.sanitizeOptionPreset({ ...base, name: "   " }), null);
 });
+
+const pn = require("../../dist/patchNotes.js");
+test("sanitizePatchNote: 본문 필수·길이 제한, 공백 정리", () => {
+  assert.deepEqual(pn.sanitizePatchNote({ version: " 1.10.0 ", title: "  새   기능 ", body: "a\r\nb " }), { version: "1.10.0", title: "새 기능", body: "a\nb" });
+  assert.equal(pn.sanitizePatchNote({ version: "", title: "", body: "   " }), null);
+  assert.equal(pn.sanitizePatchNote({ body: "x".repeat(pn.PATCH_NOTE_BODY_MAX + 1) }), null);
+  assert.equal(pn.sanitizePatchNote(null), null);
+});

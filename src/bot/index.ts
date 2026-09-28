@@ -1,13 +1,14 @@
-import { Client, Events, GatewayIntentBits, ChatInputCommandInteraction, AutocompleteInteraction, ButtonInteraction, REST, Routes, MessageFlags, AttachmentBuilder } from "discord.js";
+import { Client, Events, GatewayIntentBits, ChatInputCommandInteraction, AutocompleteInteraction, ButtonInteraction, REST, Routes, MessageFlags, AttachmentBuilder, EmbedBuilder } from "discord.js";
 import { initEncryption } from "../crypto";
 import { startWebServer, setBaseUrl, setGuildCountProvider, setGatewayPingProvider, getBaseUrl } from "../web";
-import { closeStorage, initializeStorage, loadUserSession, getCachedProfile, clearRatingCardCacheForInactive, getTranslateTitles, getPolicyAck, setPolicyAck, pruneSimaiCharts, getSimaiChart, getOrphanChartVideos, deleteChartVideo } from "../storage";
+import { closeStorage, initializeStorage, loadUserSession, getCachedProfile, clearRatingCardCacheForInactive, getTranslateTitles, getPolicyAck, setPolicyAck, getUnseenPatchNotes, setPatchAck, pruneSimaiCharts, getSimaiChart, getOrphanChartVideos, deleteChartVideo } from "../storage";
 import { CONFIG, PORT } from "../config";
 import { parseMaidata } from "../simai/parse";
 import { requestVideo, getReadyVideo, queueDepth } from "./utils/chartVideoQueue";
 import type { Chart } from "../simai/types";
 import * as fsp from "fs";
 import { POLICY_VERSION, policyNoticeText } from "../policy";
+import { PATCH_NOTE_WINDOW_MS, PATCH_NOTE_SHOW_MAX } from "../patchNotes";
 import { recentEmbeds, rtTableEmbed, searchResultEmbeds, getSearchCtx, mapAreaEmbed } from "./utils/embeds";
 
 import { loadConstants } from "../constants";
@@ -191,6 +192,32 @@ async function maybeSendPolicyNotice(i: ChatInputCommandInteraction): Promise<vo
   }
 }
 
+// 관리 페이지에서 게시한 패치노트를, 게시 뒤 처음 명령을 쓴 등록 사용자에게 1회 보여 준다.
+// 방침 고지와 같은 방식(응답 뒤 ephemeral 팔로업). 보여 준 뒤 patch_ack 를 지금으로 올린다.
+async function maybeSendPatchNotes(i: ChatInputCommandInteraction): Promise<void> {
+  try {
+    if (!i.replied && !i.deferred) return;
+    const now = Date.now();
+    const notes = await getUnseenPatchNotes(i.user.id, now - PATCH_NOTE_WINDOW_MS, PATCH_NOTE_SHOW_MAX);
+    if (!notes || !notes.length) return;
+    // 임베드 전체 글자 수 한도(6000)를 넘지 않게 최신 노트부터 담는다. 첫 노트는 항상 담는다.
+    const embeds: EmbedBuilder[] = [];
+    let total = 0;
+    for (const n of notes) {
+      const title = n.title || (n.version ? msg("patchNotes.defaultTitle", { version: n.version }) : msg("patchNotes.defaultTitleNoVersion"));
+      const size = title.length + n.body.length + 60;
+      if (embeds.length && total + size > 5800) break;
+      total += size;
+      embeds.push(new EmbedBuilder().setColor(0xff9294).setTitle(title.slice(0, 256)).setDescription(n.body.slice(0, 4096))
+        .setFooter({ text: msg("patchNotes.footer") }).setTimestamp(n.publishedAt));
+    }
+    await i.followUp({ embeds, flags: MessageFlags.Ephemeral });
+    await setPatchAck(i.user.id, now);
+  } catch (e) {
+    console.error("[patch-notes]", e);
+  }
+}
+
 client.on(Events.InteractionCreate, async (i) => {
   // 자동완성은 3초 안에 답해야 하고 deferReply 가 없다. 제일 먼저 처리한다.
   if (i.isAutocomplete()) {
@@ -208,6 +235,7 @@ client.on(Events.InteractionCreate, async (i) => {
       console.error(`[cmd:${i.commandName}]`, e);
     }
     await maybeSendPolicyNotice(i);
+    await maybeSendPatchNotes(i);
     return;
   }
   if (i.isMessageContextMenuCommand()) {
