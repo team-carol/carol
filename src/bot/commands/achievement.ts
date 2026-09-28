@@ -17,6 +17,11 @@ export const data = new SlashCommandBuilder()
       .setRequired(false),
   );
 
+/** 성과 카드에 적는 플레이 시각(한국 시간 HH:mm). */
+function kstTime(ms: number): string {
+  return new Date(ms + 9 * 60 * 60 * 1000).toISOString().slice(11, 16);
+}
+
 function isPlayDayKey(value: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
@@ -60,7 +65,10 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       // record_json에는 원본 스크래핑 당시의 PlayRecord(jacketUrl 포함)가 그대로 들어있다.
       let jacketUrl = "";
       try { jacketUrl = JSON.parse(e.recordJson)?.jacketUrl || ""; } catch { jacketUrl = ""; }
-      return { title:e.title, achievement:e.achievementAfter.toFixed(4)+"%", diff:e.diff, level:e.level, date:new Date(e.playedAt).toISOString(), jacketUrl, musicKind:e.musicKind, achievementVal:Number(e.achievementAfter), track:0, fc:e.fc, sync:e.sync, ratingUp:e.ratingUp ?? undefined, playedAt:Number(e.playedAt), achievementGain:e.achievementGain, ratingGain:e.ratingGain, achievementBefore:e.achievementBefore, achievementAfter:e.achievementAfter, levelConstant:e.levelConstant ?? undefined };
+      // 플레이 기록(최근 50곡)에서 찾은 성과만 실제 플레이 시각을 안다. 못 찾은 것(sourcePlayId 가
+      // "clear:…")은 playedAt 이 동기화 시각이라 시각 대신 그 사실을 적는다.
+      const date = String(e.sourcePlayId ?? "").startsWith("clear:") ? msg("achievement.unknownPlayTime") : kstTime(Number(e.playedAt));
+      return { title:e.title, achievement:e.achievementAfter.toFixed(4)+"%", diff:e.diff, level:e.level, date, jacketUrl, musicKind:e.musicKind, achievementVal:Number(e.achievementAfter), track:0, fc:e.fc, sync:e.sync, ratingUp:e.ratingUp ?? undefined, playedAt:Number(e.playedAt), achievementGain:e.achievementGain, ratingGain:e.ratingGain, achievementBefore:e.achievementBefore, achievementAfter:e.achievementAfter, levelConstant:e.levelConstant ?? undefined };
     });
     console.log(`[성과] 데이터 summaries=${summaries.length} records=${records.length}`);
     if (records.length === 0) {
