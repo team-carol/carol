@@ -11,7 +11,8 @@ import { buildBookmarkletJs, setBaseUrl, getBaseUrl, buildBookmarklet, BOOKMARKL
 import { OPTION_CLIENT_JS, OPTION_PRESET_MAX, buildOptionBookmarklet, sanitizeOptionPreset } from "./optionPreset";
 import { optionsPage } from "./optionsPage";
 import { patchNotesAdminPage } from "./patchNotesAdminPage";
-import { sanitizePatchNote, runningVersion } from "../patchNotes";
+import { sanitizePatchNote } from "../patchNotes";
+import { appVersion } from "../version";
 import { computeRatingTarget, getAllSongTitles } from "../constants";
 import { settingsPage } from "./settingsPage";
 import { aliasAdminPage } from "./aliasAdminPage";
@@ -380,10 +381,7 @@ export function startWebServer(port: number): void {
     if (req.method === "GET" && url.pathname === "/api/stats") {
       const userCount = await getRegisteredUserCount();
       const serverCount = getGuildCount ? getGuildCount() : 0;
-      const version =
-        process.env.RELEASE_VERSION?.trim() ||
-        process.env.BUILD_VERSION?.trim() ||
-        "local";
+      const version = appVersion();
       res.writeHead(200, {
         "content-type": "application/json",
         "access-control-allow-origin": "*",
@@ -407,7 +405,7 @@ export function startWebServer(port: number): void {
         lastSyncAt: lastSyncAt ? new Date(lastSyncAt).toISOString() : null,
         uptimeSeconds: Math.floor((Date.now() - processStartedAt) / 1000),
         userCount: await getRegisteredUserCount(),
-        version: process.env.RELEASE_VERSION?.trim() || process.env.BUILD_VERSION?.trim() || "local",
+        version: appVersion(),
       }));
       return;
     }
@@ -650,7 +648,7 @@ ${siteFooter()}
       const token = url.searchParams.get("code") || "";
       if (!isValidAdminToken(token)) { res.writeHead(403); res.end("expired"); return; }
       res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" });
-      res.end(patchNotesAdminPage(token, await listPatchNotes(), runningVersion()));
+      res.end(patchNotesAdminPage(token, await listPatchNotes(), appVersion()));
       return;
     }
     if (req.method === "POST" && url.pathname.startsWith("/api/admin/patch-notes")) {

@@ -1,6 +1,3 @@
-import fs from "fs";
-import path from "path";
-
 /**
  * 패치노트. /관리 → 패치노트 탭에서 작성·게시하고, 게시된 노트는 등록 사용자가 그 뒤 처음
  * 쓰는 슬래시 명령 응답에 본인만 보이는 팔로업으로 1회 표시된다(`src/bot/index.ts`).
@@ -24,19 +21,4 @@ export function sanitizePatchNote(body: unknown): { version: string; title: stri
   const text = typeof b.body === "string" ? b.body.replace(/\r\n/g, "\n").trim() : "";
   if (!text || text.length > PATCH_NOTE_BODY_MAX || title.length > TITLE_MAX || version.length > VERSION_MAX) return null;
   return { version, title, body: text };
-}
-
-let cachedVersion: string | null = null;
-/** 지금 실행 중인 버전. 새 패치노트의 버전 칸을 미리 채우는 데만 쓴다. */
-export function runningVersion(): string {
-  if (cachedVersion !== null) return cachedVersion;
-  const env = process.env.RELEASE_VERSION?.trim();
-  if (env && env !== "0.0.0") return (cachedVersion = env.replace(/^v/, ""));
-  try {
-    const pkg = JSON.parse(fs.readFileSync(path.join(process.cwd(), "package.json"), "utf8")) as { version?: string };
-    cachedVersion = pkg.version ?? "";
-  } catch {
-    cachedVersion = "";
-  }
-  return cachedVersion;
 }

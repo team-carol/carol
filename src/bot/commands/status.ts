@@ -1,22 +1,15 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, EmbedBuilder } from "discord.js";
 import { getRegisteredUserCount, getLastSyncTime } from "../../storage";
 import { msg } from "../../messages";
+import { appVersion, buildVersion } from "../../version";
 
 export const data = new SlashCommandBuilder()
   .setName("상태")
   .setDescription("봇 및 서버 상태 확인");
 
-function envText(name: string): string | null {
-  const value = process.env[name]?.trim();
-  return value ? value : null;
-}
-
 function displayVersion(): string {
-  const buildVersion = envText("BUILD_VERSION");
-  const releaseVersion = envText("RELEASE_VERSION");
-
-  if (buildVersion && releaseVersion) return `${releaseVersion} (${buildVersion})`;
-  return buildVersion ?? releaseVersion ?? "local";
+  const build = buildVersion();
+  return build ? `${appVersion()} (${build})` : appVersion();
 }
 
 function formatUptime(seconds: number): string {
