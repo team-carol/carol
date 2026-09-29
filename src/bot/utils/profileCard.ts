@@ -56,7 +56,7 @@ const MARK_COLOR: Record<string, string> = {
   "FDX+": "#10b981", FDX: "#34d399", "FS+": "#22c55e", FS: "#4ade80",
 };
 
-const PROFILE_CARD_VERSION = 3;
+const PROFILE_CARD_VERSION = 4;
 const PROFILE_CARD_CACHE_MAX = 64;
 const profileCardCache = new Map<string, Buffer>();
 
@@ -192,7 +192,8 @@ function clearPanel(clears: PlayRecord[]): El {
   const listed = rankItems.reduce((sum, it) => sum + it.count, 0);
   rankItems.push({ label: "그 외", color: RANK_OTHER_COLOR, count: Math.max(0, played - listed) });
 
-  const rankChart = barChart(rankItems.map((it) => ({ ...it, note: `${pct(it.count)}%` })), 96, 46);
+  // 오른쪽으로 갈수록 높은 랭크(맨 오른쪽 SSS+, 맨 왼쪽 그 외).
+  const rankChart = barChart(rankItems.map((it) => ({ ...it, note: `${pct(it.count)}%` })).reverse(), 96, 46);
   // 콤보·싱크는 막대 없이 숫자로. 두 묶음은 제목 없이 세로선으로만 나눈다.
   const markGroups = el("div", { display: "flex", marginTop: 16, paddingTop: 16, borderTop: `1px solid ${BORDER}` },
     MARK_GROUPS.map((keys, gi) => el("div", {
@@ -203,7 +204,7 @@ function clearPanel(clears: PlayRecord[]): El {
       el("span", { color: INK, fontFamily: NUM_FONT, fontSize: 20, fontWeight: 700, lineHeight: 1 }, String(marks.get(k) ?? 0)),
     ])))));
 
-  return panel("클리어 현황", `플레이한 채보 ${played}개 기준`, [rankChart, markGroups]);
+  return panel("클리어 현황", `${played}개 채보 플레이`, [rankChart, markGroups]);
 }
 
 function recentRow(record: PlayRecord, profile: CachedProfile, jacket: string | null, translate: boolean): El {
