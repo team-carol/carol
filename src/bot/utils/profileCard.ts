@@ -59,7 +59,7 @@ const MARK_COLOR: Record<string, string> = {
   "FDX+": "#10b981", FDX: "#34d399", "FS+": "#22c55e", FS: "#4ade80",
 };
 
-const PROFILE_CARD_VERSION = 7;
+const PROFILE_CARD_VERSION = 8;
 const PROFILE_CARD_CACHE_MAX = 64;
 const profileCardCache = new Map<string, Buffer>();
 
@@ -268,10 +268,8 @@ function shortDay(day: string): string {
   return day.slice(5).replace("-", ".");
 }
 
-function lineSwatch(dashed: boolean): El {
-  return dashed
-    ? el("div", { display: "flex", gap: 3 }, [0, 1, 2].map(() => el("div", { width: 5, height: 2, background: ACCENT, opacity: 0.8 })))
-    : el("div", { width: 21, height: 2, background: ACCENT });
+function dashedSwatch(): El {
+  return el("div", { display: "flex", gap: 3 }, [0, 1, 2].map(() => el("div", { width: 5, height: 2, background: ACCENT, opacity: 0.8 })));
 }
 
 function ratingChartPanel(points: RatingPoint[], days: string[]): El {
@@ -345,12 +343,12 @@ function ratingChartPanel(points: RatingPoint[], days: string[]): El {
       el("div", { display: "flex", justifyContent: points.length > 1 ? "space-between" : "center", flex: 1, color: FAINT, fontSize: 10 },
         points.length > 1 ? [shortDay(first.day), shortDay(midDay), shortDay(last.day)].map((t) => el("span", {}, t)) : [el("span", {}, shortDay(last.day))]),
     ]),
-    el("div", { display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 14, marginTop: 8, color: MUTED, fontSize: 10 }, [
-      el("div", { display: "flex", alignItems: "center", gap: 6 }, [lineSwatch(false), el("span", {}, "실측")]),
-      ...(points.some((p) => p.estimated)
-        ? [el("div", { display: "flex", alignItems: "center", gap: 6 }, [lineSwatch(true), el("span", {}, "추정 (성과 기록으로 계산)")])]
-        : []),
-    ]),
+    // 범례는 점선(추정)만 설명한다. 추정 구간이 없으면 범례를 두지 않는다.
+    ...(points.some((p) => p.estimated)
+      ? [el("div", { display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 6, marginTop: 8, color: MUTED, fontSize: 10 }, [
+          dashedSwatch(), el("span", {}, "추정 (성과 기록으로 계산)"),
+        ])]
+      : []),
   ]);
 }
 
@@ -420,8 +418,8 @@ export async function renderProfileCard(
       { value: String(profile.playCount || 0), label: "현재 버전 플레이" },
       { value: String(profile.totalPlayCount || profile.playCount || 0), label: "누적 플레이" },
     ]),
-    ...(history ? [ratingChartPanel(history.points, history.days)] : []),
     clearPanel(clears),
+    ...(history ? [ratingChartPanel(history.points, history.days)] : []),
     panel("최근 플레이", `최근 ${recent.length}곡`, recent.length
       ? recent.map((r, i) => recentRow(r, profile, jackets[i], translate, kindIcons))
       : [el("span", { color: MUTED, fontSize: 12, padding: "12px 0" }, "최근 플레이 기록이 없습니다.")]),
