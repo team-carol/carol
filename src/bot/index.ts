@@ -193,7 +193,7 @@ async function maybeSendPolicyNotice(i: ChatInputCommandInteraction): Promise<vo
 }
 
 // 관리 페이지에서 게시한 패치노트를, 게시 뒤 처음 명령을 쓴 등록 사용자에게 1회 보여 준다.
-// 방침 고지와 같은 방식(응답 뒤 ephemeral 팔로업). 보여 준 뒤 patch_ack 를 지금으로 올린다.
+// 방침 고지와 같은 방식(응답 뒤 ephemeral 팔로업). 보여 준 뒤 patch_ack 를 올린다.
 async function maybeSendPatchNotes(i: ChatInputCommandInteraction): Promise<void> {
   try {
     if (!i.replied && !i.deferred) return;
@@ -212,7 +212,8 @@ async function maybeSendPatchNotes(i: ChatInputCommandInteraction): Promise<void
         .setFooter({ text: msg("patchNotes.footer") }).setTimestamp(n.publishedAt));
     }
     await i.followUp({ embeds, flags: MessageFlags.Ephemeral });
-    await setPatchAck(i.user.id, now);
+    // 보여 준 노트 중 가장 늦은 게시 시각까지 본 것으로 기록한다(게시 시각은 DB 시계라 앱 시각을 섞지 않는다).
+    await setPatchAck(i.user.id, Math.max(...notes.map((n) => n.publishedAt)));
   } catch (e) {
     console.error("[patch-notes]", e);
   }

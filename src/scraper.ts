@@ -13,6 +13,8 @@ export interface MaimaiProfile {
   rating: number;
   ratingMax: number;
   gradeImg: string;
+  /** 단위(段位) 이미지. 홈 화면 클래스 이미지 왼쪽의 course_rank_*.png */
+  courseImg?: string;
   avatar: string;
   trophy: string;
   trophyClass: string;
@@ -54,6 +56,7 @@ export function parseHome(html: string, server: MaimaiServer = "intl"): Partial<
     trophy: $(".trophy_inner_block span").first().text().trim(),
     trophyClass: ($(".trophy_block").attr("class") || "").split(/\s+/).find(c => c.match(/^trophy_(?!block)/i))?.replace(/^trophy_/i, "").toLowerCase() || "normal",
     gradeImg: absUrl($("img.h_35[src*='class']").attr("src") || $("img.h_35.f_l").last().attr("src"), baseUrl),
+    courseImg: absUrl($("img.h_35[src*='course']").attr("src"), baseUrl),
     stars: $("img[src*='icon_star']").parent().text().trim().replace(/[^0-9]/g, "") || "0",
     comment: $(".friend_comment_block").text().trim(),
     friendCode: $("input[name=idx]").attr("value"),

@@ -7,9 +7,11 @@ let temporaryPostgresSequence = 0;
 async function temporaryPostgres() {
   if (process.env.TEST_DATABASE_URL) return { url: process.env.TEST_DATABASE_URL, stop: async () => {} };
   const name = `carol-pg-${process.pid}-${++temporaryPostgresSequence}`;
+  // -v: postgres 이미지는 데이터 디렉터리를 익명 볼륨으로 만든다. 같이 지우지 않으면 실행마다 쌓여
+  // Docker 디스크를 채운다(한 세션에 93개, 4.5GB).
   // A failed prior run must not make this test attach to an unrelated
   // container with the same deterministic name.
-  try { execFileSync("docker", ["rm", "-f", name], { stdio: "ignore" }); } catch {}
+  try { execFileSync("docker", ["rm", "-f", "-v", name], { stdio: "ignore" }); } catch {}
   execFileSync("docker", ["run", "--rm", "-d", "--name", name, "-e", "POSTGRES_PASSWORD=test", "-e", "POSTGRES_DB=carol", "-p", "127.0.0.1::5432", "postgres:16"], { stdio: "ignore" });
   const port = execFileSync("docker", ["port", name, "5432/tcp"], { encoding: "utf8" }).trim().match(/:(\d+)$/)[1];
   const url = `postgres://postgres:test@127.0.0.1:${port}/carol`;
@@ -23,10 +25,10 @@ async function temporaryPostgres() {
     catch { try { await client.end(); } catch {} await new Promise((resolve) => setTimeout(resolve, 500)); }
   }
   if (!connected) {
-    try { execFileSync("docker", ["rm", "-f", name], { stdio: "ignore" }); } catch {}
+    try { execFileSync("docker", ["rm", "-f", "-v", name], { stdio: "ignore" }); } catch {}
     throw new Error(`temporary postgres host connection failed after 90 retries (${url}, container ${name})`);
   }
-  return { url, stop: async () => { try { execFileSync("docker", ["rm", "-f", name], { stdio: "ignore" }); } catch {} } };
+  return { url, stop: async () => { try { execFileSync("docker", ["rm", "-f", "-v", name], { stdio: "ignore" }); } catch {} } };
 }
 
 // 현행 성과 추적: 매 동기화마다 전체 클리어 스냅샷을 chart_clears 에 upsert하면서
@@ -282,14 +284,15 @@ test("patch_notes 게시·미확인 조회·ack", async () => {
       await new Promise((r) => setTimeout(r, 5));
       await client.query("INSERT INTO sessions(discord_user_id) VALUES('new')");
       assert.deepEqual(await db.getUnseenPatchNotes("new", 0, 3), []);
-      // 보여 준 뒤 ack → 다시 안 보인다. 다시 게시하면 또 보인다.
-      await db.setPatchAck("old", Date.now());
+      // 보여 준 뒤 ack(보여 준 노트의 게시 시각) → 다시 안 보인다. 다시 게시하면 또 보인다.
+      await db.setPatchAck("old", seen.publishedAt);
       assert.deepEqual(await db.getUnseenPatchNotes("old", 0, 3), []);
       await new Promise((r) => setTimeout(r, 5));
       await db.setPatchNotePublished(draft.id, true);
       assert.equal((await db.getUnseenPatchNotes("old", 0, 3)).length, 1);
       // since(표시 기간) 이전 게시분은 제외
-      assert.deepEqual(await db.getUnseenPatchNotes("old", Date.now() + 1000, 3), []);
+      const [again] = await db.getUnseenPatchNotes("old", 0, 3);
+      assert.deepEqual(await db.getUnseenPatchNotes("old", again.publishedAt, 3), []);
       // 수정·게시 취소·삭제
       const edited = await db.savePatchNote({ version: "1.0.1", title: "제목", body: "수정" }, draft.id);
       assert.equal(edited.version, "1.0.1");

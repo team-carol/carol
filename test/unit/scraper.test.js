@@ -53,3 +53,12 @@ test("parseUserOptions: 폼이 없으면 빈 배열", () => {
   assert.deepEqual(s.parseUserOptions("<html><body>ERROR</body></html>"), []);
   assert.deepEqual(s.parseUserOptions(""), []);
 });
+
+test("parseHome: 단위(course)와 클래스(class) 이미지를 따로 읽는다", () => {
+  const html = `<div class="basic_block"><img src="https://maimaidx-eng.com/maimai-mobile/img/course/course_rank_15DlEMWlRz.png" class="h_35 f_l"/>
+    <img src="https://maimaidx-eng.com/maimai-mobile/img/class/class_rank_s_20OmGGNvGh.png" class="p_l_10 h_35 f_l"></div>`;
+  const home = s.parseHome(html, "intl");
+  assert.equal(home.courseImg, "https://maimaidx-eng.com/maimai-mobile/img/course/course_rank_15DlEMWlRz.png");
+  assert.equal(home.gradeImg, "https://maimaidx-eng.com/maimai-mobile/img/class/class_rank_s_20OmGGNvGh.png");
+  assert.equal(s.parseHome("<div></div>", "intl").courseImg, "");
+});

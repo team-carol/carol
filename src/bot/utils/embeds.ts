@@ -29,6 +29,7 @@ import {
 } from "../../constants";
 import { aliasMatches, normalizeQuery, displayTitle } from "../../aliases";
 import { ratingColor } from "./roles";
+import { renderProfileCard } from "./profileCard";
 import { buildMarkMap, buildKindResolver, chartKey } from "../../scraper";
 import type { PlayRecord, ChartMarks, MaimaiServer, MapArea } from "../../scraper";
 import { msg } from "../../messages";
@@ -728,6 +729,8 @@ export function rtTableEmbed(
 export async function buildProfileReply(
   cached: NonNullable<Awaited<ReturnType<typeof getCachedProfile>>>,
   userId: string,
+  format: "image" | "embed" = "embed",
+  viewerId?: string,
 ) {
   const [avatar, showFriendCode] = await Promise.all([buildAvatarAttachment(userId, cached.server), getFriendCodePublic(userId)]);
   const recentBtn = new ButtonBuilder()
@@ -747,6 +750,12 @@ export async function buildProfileReply(
     topBtn,
     mapBtn,
   );
+  if (format === "image") {
+    const [avatarBuf, translate] = await Promise.all([getAvatarBlob(userId, cached.server), getTranslateTitles(viewerId ?? userId)]);
+    const friendCode = showFriendCode ? (cached.friendCode ?? "").match(/\d{13}/)?.[0] ?? null : null;
+    const png = await renderProfileCard(cached, avatarBuf, { translate, friendCode });
+    return { embeds: [], files: [new AttachmentBuilder(png, { name: "profile.png" })], components: [row] };
+  }
   return {
     embeds: [profileEmb(cached, !!avatar, showFriendCode)],
     files: avatar ? [avatar] : [],
