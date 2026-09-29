@@ -2,9 +2,9 @@ import type { ExtraBookmarklet, MaimaiServer } from "../storage/types";
 import { BOOKMARKLET_PRESETS } from "./bookmarklet";
 import { BASE_CSS, pageHead, topbar, siteFooter, userNav } from "./theme";
 
-export function settingsPage(token: string, isPrivate: boolean, enabledPresetIds: string[], bookmarklets: ExtraBookmarklet[], defaultServer: MaimaiServer, translate = false): string {
+export function settingsPage(token: string, isPrivate: boolean, enabledPresetIds: string[], bookmarklets: ExtraBookmarklet[], defaultServer: MaimaiServer, translate = false, friendCodePublic = false): string {
   const presets = BOOKMARKLET_PRESETS.map((preset) => ({ ...preset, enabled: enabledPresetIds.includes(preset.id) }));
-  const dataJson = JSON.stringify({ private: isPrivate, presets, bookmarklets, defaultServer, translate })
+  const dataJson = JSON.stringify({ private: isPrivate, presets, bookmarklets, defaultServer, translate, friendCodePublic })
     .replace(/</g, "\\u003c").replace(/>/g, "\\u003e");
   const tokenJson = JSON.stringify(token);
 
@@ -91,6 +91,17 @@ ${topbar(userNav(token, "settings"))}
 <div class="status" id="privStatus"></div>
 </div>
 <div class="card">
+<p class="section-label">친구 코드 공개 여부</p>
+<div class="toggle-row">
+<div class="toggle-info">
+<div class="toggle-title" id="fcTitle"></div>
+<div class="toggle-desc" id="fcDesc"></div>
+</div>
+<label class="toggle"><input type="checkbox" id="fcToggle" onchange="toggleFriendCode()"><span class="slider"></span></label>
+</div>
+<div class="status" id="fcStatus"></div>
+</div>
+<div class="card">
 <p class="section-label">곡 제목 한국어 번역</p>
 <div class="toggle-row">
 <div class="toggle-info">
@@ -138,6 +149,7 @@ var MAX_BM=5;
   renderDefaultServer();
   renderPrivacy();
   renderTranslate();
+  renderFriendCode();
   loadAchievementFilter();
   renderPresetList();
   renderBmList();
@@ -214,6 +226,24 @@ function renderBmList(){
   list.querySelectorAll('.bm-del').forEach(function(btn){
     btn.onclick=function(){deleteBm(parseInt(this.getAttribute('data-i'),10));};
   });
+}
+
+function renderFriendCode(){
+  var on=!!DATA.friendCodePublic;
+  document.getElementById('fcToggle').checked=on;
+  document.getElementById('fcTitle').textContent=on?'공개':'비공개';
+  document.getElementById('fcDesc').textContent=on
+    ?'/프로필에 친구 코드가 표시됩니다. 내 프로필을 조회하는 사람은 모두 볼 수 있습니다.'
+    :'/프로필에 친구 코드를 표시하지 않습니다.';
+}
+
+function toggleFriendCode(){
+  var cb=document.getElementById('fcToggle');
+  var want=cb.checked;
+  fetch('/api/settings/friend-code?code='+TOKEN,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({public:want})})
+  .then(function(r){if(!r.ok)throw new Error(r.status);return r.json();})
+  .then(function(){DATA.friendCodePublic=want;renderFriendCode();showStatus('fcStatus','ok','저장됨');})
+  .catch(function(){cb.checked=!want;showStatus('fcStatus','err','저장 실패');});
 }
 
 function renderTranslate(){

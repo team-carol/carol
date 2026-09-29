@@ -210,6 +210,8 @@ CREATE INDEX IF NOT EXISTS idx_user_goals_owner ON user_goals(discord_user_id, c
   );
   ALTER TABLE sessions ADD COLUMN IF NOT EXISTS patch_ack bigint NOT NULL DEFAULT 0;
   ALTER TABLE sessions ALTER COLUMN patch_ack SET DEFAULT (floor(extract(epoch from clock_timestamp()) * 1000))::bigint;`,],
+  // 친구 코드 공개 여부(/설정). 켜면 /프로필 임베드에 친구 코드를 보여 준다. 기본은 비공개.
+  [25, `ALTER TABLE sessions ADD COLUMN IF NOT EXISTS friend_code_public integer NOT NULL DEFAULT 0;`,],
 ];
 
 export interface MainotesSongRow { id:string; title:string; artist:string; bpm:string; genre:string; version:string; type:string }
@@ -524,6 +526,7 @@ SELECT u.chart_key AS "chartKey",u.achievement_val AS "achievementVal",u.fc,u.sy
   // 세션 행이 없으면 null(= carol을 쓴 적 없는 사용자 → 방침 변경 고지 대상 아님).
   async getPolicyAck(id:string):Promise<number|null>{const r=await this.q<any>("SELECT policy_ack FROM sessions WHERE discord_user_id=$1",[id]);return r[0]?Number(r[0].policy_ack??0):null;}
   async setPolicyAck(id:string,v:number){await this.q("INSERT INTO sessions(discord_user_id,policy_ack) VALUES($1,$2) ON CONFLICT(discord_user_id) DO UPDATE SET policy_ack=excluded.policy_ack",[id,v]);}
+  async getFriendCodePublic(id:string){const r=await this.q<any>("SELECT friend_code_public FROM sessions WHERE discord_user_id=$1",[id]);return Number(r[0]?.friend_code_public??0)===1;} async setFriendCodePublic(id:string,v:boolean){await this.q("INSERT INTO sessions(discord_user_id,friend_code_public) VALUES($1,$2) ON CONFLICT(discord_user_id) DO UPDATE SET friend_code_public=excluded.friend_code_public",[id,v?1:0]);}
   async getTranslateTitles(id:string){const r=await this.q<any>("SELECT translate_titles FROM sessions WHERE discord_user_id=$1",[id]);return r[0]?.translate_titles===1;} async setTranslateTitles(id:string,v:boolean){await this.q("INSERT INTO sessions(discord_user_id,translate_titles) VALUES($1,$2) ON CONFLICT(discord_user_id) DO UPDATE SET translate_titles=excluded.translate_titles",[id,v?1:0]);}
   async getEnabledBookmarkletPresetIds(id:string){const r=await this.q<any>("SELECT preset_bookmarklets FROM sessions WHERE discord_user_id=$1",[id]);try{const x=JSON.parse(r[0]?.preset_bookmarklets??"[]");return Array.isArray(x)?x.filter((v):v is string=>typeof v==='string'):[];}catch{return [];}}
   async setBookmarkletPresetEnabled(id:string,p:string,v:boolean){const a=await this.getEnabledBookmarkletPresetIds(id),n=v?[...new Set([...a,p])]:a.filter(x=>x!==p);const r=await this.pool.query("UPDATE sessions SET preset_bookmarklets=$1 WHERE discord_user_id=$2",[JSON.stringify(n),id]);return r.rowCount??0;}
