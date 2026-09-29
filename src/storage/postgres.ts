@@ -268,6 +268,11 @@ export class PostgresStorage {
     if(!r[0]) return null;
     return {...r[0], rating:Number(r[0].rating), syncedAt:Number(r[0].syncedAt)};
   }
+  // 레이팅 추이 그래프용. fromDay 이후 하루치 레이팅(오래된 날부터).
+  async listRatingSnapshots(profileKey:string, fromDay:string):Promise<{playDay:string;rating:number}[]>{
+    const r=await this.q<any>(`SELECT play_day AS "playDay",rating FROM rating_snapshots WHERE profile_key=$1 AND play_day >= $2 ORDER BY play_day`,[profileKey,fromDay]);
+    return r.map((x:any)=>({playDay:x.playDay,rating:Number(x.rating)}));
+  }
   // 조회 가능한 날짜 범위 안내용. 스냅샷이 없는 날짜를 요청했을 때 쓴다.
   async getRatingSnapshotRange(profileKey:string){
     const r=await this.q<any>(`SELECT MIN(play_day) AS "first",MAX(play_day) AS "last",COUNT(*)::int AS "count" FROM rating_snapshots WHERE profile_key=$1`,[profileKey]);

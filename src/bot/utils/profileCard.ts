@@ -8,6 +8,7 @@ import { getScoreRank, MAI_CM_COLOR } from "../../games";
 import { fetchJacketDataUrl, ratingBreakdown, ratingPlate } from "./ratingCard";
 import { musicKindIcons, KIND_ICON_RATIO } from "./dxnetAssets";
 import { alignLeftMargin } from "./textMetrics";
+import type { RatingPoint } from "../../ratingHistory";
 
 // /프로필 이미지 카드. 레이아웃·색은 /성과 카드와 같은 랜딩(carol-web) 토큰(src/brand.ts)을 따른다.
 // 헤더(아바타·이름·칭호·클래스·레이팅 플레이트) → 레이팅 구성 → 클리어 현황 → 최근 플레이 5곡.
@@ -58,7 +59,7 @@ const MARK_COLOR: Record<string, string> = {
   "FDX+": "#10b981", FDX: "#34d399", "FS+": "#22c55e", FS: "#4ade80",
 };
 
-const PROFILE_CARD_VERSION = 6;
+const PROFILE_CARD_VERSION = 7;
 const PROFILE_CARD_CACHE_MAX = 64;
 const profileCardCache = new Map<string, Buffer>();
 
@@ -249,14 +250,120 @@ function recentRow(record: PlayRecord, profile: CachedProfile, jacket: string | 
   ]);
 }
 
+// ─── 레이팅 추이 그래프 ─────────────────────────────────────────────────────
+// 선·격자는 SVG 이미지로 그리고(resvg 가 벡터로 렌더), 축 라벨·값은 satori 텍스트로 올린다
+// (중첩 SVG 안의 text 는 글꼴을 못 찾을 수 있어서). 실측끼리 잇는 구간은 실선, 추정이 끼면 점선.
+const CHART_W = 840;          // 패널 안쪽 폭
+const CHART_Y_LABEL_W = 40;   // 왼쪽 눈금 라벨 칸
+const CHART_H = 150;
+const CHART_PAD_X = 10;
+const CHART_PAD_Y = 16;
+
+function niceStep(range: number): number {
+  const steps = [1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000];
+  return steps.find((s) => range / s <= 4) ?? 5000;
+}
+
+function shortDay(day: string): string {
+  return day.slice(5).replace("-", ".");
+}
+
+function lineSwatch(dashed: boolean): El {
+  return dashed
+    ? el("div", { display: "flex", gap: 3 }, [0, 1, 2].map(() => el("div", { width: 5, height: 2, background: ACCENT, opacity: 0.8 })))
+    : el("div", { width: 21, height: 2, background: ACCENT });
+}
+
+function ratingChartPanel(points: RatingPoint[], days: string[]): El {
+  if (!points.length) {
+    return panel("레이팅 추이", "", [el("span", { color: MUTED, fontSize: 12, padding: "10px 0" }, "동기화 기록이 쌓이면 레이팅 추이가 표시됩니다.")]);
+  }
+  const plotW = CHART_W - CHART_Y_LABEL_W - 8;
+  const index = new Map(days.map((d, i) => [d, i]));
+  const firstI = index.get(points[0].day) ?? 0;
+  const lastI = index.get(points[points.length - 1].day) ?? firstI;
+  const span = Math.max(1, lastI - firstI);
+  const xOf = (day: string) => points.length === 1
+    ? plotW / 2
+    : CHART_PAD_X + (((index.get(day) ?? firstI) - firstI) / span) * (plotW - 2 * CHART_PAD_X);
+
+  const values = points.map((p) => p.rating);
+  const lo = Math.min(...values), hi = Math.max(...values);
+  const step = niceStep(Math.max(hi - lo, 8) * 1.3);
+  const yMin = Math.floor((lo - step * 0.3) / step) * step;
+  const yMax = Math.max(yMin + step, Math.ceil((hi + step * 0.3) / step) * step);
+  const yOf = (v: number) => CHART_PAD_Y + (1 - (v - yMin) / (yMax - yMin)) * (CHART_H - 2 * CHART_PAD_Y);
+  const ticks: number[] = [];
+  for (let t = yMin; t <= yMax + 1e-9; t += step) ticks.push(t);
+
+  const pts = points.map((p) => ({ ...p, x: +xOf(p.day).toFixed(1), y: +yOf(p.rating).toFixed(1) }));
+  const bottom = yOf(yMin).toFixed(1);
+  const svg: string[] = [
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${plotW}" height="${CHART_H}" viewBox="0 0 ${plotW} ${CHART_H}">`,
+    `<defs><linearGradient id="fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${ACCENT}" stop-opacity="0.22"/><stop offset="1" stop-color="${ACCENT}" stop-opacity="0"/></linearGradient></defs>`,
+    ...ticks.map((t) => `<line x1="0" x2="${plotW}" y1="${yOf(t).toFixed(1)}" y2="${yOf(t).toFixed(1)}" stroke="${BORDER}" stroke-width="1"/>`),
+  ];
+  if (pts.length > 1) {
+    svg.push(`<path d="M${pts[0].x},${bottom} ${pts.map((p) => `L${p.x},${p.y}`).join(" ")} L${pts[pts.length - 1].x},${bottom} Z" fill="url(#fill)"/>`);
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i - 1], b = pts[i];
+      const dashed = a.estimated || b.estimated;
+      svg.push(`<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="${ACCENT}" stroke-width="2.5" ${dashed ? `stroke-dasharray="6 5" stroke-opacity="0.75"` : `stroke-linecap="round"`}/>`);
+    }
+  }
+  for (const p of pts.slice(0, -1)) {
+    if (!p.estimated) svg.push(`<circle cx="${p.x}" cy="${p.y}" r="3.5" fill="${SURFACE}" stroke="${ACCENT}" stroke-width="2"/>`);
+  }
+  const last = pts[pts.length - 1];
+  svg.push(`<circle cx="${last.x}" cy="${last.y}" r="5" fill="${ACCENT}"/>`, "</svg>");
+  const svgUrl = `data:image/svg+xml;base64,${Buffer.from(svg.join("")).toString("base64")}`;
+
+  const first = points[0];
+  const delta = last.rating - first.rating;
+  const meta = points.length > 1
+    ? `${shortDay(first.day)} ${first.rating} → ${shortDay(last.day)} ${last.rating} (${delta >= 0 ? "+" : ""}${delta})`
+    : `${shortDay(last.day)} ${last.rating}`;
+  const midDay = days[firstI + Math.round(span / 2)] ?? last.day;
+  const valueTop = Math.max(0, last.y - 24);
+
+  return panel("레이팅 추이", meta, [
+    el("div", { display: "flex", gap: 8 }, [
+      // 왼쪽 눈금 라벨
+      el("div", { display: "flex", position: "relative", width: CHART_Y_LABEL_W, height: CHART_H }, ticks.map((t) =>
+        el("span", { position: "absolute", right: 0, top: yOf(t) - 7, color: FAINT, fontFamily: NUM_FONT, fontSize: 10, lineHeight: 1 }, String(t)))),
+      // 그래프 + 마지막 값
+      el("div", { display: "flex", position: "relative", width: plotW, height: CHART_H }, [
+        image(svgUrl, { width: plotW, height: CHART_H }),
+        el("span", {
+          position: "absolute", top: valueTop, left: Math.max(0, Math.min(plotW - 52, last.x - 26)), width: 52, textAlign: "center",
+          color: ACCENT, fontFamily: NUM_FONT, fontSize: 13, fontWeight: 700, lineHeight: 1,
+        }, String(last.rating)),
+      ]),
+    ]),
+    // 아래 날짜 라벨 + 범례
+    el("div", { display: "flex", alignItems: "center", marginTop: 6, paddingLeft: CHART_Y_LABEL_W + 8 }, [
+      el("div", { display: "flex", justifyContent: points.length > 1 ? "space-between" : "center", flex: 1, color: FAINT, fontSize: 10 },
+        points.length > 1 ? [shortDay(first.day), shortDay(midDay), shortDay(last.day)].map((t) => el("span", {}, t)) : [el("span", {}, shortDay(last.day))]),
+    ]),
+    el("div", { display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 14, marginTop: 8, color: MUTED, fontSize: 10 }, [
+      el("div", { display: "flex", alignItems: "center", gap: 6 }, [lineSwatch(false), el("span", {}, "실측")]),
+      ...(points.some((p) => p.estimated)
+        ? [el("div", { display: "flex", alignItems: "center", gap: 6 }, [lineSwatch(true), el("span", {}, "추정 (성과 기록으로 계산)")])]
+        : []),
+    ]),
+  ]);
+}
+
 export async function renderProfileCard(
   profile: CachedProfile,
   avatarBuf: Buffer | null,
-  opts: { translate?: boolean; friendCode?: string | null } = {},
+  opts: { translate?: boolean; friendCode?: string | null; ratingHistory?: { points: RatingPoint[]; days: string[] } } = {},
 ): Promise<Buffer> {
   const translate = !!opts.translate;
   const friendCode = opts.friendCode ?? null;
-  const cacheKey = [profile.profileKey, profile.lastSyncedAt, translate ? 1 : 0, friendCode ?? "", avatarBuf?.length ?? 0, PROFILE_CARD_VERSION].join("|");
+  const history = opts.ratingHistory;
+  // 그래프 기간은 오늘을 끝으로 움직이므로 마지막 날짜도 키에 넣는다.
+  const cacheKey = [profile.profileKey, profile.lastSyncedAt, translate ? 1 : 0, friendCode ?? "", avatarBuf?.length ?? 0, history ? history.days[history.days.length - 1] : "-", PROFILE_CARD_VERSION].join("|");
   const memo = profileCardCache.get(cacheKey);
   if (memo) return memo;
 
@@ -313,6 +420,7 @@ export async function renderProfileCard(
       { value: String(profile.playCount || 0), label: "현재 버전 플레이" },
       { value: String(profile.totalPlayCount || profile.playCount || 0), label: "누적 플레이" },
     ]),
+    ...(history ? [ratingChartPanel(history.points, history.days)] : []),
     clearPanel(clears),
     panel("최근 플레이", `최근 ${recent.length}곡`, recent.length
       ? recent.map((r, i) => recentRow(r, profile, jackets[i], translate, kindIcons))

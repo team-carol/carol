@@ -35,6 +35,7 @@ src/bot/
 | Role assignment | `utils/roles.ts` | Rating-tier roles, guild setting gate. |
 | Rating card renderer | `utils/ratingCard.ts` | Largest file; satori element helper, no JSX. |
 | 프로필 카드 | `utils/profileCard.ts` | `/프로필` 기본 응답(이미지). 레이팅 플레이트·신곡/구곡 합(`ratingBreakdown`)·otoge-db 자켓은 `ratingCard.ts` 것을 재사용. `형식:임베드` 는 기존 `profileEmb`. 메모리 캐시 키에 lastSyncedAt 포함. |
+| 레이팅 추이 그래프 | `src/ratingHistory.ts`, `profileCard.ts` `ratingChartPanel` | 최근 90일. 실측=`rating_snapshots`(실선), 추정=성과 로그를 그날 끝까지 되돌린 계산값을 **다음 실측일 기준으로 보정**(점선). 마지막 동기화 이후는 점 없음. 선은 SVG 이미지, 라벨은 satori 텍스트. |
 
 ## CONVENTIONS
 

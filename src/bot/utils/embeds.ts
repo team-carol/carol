@@ -13,6 +13,9 @@ import {
   saveSongJacket,
   getTranslateTitles,
   getFriendCodePublic,
+  listRatingSnapshots,
+  getAchievementLogRange,
+  getAchievementPlayEventLog,
 } from "../../storage";
 import { getMaimaiBaseUrl } from "../../scraper";
 import {
@@ -30,6 +33,8 @@ import {
 import { aliasMatches, normalizeQuery, displayTitle } from "../../aliases";
 import { ratingColor } from "./roles";
 import { renderProfileCard } from "./profileCard";
+import { buildRatingSeries, recentPlayDays, RATING_HISTORY_DAYS } from "../../ratingHistory";
+import { koreaPlayDayKey, koreaPlayDayRange } from "../../achievements";
 import { buildMarkMap, buildKindResolver, chartKey } from "../../scraper";
 import type { PlayRecord, ChartMarks, MaimaiServer, MapArea } from "../../scraper";
 import { msg } from "../../messages";
@@ -726,6 +731,25 @@ export function rtTableEmbed(
   };
 }
 
+// 프로필 카드 레이팅 추이: 최근 RATING_HISTORY_DAYS 일의 실측(스냅샷) + 성과 로그 기반 추정.
+async function loadRatingHistory(cached: NonNullable<Awaited<ReturnType<typeof getCachedProfile>>>) {
+  const days = recentPlayDays(koreaPlayDayKey(new Date()), RATING_HISTORY_DAYS);
+  const [snapshots, logRange, events] = await Promise.all([
+    listRatingSnapshots(cached.profileKey, days[0]),
+    getAchievementLogRange(cached.profileKey),
+    getAchievementPlayEventLog(cached.profileKey, koreaPlayDayRange(days[0]).from),
+  ]);
+  const points = buildRatingSeries({
+    days,
+    snapshots,
+    clearNow: getClearList(cached),
+    events,
+    server: cached.server,
+    logFirstDay: logRange ? koreaPlayDayKey(new Date(logRange.first)) : null,
+  });
+  return { points, days };
+}
+
 export async function buildProfileReply(
   cached: NonNullable<Awaited<ReturnType<typeof getCachedProfile>>>,
   userId: string,
@@ -753,7 +777,8 @@ export async function buildProfileReply(
   if (format === "image") {
     const [avatarBuf, translate] = await Promise.all([getAvatarBlob(userId, cached.server), getTranslateTitles(viewerId ?? userId)]);
     const friendCode = showFriendCode ? (cached.friendCode ?? "").match(/\d{13}/)?.[0] ?? null : null;
-    const png = await renderProfileCard(cached, avatarBuf, { translate, friendCode });
+    const ratingHistory = await loadRatingHistory(cached);
+    const png = await renderProfileCard(cached, avatarBuf, { translate, friendCode, ratingHistory });
     return { embeds: [], files: [new AttachmentBuilder(png, { name: "profile.png" })], components: [row] };
   }
   return {
