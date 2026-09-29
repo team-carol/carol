@@ -454,7 +454,8 @@ function plateStars(value: number): number {
   return ROMAN_STARS[role[1].split(" ").pop() ?? ""] ?? 0;
 }
 
-function ratingPlate(value: number): El {
+/** 레이팅 플레이트(별 포함). 프로필 카드도 같은 모양을 쓴다. */
+export function ratingPlate(value: number): El {
   const s = (v: number) => Math.round(v * PLATE_S * 100) / 100;
   const tier = PLATE_TIERS.find((t) => value >= t.min) ?? PLATE_TIERS[PLATE_TIERS.length - 1];
   // 5칸 고정. 자릿수가 모자라면 앞칸을 비운다(게임 표시와 동일).
@@ -573,6 +574,25 @@ function avg(vms: CardVM[]): number {
 }
 
 // ─── Public: render rating target card as PNG ─────────────────────────────
+/**
+ * 레이팅 대상곡을 신곡 15 / 구곡 35 로 나눈 곡별 레이팅 합. 레이팅표와 같은 규칙으로 나눈다
+ * (국제판은 레이팅 대상 페이지 순서, JP 는 곡 버전). 프로필 카드의 레이팅 구성 표시용.
+ */
+export function ratingBreakdown(profile: CachedProfile): { newSum: number; newCount: number; oldSum: number; oldCount: number } {
+  const parse = (json: string): PlayRecord[] => {
+    try { const x = JSON.parse(json || "[]"); return Array.isArray(x) ? x : []; } catch { return []; }
+  };
+  const records = parse(profile.topJson);
+  const clearRecords = parse(profile.clearJson);
+  const markMap = buildMarkMap(clearRecords);
+  const resolveKind = buildKindResolver(clearRecords);
+  const rs = (r: PlayRecord) => toVM({ ...r, musicKind: resolveKind(r) }, markMap, profile.server).rs;
+  const news = profile.server === "jp" ? records.filter((r) => isNewSong(r.title, "jp")).slice(0, 15) : records.slice(0, 15);
+  const olds = profile.server === "jp" ? records.filter((r) => !isNewSong(r.title, "jp")).slice(0, 35) : records.slice(15, 50);
+  const sum = (list: PlayRecord[]) => list.reduce((acc, r) => acc + rs(r), 0);
+  return { newSum: sum(news), newCount: news.length, oldSum: sum(olds), oldCount: olds.length };
+}
+
 export async function renderRatingCard(
   profile: CachedProfile,
   records: PlayRecord[],

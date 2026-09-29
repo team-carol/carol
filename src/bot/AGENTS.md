@@ -34,6 +34,7 @@ src/bot/
 | Goal tracking | `commands/goal.ts`, `src/goals.ts` | `/목표` 추가/목록/삭제; specs evaluated against cached profile + re-scored on every `/sync`. `spec.baseline` (목표 수립 시 현재값)이 있으면 진행률 바는 그 시점부터의 상대치; `progressPercent`/`progressBar` 는 미달성 목표를 100%/꽉 찬 바로 표시하지 않음. `/목표 목록` 완료 개수는 라이브 평가 기준. |
 | Role assignment | `utils/roles.ts` | Rating-tier roles, guild setting gate. |
 | Rating card renderer | `utils/ratingCard.ts` | Largest file; satori element helper, no JSX. |
+| 프로필 카드 | `utils/profileCard.ts` | `/프로필` 기본 응답(이미지). 레이팅 플레이트·신곡/구곡 합(`ratingBreakdown`)·otoge-db 자켓은 `ratingCard.ts` 것을 재사용. `형식:임베드` 는 기존 `profileEmb`. 메모리 캐시 키에 lastSyncedAt 포함. |
 
 ## CONVENTIONS
 
