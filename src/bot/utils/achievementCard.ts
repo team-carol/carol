@@ -4,6 +4,7 @@ import type { CachedProfile } from "../../storage/types";
 import type { PlayRecord } from "../../scraper";
 import { getConstant, getJacketFile } from "../../constants";
 import { fetchJacketDataUrl } from "./ratingCard";
+import { musicKindIcons, KIND_ICON_RATIO } from "./dxnetAssets";
 import { displayTitle } from "../../aliases";
 import { getScoreRank, MAI_CM_COLOR } from "../../games";
 
@@ -48,7 +49,7 @@ const jacketCache = new Map<string, string | null>();
 // 반복 호출하거나 다른 사람이 조회할 때마다 satori+resvg 전체를 다시 돌린다.
 // (유저·날짜·마지막 동기화 시각·번역여부·페이지) 키로 PNG 를 재사용한다.
 // lastSyncedAt 이 키에 들어가므로 새 동기화 후에는 자연스럽게 무효화된다.
-const ACH_CARD_VERSION = 8;
+const ACH_CARD_VERSION = 9;
 const ACH_CARD_CACHE_MAX = 48;
 const achCardCache = new Map<string, Buffer>();
 
@@ -148,7 +149,17 @@ function achievementBefore(record: PlayRecord): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-function recordRow(record: PlayRecord, rankNo: number, profile: CachedProfile, jacket: string | null, playDay: string, translate = false): El {
+type KindIcons = Partial<Record<"DX" | "ST", string>>;
+
+// ST/DX 는 DX NET 과 같은 뱃지 이미지로. 못 받았으면 글자로 대신한다.
+function kindMark(kind: string, icons: KindIcons, height: number): El {
+  const src = kind === "DX" || kind === "ST" ? icons[kind] : undefined;
+  return src
+    ? image(src, { width: Math.round(height * KIND_ICON_RATIO), height, flexShrink: 0 })
+    : el("span", { color: MUTED, fontSize: 10, flexShrink: 0 }, kind || "?");
+}
+
+function recordRow(record: PlayRecord, rankNo: number, profile: CachedProfile, jacket: string | null, playDay: string, translate = false, kindIcons: KindIcons = {}): El {
   const diffColor = DIFF_COLOR[record.diff] ?? MUTED;
   const marks = [record.fc, record.sync].filter((mark) => mark.length > 0);
   const gain = ratingGain(record);
@@ -197,7 +208,8 @@ function recordRow(record: PlayRecord, rankNo: number, profile: CachedProfile, j
           ]),
           el("div", { display: "flex", alignItems: "center", gap: 7, marginTop: 5, minWidth: 0 }, [
             pill(`${record.diff} ${constantLabel}`, { color: "#fff", background: diffColor, fontSize: 9, padding: "2px 8px" }),
-            el("span", { color: MUTED, fontSize: 10, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, `${record.musicKind || "?"} · ${record.date || playDay}`),
+            kindMark(record.musicKind, kindIcons, 15),
+            el("span", { color: MUTED, fontSize: 10, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, record.date || playDay),
           ]),
           el("span", { color: INK, fontSize: 15, fontWeight: 700, lineHeight: 1, marginTop: 9 }, achievementLabel),
         ],
@@ -279,6 +291,7 @@ export async function renderAchievementCard(
   const avatarUrl = avatarBuf ? `data:image/png;base64,${avatarBuf.toString("base64")}` : "";
   // 자켓: 기록에 담긴 DX NET 자켓을 먼저 쓰고, 없거나 못 받으면 otoge-db 자켓(곡 제목 기준)으로.
   // 플레이 기록(최근 50곡)에서 못 찾은 성과는 클리어 목록에서 와서 DX NET 자켓 URL 이 없다.
+  const kindIcons = await musicKindIcons();
   const jackets = new Map<PlayRecord, string | null>();
   await Promise.all(
     topRecords.map(async (record) => {
@@ -333,7 +346,7 @@ export async function renderAchievementCard(
         },
         topRecords.length > 0
           ? topRecords.map((record, index) =>
-              recordRow(record, rankOffset + index + 1, profile, jackets.get(record) ?? null, playDay, translate),
+              recordRow(record, rankOffset + index + 1, profile, jackets.get(record) ?? null, playDay, translate, kindIcons),
             )
           : emptyState(),
       ),

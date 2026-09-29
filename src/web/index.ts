@@ -1231,7 +1231,7 @@ ${siteFooter()}
         const preexistingProfile = (await getCachedProfile(`${syncServer}:${fc}`)) !== null;
         const savedProfileKey = await cacheProfile({
           playerName: effective.playerName || "???", rating: effective.rating || 0,
-          ratingMax: effective.ratingMax || 0, gradeImg: effective.gradeImg || "",
+          ratingMax: effective.ratingMax || 0, gradeImg: effective.gradeImg || "", courseImg: effective.courseImg || "",
           avatar: effective.avatar || "", trophy: effective.trophy || "",
           trophyClass: effective.trophyClass || "normal", stars: effective.stars || "0",
           playCount: playCount || 0, totalPlayCount: totalPlayCount || 0, comment: effective.comment || "", friendCode: fc,

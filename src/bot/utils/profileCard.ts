@@ -6,6 +6,7 @@ import { getConstant, getJacketFile } from "../../constants";
 import { displayTitle } from "../../aliases";
 import { getScoreRank, MAI_CM_COLOR } from "../../games";
 import { fetchJacketDataUrl, ratingBreakdown, ratingPlate } from "./ratingCard";
+import { musicKindIcons, KIND_ICON_RATIO } from "./dxnetAssets";
 
 // /프로필 이미지 카드. 레이아웃·색은 /성과 카드와 같은 랜딩(carol-web) 토큰(src/brand.ts)을 따른다.
 // 헤더(아바타·이름·칭호·클래스·레이팅 플레이트) → 레이팅 구성 → 클리어 현황 → 최근 플레이 5곡.
@@ -56,7 +57,7 @@ const MARK_COLOR: Record<string, string> = {
   "FDX+": "#10b981", FDX: "#34d399", "FS+": "#22c55e", FS: "#4ade80",
 };
 
-const PROFILE_CARD_VERSION = 4;
+const PROFILE_CARD_VERSION = 5;
 const PROFILE_CARD_CACHE_MAX = 64;
 const profileCardCache = new Map<string, Buffer>();
 
@@ -207,7 +208,17 @@ function clearPanel(clears: PlayRecord[]): El {
   return panel("클리어 현황", `${played}개 채보 플레이`, [rankChart, markGroups]);
 }
 
-function recentRow(record: PlayRecord, profile: CachedProfile, jacket: string | null, translate: boolean): El {
+type KindIcons = Partial<Record<"DX" | "ST", string>>;
+
+// ST/DX 는 DX NET 과 같은 뱃지 이미지로. 못 받았으면 글자로 대신한다.
+function kindMark(kind: string, icons: KindIcons, height: number): El {
+  const src = kind === "DX" || kind === "ST" ? icons[kind] : undefined;
+  return src
+    ? image(src, { width: Math.round(height * KIND_ICON_RATIO), height, flexShrink: 0 })
+    : el("span", { color: MUTED, fontSize: 10, flexShrink: 0 }, kind || "?");
+}
+
+function recentRow(record: PlayRecord, profile: CachedProfile, jacket: string | null, translate: boolean, kindIcons: KindIcons): El {
   const diffColor = DIFF_COLOR[record.diff] ?? MUTED;
   const constant = getConstant(record.title, record.musicKind, record.diff, profile.server);
   const level = constant !== null ? constant.toFixed(1) : record.level;
@@ -221,7 +232,8 @@ function recentRow(record: PlayRecord, profile: CachedProfile, jacket: string | 
       el("span", { color: INK, fontSize: 14, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, displayTitle(record.title, translate)),
       el("div", { display: "flex", alignItems: "center", gap: 8 }, [
         pill(`${record.diff} ${level}`, { background: diffColor, color: "#fff" }),
-        el("span", { color: MUTED, fontSize: 10, whiteSpace: "nowrap" }, `${record.musicKind || "?"} · ${record.date || ""}`),
+        kindMark(record.musicKind, kindIcons, 15),
+        el("span", { color: MUTED, fontSize: 10, whiteSpace: "nowrap" }, record.date || ""),
       ]),
     ]),
     el("div", { display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }, [
@@ -250,10 +262,12 @@ export async function renderProfileCard(
   const recent = parseList(profile.recentJson).slice(0, RECENT_COUNT);
   const clears = parseList(profile.clearJson);
   const breakdown = ratingBreakdown(profile);
-  const [avatarUrl, gradeUrl, jackets] = await Promise.all([
+  const [avatarUrl, courseUrl, gradeUrl, jackets, kindIcons] = await Promise.all([
     avatarBuf ? Promise.resolve(`data:image/png;base64,${avatarBuf.toString("base64")}`) : remoteDataUrl(profile.avatar),
+    remoteDataUrl(profile.courseImg),
     remoteDataUrl(profile.gradeImg),
     Promise.all(recent.map((r) => jacketFor(r))),
+    musicKindIcons(),
   ]);
 
   const serverLabel = profile.server === "jp" ? "JP" : "INTERNATIONAL";
@@ -276,7 +290,9 @@ export async function renderProfileCard(
         el("span", { color: INK, fontSize: 26, fontWeight: 800, lineHeight: 1.1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, profile.playerName || "—"),
         el("div", { display: "flex", alignItems: "center", gap: 10 }, [
           pill(profile.trophy || "—", { ...trophyStyle, fontSize: 11, padding: "4px 11px", maxWidth: 420, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }),
-          gradeUrl ? image(gradeUrl, { height: 24, objectFit: "contain" }) : el("span", {}, ""),
+          // 단위(段位)·클래스(오토모다치) 이미지. 단위는 이 기능 이후 동기화부터 저장된다.
+          courseUrl ? image(courseUrl, { height: 26, objectFit: "contain" }) : el("span", {}, ""),
+          gradeUrl ? image(gradeUrl, { height: 26, objectFit: "contain" }) : el("span", {}, ""),
           stars ? el("span", { color: "#fbbf24", fontSize: 13, fontWeight: 700 }, `★ ${stars}`) : el("span", {}, ""),
         ]),
       ]),
@@ -294,7 +310,7 @@ export async function renderProfileCard(
     ]),
     clearPanel(clears),
     panel("최근 플레이", `최근 ${recent.length}곡`, recent.length
-      ? recent.map((r, i) => recentRow(r, profile, jackets[i], translate))
+      ? recent.map((r, i) => recentRow(r, profile, jackets[i], translate, kindIcons))
       : [el("span", { color: MUTED, fontSize: 12, padding: "12px 0" }, "최근 플레이 기록이 없습니다.")]),
     // 푸터
     el("div", { display: "flex", justifyContent: "space-between", marginTop: 14, color: MUTED, fontSize: 11 }, [
