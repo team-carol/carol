@@ -7,6 +7,7 @@ import { displayTitle } from "../../aliases";
 import { getScoreRank, MAI_CM_COLOR } from "../../games";
 import { fetchJacketDataUrl, ratingBreakdown, ratingPlate } from "./ratingCard";
 import { musicKindIcons, KIND_ICON_RATIO } from "./dxnetAssets";
+import { alignLeftMargin } from "./textMetrics";
 
 // /프로필 이미지 카드. 레이아웃·색은 /성과 카드와 같은 랜딩(carol-web) 토큰(src/brand.ts)을 따른다.
 // 헤더(아바타·이름·칭호·클래스·레이팅 플레이트) → 레이팅 구성 → 클리어 현황 → 최근 플레이 5곡.
@@ -57,7 +58,7 @@ const MARK_COLOR: Record<string, string> = {
   "FDX+": "#10b981", FDX: "#34d399", "FS+": "#22c55e", FS: "#4ade80",
 };
 
-const PROFILE_CARD_VERSION = 5;
+const PROFILE_CARD_VERSION = 6;
 const PROFILE_CARD_CACHE_MAX = 64;
 const profileCardCache = new Map<string, Buffer>();
 
@@ -271,6 +272,9 @@ export async function renderProfileCard(
   ]);
 
   const serverLabel = profile.server === "jp" ? "JP" : "INTERNATIONAL";
+  const eyebrow = `PLAYER PROFILE · ${serverLabel}`;
+  const name = profile.playerName || "—";
+  const nameShift = alignLeftMargin({ text: name, size: 26 }, { text: eyebrow, size: 10 });
   const trophyStyle = TROPHY_STYLE[profile.trophyClass] ?? TROPHY_STYLE.normal;
   const stars = Number(profile.stars) || 0;
   const avg = (sum: number, n: number) => (n ? `평균 ${(sum / n).toFixed(1)}` : "");
@@ -286,8 +290,9 @@ export async function renderProfileCard(
         ? image(avatarUrl, { width: 96, height: 96, objectFit: "cover", borderRadius: 16, marginRight: 18, flexShrink: 0 })
         : el("div", { width: 96, height: 96, borderRadius: 16, background: SURFACE2, marginRight: 18, flexShrink: 0 }),
       el("div", { display: "flex", flexDirection: "column", flex: 1, minWidth: 0, gap: 7 }, [
-        el("span", { color: MUTED, fontSize: 10, fontWeight: 700, letterSpacing: 0.4 }, `PLAYER PROFILE · ${serverLabel}`),
-        el("span", { color: INK, fontSize: 26, fontWeight: 800, lineHeight: 1.1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, profile.playerName || "—"),
+        el("span", { color: MUTED, fontSize: 10, fontWeight: 700, letterSpacing: 0.4 }, eyebrow),
+        // 전각 영문 이름(ＲＯＥＮＡ 등)은 첫 글자 왼쪽 여백이 커서 위 줄보다 밀려 보이므로 잉크 시작을 맞춘다.
+        el("span", { color: INK, fontSize: 26, fontWeight: 800, lineHeight: 1.1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginLeft: nameShift }, name),
         el("div", { display: "flex", alignItems: "center", gap: 10 }, [
           pill(profile.trophy || "—", { ...trophyStyle, fontSize: 11, padding: "4px 11px", maxWidth: 420, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }),
           // 단위(段位)·클래스(오토모다치) 이미지. 단위는 이 기능 이후 동기화부터 저장된다.

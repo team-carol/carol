@@ -5,6 +5,7 @@ import type { PlayRecord } from "../../scraper";
 import { getConstant, getJacketFile } from "../../constants";
 import { fetchJacketDataUrl } from "./ratingCard";
 import { musicKindIcons, KIND_ICON_RATIO } from "./dxnetAssets";
+import { alignLeftMargin } from "./textMetrics";
 import { displayTitle } from "../../aliases";
 import { getScoreRank, MAI_CM_COLOR } from "../../games";
 
@@ -49,7 +50,7 @@ const jacketCache = new Map<string, string | null>();
 // 반복 호출하거나 다른 사람이 조회할 때마다 satori+resvg 전체를 다시 돌린다.
 // (유저·날짜·마지막 동기화 시각·번역여부·페이지) 키로 PNG 를 재사용한다.
 // lastSyncedAt 이 키에 들어가므로 새 동기화 후에는 자연스럽게 무효화된다.
-const ACH_CARD_VERSION = 9;
+const ACH_CARD_VERSION = 10;
 const ACH_CARD_CACHE_MAX = 48;
 const achCardCache = new Map<string, Buffer>();
 
@@ -322,7 +323,8 @@ export async function renderAchievementCard(
           : el("div", { width: 44, height: 44, background: BRAND.surface2, marginRight: 12, borderRadius: 12 }),
         el("div", { display: "flex", flexDirection: "column", flex: 1 }, [
           el("span", { color: MUTED, fontSize: 10, fontWeight: 700 }, "DAILY ACHIEVEMENTS"),
-          el("span", { color: INK, fontSize: 18, fontWeight: 800 }, profile.playerName || "—"),
+          // 전각 영문 이름은 첫 글자 왼쪽 여백만큼 밀려 보이므로 위 줄과 잉크 시작을 맞춘다.
+          el("span", { color: INK, fontSize: 18, fontWeight: 800, marginLeft: alignLeftMargin({ text: profile.playerName || "—", size: 18 }, { text: "DAILY ACHIEVEMENTS", size: 10 }) }, profile.playerName || "—"),
         ]),
         wordmark(),
       ]),
