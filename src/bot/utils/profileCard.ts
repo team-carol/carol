@@ -41,22 +41,22 @@ const SOFT = BRAND.accentSoft;
 const FAINT = BRAND.faint;
 const NUM_FONT = "Pretendard"; // 랜딩 수치 표기와 같은 글꼴(fonts.ts 에 700 으로 등록됨)
 
-// 랭크 분포 막대·범례 색. 게임 랭크색(금색 계열)을 진한 것 → 옅은 것 순으로 이어 붙였다.
+// 랭크 막대그래프 색. 게임 랭크색(금색 계열)을 진한 것 → 옅은 것 순으로 이어 붙였다.
 const RANK_RAMP: [string, string][] = [
   ["SSS+", "#d97706"], ["SSS", "#f59e0b"], ["SS+", "#fbbf24"],
   ["SS", "#fcd34d"], ["S+", "#fde68a"], ["S", "#fef3c7"],
 ];
 const RANK_OTHER_COLOR = BRAND.border2;
-const MARK_GROUPS: { label: string; keys: string[] }[] = [
-  { label: "콤보", keys: ["AP+", "AP", "FC+", "FC"] },
-  { label: "싱크", keys: ["FDX+", "FDX", "FS+", "FS"] },
+const MARK_GROUPS: string[][] = [
+  ["AP+", "AP", "FC+", "FC"],
+  ["FDX+", "FDX", "FS+", "FS"],
 ];
 const MARK_COLOR: Record<string, string> = {
   "AP+": "#d946ef", AP: "#d946ef", "FC+": "#3b82f6", FC: "#60a5fa",
   "FDX+": "#10b981", FDX: "#34d399", "FS+": "#22c55e", FS: "#4ade80",
 };
 
-const PROFILE_CARD_VERSION = 2;
+const PROFILE_CARD_VERSION = 3;
 const PROFILE_CARD_CACHE_MAX = 64;
 const profileCardCache = new Map<string, Buffer>();
 
@@ -137,12 +137,13 @@ function statsPanel(items: { value: string; label: string; sub?: string }[]): El
     display: "flex", marginTop: 16,
     background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 16, padding: "18px 0",
   }, items.map((it, i) => el("div", {
-    display: "flex", flexDirection: "column", alignItems: "center", flex: 1, gap: 7,
+    // 보조 줄(평균)이 없는 칸도 숫자·라벨이 세로 가운데에 오도록 빈 줄을 넣지 않고 가운데 정렬한다.
+    display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", flex: 1, gap: 7,
     ...(i > 0 ? { borderLeft: `1px solid ${BORDER}` } : {}),
   }, [
     el("span", { color: SOFT, fontFamily: NUM_FONT, fontSize: 28, fontWeight: 700, lineHeight: 1 }, it.value),
     el("span", { color: MUTED, fontSize: 11 }, it.label),
-    el("span", { color: FAINT, fontSize: 10, lineHeight: 1 }, it.sub || " "),
+    ...(it.sub ? [el("span", { color: FAINT, fontSize: 10, lineHeight: 1 }, it.sub)] : []),
   ])));
 }
 
@@ -159,8 +160,20 @@ function panel(title: string, meta: string, children: El[]): El {
   ]);
 }
 
-function dot(color: string): El {
-  return el("div", { width: 7, height: 7, borderRadius: 99, background: color, flexShrink: 0 });
+// 세로 막대그래프. 막대 높이는 묶음 안 최댓값 대비 비율, 막대 위에 개수, 아래에 라벨(+비율).
+function barChart(items: { label: string; color: string; count: number; note?: string }[], height: number, barWidth: number): El {
+  const max = Math.max(1, ...items.map((it) => it.count));
+  return el("div", { display: "flex", flex: 1 }, items.map((it) => el("div", { display: "flex", flexDirection: "column", alignItems: "center", flex: 1 }, [
+    el("div", {
+      display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end",
+      alignSelf: "stretch", height: height + 26, borderBottom: `1px solid ${BORDER}`,
+    }, [
+      el("span", { color: it.count ? INK : FAINT, fontFamily: NUM_FONT, fontSize: 16, fontWeight: 700, lineHeight: 1, marginBottom: 6 }, String(it.count)),
+      el("div", { width: barWidth, height: it.count ? Math.max(3, Math.round((height * it.count) / max)) : 0, borderRadius: "6px 6px 0 0", background: it.color }),
+    ]),
+    el("span", { color: MUTED, fontSize: 11, fontWeight: 800, lineHeight: 1, marginTop: 8 }, it.label),
+    ...(it.note ? [el("span", { color: FAINT, fontSize: 10, lineHeight: 1, marginTop: 5 }, it.note)] : []),
+  ])));
 }
 
 function clearPanel(clears: PlayRecord[]): El {
@@ -174,38 +187,23 @@ function clearPanel(clears: PlayRecord[]): El {
     ranks.set(rank, (ranks.get(rank) ?? 0) + 1);
     for (const m of [markOf(r.fc), markOf(r.sync)]) if (m) marks.set(m, (marks.get(m) ?? 0) + 1);
   }
-  const rankItems: { label: string; color: string; count: number }[] = RANK_RAMP.map(([k, color]) => ({ label: k, color, count: ranks.get(k) ?? 0 }));
+  const pct = (n: number) => (played ? Math.round((n / played) * 100) : 0);
+  const rankItems = RANK_RAMP.map(([label, color]) => ({ label, color, count: ranks.get(label) ?? 0 }));
   const listed = rankItems.reduce((sum, it) => sum + it.count, 0);
   rankItems.push({ label: "그 외", color: RANK_OTHER_COLOR, count: Math.max(0, played - listed) });
-  const pct = (n: number) => (played ? (n / played) * 100 : 0);
 
-  // 랭크 분포 막대: 개수 비율만큼 이어 붙인 한 줄.
-  const bar = el("div", { display: "flex", height: 8, borderRadius: 99, overflow: "hidden", background: RANK_OTHER_COLOR },
-    rankItems.filter((it) => it.count > 0).map((it) => el("div", { width: `${pct(it.count)}%`, height: 8, background: it.color })));
-
-  const legend = el("div", { display: "flex", marginTop: 14 }, rankItems.map((it) =>
-    el("div", { display: "flex", flexDirection: "column", alignItems: "center", flex: 1, gap: 6 }, [
-      el("div", { display: "flex", alignItems: "center", gap: 5 }, [
-        dot(it.color),
-        el("span", { color: MUTED, fontSize: 11, fontWeight: 700 }, it.label),
-      ]),
-      el("span", { color: INK, fontFamily: NUM_FONT, fontSize: 20, fontWeight: 700, lineHeight: 1 }, String(it.count)),
-      el("span", { color: FAINT, fontSize: 10, lineHeight: 1 }, `${Math.round(pct(it.count))}%`),
-    ])));
-
-  const markGroups = el("div", { display: "flex", marginTop: 16, paddingTop: 14, borderTop: `1px solid ${BORDER}` },
-    MARK_GROUPS.map((g, gi) => el("div", {
-      display: "flex", flexDirection: "column", flex: 1, gap: 10,
+  const rankChart = barChart(rankItems.map((it) => ({ ...it, note: `${pct(it.count)}%` })), 96, 46);
+  // 콤보·싱크는 막대 없이 숫자로. 두 묶음은 제목 없이 세로선으로만 나눈다.
+  const markGroups = el("div", { display: "flex", marginTop: 16, paddingTop: 16, borderTop: `1px solid ${BORDER}` },
+    MARK_GROUPS.map((keys, gi) => el("div", {
+      display: "flex", flex: 1,
       ...(gi > 0 ? { borderLeft: `1px solid ${BORDER}`, paddingLeft: 16 } : { paddingRight: 16 }),
-    }, [
-      el("span", { color: FAINT, fontSize: 10, fontWeight: 700 }, g.label),
-      el("div", { display: "flex" }, g.keys.map((k) => el("div", { display: "flex", flexDirection: "column", alignItems: "center", flex: 1, gap: 6 }, [
-        el("span", { color: MARK_COLOR[k] ?? INK, fontSize: 12, fontWeight: 800, lineHeight: 1 }, k),
-        el("span", { color: INK, fontFamily: NUM_FONT, fontSize: 20, fontWeight: 700, lineHeight: 1 }, String(marks.get(k) ?? 0)),
-      ]))),
-    ])));
+    }, keys.map((k) => el("div", { display: "flex", flexDirection: "column", alignItems: "center", flex: 1, gap: 6 }, [
+      el("span", { color: MARK_COLOR[k] ?? INK, fontSize: 12, fontWeight: 800, lineHeight: 1 }, k),
+      el("span", { color: INK, fontFamily: NUM_FONT, fontSize: 20, fontWeight: 700, lineHeight: 1 }, String(marks.get(k) ?? 0)),
+    ])))));
 
-  return panel("클리어 현황", `플레이한 채보 ${played}개 기준`, [bar, legend, markGroups]);
+  return panel("클리어 현황", `플레이한 채보 ${played}개 기준`, [rankChart, markGroups]);
 }
 
 function recentRow(record: PlayRecord, profile: CachedProfile, jacket: string | null, translate: boolean): El {
