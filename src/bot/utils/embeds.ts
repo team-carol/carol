@@ -12,6 +12,7 @@ import {
   getMapImage,
   saveSongJacket,
   getTranslateTitles,
+  getFriendCodePublic,
 } from "../../storage";
 import { getMaimaiBaseUrl } from "../../scraper";
 import {
@@ -136,6 +137,7 @@ export async function buildAvatarAttachment(
 export function profileEmb(
   p: NonNullable<Awaited<ReturnType<typeof getCachedProfile>>>,
   hasAvatar: boolean,
+  showFriendCode = false,
 ) {
   const stars = p.stars && p.stars !== "0" ? " · ★×" + p.stars : "";
   const serverLabel = p.server === "jp" ? "JP" : "INTERNATIONAL";
@@ -155,6 +157,9 @@ export function profileEmb(
       text: msg("embed.profileFooter", { server: serverLabel, synced: new Date(p.lastSyncedAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }) }),
     });
   if (hasAvatar) emb.setThumbnail("attachment://avatar.png");
+  // 친구 코드는 본인이 /설정 에서 공개로 바꾼 경우에만 보인다(기본 비공개).
+  const friendCode = showFriendCode ? (p.friendCode ?? "").match(/\d{13}/)?.[0] : undefined;
+  if (friendCode) emb.addFields({ name: msg("embed.friendCodeField"), value: `\`${friendCode}\`` });
   return emb;
 }
 
@@ -724,7 +729,7 @@ export async function buildProfileReply(
   cached: NonNullable<Awaited<ReturnType<typeof getCachedProfile>>>,
   userId: string,
 ) {
-  const avatar = await buildAvatarAttachment(userId, cached.server);
+  const [avatar, showFriendCode] = await Promise.all([buildAvatarAttachment(userId, cached.server), getFriendCodePublic(userId)]);
   const recentBtn = new ButtonBuilder()
     .setCustomId(`recent:${userId}`)
     .setLabel(msg("profileButton.recent"))
@@ -743,7 +748,7 @@ export async function buildProfileReply(
     mapBtn,
   );
   return {
-    embeds: [profileEmb(cached, !!avatar)],
+    embeds: [profileEmb(cached, !!avatar, showFriendCode)],
     files: avatar ? [avatar] : [],
     components: [row],
   };

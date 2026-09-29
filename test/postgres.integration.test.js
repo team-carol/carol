@@ -273,6 +273,11 @@ test("patch_notes 게시·미확인 조회·ack", async () => {
       await db.setPatchNotePublished(draft.id, true);
       const [seen] = await db.getUnseenPatchNotes("old", 0, 3);
       assert.equal(seen.body, "초안");
+      // 친구 코드 공개는 기본 비공개, 켜고 끌 수 있다
+      assert.equal(await db.getFriendCodePublic("old"), false);
+      await db.setFriendCodePublic("old", true);
+      assert.equal(await db.getFriendCodePublic("old"), true);
+      assert.equal(await db.getFriendCodePublic("nobody"), false);
       // 가입(세션 생성)이 게시보다 나중이면 보지 않는다
       await new Promise((r) => setTimeout(r, 5));
       await client.query("INSERT INTO sessions(discord_user_id) VALUES('new')");
