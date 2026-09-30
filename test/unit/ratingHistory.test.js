@@ -40,3 +40,23 @@ test("buildRatingSeries: 성과 로그 시작 전이나 로그가 없으면 실�
   assert.deepEqual(h.buildRatingSeries({ ...base, logFirstDay: null }), [{ day: "2026-09-02", rating: 15000, estimated: false }]);
   assert.deepEqual(h.buildRatingSeries({ ...base, logFirstDay: "2026-09-02" }), [{ day: "2026-09-02", rating: 15000, estimated: false }]);
 });
+
+test("buildRatingSeries: 변화 없는 추정 구간은 빼고 실측끼리 바로 잇는다", () => {
+  const days = ["2026-09-01", "2026-09-02", "2026-09-03", "2026-09-04"];
+  const rec = { title: "t", musicKind: "DX", diff: "MASTER", level: "13", achievementVal: 100.5, fc: "", sync: "" };
+  const series = h.buildRatingSeries({
+    days,
+    snapshots: [{ playDay: "2026-09-01", rating: 16000 }, { playDay: "2026-09-04", rating: 16000 }],
+    clearNow: [rec], events: [], server: "intl", logFirstDay: "2026-09-01",
+  });
+  assert.deepEqual(series, [
+    { day: "2026-09-01", rating: 16000, estimated: false },
+    { day: "2026-09-04", rating: 16000, estimated: false },
+  ]);
+});
+
+test("versionUpdatesBetween: 기간 안의 국제판 버전 업데이트만", () => {
+  const { versionUpdatesBetween } = require("../../dist/constants.js");
+  assert.deepEqual(versionUpdatesBetween("2026-07-01", "2026-09-30"), [{ day: "2026-07-23", label: "CiRCLE PLUS" }]);
+  assert.deepEqual(versionUpdatesBetween("2026-07-24", "2026-09-30"), []);
+});

@@ -34,6 +34,7 @@ import { aliasMatches, normalizeQuery, displayTitle } from "../../aliases";
 import { ratingColor } from "./roles";
 import { renderProfileCard } from "./profileCard";
 import { buildRatingSeries, recentPlayDays, RATING_HISTORY_DAYS } from "../../ratingHistory";
+import { versionUpdatesBetween } from "../../constants";
 import { koreaPlayDayKey, koreaPlayDayRange } from "../../achievements";
 import { buildMarkMap, buildKindResolver, chartKey } from "../../scraper";
 import type { PlayRecord, ChartMarks, MaimaiServer, MapArea } from "../../scraper";
@@ -747,7 +748,9 @@ async function loadRatingHistory(cached: NonNullable<Awaited<ReturnType<typeof g
     server: cached.server,
     logFirstDay: logRange ? koreaPlayDayKey(new Date(logRange.first)) : null,
   });
-  return { points, days };
+  // 버전 업데이트 날짜는 서버별 이력(국제판·내수판 일정이 다르다).
+  const updates = versionUpdatesBetween(days[0], days[days.length - 1], cached.server);
+  return { points, days, updates };
 }
 
 export async function buildProfileReply(
