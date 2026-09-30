@@ -269,6 +269,10 @@ client.on(Events.InteractionCreate, async (i) => {
       try { await handleChartVideoButton(i); } catch (e) { console.error("[chartvid-btn]", e); }
       return;
     }
+    if (i.customId.startsWith("circle:")) {
+      try { await circle.handleButton(i); } catch (e) { console.error("[circle-btn]", e); }
+      return;
+    }
     if (i.customId.startsWith("goal:")) {
       try { await goal.handleButton(i); } catch (e) { console.error("[goal-btn]", e); }
       return;

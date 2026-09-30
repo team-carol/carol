@@ -142,9 +142,9 @@ export const MESSAGES = {
   "circle.rewardValue": "{points} PT 남음",
   "circle.challengeField": "서클 챌린지",
   "circle.challengeValue": "**{title}**\n{artist}\n달성률 **{achievement}**",
-  "circle.membersField": "멤버 포인트",
-  "circle.memberLine": "{rank}. {leader}**{name}** · {points} PT · 레이팅 {rating}",
-  "circle.leaderMark": "👑 ",
+  "circle.membersButton": "멤버 포인트",
+  "circle.membersTitle": "{name} 멤버 포인트",
+  "circle.leaderNote": "\\* 서클 리더 · 이번 달 포인트 순",
   "circle.membersMissing": "멤버 목록을 가져오지 못했습니다.",
   "circle.footer": "{player} · {server} · 마지막 동기화 {synced}",
 
