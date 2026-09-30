@@ -748,8 +748,8 @@ async function loadRatingHistory(cached: NonNullable<Awaited<ReturnType<typeof g
     server: cached.server,
     logFirstDay: logRange ? koreaPlayDayKey(new Date(logRange.first)) : null,
   });
-  // 버전 업데이트 날짜는 국제판 기준 이력만 있어 국제판 프로필에만 표시한다.
-  const updates = cached.server === "intl" ? versionUpdatesBetween(days[0], days[days.length - 1]) : [];
+  // 버전 업데이트 날짜는 서버별 이력(국제판·내수판 일정이 다르다).
+  const updates = versionUpdatesBetween(days[0], days[days.length - 1], cached.server);
   return { points, days, updates };
 }
 

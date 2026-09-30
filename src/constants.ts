@@ -62,36 +62,49 @@ export const GENRES = [
 // 버전 코드는 시작값 + 세부 웨이브(예: PRiSM PLUS = 25500~25599)이므로 범위로 판정.
 // (시작 코드: 25500 PRiSM PLUS, 26000 CiRCLE, 26500 CiRCLE PLUS, 27000 다음 세대 ...)
 const NEW_SONG_MIN_VERSION = 26000; // 국제판 신곡 하한: CiRCLE 시작 (국제판도 CiRCLE로 업데이트, PRiSM PLUS는 이제 구곡)
-const NEW_SONG_MIN_VERSION_JP = 26000; // 내수판 신곡 하한: CiRCLE 시작 (내수판 현재 = CiRCLE PLUS이므로 CiRCLE+CiRCLE PLUS만 신곡)
-const NEW_SONG_MAX_VERSION = 27000; // 다음 세대 시작 (미포함) = CiRCLE PLUS까지 신곡
+const NEW_SONG_MAX_VERSION = 27000; // 국제판 신곡 상한(미포함) = CiRCLE PLUS까지 신곡
+// 내수판은 2026-09-17 MAGiCAL(27000) 업데이트로 CiRCLE PLUS(26500) ~ MAGiCAL 이 신곡이다.
+const NEW_SONG_MIN_VERSION_JP = 26500;
+const NEW_SONG_MAX_VERSION_JP = 27500; // MAGiCAL PLUS(27500) 미포함
 
 // 레이팅 "신곡" 범위는 버전 업데이트마다 통째로 옮겨간다. 과거 레이팅표를 역산할 때
 // 현재 범위로 신곡/구곡을 나누면 그 시점과 어긋나므로, 적용 시작일과 함께 이력을 둔다.
 // from 은 그 범위가 적용되기 시작한 play-day(포함). 최신순으로 정렬해 첫 일치를 쓴다.
 // 새 버전이 나오면 위에 한 줄 추가하고 NEW_SONG_MIN/MAX 도 함께 갱신할 것.
 // label 은 그 날 나온 버전 이름(프로필 레이팅 추이 그래프의 업데이트 표시에 쓴다).
-const NEW_SONG_WINDOWS: { from: string; min: number; max: number; label?: string }[] = [
+// 국제판과 내수판은 업데이트 일정이 달라 이력을 따로 둔다.
+type NewSongWindowEntry = { from: string; min: number; max: number; label?: string };
+const NEW_SONG_WINDOWS: NewSongWindowEntry[] = [
   // 2026-07-23 CiRCLE PLUS 업데이트 → CiRCLE ~ CiRCLE PLUS
   { from: "2026-07-23", min: NEW_SONG_MIN_VERSION, max: NEW_SONG_MAX_VERSION, label: "CiRCLE PLUS" },
   // 그 이전 → PRiSM PLUS ~ CiRCLE (CiRCLE PLUS 26500 미포함)
   { from: "", min: 25500, max: 26500 },
 ];
+const NEW_SONG_WINDOWS_JP: NewSongWindowEntry[] = [
+  // 2026-09-17 MAGiCAL 업데이트 → CiRCLE PLUS ~ MAGiCAL
+  { from: "2026-09-17", min: NEW_SONG_MIN_VERSION_JP, max: NEW_SONG_MAX_VERSION_JP, label: "MAGiCAL" },
+  // 그 이전(내수판 CiRCLE PLUS 시기) → CiRCLE ~ CiRCLE PLUS. 내수판 CiRCLE PLUS 출시일은
+  // otoge-db 에 없어(release 000000) 그보다 앞선 범위는 두지 않는다.
+  { from: "", min: 26000, max: 27000 },
+];
+function windowsFor(server: MaimaiServer): NewSongWindowEntry[] {
+  return server === "jp" ? NEW_SONG_WINDOWS_JP : NEW_SONG_WINDOWS;
+}
 
 export interface NewSongWindow { min: number; max: number }
 
-/** 국제판 버전 업데이트 날짜(play-day)와 버전 이름. fromDay~toDay(포함) 안의 것만, 오래된 순. */
-export function versionUpdatesBetween(fromDay: string, toDay: string): { day: string; label: string }[] {
-  return NEW_SONG_WINDOWS
+/** 서버별 버전 업데이트 날짜(play-day)와 버전 이름. fromDay~toDay(포함) 안의 것만, 오래된 순. */
+export function versionUpdatesBetween(fromDay: string, toDay: string, server: MaimaiServer = "intl"): { day: string; label: string }[] {
+  return windowsFor(server)
     .filter((w) => w.from && w.label && w.from >= fromDay && w.from <= toDay)
     .map((w) => ({ day: w.from, label: w.label! }))
     .sort((a, b) => a.day.localeCompare(b.day));
 }
 
 // playDay(YYYY-MM-DD)가 없으면 현재 범위. 이력보다 오래된 날짜는 가장 오래된 범위를 쓴다.
-// 국제판 기준 이력이므로 내수판(jp) 판정에는 쓰지 않는다 (isNewSong 참고).
-export function newSongWindowAt(playDay?: string): NewSongWindow {
-  if (!playDay) return { min: NEW_SONG_MIN_VERSION, max: NEW_SONG_MAX_VERSION };
-  const hit = NEW_SONG_WINDOWS.find((w) => playDay >= w.from) ?? NEW_SONG_WINDOWS[NEW_SONG_WINDOWS.length - 1];
+export function newSongWindowAt(playDay?: string, server: MaimaiServer = "intl"): NewSongWindow {
+  const list = windowsFor(server);
+  const hit = playDay ? (list.find((w) => playDay >= w.from) ?? list[list.length - 1]) : list[0];
   return { min: hit.min, max: hit.max };
 }
 
@@ -288,19 +301,13 @@ export function getSongVersion(title: string): number | null {
 }
 
 // 레이팅 신곡(현재+이전 버전) 여부. version 데이터가 없으면 구곡으로 취급.
-// 서버별 현재 세대가 달라 신곡 하한이 다르다(내수판=CiRCLE PLUS, 국제판=CiRCLE).
-// playDay 를 주면 그 시점의 신곡 범위로 판정한다(과거 레이팅표 역산용).
-// 단 NEW_SONG_WINDOWS 는 국제판 업데이트 일정 기준이라 내수판(jp)에는 적용하지 않는다.
-// 내수판은 세대 진행이 국제판보다 앞서 같은 날짜의 신곡 범위가 다르다.
+// 서버별 세대 진행이 달라(내수판=MAGiCAL, 국제판=CiRCLE PLUS) 신곡 범위도 서버별 이력을 쓴다.
+// playDay 를 주면 그 시점의 신곡 범위로 판정한다(과거 레이팅표 역산·레이팅 추이 추정용).
 export function isNewSong(title: string, server: MaimaiServer = "intl", playDay?: string): boolean {
   const v = versionMap.get(title);
   if (v === undefined) return false;
-  if (playDay && server !== "jp") {
-    const w = newSongWindowAt(playDay);
-    return v >= w.min && v < w.max;
-  }
-  const min = server === "jp" ? NEW_SONG_MIN_VERSION_JP : NEW_SONG_MIN_VERSION;
-  return v >= min && v < NEW_SONG_MAX_VERSION;
+  const w = newSongWindowAt(playDay, server);
+  return v >= w.min && v < w.max;
 }
 
 // 버전 세대 [세대 시작코드, PLUS 시작코드, 세대명]. PLUS 여부는 별도로 판정.
@@ -320,6 +327,7 @@ const VERSION_GENERATIONS: [number, number, string][] = [
   [24000, 24500, "BUDDiES"],
   [25000, 25500, "PRiSM"],
   [26000, 26500, "CiRCLE"],
+  [27000, 27500, "MAGiCAL"],
 ];
 export const VERSION_NAMES = VERSION_GENERATIONS.map(([, , n]) => n);
 

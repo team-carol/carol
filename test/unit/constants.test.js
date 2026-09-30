@@ -47,5 +47,18 @@ test("newSongWindowAt: 버전 업데이트 시점 기준으로 신곡 범위가 
   assert.deepEqual(c.newSongWindowAt("2020-01-01"), { min: 25500, max: 26500 });
 });
 
+test("newSongWindowAt(jp): 내수판은 2026-09-17 MAGiCAL 부터 CiRCLE PLUS ~ MAGiCAL", () => {
+  assert.deepEqual(c.newSongWindowAt(undefined, "jp"), { min: 26500, max: 27500 }, "현재 내수판 범위");
+  assert.deepEqual(c.newSongWindowAt("2026-09-17", "jp"), { min: 26500, max: 27500 });
+  assert.deepEqual(c.newSongWindowAt("2026-09-16", "jp"), { min: 26000, max: 27000 });
+  // 국제판은 내수판 업데이트 영향을 받지 않는다
+  assert.deepEqual(c.newSongWindowAt("2026-09-20", "intl"), { min: 26000, max: 27000 });
+});
+
+test("versionUpdatesBetween: 서버별 업데이트 날", () => {
+  assert.deepEqual(c.versionUpdatesBetween("2026-07-01", "2026-09-30", "jp"), [{ day: "2026-09-17", label: "MAGiCAL" }]);
+  assert.deepEqual(c.versionUpdatesBetween("2026-07-01", "2026-09-30", "intl"), [{ day: "2026-07-23", label: "CiRCLE PLUS" }]);
+});
+
 // isNewSong 의 국제판/내수판 분기는 versionMap(네트워크·DB 로드)이 있어야 의미가 있어
 // 여기선 검증하지 않는다. 실데이터 검증은 개발 스택에서 별도로 수행.
