@@ -3,8 +3,8 @@ import * as fs from "fs";
 import { createHash, timingSafeEqual } from "crypto";
 import { gunzip } from "zlib";
 import { promisify } from "util";
-import { parseHome, parsePlayerData, parseFriendCode as parseFC, parseRecentRecords, parsePlaylogHistory, parseTop5, parseTopSongs, parseMusicScore, mergeTopRecords, getMaimaiBaseUrl, parseMapAreas, parsePlaylogDetail, chartKey, buildMarkMap, buildKindResolver, parseUserOptions } from "../scraper";
-import { cacheProfile, getCachedProfile, saveUserSession, getUserSyncToken, findUserBySyncToken, getUserFriendCodeForServer, saveAvatarBlob, getAvatarBlob, getSongJacket, saveSongJacket, getExtraBookmarklets, getProfilePrivate, setProfilePrivate, addExtraBookmarklet, removeExtraBookmarklet, getEnabledBookmarkletPresetIds, setBookmarkletPresetEnabled, getUserDefaultServer, setUserDefaultServer, isMaimaiServer, getMapImage, saveMapImage, saveAchievementPlayEventLogBatch, upsertChartClears, backfillEventRatingUp, saveRatingSnapshot, getAllAliases, addAlias, deleteAlias, setAliasTranslation, setMessageOverride, deleteMessageOverride, getTranslateTitles, setTranslateTitles, getFriendCodePublic, setFriendCodePublic, getRegisteredUserCount, getAchievementMinimum, setAchievementMinimum, listGoals, updateGoalProgress, getPolicyAck, setPolicyAck, getSimaiChart, saveSimaiChart, listRegistryCharts, auditRegistryCharts, listOptionPresets, saveOptionPreset, deleteOptionPreset, saveOptionSnapshot, getOptionSnapshots, listPatchNotes, savePatchNote, setPatchNotePublished, deletePatchNote } from "../storage";
+import { parseHome, parsePlayerData, parseFriendCode as parseFC, parseRecentRecords, parsePlaylogHistory, parseTop5, parseTopSongs, parseMusicScore, mergeTopRecords, getMaimaiBaseUrl, parseMapAreas, parsePlaylogDetail, chartKey, buildMarkMap, buildKindResolver, parseUserOptions, parseCircle } from "../scraper";
+import { cacheProfile, getCachedProfile, saveUserSession, getUserSyncToken, findUserBySyncToken, getUserFriendCodeForServer, saveAvatarBlob, getAvatarBlob, getSongJacket, saveSongJacket, getExtraBookmarklets, getProfilePrivate, setProfilePrivate, addExtraBookmarklet, removeExtraBookmarklet, getEnabledBookmarkletPresetIds, setBookmarkletPresetEnabled, getUserDefaultServer, setUserDefaultServer, isMaimaiServer, getMapImage, saveMapImage, saveAchievementPlayEventLogBatch, upsertChartClears, backfillEventRatingUp, saveRatingSnapshot, getAllAliases, addAlias, deleteAlias, setAliasTranslation, setMessageOverride, deleteMessageOverride, getTranslateTitles, setTranslateTitles, getFriendCodePublic, setFriendCodePublic, saveProfileCircle, getCirclePublic, setCirclePublic, getRegisteredUserCount, getAchievementMinimum, setAchievementMinimum, listGoals, updateGoalProgress, getPolicyAck, setPolicyAck, getSimaiChart, saveSimaiChart, listRegistryCharts, auditRegistryCharts, listOptionPresets, saveOptionPreset, deleteOptionPreset, saveOptionSnapshot, getOptionSnapshots, listPatchNotes, savePatchNote, setPatchNotePublished, deletePatchNote } from "../storage";
 import { POLICY_VERSION } from "../policy";
 import type { SongAliasRow } from "../storage/types";
 import { buildBookmarkletJs, setBaseUrl, getBaseUrl, buildBookmarklet, BOOKMARKLET_PRESETS, getBookmarkletPresets } from "./bookmarklet";
@@ -506,17 +506,18 @@ export function startWebServer(port: number): void {
 ${topbar()}
 <main class="page">
 <h1>개인정보처리방침</h1>
-<p>최종 수정일: 2026년 9월 29일</p>
+<p>최종 수정일: 2026년 9월 30일</p>
 <h2>1. 수집하는 정보</h2>
-<p>본 봇은 Discord 사용자 ID, maimai DX net 프로필 데이터(플레이어명, 친구 코드, 레이팅, 칭호, 클래스, 아바타 이미지, 최근 플레이 기록, 재킷 이미지)를 수집합니다. 북마클릿으로 동기화할 때는 maimai DX net의 게임 옵션 설정값(노트 속도, 판정 표시, 효과음 등)도 함께 수집하며, 사용자가 옵션 프리셋을 저장하면 그 설정값을 저장합니다.</p>
+<p>본 봇은 Discord 사용자 ID, maimai DX net 프로필 데이터(플레이어명, 친구 코드, 레이팅, 칭호, 클래스, 아바타 이미지, 최근 플레이 기록, 재킷 이미지)를 수집합니다. 북마클릿으로 동기화할 때는 maimai DX net의 게임 옵션 설정값(노트 속도, 판정 표시, 효과음 등)도 함께 수집하며, 사용자가 옵션 프리셋을 저장하면 그 설정값을 저장합니다. 사용자가 maimai DX net 서클에 가입되어 있다면 서클 정보(서클 이름·서클 코드·소개 문구, 서클 포인트와 순위, 서클 챌린지 달성률, 멤버의 플레이어명·칭호·레이팅·서클 포인트)도 함께 수집합니다.</p>
 <h2>2. 수집 방법</h2>
 <p>사용자가 maimai DX net에 로그인된 브라우저에서 <strong>북마클릿</strong> 또는 <strong>캐롤익스텐션(비공식 크롬 확장)</strong>을 실행하여, 해당 페이지의 HTML을 사용자 브라우저에서 직접 서버로 전송합니다. SEGA ID, 비밀번호 등 계정 정보는 절대 수집하지 않습니다.</p>
 <p>캐롤익스텐션을 쓰는 경우, 사용자가 확장 설정에서 동기화를 명시적으로 켜고 동기화 토큰을 등록해야 합니다. 동기화는 (1) maimai DX net 화면의 버튼을 눌렀을 때, 또는 (2) 사용자가 "자동" 모드를 켠 경우 홈 화면에 접속했고 플레이 횟수가 지난 동기화 이후 변한 것이 확인됐을 때에만 실행됩니다. 백그라운드 상시 수집은 하지 않으며, 전송되는 데이터의 종류와 목적은 북마클릿과 동일합니다.</p>
 <h2>3. 데이터 저장</h2>
 <p>프로필 데이터는 PostgreSQL 데이터베이스에 저장됩니다. 세션 정보는 암호화하여 저장하며, 아바타 및 재킷 이미지는 base64 인코딩하여 저장합니다. base64 인코딩은 암호화가 아닙니다.</p>
 <h2>4. 데이터 사용 목적</h2>
-<p>Discord에서 maimai DX 프로필을 표시하고, 게임 설정 페이지에서 현재 게임 옵션을 보여 주거나 옵션 프리셋을 편집·적용하는 용도로만 사용됩니다.</p>
+<p>Discord에서 maimai DX 프로필과 서클 정보를 표시하고, 게임 설정 페이지에서 현재 게임 옵션을 보여 주거나 옵션 프리셋을 편집·적용하는 용도로만 사용됩니다.</p>
 <p>친구 코드는 사용자의 maimai DX 프로필을 구분하고 Discord 계정과 연결하는 데 사용합니다. 친구 코드는 기본으로 다른 사람에게 표시하지 않으며, 사용자가 설정 페이지에서 친구 코드 공개를 켠 경우에만 /프로필 명령어 결과에 표시합니다.</p>
+<p>서클 정보는 /프로필의 서클 이름과 /서클 명령어에 사용합니다. 서클 정보는 기본으로 공개되며, 사용자가 설정 페이지에서 서클 공개를 끄면 /프로필에 서클 이름을 표시하지 않고 /서클 결과도 본인에게만 보여 줍니다. 서클 멤버의 정보는 해당 서클을 보여 주는 용도로만 사용합니다.</p>
 <h2>5. 제3자 제공</h2>
 <p>수집된 데이터를 제3자에게 제공하지 않습니다.</p>
 <h2>6. 데이터 삭제</h2>
@@ -572,8 +573,9 @@ ${siteFooter()}
       const defaultServer = userId ? await getUserDefaultServer(userId) : "intl";
       const translate = userId ? await getTranslateTitles(userId) : false;
       const friendCodePublic = userId ? await getFriendCodePublic(userId) : false;
+      const circlePublic = userId ? await getCirclePublic(userId) : true;
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-      res.end(settingsPage(token, isPrivate, presetIds, bookmarklets, defaultServer, translate, friendCodePublic));
+      res.end(settingsPage(token, isPrivate, presetIds, bookmarklets, defaultServer, translate, friendCodePublic, circlePublic));
       return;
     }
 
@@ -950,7 +952,7 @@ ${siteFooter()}
       const defaultServer = await getUserDefaultServer(userId);
       const translate = await getTranslateTitles(userId);
       res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({ private: isPrivate, presets, bookmarklets, defaultServer, translate, friendCodePublic: await getFriendCodePublic(userId), minimumAchievement: await getAchievementMinimum(userId) }));
+      res.end(JSON.stringify({ private: isPrivate, presets, bookmarklets, defaultServer, translate, friendCodePublic: await getFriendCodePublic(userId), circlePublic: await getCirclePublic(userId), minimumAchievement: await getAchievementMinimum(userId) }));
       return;
     }
 
@@ -988,6 +990,23 @@ ${siteFooter()}
         await setFriendCodePublic(userId, value);
         res.writeHead(200, { "content-type": "application/json" });
         res.end(JSON.stringify({ friendCodePublic: value }));
+      } catch {
+        res.writeHead(400, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: "invalid_body" }));
+      }
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/settings/circle") {
+      const token = url.searchParams.get("code") || "";
+      const userId = await findUserBySyncToken(token);
+      if (!userId) { res.writeHead(403, { "content-type": "application/json" }); res.end(JSON.stringify({ error: "expired" })); return; }
+      try {
+        const body = JSON.parse(await readBody(req));
+        const value = body.public === true;
+        await setCirclePublic(userId, value);
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ circlePublic: value }));
       } catch {
         res.writeHead(400, { "content-type": "application/json" });
         res.end(JSON.stringify({ error: "invalid_body" }));
@@ -1139,9 +1158,11 @@ ${siteFooter()}
       const mapHtml: string = data.m || "";
       const eventMapHtml: string = data.em || "";
       const optionHtml: string = typeof data.uo === "string" ? data.uo : "";
+      const circleHtml: string = typeof data.ci === "string" ? data.ci : "";
+      const circleMemberHtml: string = typeof data.cm === "string" ? data.cm : "";
       const avatarBase64: string = data.a || "";
       const detailPayloads = Array.isArray(data.dt) ? data.dt : [];
-      console.log(`[web] user=${syncUserId.slice(-6)}, server=${syncServer}, home=${homeHtml.length}B, player=${playerHtml.length}B, record=${recordHtml.length}B, ratingTarget=${ratingTargetHtml.length}B, fc=${fcHtml.length}B, top4=${top4Html.length}B, top3=${top3Html.length}B, top2=${top2Html.length}B, top1=${top1Html.length}B, top0=${top0Html.length}B, map=${mapHtml.length}B, eventMap=${eventMapHtml.length}B, option=${optionHtml.length}B`);
+      console.log(`[web] user=${syncUserId.slice(-6)}, server=${syncServer}, home=${homeHtml.length}B, player=${playerHtml.length}B, record=${recordHtml.length}B, ratingTarget=${ratingTargetHtml.length}B, fc=${fcHtml.length}B, top4=${top4Html.length}B, top3=${top3Html.length}B, top2=${top2Html.length}B, top1=${top1Html.length}B, top0=${top0Html.length}B, map=${mapHtml.length}B, eventMap=${eventMapHtml.length}B, option=${optionHtml.length}B, circle=${circleHtml.length}B, circleMember=${circleMemberHtml.length}B`);
       if (isDev) {
         fs.writeFileSync("debug_home.html", homeHtml, "utf-8");
         fs.writeFileSync("debug_pd.html", playerHtml, "utf-8");
@@ -1151,6 +1172,8 @@ ${siteFooter()}
         fs.writeFileSync("debug_map.html", mapHtml, "utf-8");
         fs.writeFileSync("debug_event_map.html", eventMapHtml, "utf-8");
         if (optionHtml) fs.writeFileSync("debug_option.html", optionHtml, "utf-8");
+        if (circleHtml) fs.writeFileSync("debug_circle.html", circleHtml, "utf-8");
+        if (circleMemberHtml) fs.writeFileSync("debug_circle_member.html", circleMemberHtml, "utf-8");
         detailPayloads.forEach((detail: unknown, idx: number) => {
           if (!detail || typeof detail !== "object") return;
           const html = "html" in detail && typeof detail.html === "string" ? detail.html : "";
@@ -1332,6 +1355,16 @@ ${siteFooter()}
             if (fields.length) await saveOptionSnapshot(userId, syncServer, fields);
           } catch (optionError) {
             console.warn("[web] 게임 옵션 저장 실패:", optionError instanceof Error ? optionError.message : optionError);
+          }
+        }
+
+        // 서클 정보(/서클, /프로필). 페이지를 못 받았거나 판단할 수 없으면(undefined) 이전 값을 유지한다.
+        if (circleHtml) {
+          try {
+            const circle = parseCircle(circleHtml, circleMemberHtml, syncServer);
+            if (circle !== undefined) await saveProfileCircle(savedProfileKey, JSON.stringify(circle));
+          } catch (circleError) {
+            console.warn("[web] 서클 정보 저장 실패:", circleError instanceof Error ? circleError.message : circleError);
           }
         }
 

@@ -160,6 +160,16 @@ test("chart_clears diff → 이벤트 로그 → 일일 성과 요약", async ()
     await db.cacheProfile({ playerName: "numbers", rating: 1, ratingMax: 1, gradeImg: "", avatar: "", trophy: "", trophyClass: "", stars: "", playCount: 1, friendCode: "numbers" }, 1);
     assert.equal(typeof (await db.getCachedProfile("intl:numbers")).lastSyncedAt, "number");
     assert.equal(typeof (await db.getLastSyncTime()), "number");
+    // 서클: 수집 전 '' → 저장 후 그대로, 다시 동기화(cacheProfile)해도 지워지지 않는다
+    assert.equal((await db.getCachedProfile("intl:numbers")).circleJson, "");
+    await db.saveProfileCircle("intl:numbers", '{"name":"ＺＵＮＤＡＭＯＮ"}');
+    await db.cacheProfile({ playerName: "numbers", rating: 2, ratingMax: 2, gradeImg: "", avatar: "", trophy: "", trophyClass: "", stars: "", playCount: 2, friendCode: "numbers" }, 2);
+    assert.equal((await db.getCachedProfile("intl:numbers")).circleJson, '{"name":"ＺＵＮＤＡＭＯＮ"}');
+    // 서클 공개는 기본 공개
+    assert.equal(await db.getCirclePublic("disc-1"), true);
+    assert.equal(await db.getCirclePublic("nobody"), true);
+    await db.setCirclePublic("disc-1", false);
+    assert.equal(await db.getCirclePublic("disc-1"), false);
   } finally { await db.close(); await pg.stop(); }
 });
 
