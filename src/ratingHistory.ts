@@ -1,11 +1,11 @@
 // 레이팅 추이(/프로필 카드 그래프). 두 출처를 합친다.
 //   - 실측: rating_snapshots 의 하루치 레이팅(동기화 때 DX NET 에서 읽은 값). 그래프에서 실선.
-//   - 추정: 실측이 없는 날(동기화 안 한 날, 스냅샷 기능 이전)은 /레이팅표 과거 조회와 같은 방식으로
+//   - 추정: 첫 실측 이전(스냅샷 기능 이전 등)은 /레이팅표 과거 조회와 같은 방식으로
 //     성과 이벤트 로그를 그날 끝까지 되돌려 레이팅을 계산한다(ratingRewind.ts). 그래프에서 점선.
 // 되돌린 계산은 현재 상수·버전 기준이라 실제 값과 어긋날 수 있다. 그래서 바로 다음 실측일의
 // 계산값과 실측값의 차이만큼 보정해, 추정 구간이 다음 실측점에 끊김 없이 이어지게 한다.
 // 다음 실측이 없는 날(마지막 동기화 이후)은 알 수 있는 게 없어 점을 찍지 않는다.
-// 두 실측 사이에서 값이 변하지 않는 추정 구간은 빼서 실선으로 잇는다(dropFlatEstimates).
+// 실측점 사이는 추정을 쓰지 않고 실측끼리 실선으로 잇는다. 추정은 첫 실측 이전 구간에만 쓴다.
 import type { PlayRecord } from "./scraper";
 import type { MaimaiServer } from "./storage/types";
 import { computeRatingTarget } from "./constants";
@@ -62,28 +62,13 @@ export function buildRatingSeries(opts: {
       out.push({ day, rating: measured, estimated: false });
       continue;
     }
+    // 추정은 첫 실측 이전에만. 실측 사이 빈 날은 점을 찍지 않고 실측끼리 실선으로 잇는다.
+    if (snapDays.length && day > snapDays[0]) continue;
     if (!opts.logFirstDay || day < opts.logFirstDay || opts.clearNow.length === 0) continue;
     const next = snapDays.find((d) => d > day);
     if (!next) continue;
     const rating = Math.round(estimate(day) + (snap.get(next)! - estimate(next)));
     if (rating > 0) out.push({ day, rating, estimated: true });
   }
-  return dropFlatEstimates(out);
-}
-
-// 두 실측점 사이의 추정값이 모두 양 끝 실측값과 같으면(그 사이 레이팅 변화 없음) 추정이 더하는
-// 정보가 없다. 그 추정점을 빼서 두 실측점이 실선으로 바로 이어지게 한다.
-function dropFlatEstimates(points: RatingPoint[]): RatingPoint[] {
-  const drop = new Set<number>();
-  let prev = -1;
-  points.forEach((p, i) => {
-    if (p.estimated) return;
-    if (prev >= 0 && i - prev > 1) {
-      const base = points[prev].rating;
-      const flat = p.rating === base && points.slice(prev + 1, i).every((q) => q.rating === base);
-      if (flat) for (let k = prev + 1; k < i; k++) drop.add(k);
-    }
-    prev = i;
-  });
-  return drop.size ? points.filter((_, i) => !drop.has(i)) : points;
+  return out;
 }
