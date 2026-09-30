@@ -141,7 +141,7 @@ export const MESSAGES = {
   "circle.rewardField": "다음 보상",
   "circle.rewardValue": "{points} PT 남음",
   "circle.challengeField": "서클 챌린지",
-  "circle.challengeValue": "**{title}**\n{artist}\n달성률 **{achievement}**",
+  "circle.challengeValue": "**{title}** / {artist}\n달성률 **{achievement}**",
   "circle.membersButton": "멤버 포인트",
   "circle.challengeButton": "서클 챌린지",
   "circle.membersTitle": "{name} 멤버 포인트",
