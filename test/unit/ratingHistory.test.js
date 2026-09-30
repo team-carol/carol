@@ -10,7 +10,7 @@ test("recentPlayDays: 오늘을 끝으로 n 일, 오래된 날부터", () => {
   assert.deepEqual(h.recentPlayDays("2026-10-01", 2), ["2026-09-30", "2026-10-01"]);
 });
 
-test("buildRatingSeries: 실측은 그대로, 빈 날은 다음 실측 기준으로 보정한 추정", () => {
+test("buildRatingSeries: 첫 실측 이전만 보정한 추정, 실측 사이는 추정 없음", () => {
   const days = ["2026-09-01", "2026-09-02", "2026-09-03", "2026-09-04", "2026-09-05", "2026-09-06"];
   const rec = { title: "t", musicKind: "DX", diff: "MASTER", level: "13", achievementVal: 100.5, fc: "", sync: "" };
   const key = "t|DX|MASTER";
@@ -25,11 +25,11 @@ test("buildRatingSeries: 실측은 그대로, 빈 날은 다음 실측 기준으
     logFirstDay: "2026-09-01",
   });
   const drop = calcSongRating(100.5, 13, "") - calcSongRating(99.0, 13, "");
+  assert.ok(drop > 0);
   assert.deepEqual(series, [
-    { day: "2026-09-01", rating: 16000, estimated: true },           // 다음 실측(9/2)과 사이에 변화 없음
+    { day: "2026-09-01", rating: 16000, estimated: true },           // 첫 실측 이전: 다음 실측(9/2) 기준 추정
     { day: "2026-09-02", rating: 16000, estimated: false },
-    { day: "2026-09-03", rating: 16010 - drop, estimated: true },    // 9/4 상승 전
-    { day: "2026-09-04", rating: 16010, estimated: true },           // 9/4 상승 반영
+    // 9/3·9/4: 실측 사이는 추정 없이 9/2 → 9/5 를 바로 잇는다
     { day: "2026-09-05", rating: 16010, estimated: false },
     // 9/6: 이후 실측이 없어 점을 찍지 않는다
   ]);
@@ -41,7 +41,7 @@ test("buildRatingSeries: 성과 로그 시작 전이나 로그가 없으면 실�
   assert.deepEqual(h.buildRatingSeries({ ...base, logFirstDay: "2026-09-02" }), [{ day: "2026-09-02", rating: 15000, estimated: false }]);
 });
 
-test("buildRatingSeries: 변화 없는 추정 구간은 빼고 실측끼리 바로 잇는다", () => {
+test("buildRatingSeries: 실측 사이 빈 날은 점을 찍지 않는다", () => {
   const days = ["2026-09-01", "2026-09-02", "2026-09-03", "2026-09-04"];
   const rec = { title: "t", musicKind: "DX", diff: "MASTER", level: "13", achievementVal: 100.5, fc: "", sync: "" };
   const series = h.buildRatingSeries({
