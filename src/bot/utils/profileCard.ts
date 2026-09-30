@@ -59,7 +59,7 @@ const MARK_COLOR: Record<string, string> = {
   "FDX+": "#10b981", FDX: "#34d399", "FS+": "#22c55e", FS: "#4ade80",
 };
 
-const PROFILE_CARD_VERSION = 11;
+const PROFILE_CARD_VERSION = 12;
 const PROFILE_CARD_CACHE_MAX = 64;
 const profileCardCache = new Map<string, Buffer>();
 
@@ -363,13 +363,14 @@ function ratingChartPanel(points: RatingPoint[], days: string[], updates: { day:
 export async function renderProfileCard(
   profile: CachedProfile,
   avatarBuf: Buffer | null,
-  opts: { translate?: boolean; friendCode?: string | null; ratingHistory?: { points: RatingPoint[]; days: string[]; updates?: { day: string; label: string }[] } } = {},
+  opts: { translate?: boolean; friendCode?: string | null; circleName?: string | null; ratingHistory?: { points: RatingPoint[]; days: string[]; updates?: { day: string; label: string }[] } } = {},
 ): Promise<Buffer> {
   const translate = !!opts.translate;
   const friendCode = opts.friendCode ?? null;
+  const circleName = opts.circleName ?? null;
   const history = opts.ratingHistory;
   // 그래프 기간은 오늘을 끝으로 움직이므로 마지막 날짜도 키에 넣는다.
-  const cacheKey = [profile.profileKey, profile.lastSyncedAt, translate ? 1 : 0, friendCode ?? "", avatarBuf?.length ?? 0, history ? history.days[history.days.length - 1] : "-", PROFILE_CARD_VERSION].join("|");
+  const cacheKey = [profile.profileKey, profile.lastSyncedAt, translate ? 1 : 0, friendCode ?? "", circleName ?? "", avatarBuf?.length ?? 0, history ? history.days[history.days.length - 1] : "-", PROFILE_CARD_VERSION].join("|");
   const memo = profileCardCache.get(cacheKey);
   if (memo) return memo;
 
@@ -405,7 +406,16 @@ export async function renderProfileCard(
       el("div", { display: "flex", flexDirection: "column", flex: 1, minWidth: 0, gap: 7 }, [
         el("span", { color: MUTED, fontSize: 10, fontWeight: 700, letterSpacing: 0.4 }, eyebrow),
         // 전각 영문 이름(ＲＯＥＮＡ 등)은 첫 글자 왼쪽 여백이 커서 위 줄보다 밀려 보이므로 잉크 시작을 맞춘다.
-        el("span", { color: INK, fontSize: 26, fontWeight: 800, lineHeight: 1.1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginLeft: nameShift }, name),
+        el("div", { display: "flex", alignItems: "center", gap: 12, minWidth: 0 }, [
+          el("span", { color: INK, fontSize: 26, fontWeight: 800, lineHeight: 1.1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginLeft: nameShift, flexShrink: 1, minWidth: 0 }, name),
+          // 서클 이름(/설정 서클 공개가 켜져 있을 때만)
+          circleName
+            ? el("div", { display: "flex", alignItems: "center", gap: 6, flexShrink: 0, maxWidth: 260, border: `1px solid ${BRAND.border2}`, borderRadius: 99, padding: "3px 10px" }, [
+                el("span", { color: FAINT, fontSize: 9, fontWeight: 700, letterSpacing: 0.6 }, "CIRCLE"),
+                el("span", { color: TEXT, fontSize: 12, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, circleName),
+              ])
+            : el("span", {}, ""),
+        ]),
         el("div", { display: "flex", alignItems: "center", gap: 10 }, [
           pill(profile.trophy || "—", { ...trophyStyle, fontSize: 11, padding: "4px 11px", maxWidth: 420, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }),
           // 단위(段位)·클래스(오토모다치) 이미지. 단위는 이 기능 이후 동기화부터 저장된다.

@@ -32,7 +32,7 @@ src/web/
 | Web-only local preview | `dev.ts` | Starts server without Discord token/login. |
 | 채보 플레이어 껍데기 | `chartPlayer.ts` | HTML/CSS와 컨트롤. 그리기 코어는 `chartRenderer.ts` 를 인라인한다. |
 | 노트·슬라이드 그리기 | `chartRenderer.ts` | canvas 링 렌더러. **백틱과 `${` 를 쓰지 말 것** (템플릿 문자열로 보관). `/보면` 미리보기 GIF도 이 코드를 vm 에 올려 쓴다. |
-| Scrape sync pipeline | `POST /sync` in `index.ts` | Writes debug HTML, parses, caches, saves session/avatar/jackets. |
+| Scrape sync pipeline | `POST /sync` in `index.ts` | Writes debug HTML, parses, caches, saves session/avatar/jackets. 서클(`ci`/`cm` → `parseCircle`)은 판단 불가(undefined)면 기존 `circle_json` 을 유지한다. |
 | Jacket/avatar endpoints | `GET /jacket`, `GET /avatar` in `index.ts` | Cache-first asset responses. |
 
 ## ROUTES
@@ -44,6 +44,7 @@ src/web/
 | `GET /settings?code=TOKEN` | User settings page: profile privacy, presets, extra bookmarklets. |
 | `GET /api/settings` | JSON `{ private, presets, bookmarklets }`. |
 | `POST /api/settings/privacy` | Toggle profile privacy. |
+| `POST /api/settings/circle` | 서클 공개 토글(`sessions.circle_public`, 기본 공개). |
 | `POST /api/settings/preset` | Toggle preset IDs such as `maishift`. |
 | `POST /api/settings/bookmarklet` | Add/delete extra bookmarklets, max 5. |
 | `GET /bookmarklet.js?code=TOKEN` | Serves generated sync JS with enabled presets/extras. |

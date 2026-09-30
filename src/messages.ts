@@ -116,13 +116,40 @@ export const MESSAGES = {
   "settings.title": "⚙️ 웹 설정",
   "settings.currentServerField": "현재 서버",
   "settings.manageField": "설정 페이지에서 관리",
-  "settings.manageBody": "프로필 공개 여부, 친구 코드 공개 여부, 프리셋 북마클릿, 추가 북마클릿을 웹에서 관리할 수 있습니다.",
+  "settings.manageBody": "프로필 공개 여부, 친구 코드·서클 공개 여부, 프리셋 북마클릿, 추가 북마클릿을 웹에서 관리할 수 있습니다.",
   "settings.termsField": "이용약관",
   "settings.termsBody": "추가 북마클릿 사용 책임과 면책 조항은 이용약관에서 확인할 수 있습니다.",
   "settings.openButton": "웹 설정 열기",
   "settings.termsButton": "이용약관",
 
   // ── /게임설정 ────────────────────────────────────────────────────────────
+  "circle.private": "{user} 님은 서클 정보를 비공개로 설정했습니다.",
+  "circle.notCollected": "아직 서클 정보가 없습니다. 북마클릿으로 다시 동기화하면 서클 정보도 함께 가져옵니다.",
+  "circle.otherNotCollected": "{user} 님의 서클 정보가 아직 없습니다.",
+  "circle.none": "가입한 서클이 없습니다. (마지막 동기화 기준)",
+  "circle.otherNone": "{user} 님은 가입한 서클이 없습니다. (마지막 동기화 기준)",
+  "circle.privateSelfNote": "서클 공개가 꺼져 있어 나에게만 보입니다. `/설정`에서 바꿀 수 있습니다.",
+  "circle.codeField": "서클 코드",
+  "circle.memberField": "멤버",
+  "circle.memberValue": "{count}/{max}명",
+  "circle.pointField": "{month}월 서클 포인트",
+  "circle.pointValue": "**{points} PT**\n{reset}",
+  "circle.resetDays": "초기화까지 {days}일",
+  "circle.resetToday": "오늘 초기화",
+  "circle.rankField": "포인트 순위",
+  "circle.rankValue": "**{rank}위**\n{updated} 갱신",
+  "circle.rewardField": "다음 보상",
+  "circle.rewardValue": "{points} PT 남음",
+  "circle.challengeField": "서클 챌린지",
+  "circle.challengeValue": "**{title}**\n{artist}\n달성률 **{achievement}**",
+  "circle.membersButton": "멤버 포인트",
+  "circle.challengeButton": "서클 챌린지",
+  "circle.membersTitle": "{name} 멤버 포인트",
+  "circle.memberLine": "{rank}. {leader}**{name}** · {points} PT · 레이팅 {rating}",
+  "circle.leaderMark": "👑 ",
+  "circle.membersMissing": "멤버 목록을 가져오지 못했습니다.",
+  "circle.footer": "{player} · {server} · 마지막 동기화 {synced}",
+
   "gameOptions.title": "🎮 게임 설정",
   "gameOptions.description": "maimai DX NET 게임 옵션을 확인하고, 옵션 프리셋을 만들거나 편집할 수 있습니다. 프리셋을 게임에 적용할 때는 페이지에 안내된 옵션 프리셋 북마클릿을 DX NET에서 실행합니다.",
   "gameOptions.currentField": "가져온 현재 설정",
@@ -188,6 +215,7 @@ export const MESSAGES = {
   "embed.profileBody": "**{name}**  ·  **{rating}**\n플레이 {play}/{total}회{stars}",
   "embed.profileFooter": "서버: {server}  ·  마지막 동기화: {synced}",
   "embed.friendCodeField": "친구 코드",
+  "embed.circleField": "서클",
   "embed.prev": "◀ 이전",
   "embed.next": "다음 ▶",
   "embed.share": "#{index} 공유",
@@ -319,10 +347,10 @@ export const MESSAGES = {
   "goalText.noConstantData": "곡 상수 데이터 없음",
 
   // ── 개인정보처리방침 고지 ───────────────────────────────────────────────
-  "policy.updatedTitle": "**캐롤봇 개인정보처리방침이 업데이트되었습니다** (2026년 9월 28일)",
+  "policy.updatedTitle": "**캐롤봇 개인정보처리방침이 업데이트되었습니다** (2026년 9월 30일)",
   "policy.updatedBody":
-    "게임 설정 기능이 추가되어, 북마클릿으로 동기화할 때 maimai DX net의 게임 옵션 설정값(노트 속도, 판정 표시 등)도 함께 수집합니다. " +
-    "수집한 설정값은 게임 설정 페이지와 옵션 프리셋에만 사용합니다. 자세한 내용은 아래 방침을 확인해 주세요.",
+    "서클 기능이 추가되어, 북마클릿으로 동기화할 때 maimai DX net의 서클 정보(서클 이름·코드·소개, 서클 포인트와 순위, 멤버의 플레이어명·레이팅·포인트)도 함께 수집합니다. " +
+    "서클 정보는 /프로필과 /서클에만 사용하며, `/설정`에서 공개를 끄면 다른 사람에게 보이지 않습니다. 자세한 내용은 아래 방침을 확인해 주세요.",
 
   // ── 패치노트 (관리 페이지에서 게시 → 다음 명령 때 1회) ────────────────────
   "patchNotes.defaultTitle": "📢 캐롤봇 {version} 업데이트",

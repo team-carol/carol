@@ -550,3 +550,106 @@ export function parseUserOptions(html: string): UserOptionField[] {
   });
   return fields;
 }
+
+export interface CircleMember {
+  name: string;
+  rating: number;
+  trophy: string;
+  trophyClass: string;
+  /** 이번 달 서클 포인트 */
+  points: number;
+  leader: boolean;
+}
+
+export interface CircleInfo {
+  name: string;
+  code: string;
+  comment: string;
+  /** 이번 달 서클 합계 포인트 */
+  monthPoints: number | null;
+  /** 포인트 초기화까지 남은 날 */
+  daysToReset: number | null;
+  /** 이번 달 서클 포인트 순위 */
+  rank: number | null;
+  /** 순위 갱신 시각 문구(예: 2026/09/30 01:00) */
+  rankUpdatedAt: string;
+  /** 다음 보상까지 남은 포인트 */
+  nextRewardPoints: number | null;
+  /** 서클 챌린지 과제곡과 달성률 */
+  challenge: { title: string; artist: string; genre: string; jacket: string; achievement: string } | null;
+  memberCount: number | null;
+  memberMax: number | null;
+  /** 멤버 목록 페이지를 못 받았으면 빈 배열 */
+  members: CircleMember[];
+}
+
+const numOf = (s: string): number | null => {
+  const m = s.replace(/,/g, "").match(/\d+/);
+  return m ? Number(m[0]) : null;
+};
+
+/**
+ * 서클 홈(/maimai-mobile/circle/)과 멤버 목록(/circle/circleMember/) 해석.
+ * - 서클 정보가 있으면 CircleInfo
+ * - 정상적인 DX NET 페이지인데 서클 프로필이 없으면 null(가입한 서클 없음)
+ * - 빈 문자열·오류 페이지처럼 판단할 수 없으면 undefined(기존 값을 유지해야 함)
+ */
+export function parseCircle(homeHtml: string, memberHtml = "", server: MaimaiServer = "intl"): CircleInfo | null | undefined {
+  if (!homeHtml) return undefined;
+  const $ = cheerio.load(homeHtml);
+  const clean = (s: string) => s.replace(/\s+/g, " ").trim();
+  const name = clean($(".circle_profile_circle_name").first().text());
+  if (!name) {
+    // 서클 메뉴가 있는 정상 페이지인데 프로필이 없으면 미가입으로 본다.
+    return $(".main_wrapper").length && $("a[href*='/circle/']").length ? null : undefined;
+  }
+  const baseUrl = getMaimaiBaseUrl(server);
+  const challengeBlock = $(".circle_challenge_block").first();
+  const challengeTitle = clean(challengeBlock.find(".f_15.break").first().text());
+  const challenge = challengeTitle
+    ? {
+        title: challengeTitle,
+        artist: clean(challengeBlock.find(".f_12.break").first().text()),
+        genre: clean(challengeBlock.find(".blue").first().text()),
+        jacket: absUrl(challengeBlock.find("img[src*='/Music/']").first().attr("src"), baseUrl),
+        achievement: clean($(".circle_challenge_achiv_text").first().text()),
+      }
+    : null;
+  const info: CircleInfo = {
+    name,
+    code: clean($(".circle_profile_circle_code").first().text()),
+    comment: clean($(".circle_profile_comment").first().text()),
+    monthPoints: numOf($(".circle_totalpoint_point span").first().text()),
+    daysToReset: numOf($(".circle_totalpoint_block").nextAll("div").first().find("span").first().text()),
+    rank: numOf($(".circle_pointranking_point span").not(".black").first().text()),
+    rankUpdatedAt: (clean($(".circle_pointranking_block").nextAll("div").first().text()).match(/\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}/) ?? [""])[0],
+    nextRewardPoints: numOf($(".circle_pointreward_block span.red").first().text()),
+    challenge,
+    memberCount: null,
+    memberMax: null,
+    members: [],
+  };
+  if (memberHtml) {
+    const $m = cheerio.load(memberHtml);
+    const countBlock = $m(".basic_block").filter((_, el) => $m(el).find("span.f_b").length > 0 && /\/\s*\d+/.test($m(el).text())).first();
+    if (countBlock.length) {
+      info.memberCount = numOf(countBlock.find("span.f_b").first().text());
+      info.memberMax = numOf((countBlock.text().match(/\/\s*\d+/) ?? [""])[0]);
+    }
+    $m(".see_through_block").each((_, el) => {
+      const b = $m(el);
+      const memberName = clean(b.find(".name_block").first().text());
+      if (!memberName) return;
+      info.members.push({
+        name: memberName,
+        rating: numOf(b.find(".rating_block").first().text()) ?? 0,
+        trophy: clean(b.find(".trophy_inner_block span").first().text()),
+        trophyClass: (b.find(".trophy_block").attr("class") || "").split(/\s+/).find(c => c.match(/^trophy_(?!block)/i))?.replace(/^trophy_/i, "").toLowerCase() || "normal",
+        points: numOf(b.find(".circle_member_point_block").first().text()) ?? 0,
+        leader: b.find("img.circle_member_leader, img[src*='circle_leader']").length > 0,
+      });
+    });
+    if (info.memberCount === null && info.members.length) info.memberCount = info.members.length;
+  }
+  return info;
+}

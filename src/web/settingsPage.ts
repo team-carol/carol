@@ -2,9 +2,9 @@ import type { ExtraBookmarklet, MaimaiServer } from "../storage/types";
 import { BOOKMARKLET_PRESETS } from "./bookmarklet";
 import { BASE_CSS, pageHead, topbar, siteFooter, userNav } from "./theme";
 
-export function settingsPage(token: string, isPrivate: boolean, enabledPresetIds: string[], bookmarklets: ExtraBookmarklet[], defaultServer: MaimaiServer, translate = false, friendCodePublic = false): string {
+export function settingsPage(token: string, isPrivate: boolean, enabledPresetIds: string[], bookmarklets: ExtraBookmarklet[], defaultServer: MaimaiServer, translate = false, friendCodePublic = false, circlePublic = true): string {
   const presets = BOOKMARKLET_PRESETS.map((preset) => ({ ...preset, enabled: enabledPresetIds.includes(preset.id) }));
-  const dataJson = JSON.stringify({ private: isPrivate, presets, bookmarklets, defaultServer, translate, friendCodePublic })
+  const dataJson = JSON.stringify({ private: isPrivate, presets, bookmarklets, defaultServer, translate, friendCodePublic, circlePublic })
     .replace(/</g, "\\u003c").replace(/>/g, "\\u003e");
   const tokenJson = JSON.stringify(token);
 
@@ -102,6 +102,17 @@ ${topbar(userNav(token, "settings"))}
 <div class="status" id="fcStatus"></div>
 </div>
 <div class="card">
+<p class="section-label">서클 공개 여부</p>
+<div class="toggle-row">
+<div class="toggle-info">
+<div class="toggle-title" id="circleTitle"></div>
+<div class="toggle-desc" id="circleDesc"></div>
+</div>
+<label class="toggle"><input type="checkbox" id="circleToggle" onchange="toggleCircle()"><span class="slider"></span></label>
+</div>
+<div class="status" id="circleStatus"></div>
+</div>
+<div class="card">
 <p class="section-label">곡 제목 한국어 번역</p>
 <div class="toggle-row">
 <div class="toggle-info">
@@ -150,6 +161,7 @@ var MAX_BM=5;
   renderPrivacy();
   renderTranslate();
   renderFriendCode();
+  renderCircle();
   loadAchievementFilter();
   renderPresetList();
   renderBmList();
@@ -244,6 +256,24 @@ function toggleFriendCode(){
   .then(function(r){if(!r.ok)throw new Error(r.status);return r.json();})
   .then(function(){DATA.friendCodePublic=want;renderFriendCode();showStatus('fcStatus','ok','저장됨');})
   .catch(function(){cb.checked=!want;showStatus('fcStatus','err','저장 실패');});
+}
+
+function renderCircle(){
+  var on=DATA.circlePublic!==false;
+  document.getElementById('circleToggle').checked=on;
+  document.getElementById('circleTitle').textContent=on?'공개':'비공개';
+  document.getElementById('circleDesc').textContent=on
+    ?'/프로필에 서클 이름이 표시되고, 다른 사람도 /서클로 내 서클 정보를 볼 수 있습니다.'
+    :'/프로필에 서클 이름을 표시하지 않고, /서클은 나만 볼 수 있습니다.';
+}
+
+function toggleCircle(){
+  var cb=document.getElementById('circleToggle');
+  var want=cb.checked;
+  fetch('/api/settings/circle?code='+TOKEN,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({public:want})})
+  .then(function(r){if(!r.ok)throw new Error(r.status);return r.json();})
+  .then(function(){DATA.circlePublic=want;renderCircle();showStatus('circleStatus','ok','저장됨');})
+  .catch(function(){cb.checked=!want;showStatus('circleStatus','err','저장 실패');});
 }
 
 function renderTranslate(){

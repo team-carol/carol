@@ -1,7 +1,7 @@
 export const MAIMAI_SERVERS = ["intl", "jp"] as const;
 export type MaimaiServer = (typeof MAIMAI_SERVERS)[number];
 export function isMaimaiServer(value: string): value is MaimaiServer { return value === "intl" || value === "jp"; }
-export interface CachedProfile { profileKey:string; server:MaimaiServer; friendCode:string; playerName:string; rating:number; ratingMax:number; trophy:string; trophyClass:string; avatar:string; gradeImg:string; courseImg:string; stars:string; comment:string; playCount:number; totalPlayCount:number; lastSyncedAt:number; recentJson:string; topJson:string; clearJson:string; mapJson:string; }
+export interface CachedProfile { profileKey:string; server:MaimaiServer; friendCode:string; playerName:string; rating:number; ratingMax:number; trophy:string; trophyClass:string; avatar:string; gradeImg:string; courseImg:string; circleJson?:string; stars:string; comment:string; playCount:number; totalPlayCount:number; lastSyncedAt:number; recentJson:string; topJson:string; clearJson:string; mapJson:string; }
 export interface ExtraBookmarklet { label:string; code:string; }
 export interface OptionPresetInput { name:string; server:MaimaiServer; values:Record<string,string>; labels:Record<string,[string,string]>; }
 export interface OptionPresetRow extends OptionPresetInput { id:number; updatedAt:number; }

@@ -4,6 +4,7 @@ import {
   ButtonBuilder,
   ButtonStyle,
   ActionRowBuilder,
+  escapeMarkdown,
 } from "discord.js";
 import {
   getCachedProfile,
@@ -13,6 +14,7 @@ import {
   saveSongJacket,
   getTranslateTitles,
   getFriendCodePublic,
+  getCirclePublic,
   listRatingSnapshots,
   getAchievementLogRange,
   getAchievementPlayEventLog,
@@ -33,6 +35,7 @@ import {
 import { aliasMatches, normalizeQuery, displayTitle } from "../../aliases";
 import { ratingColor } from "./roles";
 import { renderProfileCard } from "./profileCard";
+import { circleOf } from "./circle";
 import { buildRatingSeries, recentPlayDays, RATING_HISTORY_DAYS } from "../../ratingHistory";
 import { versionUpdatesBetween } from "../../constants";
 import { koreaPlayDayKey, koreaPlayDayRange } from "../../achievements";
@@ -145,6 +148,7 @@ export function profileEmb(
   p: NonNullable<Awaited<ReturnType<typeof getCachedProfile>>>,
   hasAvatar: boolean,
   showFriendCode = false,
+  circleName: string | null = null,
 ) {
   const stars = p.stars && p.stars !== "0" ? " · ★×" + p.stars : "";
   const serverLabel = p.server === "jp" ? "JP" : "INTERNATIONAL";
@@ -166,7 +170,9 @@ export function profileEmb(
   if (hasAvatar) emb.setThumbnail("attachment://avatar.png");
   // 친구 코드는 본인이 /설정 에서 공개로 바꾼 경우에만 보인다(기본 비공개).
   const friendCode = showFriendCode ? (p.friendCode ?? "").match(/\d{13}/)?.[0] : undefined;
-  if (friendCode) emb.addFields({ name: msg("embed.friendCodeField"), value: `\`${friendCode}\`` });
+  if (friendCode) emb.addFields({ name: msg("embed.friendCodeField"), value: `\`${friendCode}\``, inline: true });
+  // 서클 이름은 /설정 의 서클 공개(기본 공개)가 켜져 있을 때만.
+  if (circleName) emb.addFields({ name: msg("embed.circleField"), value: escapeMarkdown(circleName), inline: true });
   return emb;
 }
 
@@ -759,7 +765,8 @@ export async function buildProfileReply(
   format: "image" | "embed" = "embed",
   viewerId?: string,
 ) {
-  const [avatar, showFriendCode] = await Promise.all([buildAvatarAttachment(userId, cached.server), getFriendCodePublic(userId)]);
+  const [avatar, showFriendCode, circlePublic] = await Promise.all([buildAvatarAttachment(userId, cached.server), getFriendCodePublic(userId), getCirclePublic(userId)]);
+  const circleName = circlePublic ? circleOf(cached)?.name ?? null : null;
   const recentBtn = new ButtonBuilder()
     .setCustomId(`recent:${userId}`)
     .setLabel(msg("profileButton.recent"))
@@ -781,11 +788,11 @@ export async function buildProfileReply(
     const [avatarBuf, translate] = await Promise.all([getAvatarBlob(userId, cached.server), getTranslateTitles(viewerId ?? userId)]);
     const friendCode = showFriendCode ? (cached.friendCode ?? "").match(/\d{13}/)?.[0] ?? null : null;
     const ratingHistory = await loadRatingHistory(cached);
-    const png = await renderProfileCard(cached, avatarBuf, { translate, friendCode, ratingHistory });
+    const png = await renderProfileCard(cached, avatarBuf, { translate, friendCode, circleName, ratingHistory });
     return { embeds: [], files: [new AttachmentBuilder(png, { name: "profile.png" })], components: [row] };
   }
   return {
-    embeds: [profileEmb(cached, !!avatar, showFriendCode)],
+    embeds: [profileEmb(cached, !!avatar, showFriendCode, circleName)],
     files: avatar ? [avatar] : [],
     components: [row],
   };

@@ -25,6 +25,7 @@ import * as achievement  from "./commands/achievement";
 import * as fortune      from "./commands/fortune";
 import * as settings     from "./commands/settings";
 import * as gameOptions  from "./commands/gameOptions";
+import * as circle       from "./commands/circle";
 import * as serverSettings from "./commands/serverSettings";
 import * as newsSettings from "./commands/newsSettings";
 import { startNewsPoller, handleNewsButton } from "./newsPoller";
@@ -41,7 +42,7 @@ import * as ratingcalc   from "./commands/ratingcalc";
 
 type Command = { data: { toJSON(): object; name: string }; execute: (i: ChatInputCommandInteraction) => Promise<void>; autocomplete?: (i: AutocompleteInteraction) => Promise<void> };
 
-const COMMANDS: Command[] = [profile, bookmarklet, ratingtable, ratingimage, achievement, fortune, settings, gameOptions, serverSettings, newsSettings, search, status, songrec, random, areaMap, report, admin, goal, chart, ratingcalc];
+const COMMANDS: Command[] = [profile, circle, bookmarklet, ratingtable, ratingimage, achievement, fortune, settings, gameOptions, serverSettings, newsSettings, search, status, songrec, random, areaMap, report, admin, goal, chart, ratingcalc];
 const EPHEMERAL_REPLY = { flags: MessageFlags.Ephemeral } as const;
 
 const RATING_CARD_GC_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000;
@@ -266,6 +267,10 @@ client.on(Events.InteractionCreate, async (i) => {
     }
     if (i.customId.startsWith("chartvid:")) {
       try { await handleChartVideoButton(i); } catch (e) { console.error("[chartvid-btn]", e); }
+      return;
+    }
+    if (i.customId.startsWith("circle:")) {
+      try { await circle.handleButton(i); } catch (e) { console.error("[circle-btn]", e); }
       return;
     }
     if (i.customId.startsWith("goal:")) {
