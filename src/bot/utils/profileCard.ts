@@ -59,7 +59,7 @@ const MARK_COLOR: Record<string, string> = {
   "FDX+": "#10b981", FDX: "#34d399", "FS+": "#22c55e", FS: "#4ade80",
 };
 
-const PROFILE_CARD_VERSION = 9;
+const PROFILE_CARD_VERSION = 10;
 const PROFILE_CARD_CACHE_MAX = 64;
 const profileCardCache = new Map<string, Buffer>();
 
@@ -272,7 +272,7 @@ function dashedSwatch(): El {
   return el("div", { display: "flex", gap: 3 }, [0, 1, 2].map(() => el("div", { width: 5, height: 2, background: ACCENT, opacity: 0.8 })));
 }
 
-function ratingChartPanel(points: RatingPoint[], days: string[]): El {
+function ratingChartPanel(points: RatingPoint[], days: string[], updates: { day: string; label: string }[] = []): El {
   if (!points.length) {
     return panel("레이팅 추이", "", [el("span", { color: MUTED, fontSize: 12, padding: "10px 0" }, "동기화 기록이 쌓이면 레이팅 추이가 표시됩니다.")]);
   }
@@ -309,6 +309,10 @@ function ratingChartPanel(points: RatingPoint[], days: string[]): El {
       svg.push(`<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="${ACCENT}" stroke-width="2.5" ${dashed ? `stroke-dasharray="6 5" stroke-opacity="0.75"` : `stroke-linecap="round"`}/>`);
     }
   }
+  // 버전 업데이트 날: 세로 실선(그래프에 보이는 기간 안에 있을 때만). 라벨은 satori 텍스트로 올린다.
+  const firstDay = points[0].day, lastDay = points[points.length - 1].day;
+  const marks = points.length > 1 ? updates.filter((u) => u.day > firstDay && u.day <= lastDay).map((u) => ({ ...u, x: +xOf(u.day).toFixed(1) })) : [];
+  for (const m of marks) svg.push(`<line x1="${m.x}" x2="${m.x}" y1="0" y2="${CHART_H}" stroke="${BRAND.muted}" stroke-width="1.5" stroke-opacity="0.7"/>`);
   for (const p of pts.slice(0, -1)) {
     if (!p.estimated) svg.push(`<circle cx="${p.x}" cy="${p.y}" r="3.5" fill="${SURFACE}" stroke="${ACCENT}" stroke-width="2"/>`);
   }
@@ -332,6 +336,10 @@ function ratingChartPanel(points: RatingPoint[], days: string[]): El {
       // 그래프 + 마지막 값
       el("div", { display: "flex", position: "relative", width: plotW, height: CHART_H }, [
         image(svgUrl, { width: plotW, height: CHART_H }),
+        ...marks.map((m) => el("span", {
+          position: "absolute", top: 0, left: Math.min(plotW - 80, m.x + 5),
+          color: BRAND.muted, fontSize: 10, fontWeight: 700, lineHeight: 1, whiteSpace: "nowrap",
+        }, m.label)),
         el("span", {
           position: "absolute", top: valueTop, left: Math.max(0, Math.min(plotW - 52, last.x - 26)), width: 52, textAlign: "center",
           color: ACCENT, fontFamily: NUM_FONT, fontSize: 13, fontWeight: 700, lineHeight: 1,
@@ -355,7 +363,7 @@ function ratingChartPanel(points: RatingPoint[], days: string[]): El {
 export async function renderProfileCard(
   profile: CachedProfile,
   avatarBuf: Buffer | null,
-  opts: { translate?: boolean; friendCode?: string | null; ratingHistory?: { points: RatingPoint[]; days: string[] } } = {},
+  opts: { translate?: boolean; friendCode?: string | null; ratingHistory?: { points: RatingPoint[]; days: string[]; updates?: { day: string; label: string }[] } } = {},
 ): Promise<Buffer> {
   const translate = !!opts.translate;
   const friendCode = opts.friendCode ?? null;
@@ -419,7 +427,7 @@ export async function renderProfileCard(
       { value: String(profile.totalPlayCount || profile.playCount || 0), label: "누적 플레이" },
     ]),
     clearPanel(clears),
-    ...(history ? [ratingChartPanel(history.points, history.days)] : []),
+    ...(history ? [ratingChartPanel(history.points, history.days, history.updates)] : []),
     panel("최근 플레이", `최근 ${recent.length}곡`, recent.length
       ? recent.map((r, i) => recentRow(r, profile, jackets[i], translate, kindIcons))
       : [el("span", { color: MUTED, fontSize: 12, padding: "12px 0" }, "최근 플레이 기록이 없습니다.")]),

@@ -54,3 +54,9 @@ test("buildRatingSeries: 변화 없는 추정 구간은 빼고 실측끼리 바�
     { day: "2026-09-04", rating: 16000, estimated: false },
   ]);
 });
+
+test("versionUpdatesBetween: 기간 안의 국제판 버전 업데이트만", () => {
+  const { versionUpdatesBetween } = require("../../dist/constants.js");
+  assert.deepEqual(versionUpdatesBetween("2026-07-01", "2026-09-30"), [{ day: "2026-07-23", label: "CiRCLE PLUS" }]);
+  assert.deepEqual(versionUpdatesBetween("2026-07-24", "2026-09-30"), []);
+});

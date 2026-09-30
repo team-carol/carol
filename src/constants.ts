@@ -69,14 +69,23 @@ const NEW_SONG_MAX_VERSION = 27000; // 다음 세대 시작 (미포함) = CiRCLE
 // 현재 범위로 신곡/구곡을 나누면 그 시점과 어긋나므로, 적용 시작일과 함께 이력을 둔다.
 // from 은 그 범위가 적용되기 시작한 play-day(포함). 최신순으로 정렬해 첫 일치를 쓴다.
 // 새 버전이 나오면 위에 한 줄 추가하고 NEW_SONG_MIN/MAX 도 함께 갱신할 것.
-const NEW_SONG_WINDOWS: { from: string; min: number; max: number }[] = [
+// label 은 그 날 나온 버전 이름(프로필 레이팅 추이 그래프의 업데이트 표시에 쓴다).
+const NEW_SONG_WINDOWS: { from: string; min: number; max: number; label?: string }[] = [
   // 2026-07-23 CiRCLE PLUS 업데이트 → CiRCLE ~ CiRCLE PLUS
-  { from: "2026-07-23", min: NEW_SONG_MIN_VERSION, max: NEW_SONG_MAX_VERSION },
+  { from: "2026-07-23", min: NEW_SONG_MIN_VERSION, max: NEW_SONG_MAX_VERSION, label: "CiRCLE PLUS" },
   // 그 이전 → PRiSM PLUS ~ CiRCLE (CiRCLE PLUS 26500 미포함)
   { from: "", min: 25500, max: 26500 },
 ];
 
 export interface NewSongWindow { min: number; max: number }
+
+/** 국제판 버전 업데이트 날짜(play-day)와 버전 이름. fromDay~toDay(포함) 안의 것만, 오래된 순. */
+export function versionUpdatesBetween(fromDay: string, toDay: string): { day: string; label: string }[] {
+  return NEW_SONG_WINDOWS
+    .filter((w) => w.from && w.label && w.from >= fromDay && w.from <= toDay)
+    .map((w) => ({ day: w.from, label: w.label! }))
+    .sort((a, b) => a.day.localeCompare(b.day));
+}
 
 // playDay(YYYY-MM-DD)가 없으면 현재 범위. 이력보다 오래된 날짜는 가장 오래된 범위를 쓴다.
 // 국제판 기준 이력이므로 내수판(jp) 판정에는 쓰지 않는다 (isNewSong 참고).
