@@ -10,13 +10,13 @@ import { CIRCLE_COLORS, type CircleInfo, type CircleMember, type CircleColor, ty
 import { signed } from "./circle";
 import { getJacketFile, getTitleByJacket } from "../../constants";
 import { displayTitle } from "../../aliases";
-import { msg, cardTextSignature } from "../../messages";
-import { CIRCLE_COLOR_STYLE } from "./circleColors";
+import { msg, cardTextSignature, type MessageKey } from "../../messages";
+import { CIRCLE_COLOR_STYLE, CIRCLE_STAGE_POINTS } from "./circleColors";
 
 // /서클 이미지 카드. /프로필 카드와 같은 부품(cardKit)·토큰을 쓴다.
 // 헤더(서클 이름·코드·소개) → 포인트·순위·보상·멤버 수 → 서클 챌린지(+다음 주 예고) → 멤버 포인트(2열).
 
-const CIRCLE_CARD_VERSION = 14;
+const CIRCLE_CARD_VERSION = 16;
 const CIRCLE_CARD_CACHE_MAX = 32;
 const circleCardCache = new Map<string, Buffer>();
 const fmt = (n: number) => n.toLocaleString("en-US");
@@ -77,41 +77,85 @@ function challengePanel(circle: CircleInfo, translate: boolean, jacket: string |
   return panel(msg("circleCard.challengeTitle"), msg("circleCard.challengeMeta"), [el("div", { display: "flex", alignItems: "center" }, [left, right])]);
 }
 
-// 이번 달 진행도. DX NET 서클 랭킹 피라미드처럼 위(Rainbow)가 좁고 아래(White)가 넓은 계단 모양으로 그리고,
-// 현재 단계만 진하게 칠한다.
+// 이번 달 진행도. DX NET 서클 랭킹 피라미드처럼 위(Rainbow)가 좁고 아래(White)가 넓은 계단 모양.
+// 띠마다 오른쪽에 단계 조건을 붙이고, 현재·다음 단계만 밝게 한다. 오른쪽에는 다음 단계까지 남은 양.
+const RULE_KEYS: Record<CircleColor, MessageKey> = {
+  rainbow: "circleCard.ruleRainbow", gold: "circleCard.ruleGold", silver: "circleCard.ruleSilver", bronze: "circleCard.ruleBronze",
+  purple: "circleCard.rulePurple", red: "circleCard.ruleRed", yellow: "circleCard.ruleYellow", green: "circleCard.ruleGreen", white: "circleCard.ruleWhite",
+};
+
+// Gold·Silver·Bronze 는 순위 비율에 더해 10,000 PT 이상이어야 한다. 이 조건은 작게 덧붙인다.
+const RANK_STAGES: CircleColor[] = ["gold", "silver", "bronze"];
+const minPointsNote = (c: CircleColor, fontSize: number, color: string): El[] =>
+  RANK_STAGES.includes(c) ? [el("span", { color, fontSize, lineHeight: 1 }, msg("circleCard.ruleMinPoints"))] : [];
+
+function nextStageBlock(circle: CircleInfo, stage: CircleColor): El {
+  const idx = CIRCLE_COLORS.indexOf(stage);
+  const next = idx > 0 ? CIRCLE_COLORS[idx - 1] : null;
+  const title = el("span", { color: MUTED, fontSize: 11 }, msg("circleCard.nextTitle"));
+  if (!next) return el("div", { display: "flex", flexDirection: "column", gap: 8 }, [title, el("span", { color: INK, fontSize: 15, fontWeight: 700 }, msg("circleCard.topStage"))]);
+  const nextName = msg(`circleColor.${next}`);
+  const target = CIRCLE_STAGE_POINTS[next];
+  const points = circle.monthPoints ?? 0;
+  if (target !== undefined) {
+    // Purple 이하: 포인트 기준이라 남은 포인트와 막대로.
+    const ratio = Math.max(0, Math.min(1, points / target));
+    return el("div", { display: "flex", flexDirection: "column", gap: 8 }, [
+      title,
+      el("span", { color: INK, fontSize: 16, fontWeight: 700 }, msg("circleCard.nextPoints", { stage: nextName, points: fmt(Math.max(0, target - points)) })),
+      el("div", { display: "flex", position: "relative", height: 10, borderRadius: 99, background: SURFACE2, overflow: "hidden" }, [
+        el("div", { position: "absolute", left: 0, top: 0, bottom: 0, width: `${ratio * 100}%`, borderRadius: 99, backgroundImage: CIRCLE_COLOR_STYLE[next].gradient }),
+      ]),
+      el("span", { color: FAINT, fontFamily: NUM_FONT, fontSize: 11 }, msg("circleCard.nextProgress", { current: fmt(points), target: fmt(target) })),
+    ]);
+  }
+  // Bronze 이상: 순위 비율로 정해져 포인트만으로는 알 수 없다. 조건과 지금 순위를 글로.
+  return el("div", { display: "flex", flexDirection: "column", gap: 8 }, [
+    title,
+    el("div", { display: "flex", alignItems: "baseline", gap: 8 }, [
+      el("span", { color: INK, fontSize: 16, fontWeight: 700 }, msg("circleCard.nextRank", { stage: nextName, rule: msg(RULE_KEYS[next]) })),
+      ...minPointsNote(next, 11, MUTED),
+    ]),
+    el("span", { color: FAINT, fontSize: 11 }, msg("circleCard.nextRankNow", { rank: circle.rank === null ? "—" : fmt(circle.rank), points: fmt(points) })),
+  ]);
+}
+
 function progressPanel(circle: CircleInfo, stage: CircleColor): El {
   const BAND_H = 20, MIN_W = 44, MAX_W = 300;
   const n = CIRCLE_COLORS.length;
-  const pyramid = el("div", { display: "flex", flexDirection: "column", alignItems: "center", width: MAX_W + 70, flexShrink: 0, gap: 3 },
+  const stageIdx = CIRCLE_COLORS.indexOf(stage);
+  const pyramid = el("div", { display: "flex", flexDirection: "column", flexShrink: 0, gap: 3 },
     CIRCLE_COLORS.map((c, i) => {
       const on = c === stage;
+      const isNext = i === stageIdx - 1;
       const w = Math.round(MIN_W + ((MAX_W - MIN_W) * i) / (n - 1));
-      return el("div", { display: "flex", alignItems: "center", width: MAX_W + 70, justifyContent: "center", position: "relative" }, [
-        el("div", {
-          width: w, height: BAND_H, borderRadius: 4, backgroundImage: CIRCLE_COLOR_STYLE[c].gradient,
-          opacity: on ? 1 : 0.22, ...(on ? { border: `2px solid ${INK}` } : {}),
-        }),
-        ...(on ? [el("span", { position: "absolute", left: (MAX_W + 70) / 2 + w / 2 + 8, color: INK, fontSize: 12, fontWeight: 700 }, "◀")] : []),
+      return el("div", { display: "flex", alignItems: "center" }, [
+        el("div", { display: "flex", justifyContent: "center", width: MAX_W, flexShrink: 0 }, [
+          el("div", {
+            width: w, height: BAND_H, borderRadius: 4, backgroundImage: CIRCLE_COLOR_STYLE[c].gradient,
+            opacity: on ? 1 : isNext ? 0.55 : 0.22, ...(on ? { border: `2px solid ${INK}` } : {}),
+          }),
+        ]),
+        el("div", { display: "flex", alignItems: "baseline", gap: 6, width: 190, marginLeft: 14 }, [
+          el("span", { color: on ? INK : isNext ? TEXT : FAINT, fontSize: 11, fontWeight: 700, width: 52 }, msg(`circleColor.${c}`)),
+          el("span", { color: on ? TEXT : isNext ? MUTED : FAINT, fontSize: 10 }, msg(RULE_KEYS[c])),
+          ...minPointsNote(c, 8, FAINT),
+        ]),
       ]);
     }));
   const style = CIRCLE_COLOR_STYLE[stage];
-  const info = el("div", { display: "flex", flexDirection: "column", flex: 1, justifyContent: "center", gap: 18, paddingLeft: 12 }, [
+  const info = el("div", { display: "flex", flexDirection: "column", flex: 1, minWidth: 0, gap: 20, paddingLeft: 20, borderLeft: `1px solid ${BORDER}` }, [
     el("div", { display: "flex", flexDirection: "column", gap: 8 }, [
       el("span", { color: MUTED, fontSize: 11 }, msg("circleCard.progressStage")),
       pill(msg(`circleColor.${stage}`), { backgroundImage: style.gradient, color: style.ink, fontSize: 16, padding: "6px 18px", alignSelf: "flex-start" }),
     ]),
-    el("div", { display: "flex", gap: 36 }, [
-      el("div", { display: "flex", flexDirection: "column", gap: 6 }, [
-        el("span", { color: MUTED, fontSize: 11 }, msg("circleCard.progressTotal")),
-        el("span", { color: SOFT, fontFamily: NUM_FONT, fontSize: 24, fontWeight: 700, lineHeight: 1 }, circle.monthPoints === null ? "—" : `${fmt(circle.monthPoints)} PT`),
-      ]),
-      ...(circle.myPoints !== undefined
-        ? [el("div", { display: "flex", flexDirection: "column", gap: 6 }, [
-            el("span", { color: MUTED, fontSize: 11 }, msg("circleCard.progressMyPoints")),
-            el("span", { color: INK, fontFamily: NUM_FONT, fontSize: 24, fontWeight: 700, lineHeight: 1 }, `${fmt(circle.myPoints)} PT`),
-          ])]
-        : []),
-    ]),
+    nextStageBlock(circle, stage),
+    ...(circle.myPoints !== undefined
+      ? [el("div", { display: "flex", alignItems: "baseline", gap: 8 }, [
+          el("span", { color: MUTED, fontSize: 11 }, msg("circleCard.progressMyPoints")),
+          el("span", { color: INK, fontFamily: NUM_FONT, fontSize: 15, fontWeight: 700 }, `${fmt(circle.myPoints)} PT`),
+        ])]
+      : []),
   ]);
   return panel(msg("circleCard.progressTitle"), circle.period ? msg("circleCard.progressMeta", { period: circle.period }) : "", [
     el("div", { display: "flex", alignItems: "center" }, [pyramid, info]),
