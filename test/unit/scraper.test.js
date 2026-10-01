@@ -84,7 +84,7 @@ const CIRCLE_HOME = `<div class="wrapper main_wrapper t_c"><div class="m_b_10 f_
 <div class="circle_challenge_forecast_block m_t_5 p_5 t_l f_14 t_c"><img src="https://maimaidx-eng.com/maimai-mobile/img/Music/81e682b1c94a1a56.png" class="circle_challenge_forecast_icon"></div></div></div>`;
 
 const circleMember = (name, trophyClass, rating, points, leader) => `<div class="see_through_block p_r m_15 m_t_5 p_10 t_l f_0">${leader ? '<img src="https://maimaidx-eng.com/maimai-mobile/img/circle/circle_leader_icon.png" class="circle_member_leader">' : ""}
-<div class="basic_block p_10 f_0"><img src="x/Icon/a.png" class="w_112 f_l"><div class="p_l_10 f_l"><div class="trophy_block trophy_${trophyClass} p_3 t_c f_0"><div class="trophy_inner_block f_13"><span>칭호</span></div></div>
+<div class="basic_block p_10 f_0"><img src="https://maimaidx-eng.com/maimai-mobile/img/Icon/a.png" class="w_112 f_l"><div class="p_l_10 f_l"><div class="trophy_block trophy_${trophyClass} p_3 t_c f_0"><div class="trophy_inner_block f_13"><span>칭호</span></div></div>
 <div class="m_b_5"><div class="name_block t_l f_l f_16">${name}</div><div class="f_r t_r f_0"><div class="p_r p_3"><div class="rating_block">${rating}</div></div></div></div>
 <div class="circle_member_point_block f_15"><div class="p_t_10 p_r_10 t_r">${points} PT</div></div></div></div></div>`;
 const CIRCLE_MEMBERS = `<div class="wrapper main_wrapper t_c"><div class="m_15 m_t_0 m_b_0"><div class="basic_block m_3 p_5 f_11 l_h_10 t_c"><span class="f_13">Circle Members</span><span class="f_14 f_b">2</span>/20</div></div>
@@ -106,8 +106,8 @@ test("parseCircle: 서클 홈과 멤버 목록을 읽는다", () => {
   assert.equal(c.memberCount, 2);
   assert.equal(c.memberMax, 20);
   assert.deepEqual(c.members, [
-    { name: "ＤＩＧＩ", rating: 16089, trophy: "칭호", trophyClass: "gold", points: 1200, leader: true },
-    { name: "ＢＩＴ", rating: 13928, trophy: "칭호", trophyClass: "silver", points: 1970, leader: false },
+    { name: "ＤＩＧＩ", rating: 16089, trophy: "칭호", trophyClass: "gold", points: 1200, leader: true, icon: "https://maimaidx-eng.com/maimai-mobile/img/Icon/a.png" },
+    { name: "ＢＩＴ", rating: 13928, trophy: "칭호", trophyClass: "silver", points: 1970, leader: false, icon: "https://maimaidx-eng.com/maimai-mobile/img/Icon/a.png" },
   ]);
 });
 

@@ -559,6 +559,8 @@ export interface CircleMember {
   /** 이번 달 서클 포인트 */
   points: number;
   leader: boolean;
+  /** 멤버 아이콘(DX NET Icon/*.png). 이 필드 이전 값에는 없다. */
+  icon?: string;
 }
 
 export const CIRCLE_COLORS = ["rainbow", "gold", "silver", "bronze", "purple", "red", "yellow", "green", "white"] as const;
@@ -669,6 +671,7 @@ export function parseCircle(homeHtml: string, memberHtml = "", server: MaimaiSer
       const b = $m(el);
       const memberName = clean(b.find(".name_block").first().text());
       if (!memberName) return;
+      const icon = absUrl(b.find("img[src*='/Icon/']").first().attr("src"), baseUrl);
       info.members.push({
         name: memberName,
         rating: numOf(b.find(".rating_block").first().text()) ?? 0,
@@ -676,6 +679,7 @@ export function parseCircle(homeHtml: string, memberHtml = "", server: MaimaiSer
         trophyClass: (b.find(".trophy_block").attr("class") || "").split(/\s+/).find(c => c.match(/^trophy_(?!block)/i))?.replace(/^trophy_/i, "").toLowerCase() || "normal",
         points: numOf(b.find(".circle_member_point_block").first().text()) ?? 0,
         leader: b.find("img.circle_member_leader, img[src*='circle_leader']").length > 0,
+        ...(icon ? { icon } : {}),
       });
     });
     if (info.memberCount === null && info.members.length) info.memberCount = info.members.length;

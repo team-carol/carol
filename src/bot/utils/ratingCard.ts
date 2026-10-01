@@ -470,8 +470,8 @@ function plateStars(value: number): number {
 }
 
 /** 레이팅 플레이트(별 포함). 프로필 카드도 같은 모양을 쓴다. */
-export function ratingPlate(value: number): El {
-  const s = (v: number) => Math.round(v * PLATE_S * 100) / 100;
+export function ratingPlate(value: number, scale = PLATE_S): El {
+  const s = (v: number) => Math.round(v * scale * 100) / 100;
   const tier = PLATE_TIERS.find((t) => value >= t.min) ?? PLATE_TIERS[PLATE_TIERS.length - 1];
   // 5칸 고정. 자릿수가 모자라면 앞칸을 비운다(게임 표시와 동일).
   const digits = String(Math.max(0, Math.floor(value))).slice(-5).padStart(5, " ").split("");

@@ -3,7 +3,7 @@ import {
   type El, el, image, pill, remoteDataUrl, kstStamp, wordmark, statsPanel, panel,
 } from "./cardKit";
 import { renderInWorker } from "./renderPool";
-import { fetchJacketDataUrl } from "./ratingCard";
+import { fetchJacketDataUrl, ratingPlate } from "./ratingCard";
 import { alignLeftMargin } from "./textMetrics";
 import type { CachedProfile } from "../../storage/types";
 import { CIRCLE_COLORS, type CircleInfo, type CircleMember, type CircleColor, type CircleRankEntry } from "../../scraper";
@@ -16,7 +16,7 @@ import { CIRCLE_COLOR_STYLE } from "./circleColors";
 // /서클 이미지 카드. /프로필 카드와 같은 부품(cardKit)·토큰을 쓴다.
 // 헤더(서클 이름·코드·소개) → 포인트·순위·보상·멤버 수 → 서클 챌린지(+다음 주 예고) → 멤버 포인트(2열).
 
-const CIRCLE_CARD_VERSION = 8;
+const CIRCLE_CARD_VERSION = 10;
 const CIRCLE_CARD_CACHE_MAX = 32;
 const circleCardCache = new Map<string, Buffer>();
 const fmt = (n: number) => n.toLocaleString("en-US");
@@ -138,10 +138,62 @@ function neighborsBlock(entries: CircleRankEntry[]): El {
   ]);
 }
 
-function memberRow(m: CircleMember, rank: number): El {
+// 1~3위 메달 색(게임 랭킹의 금·은·동)
+const MEDAL = ["#f2c94c", "#c3ccd4", "#c77d43"];
+
+function trophyBand(m: CircleMember, width: number | undefined, fontSize: number): El {
   const trophyStyle = TROPHY_STYLE[m.trophyClass] ?? TROPHY_STYLE.normal;
+  // 칭호 문구가 비어 있어도(공백 칭호) 게임처럼 등급 색 띠는 보여 준다.
+  return pill(m.trophy || "\u00a0", {
+    ...trophyStyle, fontSize, padding: "2px 8px", maxWidth: width ?? 220, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis",
+    ...(m.trophy ? {} : { width: 120 }),
+  });
+}
+
+// 1~3위: 아이콘·이름·칭호·레이팅 플레이트·포인트를 크게. 1위 카드는 테두리를 메달색으로.
+function podiumCard(m: CircleMember, rank: number, icon: string | null): El {
+  const medal = MEDAL[rank - 1];
   return el("div", {
-    display: "flex", alignItems: "center", width: "50%", padding: "9px 10px", borderTop: `1px solid ${BORDER}`,
+    display: "flex", flexDirection: "column", alignItems: "center", flex: 1, minWidth: 0, gap: 9,
+    // 일반(normal) 칭호 띠가 SURFACE2 라 카드는 한 단계 어둡게.
+    padding: "14px 12px 16px", borderRadius: 14, background: CANVAS,
+    border: `1px solid ${rank === 1 ? medal : BORDER}`,
+  }, [
+    el("div", { display: "flex", alignSelf: "stretch", justifyContent: "space-between", alignItems: "center" }, [
+      el("div", { display: "flex", alignItems: "center", justifyContent: "center", width: 28, height: 28, borderRadius: 99, background: medal }, [
+        el("span", { color: CANVAS, fontFamily: NUM_FONT, fontSize: 15, fontWeight: 700, lineHeight: 1 }, String(rank)),
+      ]),
+      m.leader ? pill(msg("circleCard.leader"), { background: ACCENT, color: CANVAS, fontSize: 8, padding: "2px 6px" }) : el("span", {}, ""),
+    ]),
+    icon
+      ? image(icon, { width: 84, height: 84, borderRadius: 14, objectFit: "cover" })
+      : el("div", { width: 84, height: 84, borderRadius: 14, background: SURFACE2 }),
+    el("span", { color: INK, fontSize: 16, fontWeight: 700, maxWidth: "100%", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, m.name),
+    trophyBand(m, 230, 9),
+    m.rating ? ratingPlate(m.rating, 0.5) : el("span", {}, ""),
+    el("span", { color: SOFT, fontFamily: NUM_FONT, fontSize: 22, fontWeight: 700, lineHeight: 1, marginTop: 2 }, msg("circleCard.memberPoints", { points: fmt(m.points) })),
+  ]);
+}
+
+// 멤버 포인트 패널: 1~3위 시상대 + 4위 이하 두 열(왼쪽 열을 위에서 아래로 먼저 채운다).
+function membersPanel(members: CircleMember[], month: number, icons: (string | null)[]): El {
+  if (!members.length) return panel(msg("circleCard.membersTitle"), msg("circleCard.membersMeta", { month }), [el("span", { color: MUTED, fontSize: 12, padding: "12px 0" }, msg("circleCard.membersEmpty"))]);
+  const top = members.slice(0, 3);
+  const rest = members.slice(3);
+  const half = Math.ceil(rest.length / 2);
+  const column = (list: CircleMember[], offset: number) =>
+    el("div", { display: "flex", flexDirection: "column", flex: 1, minWidth: 0 }, list.map((m, i) => memberRow(m, offset + i + 1)));
+  return panel(msg("circleCard.membersTitle"), msg("circleCard.membersMeta", { month }), [
+    el("div", { display: "flex", gap: 10 }, top.map((m, i) => podiumCard(m, i + 1, icons[i] ?? null))),
+    ...(rest.length
+      ? [el("div", { display: "flex", gap: 16, marginTop: 12 }, [column(rest.slice(0, half), 3), column(rest.slice(half), 3 + half)])]
+      : []),
+  ]);
+}
+
+function memberRow(m: CircleMember, rank: number): El {
+  return el("div", {
+    display: "flex", alignItems: "center", width: "100%", padding: "9px 10px", borderTop: `1px solid ${BORDER}`,
   }, [
     el("span", { width: 26, color: rank <= 3 ? SOFT : FAINT, fontFamily: NUM_FONT, fontSize: 15, fontWeight: 700, flexShrink: 0 }, String(rank)),
     el("div", { display: "flex", flexDirection: "column", flex: 1, minWidth: 0, gap: 4 }, [
@@ -149,11 +201,8 @@ function memberRow(m: CircleMember, rank: number): El {
         el("span", { color: INK, fontSize: 14, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", flexShrink: 1, minWidth: 0 }, m.name),
         m.leader ? pill(msg("circleCard.leader"), { background: ACCENT, color: CANVAS, fontSize: 8, padding: "2px 6px" }) : el("span", {}, ""),
       ]),
-      // 칭호 문구가 비어 있어도(공백 칭호) 게임처럼 등급 색 띠는 보여 준다.
-      pill(m.trophy || "\u00a0", {
-        ...trophyStyle, fontSize: 9, padding: "2px 7px", maxWidth: 220, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis", alignSelf: "flex-start",
-        ...(m.trophy ? {} : { width: 120 }),
-      }),
+      // 가로 flex 로 감싸 띠가 열 너비만큼 늘어나지 않게 한다.
+      el("div", { display: "flex" }, [trophyBand(m, undefined, 9)]),
     ]),
     el("div", { display: "flex", flexDirection: "column", alignItems: "flex-end", flexShrink: 0, marginLeft: 8, gap: 3 }, [
       el("span", { color: INK, fontFamily: NUM_FONT, fontSize: 15, fontWeight: 700, lineHeight: 1 }, msg("circleCard.memberPoints", { points: fmt(m.points) })),
@@ -169,6 +218,9 @@ export async function renderCircleCard(circle: CircleInfo, profile: CachedProfil
   if (memo) return memo;
 
   const forecastTitle = circle.forecastJacket ? getTitleByJacket(circle.forecastJacket) : null;
+  // 동점이면 DX NET 순서(리더가 맨 앞)를 유지한다.
+  const members = circle.members.map((m, i) => ({ m, i })).sort((a, b) => b.m.points - a.m.points || a.i - b.i).map(({ m }) => m);
+  const topIcons = await Promise.all(members.slice(0, 3).map((m) => (m.icon ? remoteDataUrl(m.icon) : Promise.resolve(null))));
   const [challengeJacket, forecastJacket] = await Promise.all([
     circle.challenge ? jacketData(circle.challenge.jacket, circle.challenge.title) : Promise.resolve(null),
     circle.forecastJacket ? jacketData(circle.forecastJacket, forecastTitle) : Promise.resolve(null),
@@ -179,8 +231,6 @@ export async function renderCircleCard(circle: CircleInfo, profile: CachedProfil
   const eyebrow = msg("circleCard.eyebrow", { server: serverLabel });
   const synced = new Date(profile.lastSyncedAt);
   const month = Number(synced.toLocaleString("en-US", { timeZone: "Asia/Seoul", month: "numeric" }));
-  // 동점이면 DX NET 순서(리더가 맨 앞)를 유지한다.
-  const members = circle.members.map((m, i) => ({ m, i })).sort((a, b) => b.m.points - a.m.points || a.i - b.i).map(({ m }) => m);
   const reset = circle.daysToReset === null ? undefined : circle.daysToReset === 0 ? msg("circleCard.resetToday") : msg("circleCard.resetDays", { days: circle.daysToReset });
 
   const width = 920;
@@ -216,9 +266,7 @@ export async function renderCircleCard(circle: CircleInfo, profile: CachedProfil
     ...(circle.challenge
       ? [challengePanel(circle, translate, challengeJacket, circle.forecastJacket ? { title: forecastTitle, jacket: forecastJacket } : null)]
       : []),
-    panel(msg("circleCard.membersTitle"), msg("circleCard.membersMeta", { month }), members.length
-      ? [el("div", { display: "flex", flexWrap: "wrap" }, members.map((m, i) => memberRow(m, i + 1)))]
-      : [el("span", { color: MUTED, fontSize: 12, padding: "12px 0" }, msg("circleCard.membersEmpty"))]),
+    membersPanel(members, month, topIcons),
     // 푸터
     el("div", { display: "flex", justifyContent: "space-between", marginTop: 14, color: MUTED, fontSize: 11 }, [
       el("span", {}, msg("circleCard.syncedBy", { player: profile.playerName || "—" })),
