@@ -16,7 +16,7 @@ import { CIRCLE_COLOR_STYLE } from "./circleColors";
 // /서클 이미지 카드. /프로필 카드와 같은 부품(cardKit)·토큰을 쓴다.
 // 헤더(서클 이름·코드·소개) → 포인트·순위·보상·멤버 수 → 서클 챌린지(+다음 주 예고) → 멤버 포인트(2열).
 
-const CIRCLE_CARD_VERSION = 11;
+const CIRCLE_CARD_VERSION = 13;
 const CIRCLE_CARD_CACHE_MAX = 32;
 const circleCardCache = new Map<string, Buffer>();
 const fmt = (n: number) => n.toLocaleString("en-US");
@@ -141,39 +141,46 @@ function neighborsBlock(entries: CircleRankEntry[]): El {
 // 1~3위 메달 색(게임 랭킹의 금·은·동)
 const MEDAL = ["#f2c94c", "#c3ccd4", "#c77d43"];
 
-function trophyBand(m: CircleMember, width: number | undefined, fontSize: number): El {
+function trophyBand(m: CircleMember, maxWidth: number | string | undefined, fontSize: number): El {
   const trophyStyle = TROPHY_STYLE[m.trophyClass] ?? TROPHY_STYLE.normal;
   // 칭호 문구가 비어 있어도(공백 칭호) 게임처럼 등급 색 띠는 보여 준다.
   return pill(m.trophy || "\u00a0", {
-    ...trophyStyle, fontSize, padding: "2px 8px", maxWidth: width ?? 220, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis",
+    ...trophyStyle, fontSize, padding: "2px 8px", maxWidth: maxWidth ?? 220, minWidth: 0, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis",
     ...(m.trophy ? {} : { width: 120 }),
   });
 }
 
-// 1~3위: 아이콘 왼쪽, 정보 오른쪽. 메달색은 위쪽 띠·옅은 배경·아이콘 테두리·순위 글자에만 쓴다.
-// 1위 칸은 조금 더 넓고 아이콘도 크다.
+// 1~3위: 아이콘 왼쪽, 정보 오른쪽, 아래 줄에 포인트·레이팅. 메달색은 아이콘 테두리·순위 글자(1위는 칸 테두리)에만.
+// 1위 칸은 조금 더 넓고 크다. 칸 높이가 달라도 포인트 줄은 칸 아래에 맞춘다.
 const MEDAL_LABEL = ["1ST", "2ND", "3RD"];
 function podiumCard(m: CircleMember, rank: number, icon: string | null): El {
   const medal = MEDAL[rank - 1];
   const first = rank === 1;
-  const size = first ? 76 : 64;
+  const size = first ? 72 : 64;
+  const label = MEDAL_LABEL[rank - 1];
+  const labelSize = first ? 14 : 12;
+  const nameSize = first ? 18 : 15;
   return el("div", {
-    display: "flex", flexDirection: "column", flex: first ? 1.3 : 1, minWidth: 0, gap: 12,
-    padding: "14px 14px 14px", borderRadius: 14, background: CANVAS,
-    backgroundImage: `linear-gradient(180deg, ${medal}22 0%, ${medal}00 70%)`,
-    border: `1px solid ${BORDER}`, borderTop: `3px solid ${medal}`,
+    display: "flex", flexDirection: "column", justifyContent: "space-between", flex: first ? 1.3 : 1, minWidth: 0, gap: 16,
+    padding: 16, borderRadius: 14, background: CANVAS,
+    border: `1px solid ${first ? medal : BORDER}`,
   }, [
-    el("div", { display: "flex", alignItems: "center", gap: 12, minWidth: 0 }, [
+    el("div", { display: "flex", alignItems: "center", gap: 14, minWidth: 0 }, [
       icon
         ? image(icon, { width: size, height: size, borderRadius: 12, objectFit: "cover", border: `2px solid ${medal}`, flexShrink: 0 })
         : el("div", { width: size, height: size, borderRadius: 12, background: SURFACE2, border: `2px solid ${medal}`, flexShrink: 0 }),
       el("div", { display: "flex", flexDirection: "column", flex: 1, minWidth: 0, gap: 6 }, [
         el("div", { display: "flex", alignItems: "center", gap: 6 }, [
-          el("span", { color: medal, fontFamily: NUM_FONT, fontSize: first ? 15 : 13, fontWeight: 700, letterSpacing: 0.8, lineHeight: 1 }, MEDAL_LABEL[rank - 1]),
+          el("span", { color: medal, fontFamily: NUM_FONT, fontSize: labelSize, fontWeight: 700, letterSpacing: 0.8, lineHeight: 1 }, label),
           m.leader ? pill(msg("circleCard.leader"), { background: ACCENT, color: CANVAS, fontSize: 8, padding: "2px 6px" }) : el("span", {}, ""),
         ]),
-        el("span", { color: INK, fontSize: first ? 18 : 15, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, m.name),
-        el("div", { display: "flex" }, [trophyBand(m, first ? 230 : 170, 9)]),
+        // 전각 영문 이름은 첫 글자 왼쪽 여백만큼 밀려 보여 위 줄(순위)과 잉크 시작을 맞춘다.
+        el("span", {
+          color: INK, fontSize: nameSize, fontWeight: 700, lineHeight: 1.15, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+          marginLeft: alignLeftMargin({ text: m.name, size: nameSize }, { text: label, size: labelSize }),
+        }, m.name),
+        // 남은 폭 안에서만 늘어나게(긴 칭호는 말줄임).
+        el("div", { display: "flex", minWidth: 0 }, [trophyBand(m, "100%", 9)]),
       ]),
     ]),
     el("div", { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }, [
