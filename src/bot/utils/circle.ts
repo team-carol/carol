@@ -4,6 +4,7 @@ import type { CachedProfile } from "../../storage/types";
 import { msg } from "../../messages";
 import { displayTitle } from "../../aliases";
 import { getTitleByJacket } from "../../constants";
+import { CIRCLE_COLOR_STYLE } from "./circleColors";
 
 /**
  * profiles.circle_json 해석.
@@ -38,13 +39,15 @@ export function circleEmbed(circle: CircleInfo, profile: CachedProfile, translat
   const synced = new Date(profile.lastSyncedAt);
   const month = Number(synced.toLocaleString("en-US", { timeZone: "Asia/Seoul", month: "numeric" }));
   const emb = new EmbedBuilder()
-    .setColor(0xff9294)
+    // 서클 프로필 색상이 있으면 임베드 테두리도 그 색으로.
+    .setColor(circle.color ? CIRCLE_COLOR_STYLE[circle.color].main : 0xff9294)
     .setTitle(circle.name)
     .setFooter(footerOf(profile));
   if (circle.comment) emb.setDescription(escapeMarkdown(circle.comment));
 
   const fields: { name: string; value: string; inline?: boolean }[] = [];
   if (circle.code) fields.push({ name: msg("circle.codeField"), value: `\`${circle.code}\``, inline: true });
+  if (circle.color) fields.push({ name: msg("circle.colorField"), value: msg(`circleColor.${circle.color}`), inline: true });
   if (circle.memberCount !== null) {
     fields.push({ name: msg("circle.memberField"), value: msg("circle.memberValue", { count: circle.memberCount, max: circle.memberMax ?? "?" }), inline: true });
   }

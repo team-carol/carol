@@ -130,6 +130,16 @@ export const MESSAGES = {
   "circle.otherNone": "{user} 님은 가입한 서클이 없습니다. (마지막 동기화 기준)",
   "circle.privateSelfNote": "서클 공개가 꺼져 있어 나에게만 보입니다. `/설정`에서 바꿀 수 있습니다.",
   "circle.codeField": "서클 코드",
+  "circle.colorField": "서클 색상",
+  "circleColor.rainbow": "Rainbow",
+  "circleColor.gold": "Gold",
+  "circleColor.silver": "Silver",
+  "circleColor.bronze": "Bronze",
+  "circleColor.purple": "Purple",
+  "circleColor.red": "Red",
+  "circleColor.yellow": "Yellow",
+  "circleColor.green": "Green",
+  "circleColor.white": "White",
   "circle.memberField": "멤버",
   "circle.memberValue": "{count}/{max}명",
   "circle.pointField": "{month}월 서클 포인트",
@@ -462,7 +472,7 @@ export function applyMessageOverrides(rows: { key: string; text: string }[]): vo
 }
 
 // 이미지 카드 문구의 서명. 카드 캐시 키(메모리)와 레이팅표 DB 캐시 버전에 섞어, 문구를 바꾸면 다시 그리게 한다.
-const CARD_KEY_PREFIXES = ["card.", "profileCard.", "circleCard.", "achievementCard.", "ratingCard."];
+const CARD_KEY_PREFIXES = ["card.", "profileCard.", "circleCard.", "circleColor.", "achievementCard.", "ratingCard."];
 let cardSignature: number | null = null;
 
 function fnv1a(text: string): number {

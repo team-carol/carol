@@ -64,7 +64,7 @@ test("parseHome: 단위(course)와 클래스(class) 이미지를 따로 읽는�
 });
 
 const CIRCLE_HOME = `<div class="wrapper main_wrapper t_c"><div class="m_b_10 f_0"><a href="https://maimaidx-eng.com/maimai-mobile/circle/circleSearch/">s</a></div>
-<div class="h_270 p_r"><div class="circle_profile_circle_name"><span>ＺＵＮＤＡＭＯＮ</span></div>
+<div class="h_270 p_r"><div class="circle_profile_class"><img src="https://maimaidx-eng.com/maimai-mobile/img/profile/circle_profile_color_red.png"></div><div class="circle_profile_circle_name"><span>ＺＵＮＤＡＭＯＮ</span></div>
 <div class="circle_profile_circle_code"><span>ZM7PK1RB</span></div>
 <div class="circle_profile_user_name"><span>ＲＯＥＮＡ・∀・</span></div>
 <div class="circle_profile_comment"><span>Let's maimai！</span></div></div>
@@ -94,6 +94,7 @@ test("parseCircle: 서클 홈과 멤버 목록을 읽는다", () => {
   const c = s.parseCircle(CIRCLE_HOME, CIRCLE_MEMBERS);
   assert.equal(c.name, "ＺＵＮＤＡＭＯＮ");
   assert.equal(c.code, "ZM7PK1RB");
+  assert.equal(c.color, "red");
   assert.equal(c.comment, "Let's maimai！");
   assert.equal(c.monthPoints, 8236);
   assert.equal(c.daysToReset, 3);

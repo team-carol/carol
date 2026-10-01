@@ -10,11 +10,12 @@ import type { CircleInfo, CircleMember } from "../../scraper";
 import { getJacketFile, getTitleByJacket } from "../../constants";
 import { displayTitle } from "../../aliases";
 import { msg, cardTextSignature } from "../../messages";
+import { CIRCLE_COLOR_STYLE } from "./circleColors";
 
 // /서클 이미지 카드. /프로필 카드와 같은 부품(cardKit)·토큰을 쓴다.
 // 헤더(서클 이름·코드·소개) → 포인트·순위·보상·멤버 수 → 서클 챌린지(+다음 주 예고) → 멤버 포인트(2열).
 
-const CIRCLE_CARD_VERSION = 2;
+const CIRCLE_CARD_VERSION = 3;
 const CIRCLE_CARD_CACHE_MAX = 32;
 const circleCardCache = new Map<string, Buffer>();
 const fmt = (n: number) => n.toLocaleString("en-US");
@@ -110,6 +111,7 @@ export async function renderCircleCard(circle: CircleInfo, profile: CachedProfil
   ]);
 
   const serverLabel = profile.server === "jp" ? "JP" : "INTERNATIONAL";
+  const colorStyle = circle.color ? CIRCLE_COLOR_STYLE[circle.color] : null;
   const eyebrow = msg("circleCard.eyebrow", { server: serverLabel });
   const synced = new Date(profile.lastSyncedAt);
   const month = Number(synced.toLocaleString("en-US", { timeZone: "Asia/Seoul", month: "numeric" }));
@@ -122,8 +124,8 @@ export async function renderCircleCard(circle: CircleInfo, profile: CachedProfil
     display: "flex", flexDirection: "column", width,
     background: CANVAS, padding: 24, color: TEXT, fontFamily: "Noto Sans JP",
   }, [
-    // 헤더
-    el("div", { display: "flex", alignItems: "flex-start", paddingBottom: 18, borderBottom: `1px solid ${BORDER}` }, [
+    // 헤더. 서클 색상이 있으면 아래 경계선을 그 색 띠로.
+    el("div", { display: "flex", alignItems: "flex-start", paddingBottom: 18, ...(colorStyle ? {} : { borderBottom: `1px solid ${BORDER}` }) }, [
       el("div", { display: "flex", flexDirection: "column", flex: 1, minWidth: 0, gap: 8 }, [
         el("span", { color: MUTED, fontSize: 10, fontWeight: 700, letterSpacing: 0.4 }, eyebrow),
         el("span", {
@@ -131,12 +133,15 @@ export async function renderCircleCard(circle: CircleInfo, profile: CachedProfil
           marginLeft: alignLeftMargin({ text: circle.name, size: 30 }, { text: eyebrow, size: 10 }),
         }, circle.name),
         el("div", { display: "flex", alignItems: "center", gap: 10 }, [
+          // 서클 프로필 색상 이름표(게임의 이름판 색)
+          colorStyle ? pill(msg(`circleColor.${circle.color!}`), { backgroundImage: colorStyle.gradient, color: colorStyle.ink, fontSize: 11, padding: "4px 12px", letterSpacing: 0.4 }) : el("span", {}, ""),
           circle.code ? pill(msg("circleCard.code", { code: circle.code }), { background: SURFACE2, color: TEXT, fontSize: 11, padding: "4px 11px", letterSpacing: 0.6 }) : el("span", {}, ""),
           circle.comment ? el("span", { color: MUTED, fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 560 }, circle.comment) : el("span", {}, ""),
         ]),
       ]),
       wordmark(),
     ]),
+    ...(colorStyle ? [el("div", { height: 3, borderRadius: 99, backgroundImage: colorStyle.gradient })] : []),
     statsPanel([
       { value: circle.monthPoints === null ? "—" : fmt(circle.monthPoints), label: msg("circleCard.monthPoints", { month }), sub: reset },
       { value: circle.rank === null ? "—" : msg("circleCard.rankValue", { rank: fmt(circle.rank) }), label: msg("circleCard.rank"), sub: circle.rankUpdatedAt ? msg("circleCard.rankUpdated", { time: circle.rankUpdatedAt }) : undefined },

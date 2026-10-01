@@ -561,8 +561,13 @@ export interface CircleMember {
   leader: boolean;
 }
 
+export const CIRCLE_COLORS = ["rainbow", "gold", "silver", "bronze", "purple", "red", "yellow", "green", "white"] as const;
+export type CircleColor = (typeof CIRCLE_COLORS)[number];
+
 export interface CircleInfo {
   name: string;
+  /** 서클 프로필 색상(circle_profile_color_*.png). 이 필드 이전 값에는 없다. */
+  color?: CircleColor;
   code: string;
   comment: string;
   /** 이번 달 서클 합계 포인트 */
@@ -620,8 +625,10 @@ export function parseCircle(homeHtml: string, memberHtml = "", server: MaimaiSer
         ...(Number.isFinite(gauge) ? { gauge } : {}),
       }
     : null;
+  const colorName = ($(".circle_profile_class img").attr("src") || "").match(/circle_profile_color_([a-z]+)/i)?.[1]?.toLowerCase();
   const info: CircleInfo = {
     name,
+    ...((CIRCLE_COLORS as readonly string[]).includes(colorName ?? "") ? { color: colorName as CircleColor } : {}),
     code: clean($(".circle_profile_circle_code").first().text()),
     comment: clean($(".circle_profile_comment").first().text()),
     monthPoints: numOf($(".circle_totalpoint_point span").first().text()),
