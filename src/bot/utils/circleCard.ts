@@ -16,7 +16,7 @@ import { CIRCLE_COLOR_STYLE } from "./circleColors";
 // /서클 이미지 카드. /프로필 카드와 같은 부품(cardKit)·토큰을 쓴다.
 // 헤더(서클 이름·코드·소개) → 포인트·순위·보상·멤버 수 → 서클 챌린지(+다음 주 예고) → 멤버 포인트(2열).
 
-const CIRCLE_CARD_VERSION = 5;
+const CIRCLE_CARD_VERSION = 7;
 const CIRCLE_CARD_CACHE_MAX = 32;
 const circleCardCache = new Map<string, Buffer>();
 const fmt = (n: number) => n.toLocaleString("en-US");
@@ -80,7 +80,7 @@ function challengePanel(circle: CircleInfo, translate: boolean, jacket: string |
 // 이번 달 진행도. DX NET 서클 랭킹 피라미드처럼 위(Rainbow)가 좁고 아래(White)가 넓은 계단 모양으로 그리고,
 // 현재 단계만 진하게 칠한다.
 function progressPanel(circle: CircleInfo, stage: CircleColor): El {
-  const BAND_H = 20, MIN_W = 30, MAX_W = 190;
+  const BAND_H = 20, MIN_W = 44, MAX_W = 300;
   const n = CIRCLE_COLORS.length;
   const pyramid = el("div", { display: "flex", flexDirection: "column", alignItems: "center", width: MAX_W + 70, flexShrink: 0, gap: 3 },
     CIRCLE_COLORS.map((c, i) => {
@@ -114,26 +114,27 @@ function progressPanel(circle: CircleInfo, stage: CircleColor): El {
     ]),
   ]);
   return panel(msg("circleCard.progressTitle"), circle.period ? msg("circleCard.progressMeta", { period: circle.period }) : "", [
-    el("div", { display: "flex", alignItems: "center" }, [pyramid, info, ...(circle.neighbors?.length ? [neighborsBlock(circle.neighbors)] : [])]),
+    el("div", { display: "flex", alignItems: "center" }, [pyramid, info]),
+    ...(circle.neighbors?.length ? [neighborsBlock(circle.neighbors)] : []),
   ]);
 }
 
-// 순위 주변: 바로 위 서클 · 내 서클 · 바로 아래 서클. 남의 서클 옆에는 내 서클과의 포인트 차이.
+// 순위 주변: 바로 위 서클 · 내 서클 · 바로 아래 서클을 피라미드 아래에 가로로. 남의 서클에는 내 서클과의 포인트 차이.
 function neighborsBlock(entries: CircleRankEntry[]): El {
   const self = entries.find((e) => e.self);
-  return el("div", { display: "flex", flexDirection: "column", width: 330, flexShrink: 0, marginLeft: 12, paddingLeft: 16, borderLeft: `1px solid ${BORDER}`, gap: 6 }, [
-    el("span", { color: MUTED, fontSize: 11, marginBottom: 2 }, msg("circleCard.neighborsTitle")),
-    ...entries.map((e) => el("div", {
-      display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 10,
-      ...(e.self ? { background: SURFACE2, border: `1px solid ${BORDER}` } : {}),
+  return el("div", { display: "flex", flexDirection: "column", marginTop: 14, paddingTop: 12, borderTop: `1px solid ${BORDER}`, gap: 8 }, [
+    el("span", { color: MUTED, fontSize: 11 }, msg("circleCard.neighborsTitle")),
+    el("div", { display: "flex", gap: 10 }, entries.map((e) => el("div", {
+      display: "flex", flexDirection: "column", gap: 6, padding: "10px 12px", borderRadius: 10, flex: 1, minWidth: 0,
+      border: `1px solid ${BORDER}`, ...(e.self ? { background: SURFACE2 } : {}),
     }, [
-      el("span", { width: 58, color: e.self ? SOFT : MUTED, fontFamily: NUM_FONT, fontSize: 13, fontWeight: 700, flexShrink: 0 }, msg("circleCard.neighborRank", { rank: fmt(e.rank) })),
-      el("span", { flex: 1, minWidth: 0, color: e.self ? INK : TEXT, fontSize: 13, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, e.name),
-      el("div", { display: "flex", flexDirection: "column", alignItems: "flex-end", flexShrink: 0, gap: 2 }, [
-        el("span", { color: INK, fontFamily: NUM_FONT, fontSize: 13, fontWeight: 700, lineHeight: 1 }, msg("circleCard.neighborPoints", { points: fmt(e.points) })),
-        ...(!e.self && self ? [el("span", { color: FAINT, fontSize: 10, lineHeight: 1 }, signed(e.points - self.points))] : []),
+      el("span", { color: e.self ? SOFT : MUTED, fontFamily: NUM_FONT, fontSize: 12, fontWeight: 700, lineHeight: 1 }, msg("circleCard.neighborRank", { rank: fmt(e.rank) })),
+      el("span", { color: e.self ? INK : TEXT, fontSize: 14, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, e.name),
+      el("div", { display: "flex", alignItems: "baseline", gap: 8 }, [
+        el("span", { color: INK, fontFamily: NUM_FONT, fontSize: 15, fontWeight: 700, lineHeight: 1 }, msg("circleCard.neighborPoints", { points: fmt(e.points) })),
+        ...(!e.self && self ? [el("span", { color: FAINT, fontSize: 11, lineHeight: 1 }, signed(e.points - self.points))] : []),
       ]),
-    ])),
+    ]))),
   ]);
 }
 
