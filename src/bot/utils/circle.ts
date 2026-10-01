@@ -24,6 +24,8 @@ export function circleOf(profile: Pick<CachedProfile, "circleJson">): CircleInfo
 }
 
 const fmt = (n: number) => n.toLocaleString("en-US");
+/** 포인트 차이: +264 / −136 */
+export const signed = (n: number) => (n >= 0 ? `+${fmt(n)}` : `−${fmt(-n)}`);
 
 function footerOf(profile: CachedProfile): { text: string } {
   return {
@@ -67,6 +69,18 @@ export function circleEmbed(circle: CircleInfo, profile: CachedProfile, translat
   }
   if (circle.nextRewardPoints !== null) {
     fields.push({ name: msg("circle.rewardField"), value: msg("circle.rewardValue", { points: fmt(circle.nextRewardPoints) }), inline: true });
+  }
+  if (circle.neighbors?.length) {
+    const self = circle.neighbors.find((n) => n.self);
+    fields.push({
+      name: msg("circle.neighborsField"),
+      value: circle.neighbors.map((n) => msg("circle.neighborLine", {
+        rank: fmt(n.rank),
+        name: escapeMarkdown(n.name),
+        points: fmt(n.points),
+        gap: !n.self && self ? msg("circle.neighborGap", { gap: signed(n.points - self.points) }) : "",
+      })).join("\n"),
+    });
   }
   if (circle.challenge) {
     fields.push({

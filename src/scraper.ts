@@ -564,6 +564,14 @@ export interface CircleMember {
 export const CIRCLE_COLORS = ["rainbow", "gold", "silver", "bronze", "purple", "red", "yellow", "green", "white"] as const;
 export type CircleColor = (typeof CIRCLE_COLORS)[number];
 
+export interface CircleRankEntry {
+  rank: number;
+  name: string;
+  points: number;
+  /** 내 서클 */
+  self?: boolean;
+}
+
 export interface CircleInfo {
   name: string;
   /** 서클 프로필 색상(circle_profile_color_*.png). 이 필드 이전 값에는 없다. */
@@ -591,6 +599,8 @@ export interface CircleInfo {
   period?: string;
   /** 내(동기화한 사람) 이번 달 서클 포인트 */
   myPoints?: number;
+  /** 서클 순위표에서 내 서클과 바로 위·아래 서클(있는 것만, 순위 순) */
+  neighbors?: CircleRankEntry[];
   memberCount: number | null;
   memberMax: number | null;
   /** 멤버 목록 페이지를 못 받았으면 빈 배열 */
