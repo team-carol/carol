@@ -79,7 +79,9 @@ const CIRCLE_HOME = `<div class="wrapper main_wrapper t_c"><div class="m_b_10 f_
 <div class="basic_block w_450 m_15 m_t_0 p_10 t_l"><div class="circle_challenge_block p_5 p_t_15">
 <img src="https://maimaidx-eng.com/maimai-mobile/img/Music/af4f08eaff72cde9.png" class="w_170 m_5 f_l">
 <div class="w_240 f_l t_l"><div class="m_10 m_t_5 t_r f_12 blue">GAME＆VARIETY</div><div class="m_5 f_15 break">コンティニュー！ feat. 藍月なくる</div><hr class="w_100pc"><div class="m_5 f_12 break">lapix</div></div>
-<div class="circle_challenge_achiv_block h_25 w_410 m_5 m_b_10"><div class="circle_challenge_achiv_text h_25 p_t_5 f_r t_c f_b">99.6280%</div></div></div></div></div>`;
+<div class="circle_challenge_gauge_frame h_26 m_5 m_t_10 m_b_10 p_r"><div class="circle_challenge_gauge_status h_26 p_a" style="width:9.9628%;"></div></div>
+<div class="circle_challenge_achiv_block h_25 w_410 m_5 m_b_10"><div class="circle_challenge_achiv_text h_25 p_t_5 f_r t_c f_b">99.6280%</div></div></div>
+<div class="circle_challenge_forecast_block m_t_5 p_5 t_l f_14 t_c"><img src="https://maimaidx-eng.com/maimai-mobile/img/Music/81e682b1c94a1a56.png" class="circle_challenge_forecast_icon"></div></div></div>`;
 
 const circleMember = (name, trophyClass, rating, points, leader) => `<div class="see_through_block p_r m_15 m_t_5 p_10 t_l f_0">${leader ? '<img src="https://maimaidx-eng.com/maimai-mobile/img/circle/circle_leader_icon.png" class="circle_member_leader">' : ""}
 <div class="basic_block p_10 f_0"><img src="x/Icon/a.png" class="w_112 f_l"><div class="p_l_10 f_l"><div class="trophy_block trophy_${trophyClass} p_3 t_c f_0"><div class="trophy_inner_block f_13"><span>칭호</span></div></div>
@@ -98,7 +100,8 @@ test("parseCircle: 서클 홈과 멤버 목록을 읽는다", () => {
   assert.equal(c.rank, 609);
   assert.equal(c.rankUpdatedAt, "2026/09/30 01:00");
   assert.equal(c.nextRewardPoints, 764);
-  assert.deepEqual(c.challenge, { title: "コンティニュー！ feat. 藍月なくる", artist: "lapix", genre: "GAME＆VARIETY", jacket: "https://maimaidx-eng.com/maimai-mobile/img/Music/af4f08eaff72cde9.png", achievement: "99.6280%" });
+  assert.deepEqual(c.challenge, { title: "コンティニュー！ feat. 藍月なくる", artist: "lapix", genre: "GAME＆VARIETY", jacket: "https://maimaidx-eng.com/maimai-mobile/img/Music/af4f08eaff72cde9.png", achievement: "99.6280%", gauge: 9.9628 });
+  assert.equal(c.forecastJacket, "https://maimaidx-eng.com/maimai-mobile/img/Music/81e682b1c94a1a56.png");
   assert.equal(c.memberCount, 2);
   assert.equal(c.memberMax, 20);
   assert.deepEqual(c.members, [

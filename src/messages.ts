@@ -142,6 +142,8 @@ export const MESSAGES = {
   "circle.rewardValue": "{points} PT 남음",
   "circle.challengeField": "서클 챌린지",
   "circle.challengeValue": "**{title}** / {artist}\n달성률 **{achievement}**",
+  "circle.forecastField": "다음 주 과제곡 예고",
+  "circle.forecastUnknown": "재킷으로 곡을 찾지 못했습니다.",
   "circle.membersButton": "멤버 포인트",
   "circle.challengeButton": "서클 챌린지",
   "circle.membersTitle": "{name} 멤버 포인트",

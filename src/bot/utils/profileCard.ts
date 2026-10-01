@@ -1,4 +1,8 @@
 import { BRAND } from "../../brand";
+import {
+  ACCENT, SURFACE, SURFACE2, BORDER, TEXT, MUTED, CANVAS, INK, SOFT, FAINT, NUM_FONT, TROPHY_STYLE,
+  type El, el, image, pill, remoteDataUrl, kstStamp, wordmark, statsPanel, panel,
+} from "./cardKit";
 import { renderInWorker } from "./renderPool";
 import type { CachedProfile } from "../../storage/types";
 import type { PlayRecord } from "../../scraper";
@@ -13,14 +17,6 @@ import type { RatingPoint } from "../../ratingHistory";
 // /프로필 이미지 카드. 레이아웃·색은 /성과 카드와 같은 랜딩(carol-web) 토큰(src/brand.ts)을 따른다.
 // 헤더(아바타·이름·칭호·클래스·레이팅 플레이트) → 레이팅 구성 → 클리어 현황 → 최근 플레이 5곡.
 
-const ACCENT = BRAND.accent;
-const SURFACE = BRAND.surface;
-const SURFACE2 = BRAND.surface2;
-const BORDER = BRAND.border;
-const TEXT = BRAND.inkSoft;
-const MUTED = BRAND.dim;
-const CANVAS = BRAND.canvas;
-const INK = BRAND.ink;
 const RECENT_COUNT = 5;
 
 const DIFF_COLOR: Record<string, string> = {
@@ -31,18 +27,6 @@ const DIFF_COLOR: Record<string, string> = {
   "Re:MASTER": "#c084fc",
 };
 
-// DX NET 칭호 등급(trophy_*) 색. 레인보우는 그라디언트.
-const TROPHY_STYLE: Record<string, Record<string, unknown>> = {
-  normal: { background: SURFACE2, color: TEXT },
-  bronze: { background: "#c77d43", color: "#1a1a1c" },
-  silver: { background: "#c3ccd4", color: "#1a1a1c" },
-  gold: { background: "#f2c94c", color: "#1a1a1c" },
-  rainbow: { backgroundImage: "linear-gradient(90deg, #ff9294, #fbbf24, #4ade80, #60a5fa, #c084fc)", color: "#1a1a1c" },
-};
-
-const SOFT = BRAND.accentSoft;
-const FAINT = BRAND.faint;
-const NUM_FONT = "Pretendard"; // 랜딩 수치 표기와 같은 글꼴(fonts.ts 에 700 으로 등록됨)
 
 // 랭크 막대그래프 색. 게임 랭크색(금색 계열)을 진한 것 → 옅은 것 순으로 이어 붙였다.
 const RANK_RAMP: [string, string][] = [
@@ -62,38 +46,6 @@ const MARK_COLOR: Record<string, string> = {
 const PROFILE_CARD_VERSION = 12;
 const PROFILE_CARD_CACHE_MAX = 64;
 const profileCardCache = new Map<string, Buffer>();
-
-type El = { type: string; props: { style: Record<string, unknown>; children?: unknown; src?: string } };
-
-function el(type: string, style: Record<string, unknown>, children?: unknown): El {
-  return { type, props: { style, children } };
-}
-
-function image(src: string, style: Record<string, unknown>): El {
-  return { type: "img", props: { src, style } };
-}
-
-function pill(text: string, style: Record<string, unknown>): El {
-  return el("span", { fontSize: 10, fontWeight: 700, borderRadius: 99, padding: "3px 9px", lineHeight: 1.2, flexShrink: 0, ...style }, text);
-}
-
-// DX NET 이미지(아바타 URL·클래스·재킷)를 data URL 로. 실패는 null 로 기억한다.
-const remoteImageCache = new Map<string, string | null>();
-async function remoteDataUrl(url: string): Promise<string | null> {
-  if (!url) return null;
-  if (url.startsWith("data:")) return url;
-  const memo = remoteImageCache.get(url);
-  if (memo !== undefined) return memo;
-  let data: string | null = null;
-  try {
-    const res = await fetch(url);
-    if (res.ok) data = `data:${res.headers.get("content-type") || "image/png"};base64,${Buffer.from(await res.arrayBuffer()).toString("base64")}`;
-  } catch {
-    data = null;
-  }
-  remoteImageCache.set(url, data);
-  return data;
-}
 
 async function jacketFor(record: PlayRecord): Promise<string | null> {
   const direct = record.jacketUrl ? await remoteDataUrl(record.jacketUrl) : null;
@@ -119,48 +71,6 @@ function markOf(v: string | undefined): string {
   if (x === "FSD") return "FDX";
   if (x === "FSP") return "FS+";
   return x;
-}
-
-function kstStamp(ms: number): string {
-  const d = new Date(ms + 9 * 60 * 60 * 1000).toISOString();
-  return `${d.slice(0, 10).replace(/-/g, ".")} ${d.slice(11, 16)}`;
-}
-
-function wordmark(): El {
-  return el("div", { display: "flex", alignItems: "baseline" }, [
-    el("span", { fontSize: 13, fontWeight: 700, color: MUTED, marginRight: 6 }, "Created by"),
-    el("span", { fontSize: 13, fontWeight: 800, color: INK }, "carol"),
-    el("span", { fontSize: 13, fontWeight: 800, color: ACCENT }, "bot"),
-  ]);
-}
-
-// 랜딩 Stats 섹션처럼 박스 없이 큰 숫자(accent-soft) + 라벨. 칸 사이는 세로선으로만 나눈다.
-function statsPanel(items: { value: string; label: string; sub?: string }[]): El {
-  return el("div", {
-    display: "flex", marginTop: 16,
-    background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 16, padding: "18px 0",
-  }, items.map((it, i) => el("div", {
-    // 보조 줄(평균)이 없는 칸도 숫자·라벨이 세로 가운데에 오도록 빈 줄을 넣지 않고 가운데 정렬한다.
-    display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", flex: 1, gap: 7,
-    ...(i > 0 ? { borderLeft: `1px solid ${BORDER}` } : {}),
-  }, [
-    el("span", { color: SOFT, fontFamily: NUM_FONT, fontSize: 28, fontWeight: 700, lineHeight: 1 }, it.value),
-    el("span", { color: MUTED, fontSize: 11 }, it.label),
-    ...(it.sub ? [el("span", { color: FAINT, fontSize: 10, lineHeight: 1 }, it.sub)] : []),
-  ])));
-}
-
-function panel(title: string, meta: string, children: El[]): El {
-  return el("div", {
-    display: "flex", flexDirection: "column",
-    background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 16, padding: "14px 16px", marginTop: 12,
-  }, [
-    el("div", { display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 12 }, [
-      el("span", { color: INK, fontSize: 14, fontWeight: 700 }, title),
-      el("span", { color: MUTED, fontSize: 10 }, meta),
-    ]),
-    ...children,
-  ]);
 }
 
 // 세로 막대그래프. 막대 높이는 묶음 안 최댓값 대비 비율, 막대 위에 개수, 아래에 라벨(+비율).

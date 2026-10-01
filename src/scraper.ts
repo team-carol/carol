@@ -576,7 +576,10 @@ export interface CircleInfo {
   /** 다음 보상까지 남은 포인트 */
   nextRewardPoints: number | null;
   /** 서클 챌린지 과제곡과 달성률 */
-  challenge: { title: string; artist: string; genre: string; jacket: string; achievement: string } | null;
+  /** gauge: DX NET 게이지 폭(0~100). 멤버 달성률 합계를 1000% 기준으로 채운다. 이 필드 이전 값에는 없다. */
+  challenge: { title: string; artist: string; genre: string; jacket: string; achievement: string; gauge?: number } | null;
+  /** 다음 주 과제곡 예고(DX NET 은 재킷만 보여 준다). 이 필드 이전에 저장된 값에는 없다. */
+  forecastJacket?: string;
   memberCount: number | null;
   memberMax: number | null;
   /** 멤버 목록 페이지를 못 받았으면 빈 배열 */
@@ -606,6 +609,7 @@ export function parseCircle(homeHtml: string, memberHtml = "", server: MaimaiSer
   const baseUrl = getMaimaiBaseUrl(server);
   const challengeBlock = $(".circle_challenge_block").first();
   const challengeTitle = clean(challengeBlock.find(".f_15.break").first().text());
+  const gauge = Number(($(".circle_challenge_gauge_status").first().attr("style") || "").match(/width:\s*([\d.]+)%/)?.[1] ?? NaN);
   const challenge = challengeTitle
     ? {
         title: challengeTitle,
@@ -613,6 +617,7 @@ export function parseCircle(homeHtml: string, memberHtml = "", server: MaimaiSer
         genre: clean(challengeBlock.find(".blue").first().text()),
         jacket: absUrl(challengeBlock.find("img[src*='/Music/']").first().attr("src"), baseUrl),
         achievement: clean($(".circle_challenge_achiv_text").first().text()),
+        ...(Number.isFinite(gauge) ? { gauge } : {}),
       }
     : null;
   const info: CircleInfo = {
@@ -625,6 +630,7 @@ export function parseCircle(homeHtml: string, memberHtml = "", server: MaimaiSer
     rankUpdatedAt: (clean($(".circle_pointranking_block").nextAll("div").first().text()).match(/\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}/) ?? [""])[0],
     nextRewardPoints: numOf($(".circle_pointreward_block span.red").first().text()),
     challenge,
+    forecastJacket: absUrl($(".circle_challenge_forecast_block img[src*='/Music/']").first().attr("src"), baseUrl),
     memberCount: null,
     memberMax: null,
     members: [],

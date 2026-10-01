@@ -3,6 +3,7 @@ import type { CircleInfo } from "../../scraper";
 import type { CachedProfile } from "../../storage/types";
 import { msg } from "../../messages";
 import { displayTitle } from "../../aliases";
+import { getTitleByJacket } from "../../constants";
 
 /**
  * profiles.circle_json 해석.
@@ -74,18 +75,22 @@ export function circleEmbed(circle: CircleInfo, profile: CachedProfile, translat
     });
     if (circle.challenge.jacket) emb.setThumbnail(circle.challenge.jacket);
   }
+  if (circle.forecastJacket) {
+    const title = getTitleByJacket(circle.forecastJacket);
+    fields.push({ name: msg("circle.forecastField"), value: title ? `**${escapeMarkdown(displayTitle(title, translate))}**` : msg("circle.forecastUnknown") });
+  }
 
   emb.addFields(fields);
   return emb;
 }
 
 // customId: circle:<members|challenge>:<조회 대상 userId>. 라우터는 src/bot/index.ts.
-export function circleButtonsRow(circle: CircleInfo, targetUserId: string): ActionRowBuilder<ButtonBuilder> | null {
+export function circleButtonsRow(circle: CircleInfo, targetUserId: string, withMembers = true): ActionRowBuilder<ButtonBuilder> | null {
   const buttons: ButtonBuilder[] = [];
   if (circle.challenge) {
     buttons.push(new ButtonBuilder().setCustomId(`circle:challenge:${targetUserId}`).setLabel(msg("circle.challengeButton")).setStyle(ButtonStyle.Primary));
   }
-  if (circle.members.length) {
+  if (withMembers && circle.members.length) {
     buttons.push(new ButtonBuilder().setCustomId(`circle:members:${targetUserId}`).setLabel(msg("circle.membersButton")).setStyle(ButtonStyle.Secondary));
   }
   return buttons.length ? new ActionRowBuilder<ButtonBuilder>().addComponents(buttons) : null;

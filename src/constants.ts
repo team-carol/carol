@@ -295,6 +295,20 @@ export function getJacketFile(title: string): string | null {
   return jacketMap.get(title) ?? null;
 }
 
+// 재킷 파일명 → 곡명. otoge-db 와 DX NET 의 재킷 파일명(해시)이 같아서, 재킷만 주어지는 곳(서클 과제곡 예고)에 쓴다.
+let jacketReverse: { src: Map<string, string>; size: number; map: Map<string, string> } | null = null;
+export function getTitleByJacket(fileOrUrl: string): string | null {
+  const file = fileOrUrl.split("?")[0].split("/").pop() ?? "";
+  if (!file) return null;
+  // 카탈로그를 다시 읽으면 jacketMap 이 바뀌거나 채워지므로 그때 다시 만든다.
+  if (!jacketReverse || jacketReverse.src !== jacketMap || jacketReverse.size !== jacketMap.size) {
+    const map = new Map<string, string>();
+    for (const [title, f] of jacketMap) if (!map.has(f)) map.set(f, title);
+    jacketReverse = { src: jacketMap, size: jacketMap.size, map };
+  }
+  return jacketReverse.map.get(file) ?? null;
+}
+
 // 곡 version 세대 코드 (없으면 null)
 export function getSongVersion(title: string): number | null {
   return versionMap.get(title) ?? null;
