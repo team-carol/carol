@@ -16,7 +16,7 @@ import { CIRCLE_COLOR_STYLE, CIRCLE_STAGE_POINTS } from "./circleColors";
 // /서클 이미지 카드. /프로필 카드와 같은 부품(cardKit)·토큰을 쓴다.
 // 헤더(서클 이름·코드·소개) → 포인트·순위·보상·멤버 수 → 서클 챌린지(+다음 주 예고) → 멤버 포인트(2열).
 
-const CIRCLE_CARD_VERSION = 16;
+const CIRCLE_CARD_VERSION = 17;
 const CIRCLE_CARD_CACHE_MAX = 32;
 const circleCardCache = new Map<string, Buffer>();
 const fmt = (n: number) => n.toLocaleString("en-US");
@@ -133,7 +133,8 @@ function progressPanel(circle: CircleInfo, stage: CircleColor): El {
         el("div", { display: "flex", justifyContent: "center", width: MAX_W, flexShrink: 0 }, [
           el("div", {
             width: w, height: BAND_H, borderRadius: 4, backgroundImage: CIRCLE_COLOR_STYLE[c].gradient,
-            opacity: on ? 1 : isNext ? 0.55 : 0.22, ...(on ? { border: `2px solid ${INK}` } : {}),
+            // 현재 단계는 테두리 없이 밝기만으로 구분한다.
+            opacity: on ? 1 : isNext ? 0.55 : 0.22,
           }),
         ]),
         el("div", { display: "flex", alignItems: "baseline", gap: 6, width: 190, marginLeft: 14 }, [
