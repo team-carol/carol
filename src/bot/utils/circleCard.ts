@@ -16,7 +16,7 @@ import { CIRCLE_COLOR_STYLE } from "./circleColors";
 // /서클 이미지 카드. /프로필 카드와 같은 부품(cardKit)·토큰을 쓴다.
 // 헤더(서클 이름·코드·소개) → 포인트·순위·보상·멤버 수 → 서클 챌린지(+다음 주 예고) → 멤버 포인트(2열).
 
-const CIRCLE_CARD_VERSION = 10;
+const CIRCLE_CARD_VERSION = 11;
 const CIRCLE_CARD_CACHE_MAX = 32;
 const circleCardCache = new Map<string, Buffer>();
 const fmt = (n: number) => n.toLocaleString("en-US");
@@ -150,28 +150,36 @@ function trophyBand(m: CircleMember, width: number | undefined, fontSize: number
   });
 }
 
-// 1~3위: 아이콘·이름·칭호·레이팅 플레이트·포인트를 크게. 1위 카드는 테두리를 메달색으로.
+// 1~3위: 아이콘 왼쪽, 정보 오른쪽. 메달색은 위쪽 띠·옅은 배경·아이콘 테두리·순위 글자에만 쓴다.
+// 1위 칸은 조금 더 넓고 아이콘도 크다.
+const MEDAL_LABEL = ["1ST", "2ND", "3RD"];
 function podiumCard(m: CircleMember, rank: number, icon: string | null): El {
   const medal = MEDAL[rank - 1];
+  const first = rank === 1;
+  const size = first ? 76 : 64;
   return el("div", {
-    display: "flex", flexDirection: "column", alignItems: "center", flex: 1, minWidth: 0, gap: 9,
-    // 일반(normal) 칭호 띠가 SURFACE2 라 카드는 한 단계 어둡게.
-    padding: "14px 12px 16px", borderRadius: 14, background: CANVAS,
-    border: `1px solid ${rank === 1 ? medal : BORDER}`,
+    display: "flex", flexDirection: "column", flex: first ? 1.3 : 1, minWidth: 0, gap: 12,
+    padding: "14px 14px 14px", borderRadius: 14, background: CANVAS,
+    backgroundImage: `linear-gradient(180deg, ${medal}22 0%, ${medal}00 70%)`,
+    border: `1px solid ${BORDER}`, borderTop: `3px solid ${medal}`,
   }, [
-    el("div", { display: "flex", alignSelf: "stretch", justifyContent: "space-between", alignItems: "center" }, [
-      el("div", { display: "flex", alignItems: "center", justifyContent: "center", width: 28, height: 28, borderRadius: 99, background: medal }, [
-        el("span", { color: CANVAS, fontFamily: NUM_FONT, fontSize: 15, fontWeight: 700, lineHeight: 1 }, String(rank)),
+    el("div", { display: "flex", alignItems: "center", gap: 12, minWidth: 0 }, [
+      icon
+        ? image(icon, { width: size, height: size, borderRadius: 12, objectFit: "cover", border: `2px solid ${medal}`, flexShrink: 0 })
+        : el("div", { width: size, height: size, borderRadius: 12, background: SURFACE2, border: `2px solid ${medal}`, flexShrink: 0 }),
+      el("div", { display: "flex", flexDirection: "column", flex: 1, minWidth: 0, gap: 6 }, [
+        el("div", { display: "flex", alignItems: "center", gap: 6 }, [
+          el("span", { color: medal, fontFamily: NUM_FONT, fontSize: first ? 15 : 13, fontWeight: 700, letterSpacing: 0.8, lineHeight: 1 }, MEDAL_LABEL[rank - 1]),
+          m.leader ? pill(msg("circleCard.leader"), { background: ACCENT, color: CANVAS, fontSize: 8, padding: "2px 6px" }) : el("span", {}, ""),
+        ]),
+        el("span", { color: INK, fontSize: first ? 18 : 15, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, m.name),
+        el("div", { display: "flex" }, [trophyBand(m, first ? 230 : 170, 9)]),
       ]),
-      m.leader ? pill(msg("circleCard.leader"), { background: ACCENT, color: CANVAS, fontSize: 8, padding: "2px 6px" }) : el("span", {}, ""),
     ]),
-    icon
-      ? image(icon, { width: 84, height: 84, borderRadius: 14, objectFit: "cover" })
-      : el("div", { width: 84, height: 84, borderRadius: 14, background: SURFACE2 }),
-    el("span", { color: INK, fontSize: 16, fontWeight: 700, maxWidth: "100%", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, m.name),
-    trophyBand(m, 230, 9),
-    m.rating ? ratingPlate(m.rating, 0.5) : el("span", {}, ""),
-    el("span", { color: SOFT, fontFamily: NUM_FONT, fontSize: 22, fontWeight: 700, lineHeight: 1, marginTop: 2 }, msg("circleCard.memberPoints", { points: fmt(m.points) })),
+    el("div", { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }, [
+      el("span", { color: INK, fontFamily: NUM_FONT, fontSize: first ? 24 : 20, fontWeight: 700, lineHeight: 1 }, msg("circleCard.memberPoints", { points: fmt(m.points) })),
+      m.rating ? ratingPlate(m.rating, first ? 0.46 : 0.4) : el("span", {}, ""),
+    ]),
   ]);
 }
 
