@@ -9,6 +9,7 @@ import type { CachedProfile } from "../../storage/types";
 import type { CircleInfo, CircleMember } from "../../scraper";
 import { getJacketFile, getTitleByJacket } from "../../constants";
 import { displayTitle } from "../../aliases";
+import { msg, cardTextSignature } from "../../messages";
 
 // /서클 이미지 카드. /프로필 카드와 같은 부품(cardKit)·토큰을 쓴다.
 // 헤더(서클 이름·코드·소개) → 포인트·순위·보상·멤버 수 → 서클 챌린지(+다음 주 예고) → 멤버 포인트(2열).
@@ -52,26 +53,26 @@ function challengePanel(circle: CircleInfo, translate: boolean, jacket: string |
       el("span", { color: INK, fontSize: 18, fontWeight: 700, lineHeight: 1.25, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, displayTitle(ch.title, translate)),
       el("span", { color: MUTED, fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, ch.artist || " "),
       el("div", { display: "flex", alignItems: "baseline", gap: 8, marginTop: 6 }, [
-        el("span", { color: MUTED, fontSize: 11 }, "서클 달성률"),
+        el("span", { color: MUTED, fontSize: 11 }, msg("circleCard.achievement")),
         el("span", { color: SOFT, fontFamily: NUM_FONT, fontSize: 26, fontWeight: 700, lineHeight: 1 }, ch.achievement || "—"),
       ]),
       ...(ch.gauge !== undefined ? [gaugeBar(ch.gauge)] : []),
     ]),
   ]);
-  if (!forecast) return panel("서클 챌린지", "이번 주 과제곡", [left]);
+  if (!forecast) return panel(msg("circleCard.challengeTitle"), msg("circleCard.challengeMeta"), [left]);
   const right = el("div", {
     display: "flex", flexDirection: "column", alignItems: "center", width: 200, flexShrink: 0,
     marginLeft: 16, paddingLeft: 16, borderLeft: `1px solid ${BORDER}`, gap: 8,
   }, [
-    el("span", { color: MUTED, fontSize: 10, fontWeight: 700, letterSpacing: 0.4 }, "NEXT WEEK"),
+    el("span", { color: MUTED, fontSize: 10, fontWeight: 700, letterSpacing: 0.4 }, msg("circleCard.nextWeek")),
     forecast.jacket
       ? image(forecast.jacket, { width: 72, height: 72, borderRadius: 10, objectFit: "cover" })
       : el("div", { width: 72, height: 72, borderRadius: 10, background: SURFACE2 }),
     el("span", { color: TEXT, fontSize: 12, fontWeight: 700, maxWidth: 184, textAlign: "center", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
-      forecast.title ? displayTitle(forecast.title, translate) : "알 수 없는 곡"),
-    el("span", { color: FAINT, fontSize: 10 }, "다음 주 예고"),
+      forecast.title ? displayTitle(forecast.title, translate) : msg("circleCard.forecastUnknown")),
+    el("span", { color: FAINT, fontSize: 10 }, msg("circleCard.forecastNote")),
   ]);
-  return panel("서클 챌린지", "이번 주 과제곡", [el("div", { display: "flex", alignItems: "center" }, [left, right])]);
+  return panel(msg("circleCard.challengeTitle"), msg("circleCard.challengeMeta"), [el("div", { display: "flex", alignItems: "center" }, [left, right])]);
 }
 
 function memberRow(m: CircleMember, rank: number): El {
@@ -83,22 +84,22 @@ function memberRow(m: CircleMember, rank: number): El {
     el("div", { display: "flex", flexDirection: "column", flex: 1, minWidth: 0, gap: 4 }, [
       el("div", { display: "flex", alignItems: "center", gap: 6, minWidth: 0 }, [
         el("span", { color: INK, fontSize: 14, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", flexShrink: 1, minWidth: 0 }, m.name),
-        m.leader ? pill("LEADER", { background: ACCENT, color: CANVAS, fontSize: 8, padding: "2px 6px" }) : el("span", {}, ""),
+        m.leader ? pill(msg("circleCard.leader"), { background: ACCENT, color: CANVAS, fontSize: 8, padding: "2px 6px" }) : el("span", {}, ""),
       ]),
       m.trophy
         ? pill(m.trophy, { ...trophyStyle, fontSize: 9, padding: "2px 7px", maxWidth: 220, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis", alignSelf: "flex-start" })
         : el("span", {}, ""),
     ]),
     el("div", { display: "flex", flexDirection: "column", alignItems: "flex-end", flexShrink: 0, marginLeft: 8, gap: 3 }, [
-      el("span", { color: INK, fontFamily: NUM_FONT, fontSize: 15, fontWeight: 700, lineHeight: 1 }, `${fmt(m.points)} PT`),
-      el("span", { color: MUTED, fontSize: 10 }, m.rating ? `레이팅 ${m.rating}` : " "),
+      el("span", { color: INK, fontFamily: NUM_FONT, fontSize: 15, fontWeight: 700, lineHeight: 1 }, msg("circleCard.memberPoints", { points: fmt(m.points) })),
+      el("span", { color: MUTED, fontSize: 10 }, m.rating ? msg("circleCard.memberRating", { rating: m.rating }) : " "),
     ]),
   ]);
 }
 
 export async function renderCircleCard(circle: CircleInfo, profile: CachedProfile, opts: { translate?: boolean } = {}): Promise<Buffer> {
   const translate = !!opts.translate;
-  const cacheKey = [profile.profileKey, profile.lastSyncedAt, translate ? 1 : 0, CIRCLE_CARD_VERSION].join("|");
+  const cacheKey = [profile.profileKey, profile.lastSyncedAt, translate ? 1 : 0, CIRCLE_CARD_VERSION, cardTextSignature()].join("|");
   const memo = circleCardCache.get(cacheKey);
   if (memo) return memo;
 
@@ -109,12 +110,12 @@ export async function renderCircleCard(circle: CircleInfo, profile: CachedProfil
   ]);
 
   const serverLabel = profile.server === "jp" ? "JP" : "INTERNATIONAL";
-  const eyebrow = `CIRCLE · ${serverLabel}`;
+  const eyebrow = msg("circleCard.eyebrow", { server: serverLabel });
   const synced = new Date(profile.lastSyncedAt);
   const month = Number(synced.toLocaleString("en-US", { timeZone: "Asia/Seoul", month: "numeric" }));
   // 동점이면 DX NET 순서(리더가 맨 앞)를 유지한다.
   const members = circle.members.map((m, i) => ({ m, i })).sort((a, b) => b.m.points - a.m.points || a.i - b.i).map(({ m }) => m);
-  const reset = circle.daysToReset === null ? undefined : circle.daysToReset === 0 ? "초기화까지 D-DAY" : `초기화까지 D-${circle.daysToReset}`;
+  const reset = circle.daysToReset === null ? undefined : circle.daysToReset === 0 ? msg("circleCard.resetToday") : msg("circleCard.resetDays", { days: circle.daysToReset });
 
   const width = 920;
   const root = el("div", {
@@ -130,28 +131,28 @@ export async function renderCircleCard(circle: CircleInfo, profile: CachedProfil
           marginLeft: alignLeftMargin({ text: circle.name, size: 30 }, { text: eyebrow, size: 10 }),
         }, circle.name),
         el("div", { display: "flex", alignItems: "center", gap: 10 }, [
-          circle.code ? pill(`CODE  ${circle.code}`, { background: SURFACE2, color: TEXT, fontSize: 11, padding: "4px 11px", letterSpacing: 0.6 }) : el("span", {}, ""),
+          circle.code ? pill(msg("circleCard.code", { code: circle.code }), { background: SURFACE2, color: TEXT, fontSize: 11, padding: "4px 11px", letterSpacing: 0.6 }) : el("span", {}, ""),
           circle.comment ? el("span", { color: MUTED, fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 560 }, circle.comment) : el("span", {}, ""),
         ]),
       ]),
       wordmark(),
     ]),
     statsPanel([
-      { value: circle.monthPoints === null ? "—" : fmt(circle.monthPoints), label: `${month}월 서클 포인트`, sub: reset },
-      { value: circle.rank === null ? "—" : `${fmt(circle.rank)}위`, label: "포인트 순위", sub: circle.rankUpdatedAt ? `${circle.rankUpdatedAt} 갱신` : undefined },
-      { value: circle.nextRewardPoints === null ? "—" : fmt(circle.nextRewardPoints), label: "다음 보상까지 PT" },
-      { value: circle.memberCount === null ? "—" : `${circle.memberCount}/${circle.memberMax ?? "?"}`, label: "멤버" },
+      { value: circle.monthPoints === null ? "—" : fmt(circle.monthPoints), label: msg("circleCard.monthPoints", { month }), sub: reset },
+      { value: circle.rank === null ? "—" : msg("circleCard.rankValue", { rank: fmt(circle.rank) }), label: msg("circleCard.rank"), sub: circle.rankUpdatedAt ? msg("circleCard.rankUpdated", { time: circle.rankUpdatedAt }) : undefined },
+      { value: circle.nextRewardPoints === null ? "—" : fmt(circle.nextRewardPoints), label: msg("circleCard.nextReward") },
+      { value: circle.memberCount === null ? "—" : `${circle.memberCount}/${circle.memberMax ?? "?"}`, label: msg("circleCard.members") },
     ]),
     ...(circle.challenge
       ? [challengePanel(circle, translate, challengeJacket, circle.forecastJacket ? { title: forecastTitle, jacket: forecastJacket } : null)]
       : []),
-    panel("멤버 포인트", `${month}월 · 포인트 순`, members.length
+    panel(msg("circleCard.membersTitle"), msg("circleCard.membersMeta", { month }), members.length
       ? [el("div", { display: "flex", flexWrap: "wrap" }, members.map((m, i) => memberRow(m, i + 1)))]
-      : [el("span", { color: MUTED, fontSize: 12, padding: "12px 0" }, "멤버 목록을 가져오지 못했습니다.")]),
+      : [el("span", { color: MUTED, fontSize: 12, padding: "12px 0" }, msg("circleCard.membersEmpty"))]),
     // 푸터
     el("div", { display: "flex", justifyContent: "space-between", marginTop: 14, color: MUTED, fontSize: 11 }, [
-      el("span", {}, `${profile.playerName || "—"} 님의 동기화 기준`),
-      el("span", {}, `마지막 동기화 ${kstStamp(profile.lastSyncedAt)} (KST)`),
+      el("span", {}, msg("circleCard.syncedBy", { player: profile.playerName || "—" })),
+      el("span", {}, msg("card.lastSynced", { time: kstStamp(profile.lastSyncedAt) })),
     ]),
   ]);
 

@@ -1,4 +1,5 @@
 import { BRAND } from "../../brand";
+import { msg } from "../../messages";
 
 // PNG 카드(/프로필, /서클) 공용 부품. 색은 랜딩(carol-web) 토큰(src/brand.ts)을 따른다.
 
@@ -63,7 +64,7 @@ export function kstStamp(ms: number): string {
 
 export function wordmark(): El {
   return el("div", { display: "flex", alignItems: "baseline" }, [
-    el("span", { fontSize: 13, fontWeight: 700, color: MUTED, marginRight: 6 }, "Created by"),
+    el("span", { fontSize: 13, fontWeight: 700, color: MUTED, marginRight: 6 }, msg("card.createdBy")),
     el("span", { fontSize: 13, fontWeight: 800, color: INK }, "carol"),
     el("span", { fontSize: 13, fontWeight: 800, color: ACCENT }, "bot"),
   ]);
