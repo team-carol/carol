@@ -44,7 +44,7 @@ const MARK_COLOR: Record<string, string> = {
   "FDX+": "#10b981", FDX: "#34d399", "FS+": "#22c55e", FS: "#4ade80",
 };
 
-const PROFILE_CARD_VERSION = 12;
+const PROFILE_CARD_VERSION = 13;
 const PROFILE_CARD_CACHE_MAX = 64;
 const profileCardCache = new Map<string, Buffer>();
 
@@ -328,7 +328,8 @@ export async function renderProfileCard(
             : el("span", {}, ""),
         ]),
         el("div", { display: "flex", alignItems: "center", gap: 10 }, [
-          pill(profile.trophy || "—", { ...trophyStyle, fontSize: 11, padding: "4px 11px", maxWidth: 420, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }),
+          // 칭호 문구가 비어 있으면(공백 칭호) 게임처럼 빈 등급 색 띠만 보여 준다.
+          pill(profile.trophy || "\u00a0", { ...trophyStyle, fontSize: 11, padding: "4px 11px", maxWidth: 420, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis", ...(profile.trophy ? {} : { width: 160 }) }),
           // 단위(段位)·클래스(오토모다치) 이미지. 단위는 이 기능 이후 동기화부터 저장된다.
           courseUrl ? image(courseUrl, { height: 26, objectFit: "contain" }) : el("span", {}, ""),
           gradeUrl ? image(gradeUrl, { height: 26, objectFit: "contain" }) : el("span", {}, ""),

@@ -16,7 +16,7 @@ import { CIRCLE_COLOR_STYLE } from "./circleColors";
 // /서클 이미지 카드. /프로필 카드와 같은 부품(cardKit)·토큰을 쓴다.
 // 헤더(서클 이름·코드·소개) → 포인트·순위·보상·멤버 수 → 서클 챌린지(+다음 주 예고) → 멤버 포인트(2열).
 
-const CIRCLE_CARD_VERSION = 7;
+const CIRCLE_CARD_VERSION = 8;
 const CIRCLE_CARD_CACHE_MAX = 32;
 const circleCardCache = new Map<string, Buffer>();
 const fmt = (n: number) => n.toLocaleString("en-US");
@@ -149,9 +149,11 @@ function memberRow(m: CircleMember, rank: number): El {
         el("span", { color: INK, fontSize: 14, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", flexShrink: 1, minWidth: 0 }, m.name),
         m.leader ? pill(msg("circleCard.leader"), { background: ACCENT, color: CANVAS, fontSize: 8, padding: "2px 6px" }) : el("span", {}, ""),
       ]),
-      m.trophy
-        ? pill(m.trophy, { ...trophyStyle, fontSize: 9, padding: "2px 7px", maxWidth: 220, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis", alignSelf: "flex-start" })
-        : el("span", {}, ""),
+      // 칭호 문구가 비어 있어도(공백 칭호) 게임처럼 등급 색 띠는 보여 준다.
+      pill(m.trophy || "\u00a0", {
+        ...trophyStyle, fontSize: 9, padding: "2px 7px", maxWidth: 220, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis", alignSelf: "flex-start",
+        ...(m.trophy ? {} : { width: 120 }),
+      }),
     ]),
     el("div", { display: "flex", flexDirection: "column", alignItems: "flex-end", flexShrink: 0, marginLeft: 8, gap: 3 }, [
       el("span", { color: INK, fontFamily: NUM_FONT, fontSize: 15, fontWeight: 700, lineHeight: 1 }, msg("circleCard.memberPoints", { points: fmt(m.points) })),
