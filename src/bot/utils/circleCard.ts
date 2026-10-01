@@ -16,7 +16,7 @@ import { CIRCLE_COLOR_STYLE } from "./circleColors";
 // /서클 이미지 카드. /프로필 카드와 같은 부품(cardKit)·토큰을 쓴다.
 // 헤더(서클 이름·코드·소개) → 포인트·순위·보상·멤버 수 → 서클 챌린지(+다음 주 예고) → 멤버 포인트(2열).
 
-const CIRCLE_CARD_VERSION = 13;
+const CIRCLE_CARD_VERSION = 14;
 const CIRCLE_CARD_CACHE_MAX = 32;
 const circleCardCache = new Map<string, Buffer>();
 const fmt = (n: number) => n.toLocaleString("en-US");
@@ -150,7 +150,8 @@ function trophyBand(m: CircleMember, maxWidth: number | string | undefined, font
   });
 }
 
-// 1~3위: 아이콘 왼쪽, 정보 오른쪽, 아래 줄에 포인트·레이팅. 메달색은 아이콘 테두리·순위 글자(1위는 칸 테두리)에만.
+// 1~3위: 아이콘 왼쪽, 정보 오른쪽, 아래 줄에 포인트·레이팅. 메달색은 칸 위쪽 띠·아이콘 테두리·순위 글자에.
+// 위쪽 띠는 border-top 대신 곧은 막대를 깔고 칸의 둥근 모서리로 잘라(overflow hidden) 모서리에서 휘지 않게 한다.
 // 1위 칸은 조금 더 넓고 크다. 칸 높이가 달라도 포인트 줄은 칸 아래에 맞춘다.
 const MEDAL_LABEL = ["1ST", "2ND", "3RD"];
 function podiumCard(m: CircleMember, rank: number, icon: string | null): El {
@@ -161,10 +162,11 @@ function podiumCard(m: CircleMember, rank: number, icon: string | null): El {
   const labelSize = first ? 14 : 12;
   const nameSize = first ? 18 : 15;
   return el("div", {
-    display: "flex", flexDirection: "column", justifyContent: "space-between", flex: first ? 1.3 : 1, minWidth: 0, gap: 16,
-    padding: 16, borderRadius: 14, background: CANVAS,
-    border: `1px solid ${first ? medal : BORDER}`,
+    display: "flex", flexDirection: "column", flex: first ? 1.3 : 1, minWidth: 0,
+    borderRadius: 14, background: CANVAS, border: `1px solid ${BORDER}`, overflow: "hidden",
   }, [
+    el("div", { height: first ? 4 : 3, background: medal, flexShrink: 0 }),
+    el("div", { display: "flex", flexDirection: "column", justifyContent: "space-between", flex: 1, gap: 16, padding: 16 }, [
     el("div", { display: "flex", alignItems: "center", gap: 14, minWidth: 0 }, [
       icon
         ? image(icon, { width: size, height: size, borderRadius: 12, objectFit: "cover", border: `2px solid ${medal}`, flexShrink: 0 })
@@ -186,6 +188,7 @@ function podiumCard(m: CircleMember, rank: number, icon: string | null): El {
     el("div", { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }, [
       el("span", { color: INK, fontFamily: NUM_FONT, fontSize: first ? 24 : 20, fontWeight: 700, lineHeight: 1 }, msg("circleCard.memberPoints", { points: fmt(m.points) })),
       m.rating ? ratingPlate(m.rating, first ? 0.46 : 0.4) : el("span", {}, ""),
+    ]),
     ]),
   ]);
 }
