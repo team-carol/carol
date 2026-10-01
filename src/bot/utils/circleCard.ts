@@ -16,7 +16,7 @@ import { CIRCLE_COLOR_STYLE, CIRCLE_STAGE_POINTS } from "./circleColors";
 // /서클 이미지 카드. /프로필 카드와 같은 부품(cardKit)·토큰을 쓴다.
 // 헤더(서클 이름·코드·소개) → 포인트·순위·보상·멤버 수 → 서클 챌린지(+다음 주 예고) → 멤버 포인트(2열).
 
-const CIRCLE_CARD_VERSION = 18;
+const CIRCLE_CARD_VERSION = 19;
 const CIRCLE_CARD_CACHE_MAX = 32;
 const circleCardCache = new Map<string, Buffer>();
 const fmt = (n: number) => n.toLocaleString("en-US");
@@ -165,12 +165,13 @@ function progressPanel(circle: CircleInfo, stage: CircleColor): El {
   ]);
 }
 
-// 순위 주변: 바로 위 서클 · 내 서클 · 바로 아래 서클을 피라미드 아래에 가로로. 남의 서클에는 내 서클과의 포인트 차이.
+// 순위 주변: 피라미드 아래에 가로로. 오른쪽으로 갈수록 순위가 높다(바로 아래 · 내 서클 · 바로 위).
+// 남의 서클에는 내 서클과의 포인트 차이.
 function neighborsBlock(entries: CircleRankEntry[]): El {
   const self = entries.find((e) => e.self);
   return el("div", { display: "flex", flexDirection: "column", marginTop: 14, paddingTop: 12, borderTop: `1px solid ${BORDER}`, gap: 8 }, [
     el("span", { color: MUTED, fontSize: 11 }, msg("circleCard.neighborsTitle")),
-    el("div", { display: "flex", gap: 10 }, entries.map((e) => el("div", {
+    el("div", { display: "flex", gap: 10 }, [...entries].sort((a, b) => b.rank - a.rank).map((e) => el("div", {
       display: "flex", flexDirection: "column", gap: 6, padding: "10px 12px", borderRadius: 10, flex: 1, minWidth: 0,
       border: `1px solid ${BORDER}`, ...(e.self ? { background: SURFACE2 } : {}),
     }, [
