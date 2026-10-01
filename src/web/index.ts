@@ -1160,9 +1160,10 @@ ${siteFooter()}
       const optionHtml: string = typeof data.uo === "string" ? data.uo : "";
       const circleHtml: string = typeof data.ci === "string" ? data.ci : "";
       const circleMemberHtml: string = typeof data.cm === "string" ? data.cm : "";
+      const circleRankingHtml: string = typeof data.cr === "string" ? data.cr : "";
       const avatarBase64: string = data.a || "";
       const detailPayloads = Array.isArray(data.dt) ? data.dt : [];
-      console.log(`[web] user=${syncUserId.slice(-6)}, server=${syncServer}, home=${homeHtml.length}B, player=${playerHtml.length}B, record=${recordHtml.length}B, ratingTarget=${ratingTargetHtml.length}B, fc=${fcHtml.length}B, top4=${top4Html.length}B, top3=${top3Html.length}B, top2=${top2Html.length}B, top1=${top1Html.length}B, top0=${top0Html.length}B, map=${mapHtml.length}B, eventMap=${eventMapHtml.length}B, option=${optionHtml.length}B, circle=${circleHtml.length}B, circleMember=${circleMemberHtml.length}B`);
+      console.log(`[web] user=${syncUserId.slice(-6)}, server=${syncServer}, home=${homeHtml.length}B, player=${playerHtml.length}B, record=${recordHtml.length}B, ratingTarget=${ratingTargetHtml.length}B, fc=${fcHtml.length}B, top4=${top4Html.length}B, top3=${top3Html.length}B, top2=${top2Html.length}B, top1=${top1Html.length}B, top0=${top0Html.length}B, map=${mapHtml.length}B, eventMap=${eventMapHtml.length}B, option=${optionHtml.length}B, circle=${circleHtml.length}B, circleMember=${circleMemberHtml.length}B, circleRanking=${circleRankingHtml.length}B`);
       if (isDev) {
         fs.writeFileSync("debug_home.html", homeHtml, "utf-8");
         fs.writeFileSync("debug_pd.html", playerHtml, "utf-8");
@@ -1174,6 +1175,7 @@ ${siteFooter()}
         if (optionHtml) fs.writeFileSync("debug_option.html", optionHtml, "utf-8");
         if (circleHtml) fs.writeFileSync("debug_circle.html", circleHtml, "utf-8");
         if (circleMemberHtml) fs.writeFileSync("debug_circle_member.html", circleMemberHtml, "utf-8");
+        if (circleRankingHtml) fs.writeFileSync("debug_circle_ranking.html", circleRankingHtml, "utf-8");
         detailPayloads.forEach((detail: unknown, idx: number) => {
           if (!detail || typeof detail !== "object") return;
           const html = "html" in detail && typeof detail.html === "string" ? detail.html : "";
@@ -1361,7 +1363,7 @@ ${siteFooter()}
         // 서클 정보(/서클, /프로필). 페이지를 못 받았거나 판단할 수 없으면(undefined) 이전 값을 유지한다.
         if (circleHtml) {
           try {
-            const circle = parseCircle(circleHtml, circleMemberHtml, syncServer);
+            const circle = parseCircle(circleHtml, circleMemberHtml, syncServer, circleRankingHtml);
             if (circle !== undefined) await saveProfileCircle(savedProfileKey, JSON.stringify(circle));
           } catch (circleError) {
             console.warn("[web] 서클 정보 저장 실패:", circleError instanceof Error ? circleError.message : circleError);

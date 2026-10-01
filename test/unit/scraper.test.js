@@ -124,3 +124,17 @@ test("parseCircle: 미가입이면 null, 판단할 수 없으면 undefined", () 
   assert.equal(s.parseCircle(""), undefined);
   assert.equal(s.parseCircle("<html><body>ERROR CODE：100001</body></html>"), undefined);
 });
+
+test("parseCircle: 서클 랭킹 페이지에서 이번 달 진행도·기간·내 포인트를 읽는다", () => {
+  const ranking = `<div class="wrapper main_wrapper t_c"><div class="circle_ranking_season_top white"><p class="circle_ranking_season_top_txt">October 2026</p></div>
+<div class="circle_ranking_season_bottom white"><p class="circle_ranking_season_bottom_txt">Point Period 2026/10/01～2026/10/31</p></div>
+<div class="circle_ranking_yourpoint_block m_t_5 p_r"><span class="circle_ranking_yourpoint_text f_16 p_a">1,234 PT</span></div>
+<img src="https://maimaidx-eng.com/maimai-mobile/img/circle/circle_ranking_youebest_green.png" class="w_450"></div>`;
+  const c = s.parseCircle(CIRCLE_HOME, CIRCLE_MEMBERS, "intl", ranking);
+  assert.equal(c.progress, "green");
+  assert.equal(c.period, "2026/10/01～2026/10/31");
+  assert.equal(c.myPoints, 1234);
+  const none = s.parseCircle(CIRCLE_HOME, CIRCLE_MEMBERS);
+  assert.equal(none.progress, undefined);
+  assert.equal(none.period, undefined);
+});

@@ -48,6 +48,7 @@ export function circleEmbed(circle: CircleInfo, profile: CachedProfile, translat
   const fields: { name: string; value: string; inline?: boolean }[] = [];
   if (circle.code) fields.push({ name: msg("circle.codeField"), value: `\`${circle.code}\``, inline: true });
   if (circle.color) fields.push({ name: msg("circle.colorField"), value: msg(`circleColor.${circle.color}`), inline: true });
+  if (circle.progress) fields.push({ name: msg("circle.progressField"), value: msg("circle.progressValue", { stage: msg(`circleColor.${circle.progress}`) }), inline: true });
   if (circle.memberCount !== null) {
     fields.push({ name: msg("circle.memberField"), value: msg("circle.memberValue", { count: circle.memberCount, max: circle.memberMax ?? "?" }), inline: true });
   }

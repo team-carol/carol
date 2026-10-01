@@ -6,7 +6,7 @@ import { renderInWorker } from "./renderPool";
 import { fetchJacketDataUrl } from "./ratingCard";
 import { alignLeftMargin } from "./textMetrics";
 import type { CachedProfile } from "../../storage/types";
-import type { CircleInfo, CircleMember } from "../../scraper";
+import { CIRCLE_COLORS, type CircleInfo, type CircleMember, type CircleColor } from "../../scraper";
 import { getJacketFile, getTitleByJacket } from "../../constants";
 import { displayTitle } from "../../aliases";
 import { msg, cardTextSignature } from "../../messages";
@@ -15,7 +15,7 @@ import { CIRCLE_COLOR_STYLE } from "./circleColors";
 // /서클 이미지 카드. /프로필 카드와 같은 부품(cardKit)·토큰을 쓴다.
 // 헤더(서클 이름·코드·소개) → 포인트·순위·보상·멤버 수 → 서클 챌린지(+다음 주 예고) → 멤버 포인트(2열).
 
-const CIRCLE_CARD_VERSION = 3;
+const CIRCLE_CARD_VERSION = 4;
 const CIRCLE_CARD_CACHE_MAX = 32;
 const circleCardCache = new Map<string, Buffer>();
 const fmt = (n: number) => n.toLocaleString("en-US");
@@ -74,6 +74,47 @@ function challengePanel(circle: CircleInfo, translate: boolean, jacket: string |
     el("span", { color: FAINT, fontSize: 10 }, msg("circleCard.forecastNote")),
   ]);
   return panel(msg("circleCard.challengeTitle"), msg("circleCard.challengeMeta"), [el("div", { display: "flex", alignItems: "center" }, [left, right])]);
+}
+
+// 이번 달 진행도. DX NET 서클 랭킹 피라미드처럼 위(Rainbow)가 좁고 아래(White)가 넓은 계단 모양으로 그리고,
+// 현재 단계만 진하게 칠한다.
+function progressPanel(circle: CircleInfo, stage: CircleColor): El {
+  const BAND_H = 20, MIN_W = 44, MAX_W = 300;
+  const n = CIRCLE_COLORS.length;
+  const pyramid = el("div", { display: "flex", flexDirection: "column", alignItems: "center", width: MAX_W + 70, flexShrink: 0, gap: 3 },
+    CIRCLE_COLORS.map((c, i) => {
+      const on = c === stage;
+      const w = Math.round(MIN_W + ((MAX_W - MIN_W) * i) / (n - 1));
+      return el("div", { display: "flex", alignItems: "center", width: MAX_W + 70, justifyContent: "center", position: "relative" }, [
+        el("div", {
+          width: w, height: BAND_H, borderRadius: 4, backgroundImage: CIRCLE_COLOR_STYLE[c].gradient,
+          opacity: on ? 1 : 0.22, ...(on ? { border: `2px solid ${INK}` } : {}),
+        }),
+        ...(on ? [el("span", { position: "absolute", left: (MAX_W + 70) / 2 + w / 2 + 8, color: INK, fontSize: 12, fontWeight: 700 }, "◀")] : []),
+      ]);
+    }));
+  const style = CIRCLE_COLOR_STYLE[stage];
+  const info = el("div", { display: "flex", flexDirection: "column", flex: 1, justifyContent: "center", gap: 18, paddingLeft: 12 }, [
+    el("div", { display: "flex", flexDirection: "column", gap: 8 }, [
+      el("span", { color: MUTED, fontSize: 11 }, msg("circleCard.progressStage")),
+      pill(msg(`circleColor.${stage}`), { backgroundImage: style.gradient, color: style.ink, fontSize: 16, padding: "6px 18px", alignSelf: "flex-start" }),
+    ]),
+    el("div", { display: "flex", gap: 36 }, [
+      el("div", { display: "flex", flexDirection: "column", gap: 6 }, [
+        el("span", { color: MUTED, fontSize: 11 }, msg("circleCard.progressTotal")),
+        el("span", { color: SOFT, fontFamily: NUM_FONT, fontSize: 24, fontWeight: 700, lineHeight: 1 }, circle.monthPoints === null ? "—" : `${fmt(circle.monthPoints)} PT`),
+      ]),
+      ...(circle.myPoints !== undefined
+        ? [el("div", { display: "flex", flexDirection: "column", gap: 6 }, [
+            el("span", { color: MUTED, fontSize: 11 }, msg("circleCard.progressMyPoints")),
+            el("span", { color: INK, fontFamily: NUM_FONT, fontSize: 24, fontWeight: 700, lineHeight: 1 }, `${fmt(circle.myPoints)} PT`),
+          ])]
+        : []),
+    ]),
+  ]);
+  return panel(msg("circleCard.progressTitle"), circle.period ? msg("circleCard.progressMeta", { period: circle.period }) : "", [
+    el("div", { display: "flex", alignItems: "center" }, [pyramid, info]),
+  ]);
 }
 
 function memberRow(m: CircleMember, rank: number): El {
@@ -148,6 +189,7 @@ export async function renderCircleCard(circle: CircleInfo, profile: CachedProfil
       { value: circle.nextRewardPoints === null ? "—" : fmt(circle.nextRewardPoints), label: msg("circleCard.nextReward") },
       { value: circle.memberCount === null ? "—" : `${circle.memberCount}/${circle.memberMax ?? "?"}`, label: msg("circleCard.members") },
     ]),
+    ...(circle.progress ? [progressPanel(circle, circle.progress)] : []),
     ...(circle.challenge
       ? [challengePanel(circle, translate, challengeJacket, circle.forecastJacket ? { title: forecastTitle, jacket: forecastJacket } : null)]
       : []),
