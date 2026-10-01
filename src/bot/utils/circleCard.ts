@@ -16,7 +16,7 @@ import { CIRCLE_COLOR_STYLE, CIRCLE_STAGE_POINTS } from "./circleColors";
 // /서클 이미지 카드. /프로필 카드와 같은 부품(cardKit)·토큰을 쓴다.
 // 헤더(서클 이름·코드·소개) → 포인트·순위·보상·멤버 수 → 서클 챌린지(+다음 주 예고) → 멤버 포인트(2열).
 
-const CIRCLE_CARD_VERSION = 17;
+const CIRCLE_CARD_VERSION = 18;
 const CIRCLE_CARD_CACHE_MAX = 32;
 const circleCardCache = new Map<string, Buffer>();
 const fmt = (n: number) => n.toLocaleString("en-US");
@@ -113,7 +113,7 @@ function nextStageBlock(circle: CircleInfo, stage: CircleColor): El {
   return el("div", { display: "flex", flexDirection: "column", gap: 8 }, [
     title,
     el("div", { display: "flex", alignItems: "baseline", gap: 8 }, [
-      el("span", { color: INK, fontSize: 16, fontWeight: 700 }, msg("circleCard.nextRank", { stage: nextName, rule: msg(RULE_KEYS[next]) })),
+      el("span", { color: INK, fontSize: 16, fontWeight: 700, lineHeight: 1 }, msg("circleCard.nextRank", { stage: nextName, rule: msg(RULE_KEYS[next]) })),
       ...minPointsNote(next, 11, MUTED),
     ]),
     el("span", { color: FAINT, fontSize: 11 }, msg("circleCard.nextRankNow", { rank: circle.rank === null ? "—" : fmt(circle.rank), points: fmt(points) })),
@@ -138,8 +138,9 @@ function progressPanel(circle: CircleInfo, stage: CircleColor): El {
           }),
         ]),
         el("div", { display: "flex", alignItems: "baseline", gap: 6, width: 190, marginLeft: 14 }, [
-          el("span", { color: on ? INK : isNext ? TEXT : FAINT, fontSize: 11, fontWeight: 700, width: 52 }, msg(`circleColor.${c}`)),
-          el("span", { color: on ? TEXT : isNext ? MUTED : FAINT, fontSize: 10 }, msg(RULE_KEYS[c])),
+          // 글자 크기가 섞여 있어 줄 높이를 모두 1로 맞춰야 기준선이 어긋나지 않는다.
+          el("span", { color: on ? INK : isNext ? TEXT : FAINT, fontSize: 11, fontWeight: 700, width: 52, lineHeight: 1 }, msg(`circleColor.${c}`)),
+          el("span", { color: on ? TEXT : isNext ? MUTED : FAINT, fontSize: 10, lineHeight: 1 }, msg(RULE_KEYS[c])),
           ...minPointsNote(c, 8, FAINT),
         ]),
       ]);
