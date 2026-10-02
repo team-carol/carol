@@ -64,7 +64,7 @@ test("parseHome: 단위(course)와 클래스(class) 이미지를 따로 읽는�
 });
 
 const CIRCLE_HOME = `<div class="wrapper main_wrapper t_c"><div class="m_b_10 f_0"><a href="https://maimaidx-eng.com/maimai-mobile/circle/circleSearch/">s</a></div>
-<div class="h_270 p_r"><div class="circle_profile_circle_name"><span>ＺＵＮＤＡＭＯＮ</span></div>
+<div class="h_270 p_r"><div class="circle_profile_class"><img src="https://maimaidx-eng.com/maimai-mobile/img/profile/circle_profile_color_red.png"></div><div class="circle_profile_circle_name"><span>ＺＵＮＤＡＭＯＮ</span></div>
 <div class="circle_profile_circle_code"><span>ZM7PK1RB</span></div>
 <div class="circle_profile_user_name"><span>ＲＯＥＮＡ・∀・</span></div>
 <div class="circle_profile_comment"><span>Let's maimai！</span></div></div>
@@ -79,10 +79,12 @@ const CIRCLE_HOME = `<div class="wrapper main_wrapper t_c"><div class="m_b_10 f_
 <div class="basic_block w_450 m_15 m_t_0 p_10 t_l"><div class="circle_challenge_block p_5 p_t_15">
 <img src="https://maimaidx-eng.com/maimai-mobile/img/Music/af4f08eaff72cde9.png" class="w_170 m_5 f_l">
 <div class="w_240 f_l t_l"><div class="m_10 m_t_5 t_r f_12 blue">GAME＆VARIETY</div><div class="m_5 f_15 break">コンティニュー！ feat. 藍月なくる</div><hr class="w_100pc"><div class="m_5 f_12 break">lapix</div></div>
-<div class="circle_challenge_achiv_block h_25 w_410 m_5 m_b_10"><div class="circle_challenge_achiv_text h_25 p_t_5 f_r t_c f_b">99.6280%</div></div></div></div></div>`;
+<div class="circle_challenge_gauge_frame h_26 m_5 m_t_10 m_b_10 p_r"><div class="circle_challenge_gauge_status h_26 p_a" style="width:9.9628%;"></div></div>
+<div class="circle_challenge_achiv_block h_25 w_410 m_5 m_b_10"><div class="circle_challenge_achiv_text h_25 p_t_5 f_r t_c f_b">99.6280%</div></div></div>
+<div class="circle_challenge_forecast_block m_t_5 p_5 t_l f_14 t_c"><img src="https://maimaidx-eng.com/maimai-mobile/img/Music/81e682b1c94a1a56.png" class="circle_challenge_forecast_icon"></div></div></div>`;
 
 const circleMember = (name, trophyClass, rating, points, leader) => `<div class="see_through_block p_r m_15 m_t_5 p_10 t_l f_0">${leader ? '<img src="https://maimaidx-eng.com/maimai-mobile/img/circle/circle_leader_icon.png" class="circle_member_leader">' : ""}
-<div class="basic_block p_10 f_0"><img src="x/Icon/a.png" class="w_112 f_l"><div class="p_l_10 f_l"><div class="trophy_block trophy_${trophyClass} p_3 t_c f_0"><div class="trophy_inner_block f_13"><span>칭호</span></div></div>
+<div class="basic_block p_10 f_0"><img src="https://maimaidx-eng.com/maimai-mobile/img/Icon/a.png" class="w_112 f_l"><div class="p_l_10 f_l"><div class="trophy_block trophy_${trophyClass} p_3 t_c f_0"><div class="trophy_inner_block f_13"><span>칭호</span></div></div>
 <div class="m_b_5"><div class="name_block t_l f_l f_16">${name}</div><div class="f_r t_r f_0"><div class="p_r p_3"><div class="rating_block">${rating}</div></div></div></div>
 <div class="circle_member_point_block f_15"><div class="p_t_10 p_r_10 t_r">${points} PT</div></div></div></div></div>`;
 const CIRCLE_MEMBERS = `<div class="wrapper main_wrapper t_c"><div class="m_15 m_t_0 m_b_0"><div class="basic_block m_3 p_5 f_11 l_h_10 t_c"><span class="f_13">Circle Members</span><span class="f_14 f_b">2</span>/20</div></div>
@@ -92,18 +94,20 @@ test("parseCircle: 서클 홈과 멤버 목록을 읽는다", () => {
   const c = s.parseCircle(CIRCLE_HOME, CIRCLE_MEMBERS);
   assert.equal(c.name, "ＺＵＮＤＡＭＯＮ");
   assert.equal(c.code, "ZM7PK1RB");
+  assert.equal(c.color, "red");
   assert.equal(c.comment, "Let's maimai！");
   assert.equal(c.monthPoints, 8236);
   assert.equal(c.daysToReset, 3);
   assert.equal(c.rank, 609);
   assert.equal(c.rankUpdatedAt, "2026/09/30 01:00");
   assert.equal(c.nextRewardPoints, 764);
-  assert.deepEqual(c.challenge, { title: "コンティニュー！ feat. 藍月なくる", artist: "lapix", genre: "GAME＆VARIETY", jacket: "https://maimaidx-eng.com/maimai-mobile/img/Music/af4f08eaff72cde9.png", achievement: "99.6280%" });
+  assert.deepEqual(c.challenge, { title: "コンティニュー！ feat. 藍月なくる", artist: "lapix", genre: "GAME＆VARIETY", jacket: "https://maimaidx-eng.com/maimai-mobile/img/Music/af4f08eaff72cde9.png", achievement: "99.6280%", gauge: 9.9628 });
+  assert.equal(c.forecastJacket, "https://maimaidx-eng.com/maimai-mobile/img/Music/81e682b1c94a1a56.png");
   assert.equal(c.memberCount, 2);
   assert.equal(c.memberMax, 20);
   assert.deepEqual(c.members, [
-    { name: "ＤＩＧＩ", rating: 16089, trophy: "칭호", trophyClass: "gold", points: 1200, leader: true },
-    { name: "ＢＩＴ", rating: 13928, trophy: "칭호", trophyClass: "silver", points: 1970, leader: false },
+    { name: "ＤＩＧＩ", rating: 16089, trophy: "칭호", trophyClass: "gold", points: 1200, leader: true, icon: "https://maimaidx-eng.com/maimai-mobile/img/Icon/a.png" },
+    { name: "ＢＩＴ", rating: 13928, trophy: "칭호", trophyClass: "silver", points: 1970, leader: false, icon: "https://maimaidx-eng.com/maimai-mobile/img/Icon/a.png" },
   ]);
 });
 
@@ -120,3 +124,18 @@ test("parseCircle: 미가입이면 null, 판단할 수 없으면 undefined", () 
   assert.equal(s.parseCircle(""), undefined);
   assert.equal(s.parseCircle("<html><body>ERROR CODE：100001</body></html>"), undefined);
 });
+
+test("parseCircle: 서클 랭킹 페이지에서 이번 달 진행도·기간·내 포인트를 읽는다", () => {
+  const ranking = `<div class="wrapper main_wrapper t_c"><div class="circle_ranking_season_top white"><p class="circle_ranking_season_top_txt">October 2026</p></div>
+<div class="circle_ranking_season_bottom white"><p class="circle_ranking_season_bottom_txt">Point Period 2026/10/01～2026/10/31</p></div>
+<div class="circle_ranking_yourpoint_block m_t_5 p_r"><span class="circle_ranking_yourpoint_text f_16 p_a">1,234 PT</span></div>
+<img src="https://maimaidx-eng.com/maimai-mobile/img/circle/circle_ranking_youebest_green.png" class="w_450"></div>`;
+  const c = s.parseCircle(CIRCLE_HOME, CIRCLE_MEMBERS, "intl", ranking);
+  assert.equal(c.progress, "green");
+  assert.equal(c.period, "2026/10/01～2026/10/31");
+  assert.equal(c.myPoints, 1234);
+  const none = s.parseCircle(CIRCLE_HOME, CIRCLE_MEMBERS);
+  assert.equal(none.progress, undefined);
+  assert.equal(none.period, undefined);
+});
+

@@ -3,6 +3,8 @@ import type { CircleInfo } from "../../scraper";
 import type { CachedProfile } from "../../storage/types";
 import { msg } from "../../messages";
 import { displayTitle } from "../../aliases";
+import { getTitleByJacket } from "../../constants";
+import { CIRCLE_COLOR_STYLE } from "./circleColors";
 
 /**
  * profiles.circle_json 해석.
@@ -37,13 +39,16 @@ export function circleEmbed(circle: CircleInfo, profile: CachedProfile, translat
   const synced = new Date(profile.lastSyncedAt);
   const month = Number(synced.toLocaleString("en-US", { timeZone: "Asia/Seoul", month: "numeric" }));
   const emb = new EmbedBuilder()
-    .setColor(0xff9294)
+    // 서클 프로필 색상이 있으면 임베드 테두리도 그 색으로.
+    .setColor(circle.color ? CIRCLE_COLOR_STYLE[circle.color].main : 0xff9294)
     .setTitle(circle.name)
     .setFooter(footerOf(profile));
   if (circle.comment) emb.setDescription(escapeMarkdown(circle.comment));
 
   const fields: { name: string; value: string; inline?: boolean }[] = [];
   if (circle.code) fields.push({ name: msg("circle.codeField"), value: `\`${circle.code}\``, inline: true });
+  if (circle.color) fields.push({ name: msg("circle.colorField"), value: msg(`circleColor.${circle.color}`), inline: true });
+  if (circle.progress) fields.push({ name: msg("circle.progressField"), value: msg("circle.progressValue", { stage: msg(`circleColor.${circle.progress}`) }), inline: true });
   if (circle.memberCount !== null) {
     fields.push({ name: msg("circle.memberField"), value: msg("circle.memberValue", { count: circle.memberCount, max: circle.memberMax ?? "?" }), inline: true });
   }
@@ -74,18 +79,22 @@ export function circleEmbed(circle: CircleInfo, profile: CachedProfile, translat
     });
     if (circle.challenge.jacket) emb.setThumbnail(circle.challenge.jacket);
   }
+  if (circle.forecastJacket) {
+    const title = getTitleByJacket(circle.forecastJacket);
+    fields.push({ name: msg("circle.forecastField"), value: title ? `**${escapeMarkdown(displayTitle(title, translate))}**` : msg("circle.forecastUnknown") });
+  }
 
   emb.addFields(fields);
   return emb;
 }
 
 // customId: circle:<members|challenge>:<조회 대상 userId>. 라우터는 src/bot/index.ts.
-export function circleButtonsRow(circle: CircleInfo, targetUserId: string): ActionRowBuilder<ButtonBuilder> | null {
+export function circleButtonsRow(circle: CircleInfo, targetUserId: string, withMembers = true): ActionRowBuilder<ButtonBuilder> | null {
   const buttons: ButtonBuilder[] = [];
   if (circle.challenge) {
     buttons.push(new ButtonBuilder().setCustomId(`circle:challenge:${targetUserId}`).setLabel(msg("circle.challengeButton")).setStyle(ButtonStyle.Primary));
   }
-  if (circle.members.length) {
+  if (withMembers && circle.members.length) {
     buttons.push(new ButtonBuilder().setCustomId(`circle:members:${targetUserId}`).setLabel(msg("circle.membersButton")).setStyle(ButtonStyle.Secondary));
   }
   return buttons.length ? new ActionRowBuilder<ButtonBuilder>().addComponents(buttons) : null;

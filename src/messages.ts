@@ -130,6 +130,18 @@ export const MESSAGES = {
   "circle.otherNone": "{user} 님은 가입한 서클이 없습니다. (마지막 동기화 기준)",
   "circle.privateSelfNote": "서클 공개가 꺼져 있어 나에게만 보입니다. `/설정`에서 바꿀 수 있습니다.",
   "circle.codeField": "서클 코드",
+  "circle.colorField": "서클 색상",
+  "circle.progressField": "이번 달 진행도",
+  "circle.progressValue": "**{stage}**",
+  "circleColor.rainbow": "Rainbow",
+  "circleColor.gold": "Gold",
+  "circleColor.silver": "Silver",
+  "circleColor.bronze": "Bronze",
+  "circleColor.purple": "Purple",
+  "circleColor.red": "Red",
+  "circleColor.yellow": "Yellow",
+  "circleColor.green": "Green",
+  "circleColor.white": "White",
   "circle.memberField": "멤버",
   "circle.memberValue": "{count}/{max}명",
   "circle.pointField": "{month}월 서클 포인트",
@@ -142,6 +154,8 @@ export const MESSAGES = {
   "circle.rewardValue": "{points} PT 남음",
   "circle.challengeField": "서클 챌린지",
   "circle.challengeValue": "**{title}** / {artist}\n달성률 **{achievement}**",
+  "circle.forecastField": "다음 주 과제곡 예고",
+  "circle.forecastUnknown": "재킷으로 곡을 찾지 못했습니다.",
   "circle.membersButton": "멤버 포인트",
   "circle.challengeButton": "서클 챌린지",
   "circle.membersTitle": "{name} 멤버 포인트",
@@ -352,6 +366,97 @@ export const MESSAGES = {
     "서클 기능이 추가되어, 북마클릿으로 동기화할 때 maimai DX net의 서클 정보(서클 이름·코드·소개, 서클 포인트와 순위, 멤버의 플레이어명·레이팅·포인트)도 함께 수집합니다. " +
     "서클 정보는 /프로필과 /서클에만 사용하며, `/설정`에서 공개를 끄면 다른 사람에게 보이지 않습니다. 자세한 내용은 아래 방침을 확인해 주세요.",
 
+  // ── 이미지 카드 (/프로필, /서클, /성과, /레이팅표) ─────────────────────────
+  // 카드 그림 안의 글. 바꾸면 캐시된 카드도 다음 요청 때 새 문구로 다시 그린다(cardTextSignature).
+  // 게임 용어(난이도, 랭크, FC/AP, ST/DX)와 숫자는 카드 코드에 그대로 둔다.
+  "card.createdBy": "Created by",
+  "card.lastSynced": "마지막 동기화 {time} (KST)",
+
+  "profileCard.eyebrow": "PLAYER PROFILE · {server}",
+  "profileCard.circleChip": "CIRCLE",
+  "profileCard.newSum": "신곡 {count}곡 합계",
+  "profileCard.oldSum": "구곡 {count}곡 합계",
+  "profileCard.average": "평균 {value}",
+  "profileCard.playCount": "현재 버전 플레이",
+  "profileCard.totalPlayCount": "누적 플레이",
+  "profileCard.clearTitle": "클리어 현황",
+  "profileCard.clearMeta": "{count}개 채보 플레이",
+  "profileCard.rankOther": "그 외",
+  "profileCard.ratingTitle": "레이팅 추이",
+  "profileCard.ratingEmpty": "동기화 기록이 쌓이면 레이팅 추이가 표시됩니다.",
+  "profileCard.ratingLegend": "추정 (성과 기록으로 계산)",
+  "profileCard.recentTitle": "최근 플레이",
+  "profileCard.recentMeta": "최근 {count}곡",
+  "profileCard.recentEmpty": "최근 플레이 기록이 없습니다.",
+  "profileCard.friendCode": "친구 코드 {code}",
+
+  "circleCard.eyebrow": "CIRCLE · {server}",
+  "circleCard.code": "CODE  {code}",
+  "circleCard.monthPoints": "{month}월 서클 포인트",
+  "circleCard.resetDays": "초기화까지 D-{days}",
+  "circleCard.resetToday": "초기화까지 D-DAY",
+  "circleCard.rank": "포인트 순위",
+  "circleCard.rankValue": "{rank}위",
+  "circleCard.rankUpdated": "{time} 갱신",
+  "circleCard.nextReward": "다음 보상까지 PT",
+  "circleCard.members": "멤버",
+  "circleCard.challengeTitle": "서클 챌린지",
+  "circleCard.challengeMeta": "이번 주 과제곡",
+  "circleCard.achievement": "서클 달성률",
+  "circleCard.nextWeek": "NEXT WEEK",
+  "circleCard.forecastNote": "다음 주 예고",
+  "circleCard.forecastUnknown": "알 수 없는 곡",
+  "circleCard.progressTitle": "이번 달 진행도",
+  "circleCard.progressMeta": "포인트 기간 {period}",
+  "circleCard.progressStage": "현재 단계",
+  "circleCard.progressMyPoints": "내 서클 포인트",
+  "circleCard.progressTotal": "서클 합계 포인트",
+  "circleCard.ruleRainbow": "상위 10위",
+  "circleCard.ruleGold": "상위 20%",
+  "circleCard.ruleSilver": "상위 40%",
+  "circleCard.ruleBronze": "상위 70%",
+  "circleCard.ruleMinPoints": "10,000 PT+",
+  "circleCard.rulePurple": "10,000 PT",
+  "circleCard.ruleRed": "7,000 PT",
+  "circleCard.ruleYellow": "4,000 PT",
+  "circleCard.ruleGreen": "2,000 PT",
+  "circleCard.ruleWhite": "2,000 PT 미만",
+  "circleCard.nextTitle": "다음 단계까지",
+  "circleCard.nextPoints": "{stage}까지 {points} PT",
+  "circleCard.nextProgress": "{current} / {target} PT",
+  "circleCard.nextRank": "{stage}: {rule}",
+  "circleCard.nextRankNow": "지금 {rank}위 · {points} PT",
+  "circleCard.topStage": "최고 단계예요",
+  "circleCard.membersTitle": "멤버 포인트",
+  "circleCard.membersMeta": "{month}월 · 포인트 순",
+  "circleCard.membersEmpty": "멤버 목록을 가져오지 못했습니다.",
+  "circleCard.leader": "LEADER",
+  "circleCard.memberPoints": "{points} PT",
+  "circleCard.memberRating": "레이팅 {rating}",
+  "circleCard.syncedBy": "{player} 님의 동기화 기준",
+
+  "achievementCard.eyebrow": "DAILY ACHIEVEMENTS",
+  "achievementCard.title": "오늘의 성과",
+  "achievementCard.subtitle": "{day} · 한국시간 오전 4시 기준",
+  "achievementCard.page": "{page}/{total}페이지",
+  "achievementCard.count": "COUNT",
+  "achievementCard.ratingGain": "RATING GAIN",
+  "achievementCard.emptyTitle": "오늘의 의미 있는 성과가 없습니다",
+  "achievementCard.emptyBody": "한국시간 오전 4시부터 다음 오전 4시까지의 성과입니다",
+  "achievementCard.ratingUp": "rating +{value}",
+  "achievementCard.rating": "rating {value}",
+  "achievementCard.ratingUnknown": "rating —",
+
+  "ratingCard.sectionNew": "NEW",
+  "ratingCard.sectionOthers": "OTHERS",
+  "ratingCard.sectionBest": "BEST",
+  "ratingCard.sectionVolforce": "VOLFORCE",
+  "ratingCard.top": "TOP {count}",
+  "ratingCard.avg": "avg",
+  "ratingCard.ratingLabel": "RATING",
+  "ratingCard.volforceLabel": "VOLFORCE",
+  "ratingCard.potentialLabel": "POTENTIAL",
+
   // ── 패치노트 (관리 페이지에서 게시 → 다음 명령 때 1회) ────────────────────
   "patchNotes.defaultTitle": "📢 캐롤봇 {version} 업데이트",
   "patchNotes.defaultTitleNoVersion": "📢 캐롤봇 업데이트",
@@ -386,6 +491,34 @@ let overrides = new Map<string, string>();
 
 export function applyMessageOverrides(rows: { key: string; text: string }[]): void {
   overrides = new Map(rows.filter((r) => (MESSAGES as Record<string, string>)[r.key] !== undefined).map((r) => [r.key, r.text]));
+  cardSignature = null;
+}
+
+// 이미지 카드 문구의 서명. 카드 캐시 키(메모리)와 레이팅표 DB 캐시 버전에 섞어, 문구를 바꾸면 다시 그리게 한다.
+const CARD_KEY_PREFIXES = ["card.", "profileCard.", "circleCard.", "circleColor.", "achievementCard.", "ratingCard."];
+let cardSignature: number | null = null;
+
+function fnv1a(text: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return h >>> 0;
+}
+
+/** 카드 문구(기본값+오버라이드)의 32비트 해시. 오버라이드가 바뀔 때만 다시 계산한다. */
+export function cardTextSignature(): number {
+  if (cardSignature === null) {
+    const text = MESSAGE_KEYS.filter((k) => CARD_KEY_PREFIXES.some((p) => k.startsWith(p))).map((k) => `${k}=${rawText(k)}`).join("\n");
+    cardSignature = fnv1a(text);
+  }
+  return cardSignature;
+}
+
+/** DB 캐시처럼 정수 버전 한 칸만 있는 곳용: 카드 버전과 문구 서명을 합친 양의 int32. */
+export function cardCacheVersion(base: number): number {
+  return fnv1a(`${base}|${cardTextSignature()}`) & 0x7fffffff;
 }
 
 export function getOverride(key: MessageKey): string | null {

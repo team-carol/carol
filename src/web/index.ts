@@ -506,9 +506,9 @@ export function startWebServer(port: number): void {
 ${topbar()}
 <main class="page">
 <h1>개인정보처리방침</h1>
-<p>최종 수정일: 2026년 9월 30일</p>
+<p>최종 수정일: 2026년 10월 3일</p>
 <h2>1. 수집하는 정보</h2>
-<p>본 봇은 Discord 사용자 ID, maimai DX net 프로필 데이터(플레이어명, 친구 코드, 레이팅, 칭호, 클래스, 아바타 이미지, 최근 플레이 기록, 재킷 이미지)를 수집합니다. 북마클릿으로 동기화할 때는 maimai DX net의 게임 옵션 설정값(노트 속도, 판정 표시, 효과음 등)도 함께 수집하며, 사용자가 옵션 프리셋을 저장하면 그 설정값을 저장합니다. 사용자가 maimai DX net 서클에 가입되어 있다면 서클 정보(서클 이름·서클 코드·소개 문구, 서클 포인트와 순위, 서클 챌린지 달성률, 멤버의 플레이어명·칭호·레이팅·서클 포인트)도 함께 수집합니다.</p>
+<p>본 봇은 Discord 사용자 ID, maimai DX net 프로필 데이터(플레이어명, 친구 코드, 레이팅, 칭호, 클래스, 아바타 이미지, 최근 플레이 기록, 재킷 이미지)를 수집합니다. 북마클릿으로 동기화할 때는 maimai DX net의 게임 옵션 설정값(노트 속도, 판정 표시, 효과음 등)도 함께 수집하며, 사용자가 옵션 프리셋을 저장하면 그 설정값을 저장합니다. 사용자가 maimai DX net 서클에 가입되어 있다면 서클 정보(서클 이름·서클 코드·소개 문구·서클 색상, 서클 포인트와 순위, 이번 달 서클 진행도와 본인의 서클 포인트, 서클 챌린지 과제곡과 달성률, 멤버의 플레이어명·아이콘·칭호·레이팅·서클 포인트)도 함께 수집합니다.</p>
 <h2>2. 수집 방법</h2>
 <p>사용자가 maimai DX net에 로그인된 브라우저에서 <strong>북마클릿</strong> 또는 <strong>캐롤익스텐션(비공식 크롬 확장)</strong>을 실행하여, 해당 페이지의 HTML을 사용자 브라우저에서 직접 서버로 전송합니다. SEGA ID, 비밀번호 등 계정 정보는 절대 수집하지 않습니다.</p>
 <p>캐롤익스텐션을 쓰는 경우, 사용자가 확장 설정에서 동기화를 명시적으로 켜고 동기화 토큰을 등록해야 합니다. 동기화는 (1) maimai DX net 화면의 버튼을 눌렀을 때, 또는 (2) 사용자가 "자동" 모드를 켠 경우 홈 화면에 접속했고 플레이 횟수가 지난 동기화 이후 변한 것이 확인됐을 때에만 실행됩니다. 백그라운드 상시 수집은 하지 않으며, 전송되는 데이터의 종류와 목적은 북마클릿과 동일합니다.</p>
@@ -1160,9 +1160,10 @@ ${siteFooter()}
       const optionHtml: string = typeof data.uo === "string" ? data.uo : "";
       const circleHtml: string = typeof data.ci === "string" ? data.ci : "";
       const circleMemberHtml: string = typeof data.cm === "string" ? data.cm : "";
+      const circleRankingHtml: string = typeof data.cr === "string" ? data.cr : "";
       const avatarBase64: string = data.a || "";
       const detailPayloads = Array.isArray(data.dt) ? data.dt : [];
-      console.log(`[web] user=${syncUserId.slice(-6)}, server=${syncServer}, home=${homeHtml.length}B, player=${playerHtml.length}B, record=${recordHtml.length}B, ratingTarget=${ratingTargetHtml.length}B, fc=${fcHtml.length}B, top4=${top4Html.length}B, top3=${top3Html.length}B, top2=${top2Html.length}B, top1=${top1Html.length}B, top0=${top0Html.length}B, map=${mapHtml.length}B, eventMap=${eventMapHtml.length}B, option=${optionHtml.length}B, circle=${circleHtml.length}B, circleMember=${circleMemberHtml.length}B`);
+      console.log(`[web] user=${syncUserId.slice(-6)}, server=${syncServer}, home=${homeHtml.length}B, player=${playerHtml.length}B, record=${recordHtml.length}B, ratingTarget=${ratingTargetHtml.length}B, fc=${fcHtml.length}B, top4=${top4Html.length}B, top3=${top3Html.length}B, top2=${top2Html.length}B, top1=${top1Html.length}B, top0=${top0Html.length}B, map=${mapHtml.length}B, eventMap=${eventMapHtml.length}B, option=${optionHtml.length}B, circle=${circleHtml.length}B, circleMember=${circleMemberHtml.length}B, circleRanking=${circleRankingHtml.length}B`);
       if (isDev) {
         fs.writeFileSync("debug_home.html", homeHtml, "utf-8");
         fs.writeFileSync("debug_pd.html", playerHtml, "utf-8");
@@ -1174,6 +1175,7 @@ ${siteFooter()}
         if (optionHtml) fs.writeFileSync("debug_option.html", optionHtml, "utf-8");
         if (circleHtml) fs.writeFileSync("debug_circle.html", circleHtml, "utf-8");
         if (circleMemberHtml) fs.writeFileSync("debug_circle_member.html", circleMemberHtml, "utf-8");
+        if (circleRankingHtml) fs.writeFileSync("debug_circle_ranking.html", circleRankingHtml, "utf-8");
         detailPayloads.forEach((detail: unknown, idx: number) => {
           if (!detail || typeof detail !== "object") return;
           const html = "html" in detail && typeof detail.html === "string" ? detail.html : "";
@@ -1361,7 +1363,7 @@ ${siteFooter()}
         // 서클 정보(/서클, /프로필). 페이지를 못 받았거나 판단할 수 없으면(undefined) 이전 값을 유지한다.
         if (circleHtml) {
           try {
-            const circle = parseCircle(circleHtml, circleMemberHtml, syncServer);
+            const circle = parseCircle(circleHtml, circleMemberHtml, syncServer, circleRankingHtml);
             if (circle !== undefined) await saveProfileCircle(savedProfileKey, JSON.stringify(circle));
           } catch (circleError) {
             console.warn("[web] 서클 정보 저장 실패:", circleError instanceof Error ? circleError.message : circleError);

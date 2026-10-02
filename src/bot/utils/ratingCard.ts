@@ -19,6 +19,21 @@ import {
   getSongVersion,
 } from "../../constants";
 import { displayTitle } from "../../aliases";
+import { msg, cardCacheVersion, type MessageKey } from "../../messages";
+
+// 게임 설정(games.ts)의 섹션·레이팅 라벨을 관리 페이지에서 고칠 수 있는 문구로 바꾼다. 표에 없으면 그대로.
+const LABEL_KEYS: Record<string, MessageKey> = {
+  NEW: "ratingCard.sectionNew",
+  OTHERS: "ratingCard.sectionOthers",
+  BEST: "ratingCard.sectionBest",
+  VOLFORCE: "ratingCard.sectionVolforce",
+};
+const RATING_LABEL_KEYS: Record<string, MessageKey> = {
+  RATING: "ratingCard.ratingLabel",
+  VOLFORCE: "ratingCard.volforceLabel",
+  POTENTIAL: "ratingCard.potentialLabel",
+};
+const labelText = (label: string, table: Record<string, MessageKey>) => (table[label] ? msg(table[label]) : label);
 import type { GameId } from "../../games";
 import {
   GAMES,
@@ -455,8 +470,8 @@ function plateStars(value: number): number {
 }
 
 /** 레이팅 플레이트(별 포함). 프로필 카드도 같은 모양을 쓴다. */
-export function ratingPlate(value: number): El {
-  const s = (v: number) => Math.round(v * PLATE_S * 100) / 100;
+export function ratingPlate(value: number, scale = PLATE_S): El {
+  const s = (v: number) => Math.round(v * scale * 100) / 100;
   const tier = PLATE_TIERS.find((t) => value >= t.min) ?? PLATE_TIERS[PLATE_TIERS.length - 1];
   // 5칸 고정. 자릿수가 모자라면 앞칸을 비운다(게임 표시와 동일).
   const digits = String(Math.max(0, Math.floor(value))).slice(-5).padStart(5, " ").split("");
@@ -521,7 +536,7 @@ function sectionLabel(
       padding: "0 2px 8px",
     },
     [
-      el("span", { fontSize: 11, fontWeight: 700, color: BRAND.ink }, label),
+      el("span", { fontSize: 11, fontWeight: 700, color: BRAND.ink }, labelText(label, LABEL_KEYS)),
       el(
         "span",
         {
@@ -533,9 +548,9 @@ function sectionLabel(
           padding: "2px 8px",
           marginLeft: 8,
         },
-        `TOP ${count}`,
+        msg("ratingCard.top", { count }),
       ),
-      el("span", { fontSize: 9, color: BRAND.dim, marginLeft: "auto" }, "avg"),
+      el("span", { fontSize: 9, color: BRAND.dim, marginLeft: "auto" }, msg("ratingCard.avg")),
       el(
         "span",
         { fontSize: 11, fontWeight: 700, color: BRAND.accentSoft, marginLeft: 5 },
@@ -616,7 +631,7 @@ export async function renderRatingCard(
   if (
     cached &&
     cached.syncedAt === profile.lastSyncedAt &&
-    cached.version === CARD_VERSION
+    cached.version === cardCacheVersion(CARD_VERSION)
   ) {
     return cached.blob;
   }
@@ -779,7 +794,7 @@ export async function renderRatingCard(
     el(
       "span",
       { fontSize: 13, fontWeight: 700, color: BRAND.dim, marginRight: 6 },
-      "Created by",
+      msg("card.createdBy"),
     ),
     el("span", { fontSize: 13, fontWeight: 800, color: BRAND.ink }, "carol"),
     el("span", { fontSize: 13, fontWeight: 800, color: ACCENT }, "bot"),
@@ -791,7 +806,7 @@ export async function renderRatingCard(
     "div",
     { display: "flex", flexDirection: "column", alignItems: "flex-end" },
     [
-      el("span", { fontSize: 8, color: BRAND.dim }, cfg.ratingLabel),
+      el("span", { fontSize: 8, color: BRAND.dim }, labelText(cfg.ratingLabel, RATING_LABEL_KEYS)),
       el(
         "span",
         { fontSize: 20, fontWeight: 800, color: cfg.accent, lineHeight: 1.1 },
@@ -884,7 +899,8 @@ export async function renderRatingCard(
       profile.profileKey,
       buf,
       profile.lastSyncedAt,
-      CARD_VERSION,
+      // 카드 문구를 관리 페이지에서 바꾸면 버전이 달라져 다시 그린다.
+      cardCacheVersion(CARD_VERSION),
     );
   }
 

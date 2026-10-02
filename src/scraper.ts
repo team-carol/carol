@@ -559,10 +559,17 @@ export interface CircleMember {
   /** 이번 달 서클 포인트 */
   points: number;
   leader: boolean;
+  /** 멤버 아이콘(DX NET Icon/*.png). 이 필드 이전 값에는 없다. */
+  icon?: string;
 }
+
+export const CIRCLE_COLORS = ["rainbow", "gold", "silver", "bronze", "purple", "red", "yellow", "green", "white"] as const;
+export type CircleColor = (typeof CIRCLE_COLORS)[number];
 
 export interface CircleInfo {
   name: string;
+  /** 서클 프로필 색상(circle_profile_color_*.png). 이 필드 이전 값에는 없다. */
+  color?: CircleColor;
   code: string;
   comment: string;
   /** 이번 달 서클 합계 포인트 */
@@ -576,7 +583,16 @@ export interface CircleInfo {
   /** 다음 보상까지 남은 포인트 */
   nextRewardPoints: number | null;
   /** 서클 챌린지 과제곡과 달성률 */
-  challenge: { title: string; artist: string; genre: string; jacket: string; achievement: string } | null;
+  /** gauge: DX NET 게이지 폭(0~100). 멤버 달성률 합계를 1000% 기준으로 채운다. 이 필드 이전 값에는 없다. */
+  challenge: { title: string; artist: string; genre: string; jacket: string; achievement: string; gauge?: number } | null;
+  /** 다음 주 과제곡 예고(DX NET 은 재킷만 보여 준다). 이 필드 이전에 저장된 값에는 없다. */
+  forecastJacket?: string;
+  /** 이번 달 서클 진행도(서클 랭킹 페이지 피라미드의 현재 단계). 랭킹 페이지를 못 받았으면 없다. */
+  progress?: CircleColor;
+  /** 서클 랭킹 포인트 기간(예: 2026/10/01～2026/10/31) */
+  period?: string;
+  /** 내(동기화한 사람) 이번 달 서클 포인트 */
+  myPoints?: number;
   memberCount: number | null;
   memberMax: number | null;
   /** 멤버 목록 페이지를 못 받았으면 빈 배열 */
@@ -594,7 +610,7 @@ const numOf = (s: string): number | null => {
  * - 정상적인 DX NET 페이지인데 서클 프로필이 없으면 null(가입한 서클 없음)
  * - 빈 문자열·오류 페이지처럼 판단할 수 없으면 undefined(기존 값을 유지해야 함)
  */
-export function parseCircle(homeHtml: string, memberHtml = "", server: MaimaiServer = "intl"): CircleInfo | null | undefined {
+export function parseCircle(homeHtml: string, memberHtml = "", server: MaimaiServer = "intl", rankingHtml = ""): CircleInfo | null | undefined {
   if (!homeHtml) return undefined;
   const $ = cheerio.load(homeHtml);
   const clean = (s: string) => s.replace(/\s+/g, " ").trim();
@@ -606,6 +622,7 @@ export function parseCircle(homeHtml: string, memberHtml = "", server: MaimaiSer
   const baseUrl = getMaimaiBaseUrl(server);
   const challengeBlock = $(".circle_challenge_block").first();
   const challengeTitle = clean(challengeBlock.find(".f_15.break").first().text());
+  const gauge = Number(($(".circle_challenge_gauge_status").first().attr("style") || "").match(/width:\s*([\d.]+)%/)?.[1] ?? NaN);
   const challenge = challengeTitle
     ? {
         title: challengeTitle,
@@ -613,10 +630,13 @@ export function parseCircle(homeHtml: string, memberHtml = "", server: MaimaiSer
         genre: clean(challengeBlock.find(".blue").first().text()),
         jacket: absUrl(challengeBlock.find("img[src*='/Music/']").first().attr("src"), baseUrl),
         achievement: clean($(".circle_challenge_achiv_text").first().text()),
+        ...(Number.isFinite(gauge) ? { gauge } : {}),
       }
     : null;
+  const colorName = ($(".circle_profile_class img").attr("src") || "").match(/circle_profile_color_([a-z]+)/i)?.[1]?.toLowerCase();
   const info: CircleInfo = {
     name,
+    ...((CIRCLE_COLORS as readonly string[]).includes(colorName ?? "") ? { color: colorName as CircleColor } : {}),
     code: clean($(".circle_profile_circle_code").first().text()),
     comment: clean($(".circle_profile_comment").first().text()),
     monthPoints: numOf($(".circle_totalpoint_point span").first().text()),
@@ -625,6 +645,7 @@ export function parseCircle(homeHtml: string, memberHtml = "", server: MaimaiSer
     rankUpdatedAt: (clean($(".circle_pointranking_block").nextAll("div").first().text()).match(/\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}/) ?? [""])[0],
     nextRewardPoints: numOf($(".circle_pointreward_block span.red").first().text()),
     challenge,
+    forecastJacket: absUrl($(".circle_challenge_forecast_block img[src*='/Music/']").first().attr("src"), baseUrl),
     memberCount: null,
     memberMax: null,
     members: [],
@@ -640,6 +661,7 @@ export function parseCircle(homeHtml: string, memberHtml = "", server: MaimaiSer
       const b = $m(el);
       const memberName = clean(b.find(".name_block").first().text());
       if (!memberName) return;
+      const icon = absUrl(b.find("img[src*='/Icon/']").first().attr("src"), baseUrl);
       info.members.push({
         name: memberName,
         rating: numOf(b.find(".rating_block").first().text()) ?? 0,
@@ -647,9 +669,20 @@ export function parseCircle(homeHtml: string, memberHtml = "", server: MaimaiSer
         trophyClass: (b.find(".trophy_block").attr("class") || "").split(/\s+/).find(c => c.match(/^trophy_(?!block)/i))?.replace(/^trophy_/i, "").toLowerCase() || "normal",
         points: numOf(b.find(".circle_member_point_block").first().text()) ?? 0,
         leader: b.find("img.circle_member_leader, img[src*='circle_leader']").length > 0,
+        ...(icon ? { icon } : {}),
       });
     });
     if (info.memberCount === null && info.members.length) info.memberCount = info.members.length;
+  }
+  if (rankingHtml) {
+    const $r = cheerio.load(rankingHtml);
+    // 피라미드는 단계별 이미지 한 장(circle_ranking_youebest_<색>.png)이라 파일 이름으로 현재 단계를 읽는다.
+    const stage = ($r("img[src*='circle_ranking_you']").attr("src") || "").match(/circle_ranking_you[a-z]*_([a-z]+)\.png/i)?.[1]?.toLowerCase();
+    if ((CIRCLE_COLORS as readonly string[]).includes(stage ?? "")) info.progress = stage as CircleColor;
+    const period = clean($r(".circle_ranking_season_bottom_txt").first().text()).match(/\d{4}\/\d{2}\/\d{2}\s*[～~-]\s*\d{4}\/\d{2}\/\d{2}/)?.[0];
+    if (period) info.period = period.replace(/\s+/g, "");
+    const my = numOf($r(".circle_ranking_yourpoint_text").first().text());
+    if (my !== null) info.myPoints = my;
   }
   return info;
 }

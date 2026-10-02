@@ -8,6 +8,7 @@ import { musicKindIcons, KIND_ICON_RATIO } from "./dxnetAssets";
 import { alignLeftMargin } from "./textMetrics";
 import { displayTitle } from "../../aliases";
 import { getScoreRank, MAI_CM_COLOR } from "../../games";
+import { msg, cardTextSignature } from "../../messages";
 
 // 색은 랜딩과 같은 src/brand.ts 팔레트. 난이도·FC/AP 색은 게임 고유라 아래에 따로 둔다.
 const ACCENT = BRAND.accent;
@@ -165,7 +166,9 @@ function recordRow(record: PlayRecord, rankNo: number, profile: CachedProfile, j
   const marks = [record.fc, record.sync].filter((mark) => mark.length > 0);
   const gain = ratingGain(record);
   // 마이마이 레이팅은 정수 단위라 소수점을 붙이지 않는다.
-  const ratingLabel = gain !== null ? `rating +${Math.round(gain)}` : typeof details(record).rating === "number" ? `rating ${Math.round(details(record).rating!)}` : "rating —";
+  const ratingLabel = gain !== null
+    ? msg("achievementCard.ratingUp", { value: Math.round(gain) })
+    : typeof details(record).rating === "number" ? msg("achievementCard.rating", { value: Math.round(details(record).rating!) }) : msg("achievementCard.ratingUnknown");
   const constant = chartConstant(record, profile);
   const constantLabel = constant !== null ? constant.toFixed(1) : record.level;
   const before = achievementBefore(record);
@@ -249,15 +252,15 @@ function emptyState(): El {
       gap: 8,
     },
     [
-      el("span", { color: INK, fontSize: 18, fontWeight: 800 }, "오늘의 의미 있는 성과가 없습니다"),
-      el("span", { color: MUTED, fontSize: 11 }, "한국시간 오전 4시부터 다음 오전 4시까지의 성과입니다"),
+      el("span", { color: INK, fontSize: 18, fontWeight: 800 }, msg("achievementCard.emptyTitle")),
+      el("span", { color: MUTED, fontSize: 11 }, msg("achievementCard.emptyBody")),
     ],
   );
 }
 
 function wordmark(): El {
   return el("div", { display: "flex", alignItems: "baseline" }, [
-    el("span", { fontSize: 13, fontWeight: 700, color: MUTED, marginRight: 6 }, "Created by"),
+    el("span", { fontSize: 13, fontWeight: 700, color: MUTED, marginRight: 6 }, msg("card.createdBy")),
     el("span", { fontSize: 13, fontWeight: 800, color: INK }, "carol"),
     el("span", { fontSize: 13, fontWeight: 800, color: ACCENT }, "bot"),
   ]);
@@ -284,7 +287,7 @@ export async function renderAchievementCard(
 
   const cacheKey = [
     profile.profileKey, playDay, profile.lastSyncedAt, translate ? 1 : 0,
-    clampedPage, pageSize, sortedRecords.length, avatarBuf?.length ?? 0, ACH_CARD_VERSION,
+    clampedPage, pageSize, sortedRecords.length, avatarBuf?.length ?? 0, ACH_CARD_VERSION, cardTextSignature(),
   ].join("|");
   const memo = achCardCache.get(cacheKey);
   if (memo) return memo;
@@ -305,6 +308,7 @@ export async function renderAchievementCard(
     }),
   );
   const width = 920;
+  const eyebrow = msg("achievementCard.eyebrow");
   const root = el(
     "div",
     {
@@ -322,20 +326,23 @@ export async function renderAchievementCard(
           ? image(avatarUrl, { width: 44, height: 44, objectFit: "cover", marginRight: 12, borderRadius: 12 })
           : el("div", { width: 44, height: 44, background: BRAND.surface2, marginRight: 12, borderRadius: 12 }),
         el("div", { display: "flex", flexDirection: "column", flex: 1 }, [
-          el("span", { color: MUTED, fontSize: 10, fontWeight: 700 }, "DAILY ACHIEVEMENTS"),
+          el("span", { color: MUTED, fontSize: 10, fontWeight: 700 }, eyebrow),
           // 전각 영문 이름은 첫 글자 왼쪽 여백만큼 밀려 보이므로 위 줄과 잉크 시작을 맞춘다.
-          el("span", { color: INK, fontSize: 18, fontWeight: 800, marginLeft: alignLeftMargin({ text: profile.playerName || "—", size: 18 }, { text: "DAILY ACHIEVEMENTS", size: 10 }) }, profile.playerName || "—"),
+          el("span", { color: INK, fontSize: 18, fontWeight: 800, marginLeft: alignLeftMargin({ text: profile.playerName || "—", size: 18 }, { text: eyebrow, size: 10 }) }, profile.playerName || "—"),
         ]),
         wordmark(),
       ]),
       el("div", { display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 18 }, [
         el("div", { display: "flex", flexDirection: "column", gap: 4 }, [
-          el("span", { color: INK, fontSize: 28, fontWeight: 700, lineHeight: 1 }, "오늘의 성과"),
-          el("span", { color: MUTED, fontSize: 11 }, `${playDay} · 한국시간 오전 4시 기준${totalPages > 1 ? ` · ${clampedPage + 1}/${totalPages}페이지` : ""}`),
+          el("span", { color: INK, fontSize: 28, fontWeight: 700, lineHeight: 1 }, msg("achievementCard.title")),
+          el("span", { color: MUTED, fontSize: 11 }, [
+            msg("achievementCard.subtitle", { day: playDay }),
+            ...(totalPages > 1 ? [msg("achievementCard.page", { page: clampedPage + 1, total: totalPages })] : []),
+          ].join(" · ")),
         ]),
         el("div", { display: "flex", gap: 30 }, [
-          stat("COUNT", String(sortedRecords.length), ACCENT),
-          stat("RATING GAIN", `+${sortedRecords.reduce((sum, record) => sum + Math.max(0, ratingGain(record) ?? 0), 0).toFixed(0)}`, ACCENT),
+          stat(msg("achievementCard.count"), String(sortedRecords.length), ACCENT),
+          stat(msg("achievementCard.ratingGain"), `+${sortedRecords.reduce((sum, record) => sum + Math.max(0, ratingGain(record) ?? 0), 0).toFixed(0)}`, ACCENT),
         ]),
       ]),
       el(

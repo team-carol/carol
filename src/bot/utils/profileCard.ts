@@ -1,4 +1,8 @@
 import { BRAND } from "../../brand";
+import {
+  ACCENT, SURFACE, SURFACE2, BORDER, TEXT, MUTED, CANVAS, INK, SOFT, FAINT, NUM_FONT, TROPHY_STYLE,
+  type El, el, image, pill, remoteDataUrl, kstStamp, wordmark, statsPanel, panel,
+} from "./cardKit";
 import { renderInWorker } from "./renderPool";
 import type { CachedProfile } from "../../storage/types";
 import type { PlayRecord } from "../../scraper";
@@ -9,18 +13,11 @@ import { fetchJacketDataUrl, ratingBreakdown, ratingPlate } from "./ratingCard";
 import { musicKindIcons, KIND_ICON_RATIO } from "./dxnetAssets";
 import { alignLeftMargin } from "./textMetrics";
 import type { RatingPoint } from "../../ratingHistory";
+import { msg, cardTextSignature } from "../../messages";
 
 // /프로필 이미지 카드. 레이아웃·색은 /성과 카드와 같은 랜딩(carol-web) 토큰(src/brand.ts)을 따른다.
 // 헤더(아바타·이름·칭호·클래스·레이팅 플레이트) → 레이팅 구성 → 클리어 현황 → 최근 플레이 5곡.
 
-const ACCENT = BRAND.accent;
-const SURFACE = BRAND.surface;
-const SURFACE2 = BRAND.surface2;
-const BORDER = BRAND.border;
-const TEXT = BRAND.inkSoft;
-const MUTED = BRAND.dim;
-const CANVAS = BRAND.canvas;
-const INK = BRAND.ink;
 const RECENT_COUNT = 5;
 
 const DIFF_COLOR: Record<string, string> = {
@@ -31,18 +28,6 @@ const DIFF_COLOR: Record<string, string> = {
   "Re:MASTER": "#c084fc",
 };
 
-// DX NET 칭호 등급(trophy_*) 색. 레인보우는 그라디언트.
-const TROPHY_STYLE: Record<string, Record<string, unknown>> = {
-  normal: { background: SURFACE2, color: TEXT },
-  bronze: { background: "#c77d43", color: "#1a1a1c" },
-  silver: { background: "#c3ccd4", color: "#1a1a1c" },
-  gold: { background: "#f2c94c", color: "#1a1a1c" },
-  rainbow: { backgroundImage: "linear-gradient(90deg, #ff9294, #fbbf24, #4ade80, #60a5fa, #c084fc)", color: "#1a1a1c" },
-};
-
-const SOFT = BRAND.accentSoft;
-const FAINT = BRAND.faint;
-const NUM_FONT = "Pretendard"; // 랜딩 수치 표기와 같은 글꼴(fonts.ts 에 700 으로 등록됨)
 
 // 랭크 막대그래프 색. 게임 랭크색(금색 계열)을 진한 것 → 옅은 것 순으로 이어 붙였다.
 const RANK_RAMP: [string, string][] = [
@@ -59,41 +44,9 @@ const MARK_COLOR: Record<string, string> = {
   "FDX+": "#10b981", FDX: "#34d399", "FS+": "#22c55e", FS: "#4ade80",
 };
 
-const PROFILE_CARD_VERSION = 12;
+const PROFILE_CARD_VERSION = 13;
 const PROFILE_CARD_CACHE_MAX = 64;
 const profileCardCache = new Map<string, Buffer>();
-
-type El = { type: string; props: { style: Record<string, unknown>; children?: unknown; src?: string } };
-
-function el(type: string, style: Record<string, unknown>, children?: unknown): El {
-  return { type, props: { style, children } };
-}
-
-function image(src: string, style: Record<string, unknown>): El {
-  return { type: "img", props: { src, style } };
-}
-
-function pill(text: string, style: Record<string, unknown>): El {
-  return el("span", { fontSize: 10, fontWeight: 700, borderRadius: 99, padding: "3px 9px", lineHeight: 1.2, flexShrink: 0, ...style }, text);
-}
-
-// DX NET 이미지(아바타 URL·클래스·재킷)를 data URL 로. 실패는 null 로 기억한다.
-const remoteImageCache = new Map<string, string | null>();
-async function remoteDataUrl(url: string): Promise<string | null> {
-  if (!url) return null;
-  if (url.startsWith("data:")) return url;
-  const memo = remoteImageCache.get(url);
-  if (memo !== undefined) return memo;
-  let data: string | null = null;
-  try {
-    const res = await fetch(url);
-    if (res.ok) data = `data:${res.headers.get("content-type") || "image/png"};base64,${Buffer.from(await res.arrayBuffer()).toString("base64")}`;
-  } catch {
-    data = null;
-  }
-  remoteImageCache.set(url, data);
-  return data;
-}
 
 async function jacketFor(record: PlayRecord): Promise<string | null> {
   const direct = record.jacketUrl ? await remoteDataUrl(record.jacketUrl) : null;
@@ -119,48 +72,6 @@ function markOf(v: string | undefined): string {
   if (x === "FSD") return "FDX";
   if (x === "FSP") return "FS+";
   return x;
-}
-
-function kstStamp(ms: number): string {
-  const d = new Date(ms + 9 * 60 * 60 * 1000).toISOString();
-  return `${d.slice(0, 10).replace(/-/g, ".")} ${d.slice(11, 16)}`;
-}
-
-function wordmark(): El {
-  return el("div", { display: "flex", alignItems: "baseline" }, [
-    el("span", { fontSize: 13, fontWeight: 700, color: MUTED, marginRight: 6 }, "Created by"),
-    el("span", { fontSize: 13, fontWeight: 800, color: INK }, "carol"),
-    el("span", { fontSize: 13, fontWeight: 800, color: ACCENT }, "bot"),
-  ]);
-}
-
-// 랜딩 Stats 섹션처럼 박스 없이 큰 숫자(accent-soft) + 라벨. 칸 사이는 세로선으로만 나눈다.
-function statsPanel(items: { value: string; label: string; sub?: string }[]): El {
-  return el("div", {
-    display: "flex", marginTop: 16,
-    background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 16, padding: "18px 0",
-  }, items.map((it, i) => el("div", {
-    // 보조 줄(평균)이 없는 칸도 숫자·라벨이 세로 가운데에 오도록 빈 줄을 넣지 않고 가운데 정렬한다.
-    display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", flex: 1, gap: 7,
-    ...(i > 0 ? { borderLeft: `1px solid ${BORDER}` } : {}),
-  }, [
-    el("span", { color: SOFT, fontFamily: NUM_FONT, fontSize: 28, fontWeight: 700, lineHeight: 1 }, it.value),
-    el("span", { color: MUTED, fontSize: 11 }, it.label),
-    ...(it.sub ? [el("span", { color: FAINT, fontSize: 10, lineHeight: 1 }, it.sub)] : []),
-  ])));
-}
-
-function panel(title: string, meta: string, children: El[]): El {
-  return el("div", {
-    display: "flex", flexDirection: "column",
-    background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 16, padding: "14px 16px", marginTop: 12,
-  }, [
-    el("div", { display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 12 }, [
-      el("span", { color: INK, fontSize: 14, fontWeight: 700 }, title),
-      el("span", { color: MUTED, fontSize: 10 }, meta),
-    ]),
-    ...children,
-  ]);
 }
 
 // 세로 막대그래프. 막대 높이는 묶음 안 최댓값 대비 비율, 막대 위에 개수, 아래에 라벨(+비율).
@@ -193,7 +104,7 @@ function clearPanel(clears: PlayRecord[]): El {
   const pct = (n: number) => (played ? Math.round((n / played) * 100) : 0);
   const rankItems = RANK_RAMP.map(([label, color]) => ({ label, color, count: ranks.get(label) ?? 0 }));
   const listed = rankItems.reduce((sum, it) => sum + it.count, 0);
-  rankItems.push({ label: "그 외", color: RANK_OTHER_COLOR, count: Math.max(0, played - listed) });
+  rankItems.push({ label: msg("profileCard.rankOther"), color: RANK_OTHER_COLOR, count: Math.max(0, played - listed) });
 
   // 오른쪽으로 갈수록 높은 랭크(맨 오른쪽 SSS+, 맨 왼쪽 그 외).
   const rankChart = barChart(rankItems.map((it) => ({ ...it, note: `${pct(it.count)}%` })).reverse(), 96, 46);
@@ -207,7 +118,7 @@ function clearPanel(clears: PlayRecord[]): El {
       el("span", { color: INK, fontFamily: NUM_FONT, fontSize: 20, fontWeight: 700, lineHeight: 1 }, String(marks.get(k) ?? 0)),
     ])))));
 
-  return panel("클리어 현황", `${played}개 채보 플레이`, [rankChart, markGroups]);
+  return panel(msg("profileCard.clearTitle"), msg("profileCard.clearMeta", { count: played }), [rankChart, markGroups]);
 }
 
 type KindIcons = Partial<Record<"DX" | "ST", string>>;
@@ -274,7 +185,7 @@ function dashedSwatch(): El {
 
 function ratingChartPanel(points: RatingPoint[], days: string[], updates: { day: string; label: string }[] = []): El {
   if (!points.length) {
-    return panel("레이팅 추이", "", [el("span", { color: MUTED, fontSize: 12, padding: "10px 0" }, "동기화 기록이 쌓이면 레이팅 추이가 표시됩니다.")]);
+    return panel(msg("profileCard.ratingTitle"), "", [el("span", { color: MUTED, fontSize: 12, padding: "10px 0" }, msg("profileCard.ratingEmpty"))]);
   }
   const plotW = CHART_W - CHART_Y_LABEL_W - 8;
   const index = new Map(days.map((d, i) => [d, i]));
@@ -328,7 +239,7 @@ function ratingChartPanel(points: RatingPoint[], days: string[], updates: { day:
   const midDay = days[firstI + Math.round(span / 2)] ?? last.day;
   const valueTop = Math.max(0, last.y - 24);
 
-  return panel("레이팅 추이", meta, [
+  return panel(msg("profileCard.ratingTitle"), meta, [
     el("div", { display: "flex", gap: 8 }, [
       // 왼쪽 눈금 라벨
       el("div", { display: "flex", position: "relative", width: CHART_Y_LABEL_W, height: CHART_H }, ticks.map((t) =>
@@ -354,7 +265,7 @@ function ratingChartPanel(points: RatingPoint[], days: string[], updates: { day:
     // 범례는 점선(추정)만 설명한다. 추정 구간이 없으면 범례를 두지 않는다.
     ...(points.some((p) => p.estimated)
       ? [el("div", { display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 6, marginTop: 8, color: MUTED, fontSize: 10 }, [
-          dashedSwatch(), el("span", {}, "추정 (성과 기록으로 계산)"),
+          dashedSwatch(), el("span", {}, msg("profileCard.ratingLegend")),
         ])]
       : []),
   ]);
@@ -370,7 +281,7 @@ export async function renderProfileCard(
   const circleName = opts.circleName ?? null;
   const history = opts.ratingHistory;
   // 그래프 기간은 오늘을 끝으로 움직이므로 마지막 날짜도 키에 넣는다.
-  const cacheKey = [profile.profileKey, profile.lastSyncedAt, translate ? 1 : 0, friendCode ?? "", circleName ?? "", avatarBuf?.length ?? 0, history ? history.days[history.days.length - 1] : "-", PROFILE_CARD_VERSION].join("|");
+  const cacheKey = [profile.profileKey, profile.lastSyncedAt, translate ? 1 : 0, friendCode ?? "", circleName ?? "", avatarBuf?.length ?? 0, history ? history.days[history.days.length - 1] : "-", PROFILE_CARD_VERSION, cardTextSignature()].join("|");
   const memo = profileCardCache.get(cacheKey);
   if (memo) return memo;
 
@@ -386,12 +297,12 @@ export async function renderProfileCard(
   ]);
 
   const serverLabel = profile.server === "jp" ? "JP" : "INTERNATIONAL";
-  const eyebrow = `PLAYER PROFILE · ${serverLabel}`;
+  const eyebrow = msg("profileCard.eyebrow", { server: serverLabel });
   const name = profile.playerName || "—";
   const nameShift = alignLeftMargin({ text: name, size: 26 }, { text: eyebrow, size: 10 });
   const trophyStyle = TROPHY_STYLE[profile.trophyClass] ?? TROPHY_STYLE.normal;
   const stars = Number(profile.stars) || 0;
-  const avg = (sum: number, n: number) => (n ? `평균 ${(sum / n).toFixed(1)}` : "");
+  const avg = (sum: number, n: number) => (n ? msg("profileCard.average", { value: (sum / n).toFixed(1) }) : "");
 
   const width = 920;
   const root = el("div", {
@@ -411,13 +322,14 @@ export async function renderProfileCard(
           // 서클 이름(/설정 서클 공개가 켜져 있을 때만)
           circleName
             ? el("div", { display: "flex", alignItems: "center", gap: 6, flexShrink: 0, maxWidth: 260, border: `1px solid ${BRAND.border2}`, borderRadius: 99, padding: "3px 10px" }, [
-                el("span", { color: FAINT, fontSize: 9, fontWeight: 700, letterSpacing: 0.6 }, "CIRCLE"),
+                el("span", { color: FAINT, fontSize: 9, fontWeight: 700, letterSpacing: 0.6 }, msg("profileCard.circleChip")),
                 el("span", { color: TEXT, fontSize: 12, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, circleName),
               ])
             : el("span", {}, ""),
         ]),
         el("div", { display: "flex", alignItems: "center", gap: 10 }, [
-          pill(profile.trophy || "—", { ...trophyStyle, fontSize: 11, padding: "4px 11px", maxWidth: 420, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }),
+          // 칭호 문구가 비어 있으면(공백 칭호) 게임처럼 빈 등급 색 띠만 보여 준다.
+          pill(profile.trophy || "\u00a0", { ...trophyStyle, fontSize: 11, padding: "4px 11px", maxWidth: 420, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis", ...(profile.trophy ? {} : { width: 160 }) }),
           // 단위(段位)·클래스(오토모다치) 이미지. 단위는 이 기능 이후 동기화부터 저장된다.
           courseUrl ? image(courseUrl, { height: 26, objectFit: "contain" }) : el("span", {}, ""),
           gradeUrl ? image(gradeUrl, { height: 26, objectFit: "contain" }) : el("span", {}, ""),
@@ -431,20 +343,20 @@ export async function renderProfileCard(
     ]),
     // 레이팅 구성·플레이 횟수. 레이팅 합계는 오른쪽 위 플레이트에 있으므로 여기선 구성만.
     statsPanel([
-      { value: String(Math.round(breakdown.newSum)), label: `신곡 ${breakdown.newCount}곡 합계`, sub: avg(breakdown.newSum, breakdown.newCount) },
-      { value: String(Math.round(breakdown.oldSum)), label: `구곡 ${breakdown.oldCount}곡 합계`, sub: avg(breakdown.oldSum, breakdown.oldCount) },
-      { value: String(profile.playCount || 0), label: "현재 버전 플레이" },
-      { value: String(profile.totalPlayCount || profile.playCount || 0), label: "누적 플레이" },
+      { value: String(Math.round(breakdown.newSum)), label: msg("profileCard.newSum", { count: breakdown.newCount }), sub: avg(breakdown.newSum, breakdown.newCount) },
+      { value: String(Math.round(breakdown.oldSum)), label: msg("profileCard.oldSum", { count: breakdown.oldCount }), sub: avg(breakdown.oldSum, breakdown.oldCount) },
+      { value: String(profile.playCount || 0), label: msg("profileCard.playCount") },
+      { value: String(profile.totalPlayCount || profile.playCount || 0), label: msg("profileCard.totalPlayCount") },
     ]),
     clearPanel(clears),
     ...(history ? [ratingChartPanel(history.points, history.days, history.updates)] : []),
-    panel("최근 플레이", `최근 ${recent.length}곡`, recent.length
+    panel(msg("profileCard.recentTitle"), msg("profileCard.recentMeta", { count: recent.length }), recent.length
       ? recent.map((r, i) => recentRow(r, profile, jackets[i], translate, kindIcons))
-      : [el("span", { color: MUTED, fontSize: 12, padding: "12px 0" }, "최근 플레이 기록이 없습니다.")]),
+      : [el("span", { color: MUTED, fontSize: 12, padding: "12px 0" }, msg("profileCard.recentEmpty"))]),
     // 푸터
     el("div", { display: "flex", justifyContent: "space-between", marginTop: 14, color: MUTED, fontSize: 11 }, [
-      el("span", {}, friendCode ? `친구 코드 ${friendCode}` : " "),
-      el("span", {}, `마지막 동기화 ${kstStamp(profile.lastSyncedAt)} (KST)`),
+      el("span", {}, friendCode ? msg("profileCard.friendCode", { code: friendCode }) : " "),
+      el("span", {}, msg("card.lastSynced", { time: kstStamp(profile.lastSyncedAt) })),
     ]),
   ]);
 
