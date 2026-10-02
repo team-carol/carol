@@ -16,7 +16,7 @@ import { CIRCLE_COLOR_STYLE, CIRCLE_STAGE_POINTS } from "./circleColors";
 // /서클 이미지 카드. /프로필 카드와 같은 부품(cardKit)·토큰을 쓴다.
 // 헤더(서클 이름·코드·소개) → 포인트·순위·보상·멤버 수 → 서클 챌린지(+다음 주 예고) → 멤버 포인트(2열).
 
-const CIRCLE_CARD_VERSION = 19;
+const CIRCLE_CARD_VERSION = 20;
 const CIRCLE_CARD_CACHE_MAX = 32;
 const circleCardCache = new Map<string, Buffer>();
 const fmt = (n: number) => n.toLocaleString("en-US");
@@ -161,12 +161,31 @@ function progressPanel(circle: CircleInfo, stage: CircleColor): El {
   ]);
   return panel(msg("circleCard.progressTitle"), circle.period ? msg("circleCard.progressMeta", { period: circle.period }) : "", [
     el("div", { display: "flex", alignItems: "center" }, [pyramid, info]),
-    ...(circle.neighbors?.length ? [neighborsBlock(circle.neighbors)] : []),
+    ...(circle.neighbors?.length
+      ? [neighborsBlock(circle.neighbors)]
+      : circle.rankCutoff ? [neighborsNotice(circle)] : []),
   ]);
 }
 
 // 순위 주변: 피라미드 아래에 가로로. 오른쪽으로 갈수록 순위가 높다(바로 아래 · 내 서클 · 바로 위).
 // 남의 서클에는 내 서클과의 포인트 차이.
+// 순위표는 있는데 내 서클이 없을 때: 순위가 '-'(아직 없음)이면 다음 갱신 안내, 순위가 있으면 순위만.
+function neighborsNotice(circle: CircleInfo): El {
+  const unranked = circle.rank === null;
+  return el("div", { display: "flex", flexDirection: "column", marginTop: 14, paddingTop: 12, borderTop: `1px solid ${BORDER}`, gap: 8 }, [
+    el("span", { color: MUTED, fontSize: 11 }, msg("circleCard.neighborsTitle")),
+    el("div", {
+      display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", borderRadius: 10,
+      border: `1px dashed ${BORDER}`,
+    }, [
+      // satori 는 fontFamily: undefined 를 받으면 깨지므로 숫자일 때만 넣는다.
+      el("span", { color: unranked ? TEXT : SOFT, ...(unranked ? {} : { fontFamily: NUM_FONT }), fontSize: 14, fontWeight: 700, lineHeight: 1 },
+        unranked ? msg("circleCard.neighborsUnranked") : msg("circleCard.neighborsNotFound", { rank: fmt(circle.rank!) })),
+      el("span", { color: FAINT, fontSize: 11, lineHeight: 1 }, unranked ? msg("circleCard.neighborsUnrankedNote") : msg("circleCard.neighborsNotFoundNote")),
+    ]),
+  ]);
+}
+
 function neighborsBlock(entries: CircleRankEntry[]): El {
   const self = entries.find((e) => e.self);
   return el("div", { display: "flex", flexDirection: "column", marginTop: 14, paddingTop: 12, borderTop: `1px solid ${BORDER}`, gap: 8 }, [

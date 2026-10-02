@@ -70,6 +70,13 @@ export function circleEmbed(circle: CircleInfo, profile: CachedProfile, translat
   if (circle.nextRewardPoints !== null) {
     fields.push({ name: msg("circle.rewardField"), value: msg("circle.rewardValue", { points: fmt(circle.nextRewardPoints) }), inline: true });
   }
+  // 순위 주변: 순위표가 있을 때만(rankCutoff). 순위가 '-'(아직 없음)이거나 순위표에서 못 찾으면 안내 문구.
+  if (!circle.neighbors?.length && circle.rankCutoff) {
+    fields.push({
+      name: msg("circle.neighborsField"),
+      value: circle.rank === null ? msg("circle.neighborsUnranked") : msg("circle.neighborsNotFound", { rank: fmt(circle.rank) }),
+    });
+  }
   if (circle.neighbors?.length) {
     const self = circle.neighbors.find((n) => n.self);
     fields.push({
