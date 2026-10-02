@@ -6,8 +6,7 @@ import { renderInWorker } from "./renderPool";
 import { fetchJacketDataUrl, ratingPlate } from "./ratingCard";
 import { alignLeftMargin } from "./textMetrics";
 import type { CachedProfile } from "../../storage/types";
-import { CIRCLE_COLORS, type CircleInfo, type CircleMember, type CircleColor, type CircleRankEntry } from "../../scraper";
-import { signed } from "./circle";
+import { CIRCLE_COLORS, type CircleInfo, type CircleMember, type CircleColor } from "../../scraper";
 import { getJacketFile, getTitleByJacket } from "../../constants";
 import { displayTitle } from "../../aliases";
 import { msg, cardTextSignature, type MessageKey } from "../../messages";
@@ -16,7 +15,7 @@ import { CIRCLE_COLOR_STYLE, CIRCLE_STAGE_POINTS } from "./circleColors";
 // /서클 이미지 카드. /프로필 카드와 같은 부품(cardKit)·토큰을 쓴다.
 // 헤더(서클 이름·코드·소개) → 포인트·순위·보상·멤버 수 → 서클 챌린지(+다음 주 예고) → 멤버 포인트(2열).
 
-const CIRCLE_CARD_VERSION = 20;
+const CIRCLE_CARD_VERSION = 21;
 const CIRCLE_CARD_CACHE_MAX = 32;
 const circleCardCache = new Map<string, Buffer>();
 const fmt = (n: number) => n.toLocaleString("en-US");
@@ -161,49 +160,11 @@ function progressPanel(circle: CircleInfo, stage: CircleColor): El {
   ]);
   return panel(msg("circleCard.progressTitle"), circle.period ? msg("circleCard.progressMeta", { period: circle.period }) : "", [
     el("div", { display: "flex", alignItems: "center" }, [pyramid, info]),
-    ...(circle.neighbors?.length
-      ? [neighborsBlock(circle.neighbors)]
-      : circle.rankCutoff ? [neighborsNotice(circle)] : []),
   ]);
 }
 
 // 순위 주변: 피라미드 아래에 가로로. 오른쪽으로 갈수록 순위가 높다(바로 아래 · 내 서클 · 바로 위).
 // 남의 서클에는 내 서클과의 포인트 차이.
-// 순위표는 있는데 내 서클이 없을 때: 순위가 '-'(아직 없음)이면 다음 갱신 안내, 순위가 있으면 순위만.
-function neighborsNotice(circle: CircleInfo): El {
-  const unranked = circle.rank === null;
-  return el("div", { display: "flex", flexDirection: "column", marginTop: 14, paddingTop: 12, borderTop: `1px solid ${BORDER}`, gap: 8 }, [
-    el("span", { color: MUTED, fontSize: 11 }, msg("circleCard.neighborsTitle")),
-    el("div", {
-      display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", borderRadius: 10,
-      border: `1px dashed ${BORDER}`,
-    }, [
-      // satori 는 fontFamily: undefined 를 받으면 깨지므로 숫자일 때만 넣는다.
-      el("span", { color: unranked ? TEXT : SOFT, ...(unranked ? {} : { fontFamily: NUM_FONT }), fontSize: 14, fontWeight: 700, lineHeight: 1 },
-        unranked ? msg("circleCard.neighborsUnranked") : msg("circleCard.neighborsNotFound", { rank: fmt(circle.rank!) })),
-      el("span", { color: FAINT, fontSize: 11, lineHeight: 1 }, unranked ? msg("circleCard.neighborsUnrankedNote") : msg("circleCard.neighborsNotFoundNote")),
-    ]),
-  ]);
-}
-
-function neighborsBlock(entries: CircleRankEntry[]): El {
-  const self = entries.find((e) => e.self);
-  return el("div", { display: "flex", flexDirection: "column", marginTop: 14, paddingTop: 12, borderTop: `1px solid ${BORDER}`, gap: 8 }, [
-    el("span", { color: MUTED, fontSize: 11 }, msg("circleCard.neighborsTitle")),
-    el("div", { display: "flex", gap: 10 }, [...entries].sort((a, b) => b.rank - a.rank).map((e) => el("div", {
-      display: "flex", flexDirection: "column", gap: 6, padding: "10px 12px", borderRadius: 10, flex: 1, minWidth: 0,
-      border: `1px solid ${BORDER}`, ...(e.self ? { background: SURFACE2 } : {}),
-    }, [
-      el("span", { color: e.self ? SOFT : MUTED, fontFamily: NUM_FONT, fontSize: 12, fontWeight: 700, lineHeight: 1 }, msg("circleCard.neighborRank", { rank: fmt(e.rank) })),
-      el("span", { color: e.self ? INK : TEXT, fontSize: 14, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, e.name),
-      el("div", { display: "flex", alignItems: "baseline", gap: 8 }, [
-        el("span", { color: INK, fontFamily: NUM_FONT, fontSize: 15, fontWeight: 700, lineHeight: 1 }, msg("circleCard.neighborPoints", { points: fmt(e.points) })),
-        ...(!e.self && self ? [el("span", { color: FAINT, fontSize: 11, lineHeight: 1 }, signed(e.points - self.points))] : []),
-      ]),
-    ]))),
-  ]);
-}
-
 // 1~3위 메달 색(게임 랭킹의 금·은·동)
 const MEDAL = ["#f2c94c", "#c3ccd4", "#c77d43"];
 

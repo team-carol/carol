@@ -566,14 +566,6 @@ export interface CircleMember {
 export const CIRCLE_COLORS = ["rainbow", "gold", "silver", "bronze", "purple", "red", "yellow", "green", "white"] as const;
 export type CircleColor = (typeof CIRCLE_COLORS)[number];
 
-export interface CircleRankEntry {
-  rank: number;
-  name: string;
-  points: number;
-  /** 내 서클 */
-  self?: boolean;
-}
-
 export interface CircleInfo {
   name: string;
   /** 서클 프로필 색상(circle_profile_color_*.png). 이 필드 이전 값에는 없다. */
@@ -601,10 +593,6 @@ export interface CircleInfo {
   period?: string;
   /** 내(동기화한 사람) 이번 달 서클 포인트 */
   myPoints?: number;
-  /** 서클 순위표에서 내 서클과 바로 위·아래 서클(있는 것만, 순위 순). 내 서클이 순위표 안에 있을 때만. */
-  neighbors?: CircleRankEntry[];
-  /** 순위표 마지막 줄. 순위표가 있는지(비어 있으면 Data is preparing.) 판단에도 쓴다. */
-  rankCutoff?: { rank: number; points: number };
   memberCount: number | null;
   memberMax: number | null;
   /** 멤버 목록 페이지를 못 받았으면 빈 배열 */
@@ -622,33 +610,6 @@ const numOf = (s: string): number | null => {
  * - 정상적인 DX NET 페이지인데 서클 프로필이 없으면 null(가입한 서클 없음)
  * - 빈 문자열·오류 페이지처럼 판단할 수 없으면 undefined(기존 값을 유지해야 함)
  */
-/**
- * 서클 순위표(/circle/circleRanking/). 1~3위는 rank_first/second/third 이미지, 4위부터는 숫자 이미지
- * (rank_num_<d>.png)를 오른쪽 정렬(float:right)로 붙여서 DOM 에는 일의 자리부터 들어 있다.
- */
-export function parseCircleRankingTable(html: string): CircleRankEntry[] {
-  if (!html) return [];
-  const $ = cheerio.load(html);
-  const clean = (s: string) => s.replace(/\s+/g, " ").trim();
-  const out: CircleRankEntry[] = [];
-  $(".ranking_top_block, .ranking_block").each((_, el) => {
-    const row = $(el);
-    const imgs = row.find(".ranking_rank_block img").toArray().map((i) => ($(i).attr("src") || "").split("?")[0].split("/").pop() || "");
-    let rank: number | null = null;
-    if (imgs[0]?.startsWith("rank_first")) rank = 1;
-    else if (imgs[0]?.startsWith("rank_second")) rank = 2;
-    else if (imgs[0]?.startsWith("rank_third")) rank = 3;
-    else {
-      const digits = imgs.map((s) => s.match(/rank_num_(\d)/)?.[1] ?? "").filter(Boolean).reverse().join("");
-      rank = digits ? Number(digits) : null;
-    }
-    const name = clean(row.find(".f_15").first().text());
-    const points = numOf(row.find(".f_14").first().text());
-    if (rank !== null && name && points !== null) out.push({ rank, name, points });
-  });
-  return out;
-}
-
 export function parseCircle(homeHtml: string, memberHtml = "", server: MaimaiServer = "intl", rankingHtml = ""): CircleInfo | null | undefined {
   if (!homeHtml) return undefined;
   const $ = cheerio.load(homeHtml);
@@ -722,17 +683,6 @@ export function parseCircle(homeHtml: string, memberHtml = "", server: MaimaiSer
     if (period) info.period = period.replace(/\s+/g, "");
     const my = numOf($r(".circle_ranking_yourpoint_text").first().text());
     if (my !== null) info.myPoints = my;
-    const table = parseCircleRankingTable(rankingHtml);
-    if (table.length) {
-      const last = table[table.length - 1];
-      info.rankCutoff = { rank: last.rank, points: last.points };
-      // 내 서클 줄: 이름이 같은 줄, 없으면 서클 홈의 순위와 같은 줄.
-      const byName = table.findIndex((e) => e.name === info.name);
-      const selfIdx = byName >= 0 ? byName : info.rank !== null ? table.findIndex((e) => e.rank === info.rank) : -1;
-      if (selfIdx >= 0) {
-        info.neighbors = table.slice(Math.max(0, selfIdx - 1), selfIdx + 2).map((e) => (e === table[selfIdx] ? { ...e, self: true } : e));
-      }
-    }
   }
   return info;
 }
