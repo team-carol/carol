@@ -3,18 +3,19 @@
 Set `POSTGRES_PASSWORD`, `DATABASE_URL`, and `CF_TUNNEL_TOKEN` in `.env`, then:
 
 ```sh
-docker compose up -d
+docker compose up -d --remove-orphans
 ```
 
 Compose runs PostgreSQL, the bot, and cloudflared. Numbered idempotent
 PostgreSQL migrations run during bot startup; `DATABASE_URL` is required.
 There is no SQLite import or rollback path.
 
-During a domain migration, `.env` also needs `CF_TUNNEL_TOKEN_OLD` set to the
-retiring tunnel's token, and `CF_TUNNEL_TOKEN` rotated to the new tunnel's
-token — see `cloudflared-old` in `docker-compose.yml`. Remove both the
-`.env` entry and the `cloudflared-old` service once the migration cutoff
-(`DOMAIN_MIGRATION_CUTOFF` in `src/web/index.ts`) has passed.
+Old-domain support ended on 2026-10-01. The temporary `cloudflared-old`
+service has been removed; `--remove-orphans` also removes its existing
+`carol-tunnel-old` container when deploying the updated Compose file.
+Remove `CF_TUNNEL_TOKEN_OLD` from the deployment host's `.env` and delete
+the retired tunnel and its old-domain DNS record in Cloudflare. Keep
+`CF_TUNNEL_TOKEN` set to the current domain's tunnel token.
 
 For local development:
 
