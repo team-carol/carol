@@ -110,7 +110,7 @@ p{margin:8px 0;font-size:15.5px;line-height:1.75;color:var(--ink-soft)}`;
 
 function guidePage(token: string, bookmarklet: string): string {
   const bmEscaped = bookmarklet.replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/`/g, "\\`");
-  return `<!DOCTYPE html><html lang="ko"><head>${pageHead("북마클릿 설치 · 캐롤봇")}
+  return `<!DOCTYPE html><html lang="ko"><head>${pageHead("캐롤봇 추가 북마클릿 설치 · 캐롤봇")}
 <style>
 ${BASE_CSS}
 .page{max-width:680px}
@@ -145,8 +145,8 @@ a.extraCard:hover{border-color:#f2857f;color:var(--ink-soft)}
 </style></head><body>
 ${topbar(userNav(token, "sync"))}
 <main class="page">
-<h1>북마클릿 설치</h1>
-<p class="lead">maimai DX NET에서 한 번 실행하면 기록이 캐롤봇으로 동기화됩니다.</p>
+<h1>캐롤봇 추가 북마클릿 설치</h1>
+<p class="lead">프로필·기록은 maishift에서 가져옵니다. 서클·지방·게임 설정처럼 maishift에 없는 정보는 maimai DX NET에서 이 북마클릿을 실행하면 캐롤봇으로 동기화됩니다.</p>
 <div class="tabs">
 <button class="tabBtn active" id="tbPC" onclick="sw('PC')">💻 PC</button>
 <button class="tabBtn" id="tbMB" onclick="sw('MB')">📱 모바일</button>
@@ -155,13 +155,13 @@ ${topbar(userNav(token, "sync"))}
 <div class="card">
 <p class="eyebrow">Step 01</p>
 <p>아래 버튼을 브라우저 북마크바로 드래그하세요.</p>
-<a class="btn btn-primary bm" href="${bookmarklet}" draggable="true">캐롤봇</a>
+<a class="btn btn-primary bm" href="${bookmarklet}" draggable="true">캐롤봇 추가</a>
 <p class="hint">북마크바가 없으면 <code>Ctrl+Shift+B</code></p>
 </div>
 <div class="card">
 <p class="eyebrow">Step 02</p>
-<p>maishift 북마클릿은 캐롤봇 북마클릿을 실행할 때 자동으로 함께 실행됩니다.</p>
-<p class="hint">그 밖에 함께 실행할 외부 북마클릿은 <a href="/settings?code=${token}">설정</a> 페이지에서 추가할 수 있습니다.</p>
+<p>maishift 북마클릿은 캐롤봇 추가 북마클릿을 실행할 때 자동으로 함께 실행됩니다.</p>
+<p class="hint">그 밖에 함께 실행할 사설 북마클릿은 <a href="/settings?code=${token}">설정</a> 페이지에서 등록할 수 있습니다.</p>
 </div>
 <div class="card">
 <p class="eyebrow">Step 03</p>
@@ -177,8 +177,8 @@ ${topbar(userNav(token, "sync"))}
 </div>
 <div class="card">
 <p class="eyebrow">Step 02</p>
-<p>maishift 북마클릿은 캐롤봇 북마클릿을 실행할 때 자동으로 함께 실행됩니다.</p>
-<p class="hint">그 밖에 함께 실행할 외부 북마클릿은 <a href="/settings?code=${token}">설정</a> 페이지에서 추가할 수 있습니다.</p>
+<p>maishift 북마클릿은 캐롤봇 추가 북마클릿을 실행할 때 자동으로 함께 실행됩니다.</p>
+<p class="hint">그 밖에 함께 실행할 사설 북마클릿은 <a href="/settings?code=${token}">설정</a> 페이지에서 등록할 수 있습니다.</p>
 </div>
 <div class="card">
 <p class="eyebrow">Step 03</p>
@@ -191,7 +191,7 @@ ${topbar(userNav(token, "sync"))}
 </div>
 </div>
 <div class="extra">
-<p class="eyebrow">추가 북마클릿</p>
+<p class="eyebrow">사설 북마클릿</p>
 <h2>사설 북마클릿 관리</h2>
 <p class="extraIntro">여러 계정이나 서버를 쓰는 경우, 설정 페이지에서 북마클릿을 최대 <strong>5개</strong>까지 추가로 등록할 수 있습니다.</p>
 <div class="extraActions">

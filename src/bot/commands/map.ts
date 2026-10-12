@@ -1,6 +1,6 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, MessageFlags } from "discord.js";
 import { getCachedProfile, getUserFriendCode } from "../../storage";
-import { mapAreaEmbed } from "../utils/embeds";
+import { mapAreaEmbed, getMapAreaList } from "../utils/embeds";
 import { msg } from "../../messages";
 
 export const data = new SlashCommandBuilder()
@@ -23,6 +23,12 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       content: msg("common.selfNotRegistered"),
       flags: MessageFlags.Ephemeral,
     });
+    return;
+  }
+
+  // 지방 진행도는 캐롤봇 추가 북마클릿이 모은다. 없으면 등록을 안내한다.
+  if (!getMapAreaList(cached).length) {
+    await interaction.reply({ content: msg("common.needCarolBookmarklet"), flags: MessageFlags.Ephemeral });
     return;
   }
 

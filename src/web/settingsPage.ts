@@ -71,7 +71,7 @@ h1{font-size:clamp(36px,5vw,52px);font-weight:500;color:var(--ink);letter-spacin
 ${topbar(userNav(token, "settings"))}
 <main class="page">
 <h1>설정</h1>
-<div class="nav"><a class="back" href="/sync?code=${token}">\u2190 북마클릿 설치</a></div>
+<div class="nav"><a class="back" href="/sync?code=${token}">\u2190 캐롤봇 추가 북마클릿</a></div>
 <div class="card">
 <p class="section-label">기본 서버</p>
 <div class="server-options">
@@ -141,7 +141,7 @@ ${topbar(userNav(token, "settings"))}
 <div class="status" id="presetStatus"></div>
 </div>
 <div class="card">
-<p class="section-label">추가 북마클릿 <span class="count" id="bmCount"></span></p>
+<p class="section-label">사설 북마클릿 <span class="count" id="bmCount"></span></p>
 <ul class="bm-list" id="bmList"></ul>
 <div class="add-form" id="addForm">
 <div class="input-group"><label>이름</label><input type="text" id="bmName" placeholder="\uC608: \uC2A4\uCF54\uC5B4 \uD45C\uC2DC" maxlength="30"></div>

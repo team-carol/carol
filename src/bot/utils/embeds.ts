@@ -21,6 +21,7 @@ import {
 } from "../../storage";
 import { getMaimaiBaseUrl } from "../../scraper";
 import type { CachedProfile } from "../../storage/types";
+import { SHOW_CAROL_SYNC_EXTRAS } from "./syncExtras";
 import {
   getConstant,
   getJacketFile,
@@ -804,7 +805,8 @@ export async function buildProfileReply(
   viewerId?: string,
 ) {
   const [avatar, showFriendCode, circlePublic] = await Promise.all([buildAvatarAttachment(userId, cached), getFriendCodePublic(userId), getCirclePublic(userId)]);
-  const circleName = circlePublic ? circleOf(cached)?.name ?? null : null;
+  // 서클·최근 플레이·지방은 캐롤봇 추가 북마클릿 데이터라 우선 숨긴다(SHOW_CAROL_SYNC_EXTRAS).
+  const circleName = SHOW_CAROL_SYNC_EXTRAS && circlePublic ? circleOf(cached)?.name ?? null : null;
   const recentBtn = new ButtonBuilder()
     .setCustomId(`recent:${userId}`)
     .setLabel(msg("profileButton.recent"))
@@ -818,9 +820,7 @@ export async function buildProfileReply(
     .setLabel(msg("profileButton.map"))
     .setStyle(ButtonStyle.Secondary);
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    recentBtn,
-    topBtn,
-    mapBtn,
+    ...(SHOW_CAROL_SYNC_EXTRAS ? [recentBtn, topBtn, mapBtn] : [topBtn]),
   );
   if (format === "image") {
     const [avatarBuf, translate] = await Promise.all([loadAvatar(userId, cached), getTranslateTitles(viewerId ?? userId)]);

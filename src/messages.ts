@@ -14,12 +14,13 @@ export const MESSAGES = {
   "common.selfNotRegistered":
     "maishift 계정이 연동되어 있지 않습니다. `/마이시프트 연동`으로 먼저 연동해 주세요. 연동했는데도 이 메시지가 나오면 maishift가 잠시 응답하지 않는 것이니 조금 뒤에 다시 시도해 주세요.",
   "common.otherNotRegistered": "{user} 님은 아직 maishift 계정을 연동하지 않았습니다.",
-  "common.noBookmarklet": "캐롤봇 북마클릿을 아직 실행하지 않았습니다. `/북마클릿` 명령어로 먼저 동기화해 주세요.",
+  "common.noBookmarklet": "이 기능은 캐롤봇 추가 북마클릿 등록이 필요합니다. `/북마클릿`으로 설치한 뒤 maimai DX NET에서 실행해 주세요.",
+  "common.needCarolBookmarklet": "이 기능은 캐롤봇 추가 북마클릿 등록이 필요합니다. `/북마클릿`으로 설치한 뒤 maimai DX NET에서 실행해 주세요.",
   "common.profilePrivate": "{user} 님은 프로필을 비공개로 설정했습니다.",
   "common.adminGuildOnly": "이 명령어는 지정된 서버에서만 사용할 수 있습니다.",
 
   // ── /레이팅표 ───────────────────────────────────────────────────────────
-  "ratingImage.noRecords": "레이팅 기록이 없습니다. 북마클릿을 다시 실행하세요.",
+  "ratingImage.noRecords": "레이팅 기록이 없습니다. maishift에 기록을 올린 뒤 다시 시도해 주세요.",
   "ratingImage.snapshotNotice": "📅 {date} 기준 레이팅표",
   "ratingImage.snapshotNoticeFallback": "📅 {actual} 기준 레이팅표 · {date} 에는 갱신 기록이 없어 직전 기록을 표시합니다",
   "ratingImage.snapshotMissing": "{date} 이전의 레이팅표 기록이 없습니다. 조회 가능한 범위: {first} ~ {last}",
@@ -95,8 +96,8 @@ export const MESSAGES = {
 
   // ── /역할설정 ───────────────────────────────────────────────────────────
   "role.needManageRoles": "봇에 '역할 관리' 권한이 필요합니다.",
-  "role.needBookmarklet": "먼저 `/북마클릿`으로 프로필을 등록해주세요.",
-  "role.noProfileData": "프로필 데이터가 없습니다. `/북마클릿`으로 동기화해주세요.",
+  "role.needBookmarklet": "먼저 `/마이시프트 연동`으로 maishift 계정을 연동해 주세요.",
+  "role.noProfileData": "프로필 데이터가 없습니다. maishift에 기록을 올린 뒤 다시 시도해 주세요.",
   "role.ratingTooLow": "레이팅이 2000 미만이라 역할이 부여되지 않습니다.",
   "role.memberUnavailable": "멤버 정보를 불러올 수 없습니다.",
   "role.rolePositionTooHigh":
@@ -117,7 +118,7 @@ export const MESSAGES = {
   "settings.title": "⚙️ 웹 설정",
   "settings.currentServerField": "현재 서버",
   "settings.manageField": "설정 페이지에서 관리",
-  "settings.manageBody": "프로필 공개 여부, 친구 코드·서클 공개 여부, 프리셋 북마클릿, 추가 북마클릿을 웹에서 관리할 수 있습니다.",
+  "settings.manageBody": "프로필 공개 여부, 친구 코드·서클 공개 여부, 프리셋 북마클릿, 사설 북마클릿을 웹에서 관리할 수 있습니다.",
   "settings.termsField": "이용약관",
   "settings.termsBody": "추가 북마클릿 사용 책임과 면책 조항은 이용약관에서 확인할 수 있습니다.",
   "settings.openButton": "웹 설정 열기",
@@ -125,8 +126,8 @@ export const MESSAGES = {
 
   // ── /게임설정 ────────────────────────────────────────────────────────────
   "circle.private": "{user} 님은 서클 정보를 비공개로 설정했습니다.",
-  "circle.notCollected": "아직 서클 정보가 없습니다. 북마클릿으로 다시 동기화하면 서클 정보도 함께 가져옵니다.",
-  "circle.otherNotCollected": "{user} 님의 서클 정보가 아직 없습니다.",
+  "circle.notCollected": "서클 정보는 캐롤봇 추가 북마클릿 등록이 필요합니다. `/북마클릿`으로 설치한 뒤 maimai DX NET에서 실행하면 서클 정보를 가져옵니다.",
+  "circle.otherNotCollected": "{user} 님은 캐롤봇 추가 북마클릿을 등록하지 않아 서클 정보가 없습니다.",
   "circle.none": "가입한 서클이 없습니다. (마지막 동기화 기준)",
   "circle.otherNone": "{user} 님은 가입한 서클이 없습니다. (마지막 동기화 기준)",
   "circle.privateSelfNote": "서클 공개가 꺼져 있어 나에게만 보입니다. `/설정`에서 바꿀 수 있습니다.",
@@ -176,7 +177,7 @@ export const MESSAGES = {
   "gameOptions.description": "maimai DX NET 게임 옵션을 확인하고, 옵션 프리셋을 만들거나 편집할 수 있습니다. 프리셋을 게임에 적용할 때는 페이지에 안내된 옵션 프리셋 북마클릿을 DX NET에서 실행합니다.",
   "gameOptions.currentField": "가져온 현재 설정",
   "gameOptions.currentLine": "{server} · {time} 기준",
-  "gameOptions.currentNone": "아직 가져온 설정이 없습니다. 프로필 북마클릿으로 동기화하면 현재 설정이 함께 저장됩니다.",
+  "gameOptions.currentNone": "아직 가져온 설정이 없습니다. 캐롤봇 추가 북마클릿을 실행하면 현재 설정이 함께 저장됩니다.",
   "gameOptions.presetField": "옵션 프리셋",
   "gameOptions.presetValue": "{count}/{max}개 저장됨",
   "gameOptions.openButton": "게임 설정 열기",
@@ -224,9 +225,10 @@ export const MESSAGES = {
   "achievement.unknownPlayTime": "플레이 시각 알 수 없음",
 
   // ── /북마클릿 ───────────────────────────────────────────────────────────
-  "bookmarklet.title": "🔖 북마클릿 설치",
+  "bookmarklet.title": "🔖 캐롤봇 추가 북마클릿 설치",
   "bookmarklet.openButton": "설치 가이드 열기",
   "bookmarklet.body":
+    "프로필·기록은 maishift에서 가져옵니다(`/마이시프트 연동`). 서클·지방·게임 설정처럼 maishift에 없는 기능을 쓰려면 캐롤봇 추가 북마클릿을 설치하세요.\n\n" +
     "아래 버튼을 눌러 설치 가이드 페이지를 여세요.\n\n" +
     "**PC** — 초록색 링크를 북마크바로 드래그\n" +
     "**모바일** — 복사 버튼 → 북마크에 붙여넣기",
@@ -256,7 +258,7 @@ export const MESSAGES = {
   "map.unnamedArea": "이름 없는 지방",
   "map.areaFallback": "지방",
   "map.footer": "{server}  ·  {index} / {total}  ·  마지막 동기화: {synced}",
-  "map.empty": "지방 진행도 없음\n북마클릿을 다시 실행하면 업데이트됩니다.",
+  "map.empty": "지방 진행도 없음\n캐롤봇 추가 북마클릿을 다시 실행하면 업데이트됩니다.",
   "map.shareButton": "공유 · {area}",
 
   // ── 검색 결과 ───────────────────────────────────────────────────────────
@@ -268,7 +270,7 @@ export const MESSAGES = {
   "searchResult.versionSuffix": "\n    {version}",
 
   // ── 레이팅 대상곡 ───────────────────────────────────────────────────────
-  "ratingTarget.empty": "레이팅 기록 없음\n북마클릿을 다시 실행하면 업데이트됩니다.",
+  "ratingTarget.empty": "레이팅 기록 없음\nmaishift에 기록을 올리면 업데이트됩니다.",
   "ratingTarget.body": "**신곡 NEW · {newCount}곡**\n{newBlock}\n**구곡 OTHERS · {otherCount}곡**\n{otherBlock}",
   "ratingTarget.footer": "총 {total}곡  ·  RS=곡별 레이팅 점수",
 
@@ -295,18 +297,18 @@ export const MESSAGES = {
   "goal.progressField": "현재 진행도",
   "goal.progressValue": "`{bar}` {percent}% · {value}{target}{done}",
   "goal.alreadyDone": "  ✅ 이미 달성!",
-  "goal.progressNeedsProfile": "`/북마클릿` 으로 프로필을 먼저 등록하면 동기화할 때마다 자동으로 갱신됩니다.",
+  "goal.progressNeedsProfile": "`/마이시프트 연동`으로 maishift 계정을 연동하면 maishift에 기록을 올릴 때마다 자동으로 갱신됩니다.",
 
   // ── /랜덤 ───────────────────────────────────────────────────────────────
   "random.rangeAll": "전체",
-  "random.needProfileForPlayFilter": "플레이여부 필터는 프로필이 필요합니다. `/북마클릿`으로 먼저 등록해주세요.",
+  "random.needProfileForPlayFilter": "플레이여부 필터는 maishift 연동이 필요합니다. `/마이시프트 연동`으로 먼저 연동해 주세요.",
   "random.noMatch": "조건에 맞는 곡이 없습니다.",
   "random.label": "랜덤",
   "random.fieldGenre": "장르",
   "random.fieldVersion": "버전",
 
   // ── /곡추천 ─────────────────────────────────────────────────────────────
-  "songrec.noRecords": "기록이 없습니다. `/북마클릿`으로 먼저 동기화해주세요.",
+  "songrec.noRecords": "기록이 없습니다. maishift에 기록을 올린 뒤 다시 시도해 주세요.",
   "songrec.noCandidates": "추천할 채보를 찾지 못했습니다.",
   "songrec.notPlayed": "미플레이",
   "songrec.newSong": "신곡",
@@ -332,7 +334,7 @@ export const MESSAGES = {
   "report.failed": "오류가 발생했습니다. 잠시 후 다시 시도해주세요.",
 
   // ── 버튼 상호작용 ───────────────────────────────────────────────────────
-  "button.needProfile": "프로필을 먼저 등록하세요.",
+  "button.needProfile": "먼저 `/마이시프트 연동`으로 maishift 계정을 연동해 주세요.",
   "button.profileNotFound": "프로필을 찾을 수 없습니다.",
   "button.songNotFound": "곡을 찾을 수 없습니다.",
   "button.mapNotFound": "지방 진행도를 찾을 수 없습니다.",
