@@ -88,7 +88,7 @@ client.once(Events.ClientReady, async (c) => {
     console.error("[aliases] 로드 실패:", e);
   }
   // maishift 연동(임시, 공식 API 전까지). 프로필 조회에 maishift 데이터를 덧씌운다.
-  await initMaishift();
+  initMaishift();
   try {
     await loadMessages();
   } catch (e) {

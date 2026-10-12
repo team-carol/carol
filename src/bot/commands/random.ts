@@ -7,6 +7,7 @@ import { displayTitle } from "../../aliases";
 import {
   getChartsInConstantRange, getJacketFile, isIntlAvailable,
   getSongGenre, GENRES, getSongVersionName, VERSION_NAMES, isSongPlus,
+  jacketFileUrl,
 } from "../../constants";
 import { chartKey } from "../../scraper";
 import { msg } from "../../messages";
@@ -179,7 +180,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     }
     if (i === 0) emb.setAuthor({ name: header });
     const jacket = getJacketFile(c.title);
-    if (jacket) emb.setThumbnail(`https://otoge-db.net/maimai/jacket/${jacket}`);
+    if (jacket) emb.setThumbnail(jacketFileUrl(jacket));
     return emb;
   });
 

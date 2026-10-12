@@ -20,7 +20,7 @@ const CIRCLE_CARD_CACHE_MAX = 32;
 const circleCardCache = new Map<string, Buffer>();
 const fmt = (n: number) => n.toLocaleString("en-US");
 
-/** DX NET 재킷 URL 을 먼저 쓰고, 실패하면 otoge-db 재킷(같은 파일명)으로. */
+/** DX NET 재킷 URL 을 먼저 쓰고, 실패하면 카탈로그 재킷(같은 파일명)으로. */
 async function jacketData(url: string | undefined, title?: string | null): Promise<string | null> {
   const direct = url ? await remoteDataUrl(url) : null;
   if (direct) return direct;

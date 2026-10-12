@@ -293,7 +293,7 @@ export async function renderAchievementCard(
   if (memo) return memo;
 
   const avatarUrl = avatarBuf ? `data:image/png;base64,${avatarBuf.toString("base64")}` : "";
-  // 자켓: 기록에 담긴 DX NET 자켓을 먼저 쓰고, 없거나 못 받으면 otoge-db 자켓(곡 제목 기준)으로.
+  // 자켓: 기록에 담긴 DX NET 자켓을 먼저 쓰고, 없거나 못 받으면 카탈로그 재킷(곡 제목 기준)으로.
   // 플레이 기록(최근 50곡)에서 못 찾은 성과는 클리어 목록에서 와서 DX NET 자켓 URL 이 없다.
   const kindIcons = await musicKindIcons();
   const jackets = new Map<PlayRecord, string | null>();

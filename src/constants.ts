@@ -1,43 +1,22 @@
 import { getConstantsCache, saveConstantsCache } from "./storage";
+import { setExternalTranslations } from "./aliases";
+import { fetchCatalog, type CatalogSong } from "./maishift/catalog";
 import type { PlayRecord, MaimaiServer } from "./scraper";
 
-interface SongEntry {
-  title: string;
-  image_url?: string;
-  version?: string;
-  intl?: string; // "1" = 국제판 수록, "0" = 미수록
-  catcode?: string; // 장르명 (예: "POPS＆アニメ")
-  lev_bas_i?: string;
-  lev_adv_i?: string;
-  lev_exp_i?: string;
-  lev_mas_i?: string;
-  lev_remas_i?: string;
-  dx_lev_bas_i?: string;
-  dx_lev_adv_i?: string;
-  dx_lev_exp_i?: string;
-  dx_lev_mas_i?: string;
-  dx_lev_remas_i?: string;
-}
-
-const DIFF_FIELDS: Record<string, [keyof SongEntry, keyof SongEntry]> = {
-  BASIC:       ["lev_bas_i",   "dx_lev_bas_i"],
-  ADVANCED:    ["lev_adv_i",   "dx_lev_adv_i"],
-  EXPERT:      ["lev_exp_i",   "dx_lev_exp_i"],
-  MASTER:      ["lev_mas_i",   "dx_lev_mas_i"],
-  "Re:MASTER": ["lev_remas_i", "dx_lev_remas_i"],
-};
-
-// 국제판 기준 수록곡 (우선), 일본판은 국제판에 없는 곡 보충용
-const INTL_URL = "https://otoge-db.net/maimai/data/music-ex-intl.json";
-const JP_URL = "https://otoge-db.net/maimai/data/music-ex.json";
-
+// 곡·상수 카탈로그는 maishift 곡 목록(국제판 ASIA, 내수판 JAPAN)에서 받는다(예전엔 otoge-db).
+// 하루 한 번만 받아 constants_cache 에 두고 쓴다. 宴(우타게) 보면은 maishift 에 없다.
 let constantMap: Map<string, number> = new Map();
-// 내수판(JP) 상수 맵. otoge-db의 _i(내부 상수)는 국제판/JP 리밸런스로 값이 달라질 수 있어,
-// JP 데이터(music-ex.json)의 상수를 별도로 보관해 JP 프로필 레이팅 계산에 사용한다.
+// 내수판(JP) 상수 맵. 국제판/JP 리밸런스로 값이 달라질 수 있어,
+// JAPAN 곡 목록의 상수를 별도로 보관해 JP 프로필 레이팅 계산에 사용한다.
 let jpConstantMap: Map<string, number> = new Map();
+// 곡 → 재킷 파일명(DX NET 파일명, 예: "c7cfd8a91e0436ac.png")
 let jacketMap: Map<string, string> = new Map();
-// 곡 → otoge-db version 코드 (예: "26000" → 26000). 신곡/구곡 판정용.
+// 재킷 파일명 → DX NET 재킷 주소(국제판 곡은 maimaidx-eng.com, 내수판 전용 곡은 maimaidx.jp)
+let jacketUrlMap: Map<string, string> = new Map();
+// 곡 → 버전 코드 (예: CiRCLE 26000, CiRCLE PLUS 26500). 내수판 기준, 내수판에 없으면 국제판. 신곡/구곡 판정용.
 let versionMap: Map<string, number> = new Map();
+// 곡 → 국제판 버전 코드. 국제판은 곡이 들어온 버전이 내수판과 다를 수 있어 따로 둔다.
+let intlVersionMap: Map<string, number> = new Map();
 // 국제판(intl="1") 수록 곡 제목 집합. 곡추천에서 미수록 곡을 제외하는 데 사용.
 let intlTitles: Set<string> = new Set();
 // 내수판(JP) 수록 곡 제목 집합(music-ex.json 전곡). 지역 전용 곡 판정에 사용.
@@ -125,35 +104,23 @@ export interface DailyFortuneSong {
 let dailyFortuneSongs: DailyFortuneSong[] = [];
 
 // 이미 존재하는 키는 덮어쓰지 않음 → 먼저 채운 쪽(국제판)이 우선
-function ingest(data: SongEntry[]): void {
+function ingest(data: CatalogSong[]): void {
   for (const song of data) {
-    if (song.image_url && !jacketMap.has(song.title)) jacketMap.set(song.title, song.image_url);
-    if (song.version && !versionMap.has(song.title)) {
-      const v = parseInt(song.version, 10);
-      if (!isNaN(v)) versionMap.set(song.title, v);
-    }
-    if (song.catcode && !genreMap.has(song.title)) genreMap.set(song.title, song.catcode);
-    for (const [diff, [stField, dxField]] of Object.entries(DIFF_FIELDS)) {
-      const v = parseFloat((song[stField] as string | undefined) ?? "");
-      const dv = parseFloat((song[dxField] as string | undefined) ?? "");
-      const stKey = `${song.title}|ST|${diff}`;
-      const dxKey = `${song.title}|DX|${diff}`;
-      if (!isNaN(v) && v > 0 && !constantMap.has(stKey)) constantMap.set(stKey, v);
-      if (!isNaN(dv) && dv > 0 && !constantMap.has(dxKey)) constantMap.set(dxKey, dv);
+    const file = song.jacketUrl.split("/").pop() ?? "";
+    if (file && !jacketMap.has(song.title)) jacketMap.set(song.title, file);
+    if (file && !jacketUrlMap.has(file)) jacketUrlMap.set(file, song.jacketUrl);
+    if (song.genre && !genreMap.has(song.title)) genreMap.set(song.title, song.genre);
+    for (const c of song.charts) {
+      const key = `${song.title}|${c.kind}|${c.diff}`;
+      if (!constantMap.has(key)) constantMap.set(key, c.constant);
     }
   }
 }
 
-// JP 상수 맵 전용 수집 (music-ex.json의 _i 값을 권위 있게 채움)
-function ingestJpConstants(data: SongEntry[]): void {
-  for (const song of data) {
-    for (const [diff, [stField, dxField]] of Object.entries(DIFF_FIELDS)) {
-      const v = parseFloat((song[stField] as string | undefined) ?? "");
-      const dv = parseFloat((song[dxField] as string | undefined) ?? "");
-      if (!isNaN(v) && v > 0) jpConstantMap.set(`${song.title}|ST|${diff}`, v);
-      if (!isNaN(dv) && dv > 0) jpConstantMap.set(`${song.title}|DX|${diff}`, dv);
-    }
-  }
+function toConstantMap(data: CatalogSong[]): Map<string, number> {
+  const m = new Map<string, number>();
+  for (const song of data) for (const c of song.charts) m.set(`${song.title}|${c.kind}|${c.diff}`, c.constant);
+  return m;
 }
 
 function diffRank(diff: string): number {
@@ -196,85 +163,84 @@ function rebuildDailyFortuneSongs(): void {
     .sort((a, b) => a.title.localeCompare(b.title, "en"));
 }
 
-async function fetchSongs(url: string): Promise<SongEntry[]> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return await res.json() as SongEntry[];
-}
-
 interface ConstantsCache {
+  /** "maishift" 가 아니면(otoge-db 시절 캐시) 새로 받는다. */
+  source?: string;
   constants: [string, number][];
   jackets: [string, string][];
+  jacketUrls?: [string, string][];
   versions?: [string, number][];
+  intlVersions?: [string, number][];
   intl?: string[];
   genres?: [string, string][];
   jpConstants?: [string, number][];
   jpTitles?: string[];
+  koTitles?: [string, string][];
 }
 
-// 캐시 복원. version/intl/genre 데이터가 없는 구버전 캐시면 hasMeta=false 반환.
-function applyCache(data: string): { hasMeta: boolean } {
+// 캐시 복원. maishift 에서 받은 캐시가 아니면 fresh=false 반환.
+function applyCache(data: string): { fresh: boolean } {
   const parsed = JSON.parse(data) as ConstantsCache;
   constantMap = new Map(parsed.constants);
   jacketMap = new Map(parsed.jackets);
-  const hasMeta = !!parsed.versions && !!parsed.intl && !!parsed.genres && !!parsed.jpConstants && !!parsed.jpTitles;
-  versionMap = parsed.versions ? new Map(parsed.versions) : new Map();
-  intlTitles = parsed.intl ? new Set(parsed.intl) : new Set();
-  genreMap = parsed.genres ? new Map(parsed.genres) : new Map();
-  jpConstantMap = parsed.jpConstants ? new Map(parsed.jpConstants) : new Map();
-  jpTitles = parsed.jpTitles ? new Set(parsed.jpTitles) : new Set();
+  jacketUrlMap = new Map(parsed.jacketUrls ?? []);
+  versionMap = new Map(parsed.versions ?? []);
+  intlVersionMap = new Map(parsed.intlVersions ?? []);
+  intlTitles = new Set(parsed.intl ?? []);
+  genreMap = new Map(parsed.genres ?? []);
+  jpConstantMap = new Map(parsed.jpConstants ?? []);
+  jpTitles = new Set(parsed.jpTitles ?? []);
+  setExternalTranslations(new Map(parsed.koTitles ?? []));
   rebuildDailyFortuneSongs();
-  return { hasMeta };
+  return { fresh: parsed.source === "maishift" };
 }
 
 export async function loadConstants(): Promise<void> {
   const dbCache = await getConstantsCache();
   if (dbCache && Date.now() - dbCache.updatedAt < 24 * 60 * 60 * 1000) {
     try {
-      if (applyCache(dbCache.data).hasMeta) {
+      if (applyCache(dbCache.data).fresh) {
         console.log(`[constants] DB 캐시 복원: 상수 ${constantMap.size}개, 자켓 ${jacketMap.size}개, version ${versionMap.size}개, 국제판 ${intlTitles.size}개`);
         return;
       }
-      console.log("[constants] 캐시에 version/intl 없음 → 네트워크 재fetch");
+      console.log("[constants] maishift 캐시가 아님 → 네트워크 재fetch");
     } catch (e) {
       console.error("[constants] DB 캐시 파싱 실패, 네트워크 fetch 시도:", e);
     }
   }
 
   try {
-    const intl = await fetchSongs(INTL_URL);
+    const intl = await fetchCatalog("ASIA");
+    const jp = await fetchCatalog("JAPAN");
     constantMap = new Map();
-    jpConstantMap = new Map();
     jacketMap = new Map();
-    versionMap = new Map();
+    jacketUrlMap = new Map();
     genreMap = new Map();
-    jpTitles = new Set();
-    // 국제판 수록(intl="1") 곡만 집합에 담음 (JP 보충곡·미수록곡 제외)
-    intlTitles = new Set(intl.filter((s) => s.intl === "1").map((s) => s.title));
+    intlTitles = new Set(intl.map((s) => s.title));
+    jpTitles = new Set(jp.map((s) => s.title));
     ingest(intl);
     const intlCount = constantMap.size;
+    ingest(jp); // 국제판에 없는 곡·보면 보충
+    jpConstantMap = toConstantMap(jp); // JP 상수 맵 (JP 프로필 레이팅 계산용)
+    intlVersionMap = new Map(intl.map((s) => [s.title, s.version]));
+    versionMap = new Map([...intlVersionMap, ...jp.map((s) => [s.title, s.version] as [string, number])]);
+    const koTitles = new Map<string, string>();
+    for (const s of [...intl, ...jp]) if (s.korean && !koTitles.has(s.title)) koTitles.set(s.title, s.korean);
+    setExternalTranslations(koTitles);
 
-    let jpAdded = 0;
-    try {
-      const jp = await fetchSongs(JP_URL);
-      const before = constantMap.size;
-      ingest(jp);
-      ingestJpConstants(jp); // JP 상수 맵 (JP 프로필 레이팅 계산용)
-      jpTitles = new Set(jp.map((s) => s.title)); // JP 수록 곡 집합 (지역 전용 판정용)
-      jpAdded = constantMap.size - before;
-    } catch (e) {
-      console.error("[constants] JP 보충 로드 실패:", e);
-    }
-
-    console.log(`[constants] 국제판 ${intl.length}곡 (상수 ${intlCount}개) + JP 보충 ${jpAdded}개, JP상수 ${jpConstantMap.size}개, 자켓 ${jacketMap.size}개, version ${versionMap.size}개, 국제판수록 ${intlTitles.size}개`);
+    console.log(`[constants] maishift 국제판 ${intl.length}곡 (상수 ${intlCount}개) + JP 보충 ${constantMap.size - intlCount}개, JP상수 ${jpConstantMap.size}개, 자켓 ${jacketMap.size}개, 번역 ${koTitles.size}개`);
     await saveConstantsCache(JSON.stringify({
+      source: "maishift",
       constants: Array.from(constantMap.entries()),
       jackets: Array.from(jacketMap.entries()),
+      jacketUrls: Array.from(jacketUrlMap.entries()),
       versions: Array.from(versionMap.entries()),
+      intlVersions: Array.from(intlVersionMap.entries()),
       intl: Array.from(intlTitles),
       genres: Array.from(genreMap.entries()),
       jpConstants: Array.from(jpConstantMap.entries()),
       jpTitles: Array.from(jpTitles),
+      koTitles: Array.from(koTitles.entries()),
     } satisfies ConstantsCache));
     rebuildDailyFortuneSongs();
   } catch (e) {
@@ -290,12 +256,21 @@ export async function loadConstants(): Promise<void> {
   }
 }
 
-// otoge-db 자켓 이미지 파일명 (예: "c7cfd8a91e0436ac.png")
+// 재킷 이미지 파일명 (예: "c7cfd8a91e0436ac.png")
 export function getJacketFile(title: string): string | null {
   return jacketMap.get(title) ?? null;
 }
 
-// 재킷 파일명 → 곡명. otoge-db 와 DX NET 의 재킷 파일명(해시)이 같아서, 재킷만 주어지는 곳(서클 과제곡 예고)에 쓴다.
+// 재킷 파일명 → 재킷 이미지 주소. 국제판 곡은 DX NET(공개 이미지), 카탈로그에 없으면 국제판 경로로 짐작한다.
+// 내수판 전용 곡의 maimaidx.jp 는 중간 인증서를 보내지 않아 Node fetch 가 실패하므로(브라우저는 됨)
+// 같은 파일명을 두는 otoge-db 이미지 미러를 쓴다. 이미지 파일만 받고 곡 데이터는 받지 않는다.
+export function jacketFileUrl(file: string): string {
+  const url = jacketUrlMap.get(file);
+  if (url && new URL(url).host === "maimaidx.jp") return `https://otoge-db.net/maimai/jacket/${file}`;
+  return url ?? `https://maimaidx-eng.com/maimai-mobile/img/Music/${file}`;
+}
+
+// 재킷 파일명 → 곡명. 카탈로그 재킷이 DX NET 파일명이라, 재킷만 주어지는 곳(서클 과제곡 예고)에 쓴다.
 let jacketReverse: { src: Map<string, string>; size: number; map: Map<string, string> } | null = null;
 export function getTitleByJacket(fileOrUrl: string): string | null {
   const file = fileOrUrl.split("?")[0].split("/").pop() ?? "";
@@ -318,7 +293,7 @@ export function getSongVersion(title: string): number | null {
 // 서버별 세대 진행이 달라(내수판=MAGiCAL, 국제판=CiRCLE PLUS) 신곡 범위도 서버별 이력을 쓴다.
 // playDay 를 주면 그 시점의 신곡 범위로 판정한다(과거 레이팅표 역산·레이팅 추이 추정용).
 export function isNewSong(title: string, server: MaimaiServer = "intl", playDay?: string): boolean {
-  const v = versionMap.get(title);
+  const v = (server === "intl" ? intlVersionMap.get(title) : undefined) ?? versionMap.get(title);
   if (v === undefined) return false;
   const w = newSongWindowAt(playDay, server);
   return v >= w.min && v < w.max;
@@ -460,7 +435,7 @@ export function getChartsInConstantRange(min: number, max: number): ChartInfo[] 
   return charts;
 }
 
-// 검색용: otoge-db 카탈로그의 고유 (곡, 채보종류) 목록. 동기화 여부·프로필 지역과
+// 검색용: 카탈로그의 고유 (곡, 채보종류) 목록. 동기화 여부·프로필 지역과
 // 무관하게(국제판 프로필에서 JP 전용곡까지) /검색 이 클리어기록에 이 목록을 덧대 곡을
 // 노출하기 위한 것. constantMap 은 intl+JP 를 합쳐 담으므로 양쪽 곡이 모두 나온다.
 export function listCatalogSongKinds(): { title: string; musicKind: "ST" | "DX" }[] {

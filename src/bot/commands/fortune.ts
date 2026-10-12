@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, EmbedBuilder, AttachmentBuilder, MessageFlags } from "discord.js";
-import { getDailyFortuneSong, getJacketFile } from "../../constants";
+import { getDailyFortuneSong, getJacketFile, jacketFileUrl } from "../../constants";
 import { getTranslateTitles } from "../../storage";
 import { displayTitle, normalizeQuery } from "../../aliases";
 import { searchRegistry } from "../../simai/registryIndex";
@@ -92,7 +92,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 
   const jacketFile = getJacketFile(fortune.title);
   if (jacketFile) {
-    emb.setThumbnail(`https://otoge-db.net/maimai/jacket/${jacketFile}`);
+    emb.setThumbnail(jacketFileUrl(jacketFile));
   }
 
   // 등록 채보가 있으면 /보면 과 같은 미리보기 GIF 를 붙인다(부가 기능, 실패해도 임베드는 나감).

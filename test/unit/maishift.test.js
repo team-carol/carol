@@ -3,6 +3,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { decodeSeroval } = require("../../dist/maishift/serverFn.js");
 const conv = require("../../dist/maishift/convert.js");
+const catalog = require("../../dist/maishift/catalog.js");
 
 test("decodeSeroval: 숫자·문자열·상수·배열·객체·참조", () => {
   const node = { t: 10, i: 0, p: { k: ["a", "b", "c", "d", "e"], v: [
@@ -62,8 +63,30 @@ test("ratingTargets: 신곡 → 구곡 순서, 인덱스로 찾는다", () => {
   assert.deepEqual(conv.ratingTargets(rec).map((r) => r.diff), ["Re:MASTER", "MASTER"]);
 });
 
-test("koreanTitles·trophyClassOf", () => {
-  assert.deepEqual([...conv.koreanTitles(songs)], [["アイドル", "아이돌"]]);
+test("trophyClassOf", () => {
   assert.equal(conv.trophyClassOf("RAINBOW"), "rainbow");
   assert.equal(conv.trophyClassOf(undefined), "normal");
+});
+
+test("versionCode: maishift 세대 번호 → 캐롤봇 버전 코드", () => {
+  assert.equal(catalog.versionCode(0), 10000);
+  assert.equal(catalog.versionCode(9), 18500); // MURASAKi PLUS
+  assert.equal(catalog.versionCode(12), 19900); // FiNALE
+  assert.equal(catalog.versionCode(13), 20000); // でらっくす
+  assert.equal(catalog.versionCode(25), 26000); // CiRCLE
+  assert.equal(catalog.versionCode(26), 26500); // CiRCLE PLUS
+  assert.equal(catalog.versionCode(27), 27000); // MAGiCAL
+});
+
+test("toCatalog: 제목별로 묶고 상수·장르·번역·이른 버전", () => {
+  const list = catalog.toCatalog(
+    [...songs, { ...songs[1], type: "DX", songVersion: 25 }],
+    [...tracks, { s: 2, i: 9, d: "MASTER", l: 135 }],
+  );
+  const idol = list.find((s) => s.title === "アイドル");
+  assert.equal(idol.version, 24500); // ST(BUDDiES PLUS)와 DX(CiRCLE) 중 이른 쪽
+  assert.equal(idol.genre, "POPS＆アニメ");
+  assert.equal(idol.korean, "아이돌");
+  assert.deepEqual(idol.charts.map((c) => [c.kind, c.diff, c.constant]), [["ST", "Re:MASTER", 13.1], ["ST", "BASIC", 3], ["DX", "MASTER", 13.5]]);
+  assert.equal(list.find((s) => s.title === "Customized Justice").korean, undefined);
 });

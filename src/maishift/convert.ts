@@ -83,16 +83,6 @@ export function allRecords(res: MsRecordsResult): PlayRecord[] {
   return res.tracks.filter(played).filter((t) => !!res.songs[t.s]).map((t) => toPlayRecord(res.songs[t.s], t));
 }
 
-/** 곡명 → maishift 한국어 번역. */
-export function koreanTitles(songs: MsSong[]): Map<string, string> {
-  const out = new Map<string, string>();
-  for (const s of songs) {
-    const ko = s.titleTranslations?.find((t) => t.language === "KOREAN")?.title;
-    if (ko && ko !== s.title && !out.has(s.title)) out.set(s.title, ko);
-  }
-  return out;
-}
-
 const TROPHY_CLASS: Record<string, string> = { NORMAL: "normal", BRONZE: "bronze", SILVER: "silver", GOLD: "gold", RAINBOW: "rainbow" };
 export function trophyClassOf(tier: string | undefined): string {
   return TROPHY_CLASS[(tier ?? "").toUpperCase()] ?? "normal";

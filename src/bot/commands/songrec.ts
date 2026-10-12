@@ -20,6 +20,7 @@ import {
   getChartsUnderConstant,
   isNewSong,
   isIntlAvailable,
+  jacketFileUrl,
 } from "../../constants";
 import { chartKey } from "../../scraper";
 import type { PlayRecord, MaimaiServer } from "../../scraper";
@@ -368,7 +369,7 @@ export async function execute(
     if (i === 0) emb.setAuthor({ name: "레이팅 대상곡에 따른 곡 추천" });
     const jacket = r.jacketFile;
     if (jacket)
-      emb.setThumbnail(`https://otoge-db.net/maimai/jacket/${jacket}`);
+      emb.setThumbnail(jacketFileUrl(jacket));
     return emb;
   });
 

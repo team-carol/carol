@@ -50,7 +50,7 @@ carol/
 | 미리보기 GIF | `src/bot/utils/chartGif.ts` | 같은 렌더러를 vm+napi-canvas 로 돌려 프레임을 뽑는다. |
 | DB schema/storage | `src/storage/postgres.ts` | PostgreSQL storage and numbered migrations. |
 | maimai parsing | `src/scraper.ts` | Cheerio selectors tied to DX NET markup. |
-| Song constants/jackets | `src/constants.ts` | otoge-db cache; startup network failure is non-fatal. |
+| Song constants/jackets | `src/constants.ts` | maishift song catalog (ASIA + JAPAN) cached daily in `constants_cache`; startup network failure is non-fatal. JP-only jacket images come from the otoge-db image mirror (maimaidx.jp TLS chain breaks Node fetch). |
 | Visual tokens | `src/brand.ts`, `src/web/theme.ts` | carol-web landing palette shared by web pages and PNG cards. Bump `CARD_VERSION`/`ACH_CARD_VERSION` when card colors change. |
 | Deploy/runbook | `docs/DEPLOY.md`, `docs/SETUP.md` | Cloudflare tunnel + GCP VM workflow. |
 

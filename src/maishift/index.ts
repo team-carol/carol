@@ -6,11 +6,10 @@
  * - 전체 기록(큼)은 프로필의 updatedAt(maishift 업로드 시각)이 바뀌었을 때만 다시 받는다.
  * - 모든 요청은 serverFn.ts 에서 한 줄로 세워 간격을 둔다.
  */
-import { registerProfileOverlay, maishiftProfileKey, getKvCache, saveKvCache, type MaishiftLink } from "../storage";
+import { registerProfileOverlay, maishiftProfileKey, type MaishiftLink } from "../storage";
 import type { CachedProfile } from "../storage/types";
-import { setExternalTranslations } from "../aliases";
 import { callServerFn, FN, MaishiftError, type MaishiftRegion } from "./serverFn";
-import { ratingTargets, allRecords, koreanTitles, trophyClassOf, type MsProfileResult, type MsRecordsResult } from "./convert";
+import { ratingTargets, allRecords, trophyClassOf, type MsProfileResult, type MsRecordsResult } from "./convert";
 
 export { MaishiftError } from "./serverFn";
 
@@ -18,7 +17,6 @@ const PROFILE_TTL_MS = 5 * 60 * 1000;
 const MAX_ENTRIES = 200;
 /** 이미 캐롤봇 프로필이 있는 유저는 maishift 가 늦으면 이만큼만 기다리고 가진 값으로 답한다. */
 const WAIT_BUDGET_MS = 2_500;
-const TRANSLATIONS_KEY = "maishift_ko_titles";
 
 interface Entry {
   checkedAt: number;
@@ -62,7 +60,6 @@ async function refresh(link: MaishiftLink): Promise<Entry> {
   if (!clearJson) {
     const all = await callServerFn<MsRecordsResult>(FN.records, args);
     clearJson = JSON.stringify(allRecords(all));
-    void mergeTranslations(all);
   }
   const entry: Entry = {
     checkedAt: Date.now(),
@@ -170,25 +167,8 @@ export function markMaishiftStale(link: MaishiftLink): void {
   if (e) e.checkedAt = 0;
 }
 
-let translations = new Map<string, string>();
-async function mergeTranslations(res: MsRecordsResult): Promise<void> {
-  const next = new Map([...translations, ...koreanTitles(res.songs)]);
-  if (next.size === translations.size && [...next].every(([k, v]) => translations.get(k) === v)) return;
-  translations = next;
-  setExternalTranslations(translations);
-  await saveKvCache(TRANSLATIONS_KEY, JSON.stringify([...translations])).catch((e) => console.error("[maishift] 번역 저장 실패:", e));
-}
-
-export async function initMaishift(): Promise<void> {
+// 곡 목록·상수·한국어 번역은 src/constants.ts 가 maishift 곡 목록에서 하루 한 번 받는다.
+export function initMaishift(): void {
   registerProfileOverlay(overlay);
-  try {
-    const saved = await getKvCache(TRANSLATIONS_KEY);
-    if (saved) {
-      translations = new Map(JSON.parse(saved.data) as [string, string][]);
-      setExternalTranslations(translations);
-    }
-    console.log(`[maishift] 연동 켜짐, 저장된 번역 ${translations.size}개`);
-  } catch (e) {
-    console.error("[maishift] 번역 복원 실패:", e);
-  }
+  console.log("[maishift] 프로필 연동 켜짐");
 }

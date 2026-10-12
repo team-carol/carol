@@ -32,6 +32,7 @@ import {
   getSongGenre,
   getSongVersionName,
   isSongPlus,
+  jacketFileUrl,
 } from "../../constants";
 import { aliasMatches, normalizeQuery, displayTitle } from "../../aliases";
 import { ratingColor } from "./roles";
@@ -44,7 +45,7 @@ import { buildMarkMap, buildKindResolver, chartKey } from "../../scraper";
 import type { PlayRecord, ChartMarks, MaimaiServer, MapArea } from "../../scraper";
 import { msg } from "../../messages";
 
-// 곡 자켓 버퍼: DB 캐시 → maimai net(musicId) → otoge-db(title) 순으로 확보하고 캐시
+// 곡 자켓 버퍼: DB 캐시 → maimai net(musicId) → 카탈로그 재킷(title) 순으로 확보하고 캐시
 export async function jacketBuffer(r: PlayRecord): Promise<Buffer | null> {
   const m = r.jacketUrl?.match(/\/img\/Music\/([^.]+)\.png/);
   const musicId = m ? m[1] : null;
@@ -69,7 +70,7 @@ export async function jacketBuffer(r: PlayRecord): Promise<Buffer | null> {
     const cached = await getSongJacket(key);
     if (cached) return cached;
     try {
-      const res = await fetch(`https://otoge-db.net/maimai/jacket/${file}`);
+      const res = await fetch(jacketFileUrl(file));
       if (res.ok) {
         const b = Buffer.from(await res.arrayBuffer());
         await saveSongJacket(key, b);

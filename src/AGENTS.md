@@ -14,7 +14,7 @@ src/
 ├── mainotes/   # mai-notes.com 메타데이터 인덱스 — 검색용. 채보 본문은 받지 않는다
 ├── db.ts       # SQLite singleton, schema, migrations, caches, settings
 ├── scraper.ts  # maimai DX NET HTML parser and PlayRecord model
-├── constants.ts # otoge-db constants/jacket metadata and rating math
+├── constants.ts # song catalog/constants/jackets (maishift songs, daily cache) and rating math
 ├── config.ts   # config.json loader + default PORT
 ├── crypto.ts   # AES-GCM helpers; may write encryptionKey to config.json
 ├── fonts.ts    # NotoSansJP download/cache for satori
