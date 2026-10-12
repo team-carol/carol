@@ -1,6 +1,6 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, MessageFlags, AttachmentBuilder } from "discord.js";
-import { getCachedProfile, getUserFriendCode, getAvatarBlob, getProfilePrivate, getTranslateTitles, getRatingSnapshot, getRatingSnapshotRange, getAchievementPlayEventLog, getAchievementLogRange } from "../../storage";
-import { getTopList, getClearList } from "../utils/embeds";
+import { getCachedProfile, getUserFriendCode, getProfilePrivate, getTranslateTitles, getRatingSnapshot, getRatingSnapshotRange, getAchievementPlayEventLog, getAchievementLogRange } from "../../storage";
+import { getTopList, getClearList, loadAvatar } from "../utils/embeds";
 import { renderRatingCard } from "../utils/ratingCard";
 import { GAMES, isGameId } from "../../games";
 import { msg } from "../../messages";
@@ -131,7 +131,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     const png = await renderRatingCard(
       profile,
       records,
-      await getAvatarBlob(userId, profile.server),
+      await loadAvatar(userId, profile),
       await getTranslateTitles(interaction.user.id),
       game,
       !snapshotDay && !rewindDay,

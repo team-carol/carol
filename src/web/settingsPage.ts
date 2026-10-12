@@ -3,7 +3,7 @@ import { BOOKMARKLET_PRESETS } from "./bookmarklet";
 import { BASE_CSS, pageHead, topbar, siteFooter, userNav } from "./theme";
 
 export function settingsPage(token: string, isPrivate: boolean, enabledPresetIds: string[], bookmarklets: ExtraBookmarklet[], defaultServer: MaimaiServer, translate = false, friendCodePublic = false, circlePublic = true): string {
-  const presets = BOOKMARKLET_PRESETS.map((preset) => ({ ...preset, enabled: enabledPresetIds.includes(preset.id) }));
+  const presets = BOOKMARKLET_PRESETS.map((preset) => ({ ...preset, enabled: !!preset.required || enabledPresetIds.includes(preset.id) }));
   const dataJson = JSON.stringify({ private: isPrivate, presets, bookmarklets, defaultServer, translate, friendCodePublic, circlePublic })
     .replace(/</g, "\\u003c").replace(/>/g, "\\u003e");
   const tokenJson = JSON.stringify(token);
@@ -28,6 +28,7 @@ h1{font-size:clamp(36px,5vw,52px);font-weight:500;color:var(--ink);letter-spacin
 .toggle .slider::before{content:'';position:absolute;height:22px;width:22px;left:3px;top:3px;background:var(--ink-2);border-radius:50%;transition:.2s}
 .toggle input:checked+.slider{background:var(--accent);box-shadow:none}
 .toggle input:checked+.slider::before{transform:translateX(20px);background:#fff}
+.toggle input:disabled+.slider{cursor:not-allowed;opacity:.6}
 .toggle input:focus-visible+.slider{outline:2px solid #3898ec;outline-offset:2px}
 .server-options{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .server-btn{background:var(--canvas-alt);border:1px solid var(--border);border-radius:12px;padding:14px 16px;color:var(--ink-soft);text-align:left;cursor:pointer;transition:border-color .15s,background-color .15s}
@@ -311,7 +312,7 @@ function renderPresetList(){
   var html='';
   DATA.presets.forEach(function(p){
     var code=esc(p.code.length>70?p.code.substring(0,70)+'...':p.code);
-    html+='<li class="bm-item"><div class="bm-item-info"><div class="bm-label">'+esc(p.label)+'</div><div class="toggle-desc">'+esc(p.description)+'</div><div class="bm-code-preview">'+code+'</div></div><label class="toggle"><input type="checkbox" data-preset="'+esc(p.id)+'" '+(p.enabled?'checked':'')+'><span class="slider"></span></label></li>';
+    html+='<li class="bm-item"><div class="bm-item-info"><div class="bm-label">'+esc(p.label)+'</div><div class="toggle-desc">'+esc(p.description)+'</div><div class="bm-code-preview">'+code+'</div></div><label class="toggle"><input type="checkbox" data-preset="'+esc(p.id)+'" '+(p.enabled?'checked':'')+(p.required?' disabled':'')+'><span class="slider"></span></label></li>';
   });
   list.innerHTML=html;
   list.querySelectorAll('input[data-preset]').forEach(function(input){

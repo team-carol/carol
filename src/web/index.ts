@@ -4,9 +4,10 @@ import { createHash, timingSafeEqual } from "crypto";
 import { gunzip } from "zlib";
 import { promisify } from "util";
 import { parseHome, parsePlayerData, parseFriendCode as parseFC, parseRecentRecords, parsePlaylogHistory, parseTop5, parseTopSongs, parseMusicScore, mergeTopRecords, getMaimaiBaseUrl, parseMapAreas, parsePlaylogDetail, chartKey, buildMarkMap, buildKindResolver, parseUserOptions, parseCircle } from "../scraper";
-import { cacheProfile, getCachedProfile, saveUserSession, getUserSyncToken, findUserBySyncToken, getUserFriendCodeForServer, saveAvatarBlob, getAvatarBlob, getSongJacket, saveSongJacket, getExtraBookmarklets, getProfilePrivate, setProfilePrivate, addExtraBookmarklet, removeExtraBookmarklet, getEnabledBookmarkletPresetIds, setBookmarkletPresetEnabled, getUserDefaultServer, setUserDefaultServer, isMaimaiServer, getMapImage, saveMapImage, saveAchievementPlayEventLogBatch, upsertChartClears, backfillEventRatingUp, saveRatingSnapshot, getAllAliases, addAlias, deleteAlias, setAliasTranslation, setMessageOverride, deleteMessageOverride, getTranslateTitles, setTranslateTitles, getFriendCodePublic, setFriendCodePublic, saveProfileCircle, getCirclePublic, setCirclePublic, getRegisteredUserCount, getAchievementMinimum, setAchievementMinimum, listGoals, updateGoalProgress, getPolicyAck, setPolicyAck, getSimaiChart, saveSimaiChart, listRegistryCharts, auditRegistryCharts, listOptionPresets, saveOptionPreset, deleteOptionPreset, saveOptionSnapshot, getOptionSnapshots, listPatchNotes, savePatchNote, setPatchNotePublished, deletePatchNote } from "../storage";
+import { cacheProfile, getStoredProfile, getMaishiftLink, saveUserSession, getUserSyncToken, findUserBySyncToken, getUserFriendCodeForServer, saveAvatarBlob, getAvatarBlob, getSongJacket, saveSongJacket, getExtraBookmarklets, getProfilePrivate, setProfilePrivate, addExtraBookmarklet, removeExtraBookmarklet, getEnabledBookmarkletPresetIds, setBookmarkletPresetEnabled, getUserDefaultServer, setUserDefaultServer, isMaimaiServer, getMapImage, saveMapImage, saveAchievementPlayEventLogBatch, upsertChartClears, backfillEventRatingUp, saveRatingSnapshot, getAllAliases, addAlias, deleteAlias, setAliasTranslation, setMessageOverride, deleteMessageOverride, getTranslateTitles, setTranslateTitles, getFriendCodePublic, setFriendCodePublic, saveProfileCircle, getCirclePublic, setCirclePublic, getRegisteredUserCount, getAchievementMinimum, setAchievementMinimum, listGoals, updateGoalProgress, getPolicyAck, setPolicyAck, getSimaiChart, saveSimaiChart, listRegistryCharts, auditRegistryCharts, listOptionPresets, saveOptionPreset, deleteOptionPreset, saveOptionSnapshot, getOptionSnapshots, listPatchNotes, savePatchNote, setPatchNotePublished, deletePatchNote } from "../storage";
 import { POLICY_VERSION } from "../policy";
 import type { SongAliasRow } from "../storage/types";
+import { markMaishiftStale } from "../maishift";
 import { buildBookmarkletJs, setBaseUrl, getBaseUrl, buildBookmarklet, BOOKMARKLET_PRESETS, getBookmarkletPresets } from "./bookmarklet";
 import { OPTION_CLIENT_JS, OPTION_PRESET_MAX, buildOptionBookmarklet, sanitizeOptionPreset } from "./optionPreset";
 import { optionsPage } from "./optionsPage";
@@ -160,8 +161,8 @@ ${topbar(userNav(token, "sync"))}
 </div>
 <div class="card">
 <p class="eyebrow">Step 02</p>
-<p><a href="/settings?code=${token}">설정</a> 페이지에서 프리셋 북마클릿을 설정하세요.</p>
-<p class="hint">캐롤봇 동기화 시 함께 실행할 외부 북마클릿(예: maishift)을 켜고 끌 수 있습니다.</p>
+<p>maishift 북마클릿은 캐롤봇 북마클릿을 실행할 때 자동으로 함께 실행됩니다.</p>
+<p class="hint">그 밖에 함께 실행할 외부 북마클릿은 <a href="/settings?code=${token}">설정</a> 페이지에서 추가할 수 있습니다.</p>
 </div>
 <div class="card">
 <p class="eyebrow">Step 03</p>
@@ -177,8 +178,8 @@ ${topbar(userNav(token, "sync"))}
 </div>
 <div class="card">
 <p class="eyebrow">Step 02</p>
-<p><a href="/settings?code=${token}">설정</a> 페이지에서 프리셋 북마클릿을 설정하세요.</p>
-<p class="hint">캐롤봇 동기화 시 함께 실행할 외부 북마클릿(예: maishift)을 켜고 끌 수 있습니다.</p>
+<p>maishift 북마클릿은 캐롤봇 북마클릿을 실행할 때 자동으로 함께 실행됩니다.</p>
+<p class="hint">그 밖에 함께 실행할 외부 북마클릿은 <a href="/settings?code=${token}">설정</a> 페이지에서 추가할 수 있습니다.</p>
 </div>
 <div class="card">
 <p class="eyebrow">Step 03</p>
@@ -1060,7 +1061,9 @@ ${siteFooter()}
       try {
         const body = JSON.parse(await readBody(req));
         const presetId = (body.presetId || "").trim();
-        if (!BOOKMARKLET_PRESETS.some((preset) => preset.id === presetId)) {
+        const target = BOOKMARKLET_PRESETS.find((preset) => preset.id === presetId);
+        // 항상 실행하는 프리셋(maishift)은 끌 수 없다.
+        if (!target || target.required) {
           res.writeHead(400, { "content-type": "application/json" });
           res.end(JSON.stringify({ error: "invalid_preset" }));
           return;
@@ -1136,6 +1139,8 @@ ${siteFooter()}
       if (!userId && !isPreview) { res.writeHead(403); res.end("expired"); return; }
       const syncUserId = userId || "preview";
       lastSyncAt = Date.now();
+      // 캐롤봇 북마클릿은 maishift 북마클릿을 함께 돌리므로, 지금 maishift 에도 새 기록이 올라갔을 수 있다.
+      if (userId) void getMaishiftLink(userId).then((link) => { if (link) markMaishiftStale(link); }).catch(() => {});
 
       let raw: string;
       try { raw = await readSyncBody(req); } catch (error) {
@@ -1253,7 +1258,7 @@ ${siteFooter()}
           return;
         }
 
-        const preexistingProfile = (await getCachedProfile(`${syncServer}:${fc}`)) !== null;
+        const preexistingProfile = (await getStoredProfile(`${syncServer}:${fc}`)) !== null;
         const savedProfileKey = await cacheProfile({
           playerName: effective.playerName || "???", rating: effective.rating || 0,
           ratingMax: effective.ratingMax || 0, gradeImg: effective.gradeImg || "", courseImg: effective.courseImg || "",

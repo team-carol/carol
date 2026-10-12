@@ -162,6 +162,13 @@ export const MESSAGES = {
   "circle.memberLine": "{rank}. {leader}**{name}** · {points} PT · 레이팅 {rating}",
   "circle.leaderMark": "👑 ",
   "circle.membersMissing": "멤버 목록을 가져오지 못했습니다.",
+  "maishift.linked": "maishift **{handle}** 계정을 연동했습니다. ({name} · 레이팅 {rating})\n이제 /프로필 같은 명령에서 maishift 기록을 사용합니다. maishift에 새 기록을 올리면 몇 분 안에 반영됩니다.",
+  "maishift.unlinked": "maishift **{handle}** 계정 연동을 해제했습니다.",
+  "maishift.notLinked": "연동된 maishift 계정이 없습니다.",
+  "maishift.invalidHandle": "maishift 아이디 형식이 올바르지 않습니다. 프로필 주소(maimai.shiftpsh.com/profile/아이디)의 아이디를 입력해 주세요.",
+  "maishift.notFound": "maishift에서 **{handle}** 아이디를 찾지 못했습니다. 아이디와 {server} 지역 기록이 있는지 확인해 주세요.",
+  "maishift.unavailable": "지금은 maishift에서 정보를 받아 오지 못했습니다. 잠시 후 다시 시도해 주세요.",
+  "maishift.credit": "데이터: maishift",
   "circle.footer": "{player} · {server} · 마지막 동기화 {synced}",
 
   "gameOptions.title": "🎮 게임 설정",

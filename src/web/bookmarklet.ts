@@ -8,6 +8,8 @@ export interface BookmarkletPreset {
   description: string;
   code: string;
   execution?: BookmarkletExecution;
+  /** true 면 설정과 상관없이 항상 함께 실행한다(끌 수 없음). */
+  required?: boolean;
 }
 
 interface BookmarkletExecution {
@@ -20,7 +22,8 @@ interface BookmarkletExecution {
 export const BOOKMARKLET_PRESETS: BookmarkletPreset[] = [{
   id: "maishift",
   label: "maishift",
-  description: "대부분 사용자가 함께 쓰는 maishift 북마클릿",
+  description: "캐롤봇이 maishift 기록을 쓰므로 항상 함께 실행됩니다",
+  required: true,
   code: "javascript:(function(i){var t=i.createElement(\"script\");t.src=\"https://maimai.shiftpsh.com/bookmarklet.js?v=\"+Math.floor(Date.now()/1e5),i.body.append(t)})(document);",
   execution: {
     popupUrl: "https://maimai.shiftpsh.com/upload",
@@ -32,7 +35,7 @@ export const BOOKMARKLET_PRESETS: BookmarkletPreset[] = [{
 
 export function getBookmarkletPresets(ids: string[]): Array<{ label: string; code: string; execution?: BookmarkletExecution }> {
   const enabled = new Set(ids);
-  return BOOKMARKLET_PRESETS.filter((preset) => enabled.has(preset.id)).map((preset) => ({
+  return BOOKMARKLET_PRESETS.filter((preset) => preset.required || enabled.has(preset.id)).map((preset) => ({
     label: preset.label,
     code: preset.code,
     execution: preset.execution,

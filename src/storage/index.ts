@@ -3,6 +3,7 @@
  */
 import { DATABASE_URL } from "../config";
 import type { PostgresStorage } from "./postgres";
+import type { CachedProfile, MaimaiServer } from "./types";
 
 type Storage = PostgresStorage;
 let adapter: Promise<Storage> | undefined;
@@ -30,8 +31,8 @@ export { isMaimaiServer } from "./types";
 
 type Method<K extends keyof Storage> = (...args: Parameters<DbFunction<K>>) => Promise<Awaited<ReturnType<DbFunction<K>>>>;
 const method = <K extends keyof Storage>(name: K): Method<K> => ((...args) => invoke(name, args)) as Method<K>;
-export const cacheProfile = method("cacheProfile"); export const deleteCachedProfile = method("deleteCachedProfile"); export const getCachedProfile = method("getCachedProfile"); export const getAllCachedProfiles = method("getAllCachedProfiles");
-export const saveUserSession = method("saveUserSession"); export const loadUserSession = method("loadUserSession"); export const getUserFriendCode = method("getUserFriendCode"); export const getUserFriendCodeForServer = method("getUserFriendCodeForServer"); export const getUserDefaultServer = method("getUserDefaultServer"); export const setUserDefaultServer = method("setUserDefaultServer"); export const getUserSyncToken = method("getUserSyncToken"); export const findUserBySyncToken = method("findUserBySyncToken"); export const saveAvatarBlob = method("saveAvatarBlob"); export const getAvatarBlob = method("getAvatarBlob"); export const saveJacket = method("saveJacket"); export const getJacket = method("getJacket"); export const getSongJacket = method("getSongJacket"); export const saveSongJacket = method("saveSongJacket"); export const getMapImage = method("getMapImage"); export const saveMapImage = method("saveMapImage"); export const getGuildSetting = method("getGuildSetting"); export const listNewsChannels = method("listNewsChannels"); export const getNewsChannels = method("getNewsChannels"); export const setNewsChannel = method("setNewsChannel"); export const clearNewsChannel = method("clearNewsChannel"); export const getSeenNewsIds = method("getSeenNewsIds"); export const markNewsSeen = method("markNewsSeen"); export const deleteNewsSeen = method("deleteNewsSeen"); export const saveNewsArticle = method("saveNewsArticle"); export const getNewsArticle = method("getNewsArticle"); export const getUntranslatedNewsArticles = method("getUntranslatedNewsArticles"); export const pruneNewsArticles = method("pruneNewsArticles"); export const getNewsFeedState = method("getNewsFeedState"); export const setNewsFeedState = method("setNewsFeedState"); export const setGuildSetting = method("setGuildSetting"); export const getProfilePrivate = method("getProfilePrivate"); export const setProfilePrivate = method("setProfilePrivate");
+export const cacheProfile = method("cacheProfile"); export const deleteCachedProfile = method("deleteCachedProfile"); const getStoredProfile = method("getCachedProfile"); export const getAllCachedProfiles = method("getAllCachedProfiles");
+export const saveUserSession = method("saveUserSession"); const loadStoredSession = method("loadUserSession"); const getStoredFriendCode = method("getUserFriendCode"); export const getUserFriendCodeForServer = method("getUserFriendCodeForServer"); export const getUserDefaultServer = method("getUserDefaultServer"); export const setUserDefaultServer = method("setUserDefaultServer"); export const getUserSyncToken = method("getUserSyncToken"); export const findUserBySyncToken = method("findUserBySyncToken"); export const saveAvatarBlob = method("saveAvatarBlob"); export const getAvatarBlob = method("getAvatarBlob"); export const saveJacket = method("saveJacket"); export const getJacket = method("getJacket"); export const getSongJacket = method("getSongJacket"); export const saveSongJacket = method("saveSongJacket"); export const getMapImage = method("getMapImage"); export const saveMapImage = method("saveMapImage"); export const getGuildSetting = method("getGuildSetting"); export const listNewsChannels = method("listNewsChannels"); export const getNewsChannels = method("getNewsChannels"); export const setNewsChannel = method("setNewsChannel"); export const clearNewsChannel = method("clearNewsChannel"); export const getSeenNewsIds = method("getSeenNewsIds"); export const markNewsSeen = method("markNewsSeen"); export const deleteNewsSeen = method("deleteNewsSeen"); export const saveNewsArticle = method("saveNewsArticle"); export const getNewsArticle = method("getNewsArticle"); export const getUntranslatedNewsArticles = method("getUntranslatedNewsArticles"); export const pruneNewsArticles = method("pruneNewsArticles"); export const getNewsFeedState = method("getNewsFeedState"); export const setNewsFeedState = method("setNewsFeedState"); export const setGuildSetting = method("setGuildSetting"); export const getProfilePrivate = method("getProfilePrivate"); export const setProfilePrivate = method("setProfilePrivate");
 export const getAchievementMinimum = method("getAchievementMinimum"); export const setAchievementMinimum = method("setAchievementMinimum");
 export const listGoals = method("listGoals"); export const countGoals = method("countGoals"); export const addGoal = method("addGoal"); export const deleteGoal = method("deleteGoal"); export const updateGoalProgress = method("updateGoalProgress");
 export const saveSimaiChart = method("saveSimaiChart"); export const getSimaiChart = method("getSimaiChart"); export const listRegistryCharts = method("listRegistryCharts"); export const auditRegistryCharts = method("auditRegistryCharts"); export const countSimaiChartsByOwner = method("countSimaiChartsByOwner"); export const pruneSimaiCharts = method("pruneSimaiCharts"); export const deleteSimaiChart = method("deleteSimaiChart");
@@ -45,11 +46,54 @@ export const getFriendCodePublic = method("getFriendCodePublic"); export const s
 export const saveProfileCircle = method("saveProfileCircle"); export const getCirclePublic = method("getCirclePublic"); export const setCirclePublic = method("setCirclePublic");
 export const getTranslateTitles = method("getTranslateTitles"); export const setTranslateTitles = method("setTranslateTitles");
 export const getEnabledBookmarkletPresetIds = method("getEnabledBookmarkletPresetIds"); export const setBookmarkletPresetEnabled = method("setBookmarkletPresetEnabled"); export const getExtraBookmarklets = method("getExtraBookmarklets"); export const addExtraBookmarklet = method("addExtraBookmarklet"); export const removeExtraBookmarklet = method("removeExtraBookmarklet");
+export const getMaishiftLink = method("getMaishiftLink"); export const setMaishiftHandle = method("setMaishiftHandle"); export const getKvCache = method("getKvCache"); export const saveKvCache = method("saveKvCache");
 export const getConstantsCache = method("getConstantsCache"); export const saveConstantsCache = method("saveConstantsCache");
 export const saveRatingSnapshot = method("saveRatingSnapshot"); export const listRatingSnapshots = method("listRatingSnapshots"); export const getRatingSnapshot = method("getRatingSnapshot"); export const getRatingSnapshotRange = method("getRatingSnapshotRange");
 export const getRatingCardCache = method("getRatingCardCache"); export const saveRatingCardCache = method("saveRatingCardCache");
 export const getAllAliases = method("getAllAliases"); export const getTranslationAliases = method("getTranslationAliases"); export const addAlias = method("addAlias"); export const deleteAlias = method("deleteAlias"); export const setAliasTranslation = method("setAliasTranslation"); export const getMessageOverrides = method("getMessageOverrides"); export const setMessageOverride = method("setMessageOverride"); export const deleteMessageOverride = method("deleteMessageOverride");
 export const getRegisteredUserCount = method("getRegisteredUserCount"); export const getLastSyncTime = method("getLastSyncTime"); export const getInactiveProfileFriendCodes = method("getInactiveProfileFriendCodes"); export const clearRatingCardCacheForInactive = method("clearRatingCardCacheForInactive");
+
+// ─── maishift 연동(임시) ──────────────────────────────────────────────────
+// 프로필 조회에 maishift 데이터를 덧씌운다. 덧씌우는 함수는 src/maishift 가 registerProfileOverlay 로 넣는다
+// (storage 가 네트워크 코드를 import 하지 않게). 캐롤봇 프로필이 없고 maishift 만 연동한 유저는
+// "ms:<server>:<handle>" 키로 다룬다 — 이 키로는 서클·최근 기록·성과처럼 캐롤봇 북마클릿이 모은 데이터가 없다.
+export interface MaishiftLink { handle: string; server: MaimaiServer }
+export type ProfileOverlay = (base: CachedProfile | null, link: MaishiftLink) => Promise<CachedProfile | null>;
+let profileOverlay: ProfileOverlay | null = null;
+export function registerProfileOverlay(fn: ProfileOverlay): void { profileOverlay = fn; }
+
+const MS_KEY = /^ms:(intl|jp):(.+)$/;
+export function maishiftProfileKey(link: MaishiftLink): string { return `ms:${link.server}:${link.handle}`; }
+export function parseMaishiftProfileKey(key: string): MaishiftLink | null {
+  const m = key.match(MS_KEY);
+  return m ? { server: m[1] as MaimaiServer, handle: m[2] } : null;
+}
+
+/** 동기화(/sync)처럼 캐롤봇이 저장한 값 그대로가 필요할 때. */
+export { getStoredProfile };
+
+export async function getCachedProfile(key: string): Promise<CachedProfile | null> {
+  const ms = parseMaishiftProfileKey(key);
+  if (ms) return profileOverlay ? profileOverlay(null, ms) : null;
+  const base = await getStoredProfile(key);
+  if (!base || !profileOverlay) return base;
+  const handle = await invoke("getMaishiftHandleByProfileKey", [base.profileKey]);
+  return handle ? profileOverlay(base, { handle, server: base.server }) : base;
+}
+
+export async function getUserFriendCode(id: string): Promise<string | null> {
+  const fc = await getStoredFriendCode(id);
+  if (fc) return fc;
+  const link = await getMaishiftLink(id);
+  return link ? maishiftProfileKey(link) : null;
+}
+
+export async function loadUserSession(id: string): Promise<{ friendCode: string } | null> {
+  const stored = await loadStoredSession(id);
+  if (stored?.friendCode) return stored;
+  const link = await getMaishiftLink(id);
+  return link ? { friendCode: maishiftProfileKey(link) } : stored;
+}
 
 export async function closeStorage(): Promise<void> {
   const current = await getAdapter();

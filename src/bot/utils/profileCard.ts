@@ -1,7 +1,7 @@
 import { BRAND } from "../../brand";
 import {
   ACCENT, SURFACE, SURFACE2, BORDER, TEXT, MUTED, CANVAS, INK, SOFT, FAINT, NUM_FONT, TROPHY_STYLE,
-  type El, el, image, pill, remoteDataUrl, kstStamp, wordmark, statsPanel, panel,
+  type El, el, image, pill, remoteDataUrl, kstStamp, wordmark, creditOf, statsPanel, panel,
 } from "./cardKit";
 import { renderInWorker } from "./renderPool";
 import type { CachedProfile } from "../../storage/types";
@@ -281,7 +281,7 @@ export async function renderProfileCard(
   const circleName = opts.circleName ?? null;
   const history = opts.ratingHistory;
   // 그래프 기간은 오늘을 끝으로 움직이므로 마지막 날짜도 키에 넣는다.
-  const cacheKey = [profile.profileKey, profile.lastSyncedAt, translate ? 1 : 0, friendCode ?? "", circleName ?? "", avatarBuf?.length ?? 0, history ? history.days[history.days.length - 1] : "-", PROFILE_CARD_VERSION, cardTextSignature()].join("|");
+  const cacheKey = [profile.profileKey, profile.lastSyncedAt, translate ? 1 : 0, friendCode ?? "", circleName ?? "", avatarBuf?.length ?? 0, history ? history.days[history.days.length - 1] : "-", PROFILE_CARD_VERSION, profile.source ?? "", cardTextSignature()].join("|");
   const memo = profileCardCache.get(cacheKey);
   if (memo) return memo;
 
@@ -337,7 +337,7 @@ export async function renderProfileCard(
         ]),
       ]),
       el("div", { display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 16, flexShrink: 0 }, [
-        wordmark(),
+        wordmark(creditOf(profile)),
         ratingPlate(profile.rating || 0),
       ]),
     ]),

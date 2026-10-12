@@ -62,12 +62,23 @@ export function kstStamp(ms: number): string {
   return `${d.slice(0, 10).replace(/-/g, ".")} ${d.slice(11, 16)}`;
 }
 
-export function wordmark(): El {
-  return el("div", { display: "flex", alignItems: "baseline" }, [
+/** credit: 데이터 출처(예: maishift). 있으면 워드마크 아래에 작게 붙인다. */
+export function wordmark(credit?: string, align: "flex-start" | "center" | "flex-end" = "flex-end"): El {
+  const mark = el("div", { display: "flex", alignItems: "baseline" }, [
     el("span", { fontSize: 13, fontWeight: 700, color: MUTED, marginRight: 6 }, msg("card.createdBy")),
     el("span", { fontSize: 13, fontWeight: 800, color: INK }, "carol"),
     el("span", { fontSize: 13, fontWeight: 800, color: ACCENT }, "bot"),
   ]);
+  if (!credit) return mark;
+  return el("div", { display: "flex", flexDirection: "column", alignItems: align, gap: 3 }, [
+    mark,
+    el("span", { fontSize: 10, fontWeight: 600, color: MUTED }, credit),
+  ]);
+}
+
+/** 프로필이 maishift 데이터면 카드에 붙일 출처 문구. */
+export function creditOf(profile: { source?: string }): string | undefined {
+  return profile.source === "maishift" ? msg("maishift.credit") : undefined;
 }
 
 // 랜딩 Stats 섹션처럼 박스 없이 큰 숫자(accent-soft) + 라벨. 칸 사이는 세로선으로만 나눈다.

@@ -39,8 +39,9 @@ test("buildBookmarklet: javascript: 스킴 로더", () => {
   assert.ok(out.includes("/bookmarklet.js?code=tok123"));
 });
 
-test("BOOKMARKLET_PRESETS: 첫 프리셋은 maishift", () => {
+test("BOOKMARKLET_PRESETS: 첫 프리셋은 maishift, 설정과 상관없이 항상 실행", () => {
   assert.equal(bm.BOOKMARKLET_PRESETS[0].id, "maishift");
-  assert.deepEqual(bm.getBookmarkletPresets([]), []);
-  assert.equal(bm.getBookmarkletPresets(["maishift"])[0].label, "maishift");
+  assert.equal(bm.BOOKMARKLET_PRESETS[0].required, true);
+  assert.deepEqual(bm.getBookmarkletPresets([]).map((p) => p.label), ["maishift"]);
+  assert.deepEqual(bm.getBookmarkletPresets(["maishift"]).map((p) => p.label), ["maishift"]);
 });

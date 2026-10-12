@@ -39,10 +39,12 @@ import * as admin        from "./commands/admin";
 import * as goal         from "./commands/goal";
 import * as chart        from "./commands/chart";
 import * as ratingcalc   from "./commands/ratingcalc";
+import * as maishift     from "./commands/maishift";
+import { initMaishift } from "../maishift";
 
 type Command = { data: { toJSON(): object; name: string }; execute: (i: ChatInputCommandInteraction) => Promise<void>; autocomplete?: (i: AutocompleteInteraction) => Promise<void> };
 
-const COMMANDS: Command[] = [profile, circle, bookmarklet, ratingtable, ratingimage, achievement, fortune, settings, gameOptions, serverSettings, newsSettings, search, status, songrec, random, areaMap, report, admin, goal, chart, ratingcalc];
+const COMMANDS: Command[] = [profile, circle, bookmarklet, ratingtable, ratingimage, achievement, fortune, settings, gameOptions, serverSettings, newsSettings, search, status, songrec, random, areaMap, report, admin, goal, chart, ratingcalc, maishift];
 const EPHEMERAL_REPLY = { flags: MessageFlags.Ephemeral } as const;
 
 const RATING_CARD_GC_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000;
@@ -85,6 +87,8 @@ client.once(Events.ClientReady, async (c) => {
   } catch (e) {
     console.error("[aliases] 로드 실패:", e);
   }
+  // maishift 연동(임시, 공식 API 전까지). 프로필 조회에 maishift 데이터를 덧씌운다.
+  await initMaishift();
   try {
     await loadMessages();
   } catch (e) {

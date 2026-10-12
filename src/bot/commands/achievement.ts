@@ -1,7 +1,8 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, MessageFlags, AttachmentBuilder } from "discord.js";
-import { getDailyAchievementSummaries, getAvatarBlob, getCachedProfile, getProfilePrivate, getUserFriendCode, getTranslateTitles } from "../../storage";
+import { getDailyAchievementSummaries, getCachedProfile, getProfilePrivate, getUserFriendCode, getTranslateTitles } from "../../storage";
 import { koreaPlayDayKey, koreaPlayDayRange } from "../../achievements";
 import { renderAchievementCard } from "../utils/achievementCard";
+import { loadAvatar } from "../utils/embeds";
 import { msg } from "../../messages";
 
 export const data = new SlashCommandBuilder()
@@ -80,7 +81,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       });
       return;
     }
-    const avatar = await getAvatarBlob(userId, cached.server);
+    const avatar = await loadAvatar(userId, cached);
     const translate = await getTranslateTitles(interaction.user.id);
     const renderStartedAt = Date.now();
     // 한 장에 5개씩 여러 장으로 나눠 한 메시지에 같이 첨부한다 (인스타/X 공유 시 사진 여러 장으로 넘기기 좋게).

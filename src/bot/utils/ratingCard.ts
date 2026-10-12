@@ -790,7 +790,7 @@ export async function renderRatingCard(
     ],
   );
 
-  const wordmark = el("div", { display: "flex", alignItems: "baseline" }, [
+  const mark = el("div", { display: "flex", alignItems: "baseline" }, [
     el(
       "span",
       { fontSize: 13, fontWeight: 700, color: BRAND.dim, marginRight: 6 },
@@ -799,6 +799,13 @@ export async function renderRatingCard(
     el("span", { fontSize: 13, fontWeight: 800, color: BRAND.ink }, "carol"),
     el("span", { fontSize: 13, fontWeight: 800, color: ACCENT }, "bot"),
   ]);
+  // maishift 데이터면 출처를 워드마크 아래에 작게 붙인다.
+  const wordmark = profile.source === "maishift"
+    ? el("div", { display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }, [
+        mark,
+        el("span", { fontSize: 10, fontWeight: 600, color: BRAND.dim }, msg("maishift.credit")),
+      ])
+    : mark;
 
   const ratingBlock = game === "maimai"
     ? ratingPlate(Number(totalRs) || 0)

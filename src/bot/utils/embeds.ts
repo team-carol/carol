@@ -20,6 +20,7 @@ import {
   getAchievementPlayEventLog,
 } from "../../storage";
 import { getMaimaiBaseUrl } from "../../scraper";
+import type { CachedProfile } from "../../storage/types";
 import {
   getConstant,
   getJacketFile,
@@ -135,11 +136,37 @@ function songRating(r: PlayRecord, fc?: string, server: MaimaiServer = "intl"): 
   return calcSongRating(r.achievementVal, lvNum, fc ?? r.fc);
 }
 
+// maishift 프로필의 아이콘(DX NET 공개 이미지) 메모리 캐시. 아이콘 주소는 아이콘이 바뀌면 같이 바뀐다.
+const remoteAvatarCache = new Map<string, Buffer>();
+async function fetchRemoteAvatar(url: string): Promise<Buffer | null> {
+  const hit = remoteAvatarCache.get(url);
+  if (hit) return hit;
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    if (!res.ok) return null;
+    const buf = Buffer.from(await res.arrayBuffer());
+    remoteAvatarCache.set(url, buf);
+    if (remoteAvatarCache.size > 300) remoteAvatarCache.delete(remoteAvatarCache.keys().next().value!);
+    return buf;
+  } catch {
+    return null;
+  }
+}
+
+/** 프로필 아바타. maishift 데이터면 maishift 가 알려 준 아이콘, 아니면(또는 못 받으면) 북마클릿이 저장한 이미지. */
+export async function loadAvatar(userId: string, profile: Pick<CachedProfile, "server" | "source" | "avatar">): Promise<Buffer | null> {
+  if (profile.source === "maishift" && profile.avatar) {
+    const remote = await fetchRemoteAvatar(profile.avatar);
+    if (remote) return remote;
+  }
+  return getAvatarBlob(userId, profile.server);
+}
+
 export async function buildAvatarAttachment(
   userId: string,
-  server: MaimaiServer,
+  profile: Pick<CachedProfile, "server" | "source" | "avatar">,
 ): Promise<AttachmentBuilder | null> {
-  const buf = await getAvatarBlob(userId, server);
+  const buf = await loadAvatar(userId, profile);
   if (!buf) return null;
   return new AttachmentBuilder(buf, { name: "avatar.png" });
 }
@@ -165,7 +192,8 @@ export function profileEmb(
       }),
     )
     .setFooter({
-      text: msg("embed.profileFooter", { server: serverLabel, synced: new Date(p.lastSyncedAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }) }),
+      text: msg("embed.profileFooter", { server: serverLabel, synced: new Date(p.lastSyncedAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }) })
+        + (p.source === "maishift" ? `  ·  ${msg("maishift.credit")}` : ""),
     });
   if (hasAvatar) emb.setThumbnail("attachment://avatar.png");
   // 친구 코드는 본인이 /설정 에서 공개로 바꾼 경우에만 보인다(기본 비공개).
@@ -765,7 +793,7 @@ export async function buildProfileReply(
   format: "image" | "embed" = "embed",
   viewerId?: string,
 ) {
-  const [avatar, showFriendCode, circlePublic] = await Promise.all([buildAvatarAttachment(userId, cached.server), getFriendCodePublic(userId), getCirclePublic(userId)]);
+  const [avatar, showFriendCode, circlePublic] = await Promise.all([buildAvatarAttachment(userId, cached), getFriendCodePublic(userId), getCirclePublic(userId)]);
   const circleName = circlePublic ? circleOf(cached)?.name ?? null : null;
   const recentBtn = new ButtonBuilder()
     .setCustomId(`recent:${userId}`)
@@ -785,7 +813,7 @@ export async function buildProfileReply(
     mapBtn,
   );
   if (format === "image") {
-    const [avatarBuf, translate] = await Promise.all([getAvatarBlob(userId, cached.server), getTranslateTitles(viewerId ?? userId)]);
+    const [avatarBuf, translate] = await Promise.all([loadAvatar(userId, cached), getTranslateTitles(viewerId ?? userId)]);
     const friendCode = showFriendCode ? (cached.friendCode ?? "").match(/\d{13}/)?.[0] ?? null : null;
     const ratingHistory = await loadRatingHistory(cached);
     const png = await renderProfileCard(cached, avatarBuf, { translate, friendCode, circleName, ratingHistory });
