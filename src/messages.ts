@@ -12,8 +12,9 @@
 export const MESSAGES = {
   // ── 공통 ────────────────────────────────────────────────────────────────
   "common.selfNotRegistered":
-    "아직 프로필이 등록되지 않았습니다. `/북마클릿` 명령어로 먼저 등록해주세요.",
-  "common.otherNotRegistered": "{user} 님은 아직 프로필을 등록하지 않았습니다.",
+    "maishift 계정이 연동되어 있지 않습니다. `/마이시프트 연동`으로 먼저 연동해 주세요. 연동했는데도 이 메시지가 나오면 maishift가 잠시 응답하지 않는 것이니 조금 뒤에 다시 시도해 주세요.",
+  "common.otherNotRegistered": "{user} 님은 아직 maishift 계정을 연동하지 않았습니다.",
+  "common.noBookmarklet": "캐롤봇 북마클릿을 아직 실행하지 않았습니다. `/북마클릿` 명령어로 먼저 동기화해 주세요.",
   "common.profilePrivate": "{user} 님은 프로필을 비공개로 설정했습니다.",
   "common.adminGuildOnly": "이 명령어는 지정된 서버에서만 사용할 수 있습니다.",
 

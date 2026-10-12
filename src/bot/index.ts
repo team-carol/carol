@@ -41,6 +41,7 @@ import * as chart        from "./commands/chart";
 import * as ratingcalc   from "./commands/ratingcalc";
 import * as maishift     from "./commands/maishift";
 import { initMaishift } from "../maishift";
+import { guardSlowAck } from "./utils/slowAck";
 
 type Command = { data: { toJSON(): object; name: string }; execute: (i: ChatInputCommandInteraction) => Promise<void>; autocomplete?: (i: AutocompleteInteraction) => Promise<void> };
 
@@ -235,6 +236,8 @@ client.on(Events.InteractionCreate, async (i) => {
   if (i.isChatInputCommand()) {
     const cmd = COMMANDS.find((c) => c.data.name === i.commandName);
     if (!cmd) return;
+    // maishift 프로필을 처음 받을 때처럼 늦어지면 3초 한도 전에 대신 defer 한다. /문의 는 모달을 띄워야 해서 제외.
+    if (cmd !== report) guardSlowAck(i);
     try {
       await cmd.execute(i);
     } catch (e) {
@@ -261,6 +264,8 @@ client.on(Events.InteractionCreate, async (i) => {
       try { await report.handleButton(i); } catch (e) { console.error("[report-btn]", e); }
       return;
     }
+    // 프로필을 읽는 버튼도 늦어지면 대신 defer 한다. 원래 메시지를 고치는 버튼은 deferUpdate.
+    guardSlowAck(i, ["page:", "search:", "map:", "goal:"].some((p) => i.customId.startsWith(p)) ? "update" : "reply");
     if (i.customId.startsWith("serverset:")) {
       try { await serverSettings.handleButton(i); } catch (e) { console.error("[serverset-btn]", e); }
       return;

@@ -67,7 +67,7 @@ TypeScript LSP was unavailable in this workspace, and codegraph is not indexed. 
 | `settingsPage` | HTML generator | `src/web/settingsPage.ts` | Privacy, preset bookmarklets, extra bookmarklet CRUD. |
 | `buildBookmarkletJs` | generator | `src/web/bookmarklet.ts` | Wraps embedded sync JS and evaluates enabled extra scripts. |
 | `BOOKMARKLET_PRESETS` | config list | `src/web/bookmarklet.ts` | Built-in bookmarklets; first preset is `maishift`. |
-| `cacheProfile` / `saveUserSession` | persistence | `src/storage/postgres.ts` | Main write path after `/sync`. |
+| `saveSyncExtras` / `saveUserSession` | persistence | `src/storage/postgres.ts` | Main write path after `/sync` (feat/maishift: 부가 데이터만; 프로필은 maishift). |
 | `getUserSyncToken` / `findUserBySyncToken` | auth link | `src/storage/postgres.ts` | Token-based web access for `/sync` and `/settings`. |
 | `parseHome` / `parseMusicScore` | scraper | `src/scraper.ts` | CSS-selector parsing of DX NET HTML. |
 | `renderRatingCard` | PNG render | `src/bot/utils/ratingCard.ts` | Rating image generation and cache population. |

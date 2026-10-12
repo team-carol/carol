@@ -2,7 +2,7 @@ import {
   SlashCommandBuilder, ChatInputCommandInteraction, EmbedBuilder,
   MessageFlags, ActionRowBuilder, ButtonBuilder, ButtonStyle,
 } from "discord.js";
-import { getUserFriendCode, getUserSyncToken, getOptionSnapshots, listOptionPresets } from "../../storage";
+import { getStoredFriendCode, getUserSyncToken, getOptionSnapshots, listOptionPresets } from "../../storage";
 import { getBaseUrl } from "../../web";
 import { PORT } from "../../config";
 import { msg } from "../../messages";
@@ -15,8 +15,9 @@ export const data = new SlashCommandBuilder()
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   const userId = interaction.user.id;
-  if (!await getUserFriendCode(userId)) {
-    await interaction.reply({ content: msg("common.selfNotRegistered"), flags: MessageFlags.Ephemeral });
+  // 게임 설정은 캐롤봇 북마클릿이 모은다. maishift 연동과 상관없이 북마클릿을 쓴 적이 있으면 연다.
+  if (!await getStoredFriendCode(userId)) {
+    await interaction.reply({ content: msg("common.noBookmarklet"), flags: MessageFlags.Ephemeral });
     return;
   }
   const url = `${getBaseUrl(PORT)}/options?code=${await getUserSyncToken(userId)}`;

@@ -10,8 +10,8 @@
 const BASE = "https://maimai.shiftpsh.com";
 const USER_AGENT = "carol-bot (Discord bot; +https://www.team-carol.com)";
 const TIMEOUT_MS = 10_000;
-/** 요청 사이 최소 간격. 여러 명령이 몰려도 maishift 로는 이 간격으로만 나간다. */
-const MIN_INTERVAL_MS = 1_000;
+/** 요청 사이 최소 간격. 여러 명령이 몰려도 maishift 로는 이 간격으로만 나간다(한 사용자 조회는 많아야 3건). */
+const MIN_INTERVAL_MS = 250;
 
 export const FN = {
   /** {handle, region} → 프로필 요약 + 레이팅 대상곡 + 상위 기록 100개 */

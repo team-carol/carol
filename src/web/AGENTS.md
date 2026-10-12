@@ -32,7 +32,7 @@ src/web/
 | Web-only local preview | `dev.ts` | Starts server without Discord token/login. |
 | 채보 플레이어 껍데기 | `chartPlayer.ts` | HTML/CSS와 컨트롤. 그리기 코어는 `chartRenderer.ts` 를 인라인한다. |
 | 노트·슬라이드 그리기 | `chartRenderer.ts` | canvas 링 렌더러. **백틱과 `${` 를 쓰지 말 것** (템플릿 문자열로 보관). `/보면` 미리보기 GIF도 이 코드를 vm 에 올려 쓴다. |
-| Scrape sync pipeline | `POST /sync` in `index.ts` | Writes debug HTML, parses, caches, saves session/avatar/jackets. 서클(`ci`/`cm` → `parseCircle`)은 판단 불가(undefined)면 기존 `circle_json` 을 유지한다. |
+| Scrape sync pipeline | `POST /sync` in `index.ts` | (feat/maishift) 친구 코드·최근 플레이(+상세)·지방·게임 설정·서클만 받아 `saveSyncExtras` 로 저장하고, 연동돼 있으면 30·90초 뒤 maishift 확인을 예약한다. 프로필·전체 기록·레이팅 대상·성과는 maishift 쪽(`src/maishift/sync.ts`). 서클(`ci`/`cm` → `parseCircle`)은 판단 불가(undefined)면 기존 `circle_json` 을 유지한다. |
 | Jacket/avatar endpoints | `GET /jacket`, `GET /avatar` in `index.ts` | Cache-first asset responses. |
 
 ## ROUTES
@@ -78,11 +78,11 @@ src/web/
 
 ## SYNC GOTCHAS
 
-- `/sync` writes `debug_home.html`, `debug_pd.html`, `debug_fc.html`, `debug_record.html`, `debug_rating_target.html` in repo root.
+- `/sync` writes `debug_fc.html`, `debug_record.html`, `debug_map.html` 등 in repo root.
 - The old play-count-only `no_change` shortcut was removed; `/sync` should parse/cache posted data even when play count is unchanged.
-- `/sync` rejects invalid payloads before caching when profile/friend code/clear/rating-target data is missing or recent-play parsing returns fewer rows than expected.
+- `/sync` rejects payloads without a 13-digit friend code or the record page.
 - Recent-play storage is intentionally capped to the latest 5 games, not 5 songs; duplicate same-song plays must remain separate records.
-- `POST /sync` stores recent records, rating target records, clear records, avatar, song jackets, and session friend code.
+- `POST /sync` stores `recent_json` as `{ recent, history }` (최근 플레이 + 성과 매칭용 플레이 이력), `map_json`, circle, options, and session friend code.
 - 동기화 페이로드의 `uo`(옵션 설정 페이지 HTML, 선택 수집)는 `parseUserOptions` 로 읽어 `user_options` 에 서버별로 저장한다. 실패해도 동기화는 계속된다. dev 에서는 `debug_option.html` 로 남긴다.
 - DX NET HTML selectors live in `src/scraper.ts`; check debug files first when SEGA layout changes.
 

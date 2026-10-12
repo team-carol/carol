@@ -6,8 +6,9 @@
  * - 전체 기록(큼)과 레이팅 히스토리는 프로필의 updatedAt(maishift 업로드 시각)이 바뀌었을 때만 다시 받는다.
  * - 모든 요청은 serverFn.ts 에서 한 줄로 세워 간격을 둔다.
  */
-import { registerProfileOverlay, maishiftProfileKey, type MaishiftLink } from "../storage";
+import { registerProfileOverlay, type MaishiftLink } from "../storage";
 import type { CachedProfile, MaishiftHistoryPoint } from "../storage/types";
+import { applyMaishiftUpdate } from "./sync";
 import { callServerFn, FN, MaishiftError, type MaishiftRegion } from "./serverFn";
 import { ratingTargets, allRecords, trophyClassOf, historyPoints, type MsProfileResult, type MsRecordsResult, type MsHistoryPoint } from "./convert";
 
@@ -15,7 +16,7 @@ export { MaishiftError } from "./serverFn";
 
 const PROFILE_TTL_MS = 5 * 60 * 1000;
 const MAX_ENTRIES = 200;
-/** 이미 캐롤봇 프로필이 있는 유저는 maishift 가 늦으면 이만큼만 기다리고 가진 값으로 답한다. */
+/** 캐시가 오래됐을 때 새 값을 이만큼만 기다리고, 늦으면 가진 값으로 답한다. */
 const WAIT_BUDGET_MS = 2_500;
 
 interface Entry {
@@ -52,25 +53,34 @@ function remember(key: string, e: Entry): void {
 async function refresh(link: MaishiftLink): Promise<Entry> {
   const key = keyOf(link);
   const args = { handle: link.handle, region: regionOf(link) };
-  const res = await callServerFn<MsProfileResult>(FN.profile, args);
+  const prev = cache.get(key);
+  const fetchRecords = () => callServerFn<MsRecordsResult>(FN.records, args);
+  // 히스토리는 그래프용 부가 데이터라 못 받아도 프로필은 보여 준다(다음 업로드 때 다시 시도).
+  const fetchHistory = () => callServerFn<MsHistoryPoint[]>(FN.history, args).then(historyPoints).catch((e) => {
+    console.error(`[maishift] ${link.handle} 히스토리:`, (e as Error).message);
+    return [] as MaishiftHistoryPoint[];
+  });
+  // 캐시가 없으면(재시작 직후·첫 조회) 세 가지를 한꺼번에 요청해 기다리는 시간을 줄인다.
+  // 캐시가 있으면 프로필(작음)만 먼저 보고, 업로드 시각이 바뀌었을 때만 나머지를 받는다.
+  // 프로필이 제일 느려서(약 2초) 먼저 줄 세운다.
+  const profileReq = callServerFn<MsProfileResult>(FN.profile, args);
+  const cold = prev ? null : { records: fetchRecords(), history: fetchHistory() };
+  cold?.records.catch(() => {});
+  const res = await profileReq;
   const rec = res.userRecord;
   if (!rec?.profile) throw new MaishiftError("no record for region", "not_found");
   const p = rec.profile;
-  const prev = cache.get(key);
   const same = prev && prev.updatedAt === p.updatedAt ? prev : null;
+  const top = ratingTargets(rec);
   let clearJson = same?.clearJson ?? "";
-  let history = same?.history ?? null;
   if (!clearJson) {
-    const all = await callServerFn<MsRecordsResult>(FN.records, args);
-    clearJson = JSON.stringify(allRecords(all));
+    const records = allRecords(await (cold?.records ?? fetchRecords()));
+    clearJson = JSON.stringify(records);
+    // 새 기록이 올라왔으면 성과·스냅샷·목표를 갱신한다. 조회는 기다리게 하지 않는다.
+    void applyMaishiftUpdate({ link, records, top, rating: p.rating, uploadedAt: Date.parse(p.updatedAt) || Date.now() })
+      .catch((e) => console.error(`[maishift] ${link.handle} 기록 반영:`, e));
   }
-  if (!history) {
-    // 히스토리는 그래프용 부가 데이터라 못 받아도 프로필은 보여 준다(다음 업로드 때 다시 시도).
-    history = await callServerFn<MsHistoryPoint[]>(FN.history, args).then(historyPoints).catch((e) => {
-      console.error(`[maishift] ${link.handle} 히스토리:`, (e as Error).message);
-      return [];
-    });
-  }
+  const history = same?.history ?? await (cold?.history ?? fetchHistory());
   const entry: Entry = {
     checkedAt: Date.now(),
     updatedAt: p.updatedAt,
@@ -84,7 +94,7 @@ async function refresh(link: MaishiftLink): Promise<Entry> {
     playCount: p.playCount?.current ?? 0,
     totalPlayCount: p.playCount?.total ?? 0,
     friendCode: p.friendCode ?? "",
-    topJson: JSON.stringify(ratingTargets(rec)),
+    topJson: JSON.stringify(top),
     clearJson,
     history,
   };
@@ -102,69 +112,67 @@ function refreshOnce(link: MaishiftLink): Promise<Entry> {
   return p;
 }
 
-/** budgetMs 안에 새 값이 안 오면 가진 값(없으면 null)을 돌려준다. 새로 받는 일은 뒤에서 계속된다. */
-async function getEntry(link: MaishiftLink, budgetMs: number): Promise<Entry | null> {
+/**
+ * 캐시가 신선하면 그대로. 오래됐으면 새로 받되 WAIT_BUDGET_MS 안에 안 오면 가진 값으로 답한다(새로 받는 일은 뒤에서 계속).
+ * 캐시가 없으면 받을 때까지 기다린다 — 명령은 프로필을 읽기 전에 응답을 미뤄(defer) 둔다.
+ */
+async function getEntry(link: MaishiftLink): Promise<Entry> {
   const have = cache.get(keyOf(link)) ?? null;
   if (have && Date.now() - have.checkedAt < PROFILE_TTL_MS) return have;
   const pending = refreshOnce(link);
-  if (!Number.isFinite(budgetMs)) return pending;
+  if (!have) return pending;
   pending.catch(() => {});
-  const timeout = new Promise<null>((r) => setTimeout(() => r(null), budgetMs));
+  const timeout = new Promise<null>((r) => setTimeout(() => r(null), WAIT_BUDGET_MS));
   return (await Promise.race([pending, timeout])) ?? have;
 }
 
-function toProfile(base: CachedProfile | null, link: MaishiftLink, e: Entry): CachedProfile {
-  const shell: CachedProfile = base ?? {
-    profileKey: maishiftProfileKey(link),
-    server: link.server,
-    friendCode: e.friendCode,
-    playerName: "",
-    rating: 0,
-    ratingMax: 0,
-    trophy: "",
-    trophyClass: "normal",
-    avatar: "",
-    // 클래스·단위 이미지는 DX NET 파일명에 임의 문자열이 붙어 있어 번호로 만들 수 없다.
-    gradeImg: "",
-    courseImg: "",
-    circleJson: "",
-    stars: "0",
-    comment: "",
-    playCount: 0,
-    totalPlayCount: 0,
-    lastSyncedAt: 0,
-    recentJson: "[]",
-    topJson: "[]",
-    clearJson: "[]",
-    mapJson: "[]",
-  };
+/** 프로필 = maishift 값 + 캐롤봇 북마클릿 부가 데이터(서클·최근 플레이·지방). 캐롤봇 프로필 값은 쓰지 않는다. */
+function toProfile(profileKey: string, link: MaishiftLink, e: Entry, extras: CachedProfile | null): CachedProfile {
   return {
-    ...shell,
+    profileKey,
+    server: link.server,
+    friendCode: extras?.friendCode || e.friendCode,
     playerName: e.name,
     rating: e.rating,
+    ratingMax: 0,
     trophy: e.trophy,
     trophyClass: e.trophyClass,
     avatar: e.avatar,
+    // 클래스·단위 이미지는 DX NET 파일명에 임의 문자열이 붙어 있어 maishift 의 번호로 만들 수 없다.
+    gradeImg: "",
+    courseImg: "",
+    circleJson: extras?.circleJson ?? "",
     stars: String(e.stars),
+    comment: "",
     playCount: e.playCount,
     totalPlayCount: e.totalPlayCount,
-    lastSyncedAt: Date.parse(e.updatedAt) || shell.lastSyncedAt,
+    lastSyncedAt: Date.parse(e.updatedAt) || 0,
+    recentJson: extras?.recentJson ?? "[]",
     topJson: e.topJson,
     clearJson: e.clearJson,
+    mapJson: extras?.mapJson ?? "[]",
     maishiftHistory: e.history,
     source: "maishift",
   };
 }
 
-async function overlay(base: CachedProfile | null, link: MaishiftLink): Promise<CachedProfile | null> {
+/** maishift 에서 못 받으면(캐시도 없으면) null — 캐롤봇 프로필로 돌아가지 않는다. */
+async function overlay(profileKey: string, link: MaishiftLink, extras: CachedProfile | null): Promise<CachedProfile | null> {
   let e: Entry | null = null;
   try {
-    e = await getEntry(link, base ? WAIT_BUDGET_MS : Infinity);
+    e = await getEntry(link);
   } catch (err) {
     console.error(`[maishift] ${link.handle}:`, (err as Error).message);
     e = cache.get(keyOf(link)) ?? null;
   }
-  return e ? toProfile(base, link, e) : base;
+  return e ? toProfile(profileKey, link, e, extras) : null;
+}
+
+/** 연동 직후: 받아 둔 기록으로 비교 기준(chart_clears)·스냅샷을 바로 잡는다. 다음 업로드부터 성과가 생긴다. */
+export async function applyCachedRecords(link: MaishiftLink): Promise<void> {
+  const e = cache.get(keyOf(link));
+  if (!e) return;
+  await applyMaishiftUpdate({ link, records: JSON.parse(e.clearJson), top: JSON.parse(e.topJson), rating: e.rating, uploadedAt: Date.parse(e.updatedAt) || Date.now() });
 }
 
 /** 연동할 때 아이디 확인. 없는 아이디면 MaishiftError(kind "not_found"). 캐시도 함께 채운다. */
@@ -173,10 +181,20 @@ export async function lookupMaishift(link: MaishiftLink): Promise<{ handle: stri
   return { handle: e.handle, name: e.name, rating: e.rating };
 }
 
-/** 북마클릿 동기화 직후처럼 maishift 에 새 기록이 올라갔을 만한 때, 다음 조회에서 바로 확인하게 한다. */
-export function markMaishiftStale(link: MaishiftLink): void {
-  const e = cache.get(keyOf(link));
-  if (e) e.checkedAt = 0;
+/**
+ * 캐롤봇 북마클릿은 maishift 북마클릿을 함께 돌리지만 그 업로드가 끝나길 기다리지 않는다.
+ * 그래서 동기화 뒤 잠시 있다가 maishift 프로필(작은 요청)을 확인해, 업로드 시각이 바뀌었으면 전체 기록을 받아
+ * 성과를 반영한다. 그 사이 명령이 먼저 오면 그쪽에서 확인된다.
+ */
+const SYNC_CHECK_DELAYS_MS = [30_000, 90_000];
+export function scheduleMaishiftCheck(link: MaishiftLink): void {
+  for (const delay of SYNC_CHECK_DELAYS_MS) {
+    setTimeout(() => {
+      const e = cache.get(keyOf(link));
+      if (e) e.checkedAt = 0;
+      refreshOnce(link).catch((err) => console.error(`[maishift] ${link.handle} 동기화 뒤 확인:`, (err as Error).message));
+    }, delay).unref();
+  }
 }
 
 // 곡 목록·상수·한국어 번역은 src/constants.ts 가 maishift 곡 목록에서 하루 한 번 받는다.

@@ -48,7 +48,7 @@ Discord "/북마클릿" → 설치 가이드 링크(고유 동기화 토큰) 발
 사용자가 maimai DX NET에 로그인된 브라우저에서 북마클릿 실행
 (브라우저 쿠키를 그대로 사용 — SEGA 계정 정보는 서버로 전송되지 않음)
        ↓
-프로필/최근 기록/클리어 기록/레이팅 대상곡 HTML을 POST /sync 로 전송
+친구 코드/최근 기록/지방/게임 설정/서클 HTML을 POST /sync 로 전송 (프로필·전체 기록은 maishift에서)
        ↓
 src/scraper.ts (Cheerio) 로 파싱
        ↓

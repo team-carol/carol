@@ -1,6 +1,6 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, MessageFlags } from "discord.js";
 import { getMaishiftLink, setMaishiftHandle, getUserDefaultServer } from "../../storage";
-import { lookupMaishift, MaishiftError } from "../../maishift";
+import { lookupMaishift, applyCachedRecords, MaishiftError } from "../../maishift";
 import { msg } from "../../messages";
 
 // /마이시프트: maishift 아이디 연동(임시 — 공식 API 전까지). 연동하면 프로필·기록을 maishift 에서 받아 쓴다.
@@ -37,6 +37,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   try {
     const found = await lookupMaishift({ handle, server });
     await setMaishiftHandle(userId, found.handle);
+    await applyCachedRecords({ handle: found.handle, server }).catch((e) => console.error("[maishift] 연동 기준 설정 실패:", e));
     await interaction.editReply({ content: msg("maishift.linked", { handle: found.handle, name: found.name, rating: found.rating }) });
   } catch (e) {
     const notFound = e instanceof MaishiftError && e.kind === "not_found";
