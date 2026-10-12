@@ -8,7 +8,7 @@
  */
 import type { MaishiftHistoryPoint, MaishiftVersion } from "./storage/types";
 
-export interface Milestone { value: number; at: number; emphasised: boolean }
+export interface Milestone { value: number; at: number; versionId: number; emphasised: boolean }
 
 const RATING_STEPS: [number, number, number][] = [[10000, 14000, 1000], [14000, 15000, 500], [15000, 16000, 100], [16000, Infinity, 50]];
 const RATING_EXTRA = [15250, 15750];
@@ -33,7 +33,7 @@ function crossings(history: readonly MaishiftHistoryPoint[], thresholds: number[
     const v = valueOf(h);
     if (v <= best) return;
     best = v;
-    for (; next < sorted.length && sorted[next] <= best; next++) if (i > 0) out.push({ value: sorted[next], at: h.at, emphasised: emphasised(sorted[next]) });
+    for (; next < sorted.length && sorted[next] <= best; next++) if (i > 0) out.push({ value: sorted[next], at: h.at, versionId: h.versionId, emphasised: emphasised(sorted[next]) });
   });
   return out;
 }

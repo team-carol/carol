@@ -13,6 +13,7 @@ import { fetchJacketDataUrl, ratingBreakdown, ratingPlate } from "./ratingCard";
 import { musicKindIcons, KIND_ICON_RATIO } from "./dxnetAssets";
 import { alignLeftMargin } from "./textMetrics";
 import type { RatingPoint, PlayCountPoint } from "../../ratingHistory";
+import { lineChart, lineSwatch, dashedSwatch } from "./historyChart";
 import { msg, cardTextSignature } from "../../messages";
 
 // /프로필 이미지 카드. 레이아웃·색은 /성과 카드와 같은 랜딩(carol-web) 토큰(src/brand.ts)을 따른다.
@@ -44,7 +45,7 @@ const MARK_COLOR: Record<string, string> = {
   "FDX+": "#10b981", FDX: "#34d399", "FS+": "#22c55e", FS: "#4ade80",
 };
 
-const PROFILE_CARD_VERSION = 16;
+const PROFILE_CARD_VERSION = 17;
 const PROFILE_CARD_CACHE_MAX = 64;
 const profileCardCache = new Map<string, Buffer>();
 
@@ -162,132 +163,21 @@ function recentRow(record: PlayRecord, profile: CachedProfile, jacket: string | 
 }
 
 // ─── 히스토리 그래프 ─────────────────────────────────────────────────────
-// 선·격자는 SVG 이미지로 그리고(resvg 가 벡터로 렌더), 축 라벨·값은 satori 텍스트로 올린다
-// (중첩 SVG 안의 text 는 글꼴을 못 찾을 수 있어서). 실측끼리 잇는 구간은 실선, 추정이 끼면 점선.
-// 점은 찍지 않고 선만 그린다(maishift 히스토리는 기간이 길어 점이 수백 개다). 값은 다음 측정 전까지 그대로이므로
-// 계단 모양(가로로 이어 가다 다음 점에서 세로로)으로 그려 오르내린 폭이 잘 보이게 한다.
-const CHART_W = 840;          // 패널 안쪽 폭
-const CHART_Y_LABEL_W = 44;   // 왼쪽 눈금 라벨 칸
+// 그리는 코드는 /히스토리 카드와 같이 쓴다(historyChart.ts).
 const CHART_H = 150;
 const PLAYS_H = 120;
-const CHART_PAD_X = 10;
-const CHART_PAD_Y = 16;
-const PLAY_CURRENT_COLOR = "#60a5fa";
-
-function niceStep(range: number): number {
-  const steps = [1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000, 10000, 20000, 50000];
-  return steps.find((s) => range / s <= 4) ?? 50000;
-}
+export const PLAY_CURRENT_COLOR = "#60a5fa";
 
 /** 날짜 라벨. 기간이 해를 넘기면 연도(두 자리)를 붙인다. */
 function dayLabel(day: string, withYear: boolean): string {
   return withYear ? day.slice(2).replace(/-/g, ".") : day.slice(5).replace("-", ".");
 }
 
-function dashedSwatch(): El {
-  return el("div", { display: "flex", gap: 3 }, [0, 1, 2].map(() => el("div", { width: 5, height: 2, background: ACCENT, opacity: 0.8 })));
-}
-
-function lineSwatch(color: string, label: string): El {
-  return el("div", { display: "flex", alignItems: "center", gap: 6 }, [
-    el("div", { width: 14, height: 2.5, borderRadius: 2, background: color }),
-    el("span", {}, label),
-  ]);
-}
-
-interface ChartSeries {
-  values: { day: string; value: number; estimated?: boolean }[];
-  color: string;
-  /** 선 아래를 옅게 채운다 */
-  fill?: boolean;
-}
-
-/**
- * 날짜를 가로축으로 하는 선 그래프(+왼쪽 눈금, 아래 날짜 라벨). 가로축은 첫 시리즈의 첫 점~마지막 점.
- * 같은 days·같은 점 날짜로 그리면 여러 패널의 가로축이 위아래로 맞는다.
- */
-function lineChart(days: string[], series: ChartSeries[], opts: { height: number; fromZero?: boolean; updates?: { day: string; label: string }[]; lastLabel?: boolean }): El {
-  const main = series[0].values;
-  const plotW = CHART_W - CHART_Y_LABEL_W - 8;
-  const index = new Map(days.map((d, i) => [d, i]));
-  const firstI = index.get(main[0].day) ?? 0;
-  const lastI = index.get(main[main.length - 1].day) ?? firstI;
-  const span = Math.max(1, lastI - firstI);
-  const xOf = (day: string) => main.length === 1
-    ? plotW / 2
-    : CHART_PAD_X + (((index.get(day) ?? firstI) - firstI) / span) * (plotW - 2 * CHART_PAD_X);
-
-  const all = series.flatMap((s) => s.values.map((v) => v.value));
-  const lo = opts.fromZero ? 0 : Math.min(...all), hi = Math.max(...all);
-  const step = niceStep(Math.max(hi - lo, 8) * (opts.fromZero ? 1.1 : 1.3));
-  const yMin = opts.fromZero ? 0 : Math.floor((lo - step * 0.3) / step) * step;
-  const yMax = Math.max(yMin + step, Math.ceil((hi + (opts.fromZero ? 0 : step * 0.3)) / step) * step);
-  const H = opts.height;
-  const yOf = (v: number) => CHART_PAD_Y + (1 - (v - yMin) / (yMax - yMin)) * (H - 2 * CHART_PAD_Y);
-  const ticks: number[] = [];
-  for (let t = yMin; t <= yMax + 1e-9; t += step) ticks.push(t);
-
-  const svg: string[] = [
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${plotW}" height="${H}" viewBox="0 0 ${plotW} ${H}">`,
-    ...ticks.map((t) => `<line x1="0" x2="${plotW}" y1="${yOf(t).toFixed(1)}" y2="${yOf(t).toFixed(1)}" stroke="${BORDER}" stroke-width="1"/>`),
-  ];
-  const bottom = yOf(yMin).toFixed(1);
-  series.forEach((s, si) => {
-    const pts = s.values.map((v) => ({ ...v, x: +xOf(v.day).toFixed(1), y: +yOf(v.value).toFixed(1) }));
-    if (pts.length < 2) return;
-    if (s.fill) {
-      svg.push(`<defs><linearGradient id="fill${si}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${s.color}" stop-opacity="0.22"/><stop offset="1" stop-color="${s.color}" stop-opacity="0"/></linearGradient></defs>`);
-      const steps = pts.map((p, i) => (i ? `L${p.x},${pts[i - 1].y} L${p.x},${p.y}` : `L${p.x},${p.y}`)).join(" ");
-      svg.push(`<path d="M${pts[0].x},${bottom} ${steps} L${pts[pts.length - 1].x},${bottom} Z" fill="url(#fill${si})"/>`);
-    }
-    // 실측 구간은 한 줄(path)로, 추정이 낀 구간만 점선으로 따로 그린다.
-    let solid = `M${pts[0].x},${pts[0].y}`;
-    for (let i = 1; i < pts.length; i++) {
-      const a = pts[i - 1], b = pts[i];
-      if (a.estimated || b.estimated) {
-        svg.push(`<path d="M${a.x},${a.y} L${b.x},${a.y} L${b.x},${b.y}" fill="none" stroke="${s.color}" stroke-width="2.5" stroke-dasharray="6 5" stroke-opacity="0.75"/>`);
-        solid += ` M${b.x},${b.y}`;
-      } else {
-        solid += ` L${b.x},${a.y} L${b.x},${b.y}`;
-      }
-    }
-    svg.push(`<path d="${solid}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="miter" stroke-linecap="square"/>`);
-  });
-  // 버전 업데이트 날: 세로 실선(그래프에 보이는 기간 안에 있을 때만). 라벨은 satori 텍스트로 올린다.
-  const firstDay = main[0].day, lastDay = main[main.length - 1].day;
-  const marks = main.length > 1 ? (opts.updates ?? []).filter((u) => u.day > firstDay && u.day <= lastDay).map((u) => ({ ...u, x: +xOf(u.day).toFixed(1) })) : [];
-  for (const m of marks) svg.push(`<line x1="${m.x}" x2="${m.x}" y1="0" y2="${H}" stroke="${BRAND.muted}" stroke-width="1.5" stroke-opacity="0.7"/>`);
-  svg.push("</svg>");
-  const svgUrl = `data:image/svg+xml;base64,${Buffer.from(svg.join("")).toString("base64")}`;
-
-  const last = main[main.length - 1];
-  const lastX = xOf(last.day), lastY = yOf(last.value);
-  const withYear = firstDay.slice(0, 4) !== lastDay.slice(0, 4);
-  const midDay = days[firstI + Math.round(span / 2)] ?? lastDay;
-  const fmtTick = (t: number) => (t >= 10000 && opts.fromZero ? `${t / 1000}k` : String(t));
-
-  return el("div", { display: "flex", flexDirection: "column" }, [
-    el("div", { display: "flex", gap: 8 }, [
-      el("div", { display: "flex", position: "relative", width: CHART_Y_LABEL_W, height: H }, ticks.map((t) =>
-        el("span", { position: "absolute", right: 0, top: yOf(t) - 7, color: FAINT, fontFamily: NUM_FONT, fontSize: 10, lineHeight: 1 }, fmtTick(t)))),
-      el("div", { display: "flex", position: "relative", width: plotW, height: H }, [
-        image(svgUrl, { width: plotW, height: H }),
-        ...marks.map((m) => el("span", {
-          position: "absolute", top: 0, left: Math.min(plotW - 80, m.x + 5),
-          color: BRAND.muted, fontSize: 10, fontWeight: 700, lineHeight: 1, whiteSpace: "nowrap",
-        }, m.label)),
-        ...(opts.lastLabel ? [el("span", {
-          position: "absolute", top: Math.max(0, lastY - 22), left: Math.max(0, Math.min(plotW - 52, lastX - 26)), width: 52, textAlign: "center",
-          color: series[0].color, fontFamily: NUM_FONT, fontSize: 13, fontWeight: 700, lineHeight: 1,
-        }, String(last.value))] : []),
-      ]),
-    ]),
-    el("div", { display: "flex", alignItems: "center", marginTop: 6, paddingLeft: CHART_Y_LABEL_W + 8 }, [
-      el("div", { display: "flex", justifyContent: main.length > 1 ? "space-between" : "center", flex: 1, color: FAINT, fontSize: 10 },
-        main.length > 1 ? [firstDay, midDay, lastDay].map((d) => el("span", {}, dayLabel(d, withYear))) : [el("span", {}, dayLabel(lastDay, false))]),
-    ]),
-  ]);
-}
+/** 레이팅 축: 왼쪽은 곡 평균(레이팅 ÷ 50), 오른쪽은 레이팅. */
+export const RATING_AXES = {
+  left: (v: number) => String(+(v / 50).toFixed(1)),
+  right: (v: number) => String(v),
+};
 
 function ratingChartPanel(points: RatingPoint[], days: string[], updates: { day: string; label: string }[] = []): El {
   if (!points.length) {
@@ -300,7 +190,7 @@ function ratingChartPanel(points: RatingPoint[], days: string[], updates: { day:
     ? `${dayLabel(first.day, withYear)} ${first.rating} → ${dayLabel(last.day, withYear)} ${last.rating} (${delta >= 0 ? "+" : ""}${delta})`
     : `${dayLabel(last.day, false)} ${last.rating}`;
   return panel(msg("profileCard.ratingTitle"), meta, [
-    lineChart(days, [{ values: points.map((p) => ({ day: p.day, value: p.rating, estimated: p.estimated })), color: ACCENT, fill: true }], { height: CHART_H, updates, lastLabel: true }),
+    lineChart(days, [{ values: points.map((p) => ({ day: p.day, value: p.rating, estimated: p.estimated })), color: ACCENT, fill: true }], { height: CHART_H, updates, lastLabel: true, extendTo: days[days.length - 1], mirror: RATING_AXES }),
     // 범례는 점선(추정)만 설명한다. 추정 구간이 없으면 범례를 두지 않는다.
     ...(points.some((p) => p.estimated)
       ? [el("div", { display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 6, marginTop: 8, color: MUTED, fontSize: 10 }, [
@@ -316,8 +206,8 @@ function playCountPanel(plays: PlayCountPoint[], days: string[], updates: { day:
   return panel(msg("profileCard.playsTitle"), msg("profileCard.playsMeta", { total: last.total.toLocaleString("en-US"), current: last.current.toLocaleString("en-US") }), [
     lineChart(days, [
       { values: plays.map((p) => ({ day: p.day, value: p.total })), color: ACCENT },
-      { values: plays.map((p) => ({ day: p.day, value: p.current })), color: PLAY_CURRENT_COLOR },
-    ], { height: PLAYS_H, fromZero: true, updates }),
+      { values: plays.map((p) => ({ day: p.day, value: p.current })), color: PLAY_CURRENT_COLOR, axis: "right" },
+    ], { height: PLAYS_H, fromZero: true, updates, extendTo: days[days.length - 1] }),
     el("div", { display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 14, marginTop: 8, color: MUTED, fontSize: 10 }, [
       lineSwatch(ACCENT, msg("profileCard.playsTotal")),
       lineSwatch(PLAY_CURRENT_COLOR, msg("profileCard.playsCurrent")),

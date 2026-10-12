@@ -99,3 +99,32 @@ test("versionName: maishift 세대 번호 → 버전 이름", () => {
   assert.equal(catalog.versionName(27), "MAGiCAL");
   assert.equal(catalog.versionName(40), "ver.40");
 });
+
+// /히스토리 달성 기록: maishift 히스토리 내보내기 그림과 같은 규칙.
+const hs = require("../../dist/historyStats.js");
+const P = (day, rating, playTotal, versionId = 26) => ({ at: Date.parse(`${day}T12:00:00+09:00`), rating, playTotal, playCurrent: 0, versionId });
+
+test("ratingThresholds: 단위별 기준값과 15250·15750", () => {
+  const t = hs.ratingThresholds(16200);
+  assert.ok(t.includes(13000) && t.includes(14500) && t.includes(15100) && t.includes(15250) && t.includes(16050) && t.includes(16200));
+  assert.ok(!t.includes(13500) && !t.includes(14750) && !t.includes(16250));
+});
+
+test("ratingMilestones: 최근 4개 + 주요 단계 최근 3개, 첫 점에서 이미 넘은 값은 빼고, 한 번에 여러 기준을 넘으면 각각", () => {
+  const history = [P("2025-01-01", 14200, 10), P("2025-02-01", 15010, 20), P("2026-03-13", 16000, 30), P("2026-03-29", 16110, 40), P("2026-04-19", 16160, 50), P("2026-05-05", 16200, 60)];
+  const list = hs.ratingMilestones(history, 16900, history[history.length - 1].at);
+  assert.deepEqual(list.map((m) => m.value), [14500, 15000, 16000, 16050, 16100, 16150, 16200]);
+  assert.equal(list.find((m) => m.value === 16000).emphasised, true);
+  assert.equal(list.find((m) => m.value === 16150).emphasised, false);
+});
+
+test("playMilestones: 4개 이하가 되는 가장 작은 단위", () => {
+  const history = [P("2024-09-12", 0, 123), P("2025-08-12", 0, 1001), P("2026-05-22", 0, 2003), P("2026-10-11", 0, 2608)];
+  assert.deepEqual(hs.playMilestones(history, 2608, history[3].at).map((m) => m.value), [1000, 2000]);
+});
+
+test("versionWeek: 출시 뒤 경과 주(내림)", () => {
+  const versions = [{ id: 26, name: "CiRCLE PLUS", releasedAt: Date.parse("2026-07-22T22:00:00Z") }];
+  assert.deepEqual(hs.versionWeek(Date.parse("2026-10-11T09:28:00Z"), 26, versions), { name: "CiRCLE PLUS", week: 11 });
+  assert.equal(hs.versionWeek(0, 99, versions), null);
+});

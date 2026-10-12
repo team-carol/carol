@@ -96,3 +96,14 @@ test("maishiftDays: 첫 업로드한 날부터 오늘까지 전체 기간", () =
   assert.equal(days.length, 8);
   assert.deepEqual(h.maishiftDays([], "2026-10-05"), []);
 });
+
+test("historyPeriodDays: 끝은 마지막 업로드한 날, 첫 업로드보다 앞으로 가지 않음, 현재 버전은 출시일부터", () => {
+  const H = [{ at: kst("2026-01-10", 12), rating: 1, playTotal: 1, playCurrent: 1, versionId: 25 }, { at: kst("2026-10-11", 18), rating: 1, playTotal: 1, playCurrent: 1, versionId: 26 }];
+  const V = [{ id: 26, releasedAt: Date.parse("2026-07-22T22:00:00Z") }];
+  const all = h.historyPeriodDays(H, V, "all");
+  assert.deepEqual([all[0], all[all.length - 1]], ["2026-01-10", "2026-10-11"]);
+  const week = h.historyPeriodDays(H, V, "7");
+  assert.deepEqual([week[0], week.length], ["2026-10-05", 7]);
+  assert.equal(h.historyPeriodDays(H, V, "version")[0], "2026-07-23");
+  assert.equal(h.historyPeriodDays(H, V, "365")[0], "2026-01-10");
+});

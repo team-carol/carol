@@ -120,3 +120,27 @@ export function maishiftSeries(history: readonly MaishiftHistoryPoint[], days: s
     updates,
   };
 }
+
+export const HISTORY_PERIODS = ["all", "version", "365", "182", "91", "30", "14", "7"] as const;
+export type HistoryPeriod = (typeof HISTORY_PERIODS)[number];
+
+/**
+ * /히스토리 기간의 날짜들(오래된 날부터). 끝은 마지막 업로드한 날(maishift 내보내기 그림과 같이).
+ * - all: 첫 업로드부터, version: 지금 버전이 나온 날부터, 숫자: 그만큼의 일수. 첫 업로드보다 앞으로는 가지 않는다.
+ */
+export function historyPeriodDays(history: readonly MaishiftHistoryPoint[], versions: readonly { id: number; releasedAt: number }[], period: HistoryPeriod): string[] {
+  if (!history.length) return [];
+  const sorted = [...history].sort((a, b) => a.at - b.at);
+  const first = koreaPlayDayKey(new Date(sorted[0].at));
+  const last = koreaPlayDayKey(new Date(sorted[sorted.length - 1].at));
+  let start = first;
+  if (period === "version") {
+    const released = versions.find((v) => v.id === sorted[sorted.length - 1].versionId)?.releasedAt;
+    if (released) start = koreaPlayDayKey(new Date(released));
+  } else if (period !== "all") {
+    start = recentPlayDays(last, Number(period))[0];
+  }
+  if (start < first) start = first;
+  const n = Math.round((Date.parse(last) - Date.parse(start)) / 86400000) + 1;
+  return recentPlayDays(last, Math.max(1, n));
+}
