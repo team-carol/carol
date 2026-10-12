@@ -90,3 +90,12 @@ test("toCatalog: 제목별로 묶고 상수·장르·번역·이른 버전", () 
   assert.deepEqual(idol.charts.map((c) => [c.kind, c.diff, c.constant]), [["ST", "Re:MASTER", 13.1], ["ST", "BASIC", 3], ["DX", "MASTER", 13.5]]);
   assert.equal(list.find((s) => s.title === "Customized Justice").korean, undefined);
 });
+
+test("versionName: maishift 세대 번호 → 버전 이름", () => {
+  assert.equal(catalog.versionName(12), "FiNALE");
+  assert.equal(catalog.versionName(13), "でらっくす");
+  assert.equal(catalog.versionName(22), "BUDDiES PLUS");
+  assert.equal(catalog.versionName(26), "CiRCLE PLUS");
+  assert.equal(catalog.versionName(27), "MAGiCAL");
+  assert.equal(catalog.versionName(40), "ver.40");
+});

@@ -64,16 +64,17 @@ test("versionUpdatesBetween: 기간 안의 국제판 버전 업데이트만", ()
 // maishift 히스토리: 업로드마다 한 점(실제 값). 시각은 한국 시간 오전 4시 기준 플레이 날짜로 묶는다.
 const kst = (day, hour) => Date.parse(`${day}T${String(hour).padStart(2, "0")}:00:00+09:00`);
 
-test("maishiftSeries: 기간 이전 값을 첫날에, 같은 날은 마지막 값, 플레이 횟수는 직전 업로드 대비", () => {
+test("maishiftSeries: 기간 이전 값을 첫날에, 같은 날은 마지막 값, 플레이 횟수는 누적·현재 버전 그대로", () => {
   const days = h.recentPlayDays("2026-10-05", 5); // 10-01 ~ 10-05
   const history = [
-    { at: kst("2026-09-20", 20), rating: 16000, playTotal: 2500 },
-    { at: kst("2026-10-02", 13), rating: 16100, playTotal: 2520 },
-    { at: kst("2026-10-02", 22), rating: 16150, playTotal: 2530 },
-    { at: kst("2026-10-05", 2), rating: 16150, playTotal: 2535 }, // 오전 4시 전 → 10-04
-    { at: kst("2026-10-05", 15), rating: 16200, playTotal: 2550 },
+    { at: kst("2026-09-20", 20), rating: 16000, playTotal: 2500, playCurrent: 300, versionId: 25 },
+    { at: kst("2026-10-02", 13), rating: 16100, playTotal: 2520, playCurrent: 320, versionId: 25 },
+    { at: kst("2026-10-02", 22), rating: 16150, playTotal: 2530, playCurrent: 330, versionId: 25 },
+    { at: kst("2026-10-05", 2), rating: 16150, playTotal: 2535, playCurrent: 5, versionId: 26 }, // 오전 4시 전 → 10-04, 버전 바뀜
+    { at: kst("2026-10-05", 15), rating: 16200, playTotal: 2550, playCurrent: 20, versionId: 26 },
   ];
-  const { points, plays } = h.maishiftSeries(history, days);
+  const { points, plays, updates } = h.maishiftSeries(history, days, (id) => (id === 26 ? "CiRCLE PLUS" : "?"));
+  assert.deepEqual(updates, [{ day: "2026-10-04", label: "CiRCLE PLUS" }]);
   assert.deepEqual(points, [
     { day: "2026-10-01", rating: 16000, estimated: false },
     { day: "2026-10-02", rating: 16150, estimated: false },
@@ -81,15 +82,17 @@ test("maishiftSeries: 기간 이전 값을 첫날에, 같은 날은 마지막 �
     { day: "2026-10-05", rating: 16200, estimated: false },
   ]);
   assert.deepEqual(plays, [
-    { day: "2026-10-02", count: 30 },
-    { day: "2026-10-04", count: 5 },
-    { day: "2026-10-05", count: 15 },
+    { day: "2026-10-01", total: 2500, current: 300 },
+    { day: "2026-10-02", total: 2530, current: 330 },
+    { day: "2026-10-04", total: 2535, current: 5 },
+    { day: "2026-10-05", total: 2550, current: 20 },
   ]);
 });
 
-test("maishiftSeries: 기간 안 업로드가 하나뿐이고 이전 기록이 없으면 플레이 횟수는 비어 있다", () => {
-  const days = h.recentPlayDays("2026-10-05", 5);
-  const { points, plays } = h.maishiftSeries([{ at: kst("2026-10-03", 12), rating: 15000, playTotal: 100 }], days);
-  assert.deepEqual(points, [{ day: "2026-10-03", rating: 15000, estimated: false }]);
-  assert.deepEqual(plays, []);
+test("maishiftDays: 첫 업로드한 날부터 오늘까지 전체 기간", () => {
+  const days = h.maishiftDays([{ at: kst("2026-10-05", 15), rating: 1, playTotal: 1, playCurrent: 1 }, { at: kst("2026-09-28", 12), rating: 1, playTotal: 1, playCurrent: 1 }], "2026-10-05");
+  assert.equal(days[0], "2026-09-28");
+  assert.equal(days[days.length - 1], "2026-10-05");
+  assert.equal(days.length, 8);
+  assert.deepEqual(h.maishiftDays([], "2026-10-05"), []);
 });

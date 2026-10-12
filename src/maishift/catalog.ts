@@ -26,6 +26,17 @@ export function versionCode(index: number): number {
   return index < OLD_VERSION_CODES.length ? OLD_VERSION_CODES[index] : 20000 + (index - OLD_VERSION_CODES.length) * 500;
 }
 
+// でらっくす(13)부터 세대마다 무印·PLUS 두 버전. 아직 모르는 세대는 번호로.
+const DX_GENERATIONS = ["でらっくす", "Splash", "UNiVERSE", "FESTiVAL", "BUDDiES", "PRiSM", "CiRCLE", "MAGiCAL"];
+const OLD_VERSION_NAMES = ["maimai", "maimai PLUS", "GreeN", "GreeN PLUS", "ORANGE", "ORANGE PLUS", "PiNK", "PiNK PLUS", "MURASAKi", "MURASAKi PLUS", "MiLK", "MiLK PLUS", "FiNALE"];
+/** maishift 세대 번호 → 버전 이름(그래프의 버전 표시용). */
+export function versionName(index: number): string {
+  if (index < OLD_VERSION_NAMES.length) return OLD_VERSION_NAMES[index] ?? `ver.${index}`;
+  const k = index - OLD_VERSION_NAMES.length;
+  const gen = DX_GENERATIONS[Math.floor(k / 2)];
+  return gen ? (k % 2 ? `${gen} PLUS` : gen) : `ver.${index}`;
+}
+
 const GENRES: Record<string, string> = {
   POPS_AND_ANIME: "POPS＆アニメ",
   NICONICO_AND_VOCALOID: "niconico＆ボーカロイド",

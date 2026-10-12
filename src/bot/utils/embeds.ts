@@ -38,7 +38,8 @@ import { aliasMatches, normalizeQuery, displayTitle } from "../../aliases";
 import { ratingColor } from "./roles";
 import { renderProfileCard } from "./profileCard";
 import { circleOf } from "./circle";
-import { buildRatingSeries, maishiftSeries, recentPlayDays, RATING_HISTORY_DAYS } from "../../ratingHistory";
+import { versionName } from "../../maishift/catalog";
+import { buildRatingSeries, maishiftDays, maishiftSeries, recentPlayDays, RATING_HISTORY_DAYS } from "../../ratingHistory";
 import { versionUpdatesBetween } from "../../constants";
 import { koreaPlayDayKey, koreaPlayDayRange } from "../../achievements";
 import { buildMarkMap, buildKindResolver, chartKey } from "../../scraper";
@@ -767,16 +768,19 @@ export function rtTableEmbed(
   };
 }
 
-// 프로필 카드 히스토리: 최근 RATING_HISTORY_DAYS 일.
-// maishift 연동이면 maishift 히스토리(업로드마다의 실제 레이팅·플레이 횟수), 아니면 실측(스냅샷) + 성과 로그 기반 추정.
+// 프로필 카드 히스토리. maishift 연동이면 maishift 히스토리(업로드마다의 실제 레이팅·플레이 횟수) 전체 기간,
+// 아니면 최근 RATING_HISTORY_DAYS 일의 실측(스냅샷) + 성과 로그 기반 추정.
 async function loadRatingHistory(cached: NonNullable<Awaited<ReturnType<typeof getCachedProfile>>>) {
-  const days = recentPlayDays(koreaPlayDayKey(new Date()), RATING_HISTORY_DAYS);
-  // 버전 업데이트 날짜는 서버별 이력(국제판·내수판 일정이 다르다).
-  const updates = versionUpdatesBetween(days[0], days[days.length - 1], cached.server);
+  const today = koreaPlayDayKey(new Date());
+  // maishift 히스토리는 전체 기간(첫 업로드부터 오늘까지)을 그린다.
   if (cached.maishiftHistory?.length) {
-    const { points, plays } = maishiftSeries(cached.maishiftHistory, days);
+    const days = maishiftDays(cached.maishiftHistory, today);
+    const { points, plays, updates } = maishiftSeries(cached.maishiftHistory, days, versionName);
     return { points, days, updates, plays };
   }
+  const days = recentPlayDays(today, RATING_HISTORY_DAYS);
+  // 버전 업데이트 날짜는 서버별 이력(국제판·내수판 일정이 다르다).
+  const updates = versionUpdatesBetween(days[0], days[days.length - 1], cached.server);
   const [snapshots, logRange, events] = await Promise.all([
     listRatingSnapshots(cached.profileKey, days[0]),
     getAchievementLogRange(cached.profileKey),

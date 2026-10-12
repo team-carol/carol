@@ -93,7 +93,7 @@ export function trophyClassOf(tier: string | undefined): string {
 /** 히스토리 → 캐롤봇 형식(시간순). 시각을 못 읽는 점은 버린다. */
 export function historyPoints(list: MsHistoryPoint[]): MaishiftHistoryPoint[] {
   return list
-    .map((h) => ({ at: Date.parse(h.date), rating: h.rating, playTotal: h.playCountTotal }))
+    .map((h) => ({ at: Date.parse(h.date), rating: h.rating, playTotal: h.playCountTotal, playCurrent: h.playCountCurrent, versionId: h.versionId }))
     .filter((h) => Number.isFinite(h.at) && h.rating > 0)
     .sort((a, b) => a.at - b.at);
 }
