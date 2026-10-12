@@ -3,6 +3,7 @@
  * 여기서 바꾼 값만 쓴다. 공식 API로 옮길 때 이 파일과 serverFn.ts 만 바꾸면 되게 하려는 것.
  */
 import type { PlayRecord } from "../scraper";
+import type { MaishiftHistoryPoint } from "../storage/types";
 import { constantToDisplayLevel } from "../constants";
 
 export interface MsSong {
@@ -42,6 +43,7 @@ export interface MsProfileResult {
   ban?: { banned: boolean };
 }
 export interface MsRecordsResult { songs: MsSong[]; tracks: MsTrack[] }
+export interface MsHistoryPoint { rating: number; ratingNew: number; ratingOld: number; playCountTotal: number; playCountCurrent: number; date: string; versionId: number }
 
 const DIFF: Record<string, string> = { BASIC: "BASIC", ADVANCED: "ADVANCED", EXPERT: "EXPERT", MASTER: "MASTER", RE_MASTER: "Re:MASTER" };
 const FC: Record<string, string> = { FULL_COMBO: "FC", FULL_COMBO_PLUS: "FC+", ALL_PERFECT: "AP", ALL_PERFECT_PLUS: "AP+" };
@@ -86,4 +88,12 @@ export function allRecords(res: MsRecordsResult): PlayRecord[] {
 const TROPHY_CLASS: Record<string, string> = { NORMAL: "normal", BRONZE: "bronze", SILVER: "silver", GOLD: "gold", RAINBOW: "rainbow" };
 export function trophyClassOf(tier: string | undefined): string {
   return TROPHY_CLASS[(tier ?? "").toUpperCase()] ?? "normal";
+}
+
+/** 히스토리 → 캐롤봇 형식(시간순). 시각을 못 읽는 점은 버린다. */
+export function historyPoints(list: MsHistoryPoint[]): MaishiftHistoryPoint[] {
+  return list
+    .map((h) => ({ at: Date.parse(h.date), rating: h.rating, playTotal: h.playCountTotal }))
+    .filter((h) => Number.isFinite(h.at) && h.rating > 0)
+    .sort((a, b) => a.at - b.at);
 }

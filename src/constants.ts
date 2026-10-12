@@ -50,7 +50,7 @@ const NEW_SONG_MAX_VERSION_JP = 27500; // MAGiCAL PLUS(27500) 미포함
 // 현재 범위로 신곡/구곡을 나누면 그 시점과 어긋나므로, 적용 시작일과 함께 이력을 둔다.
 // from 은 그 범위가 적용되기 시작한 play-day(포함). 최신순으로 정렬해 첫 일치를 쓴다.
 // 새 버전이 나오면 위에 한 줄 추가하고 NEW_SONG_MIN/MAX 도 함께 갱신할 것.
-// label 은 그 날 나온 버전 이름(프로필 레이팅 추이 그래프의 업데이트 표시에 쓴다).
+// label 은 그 날 나온 버전 이름(프로필 히스토리 그래프의 업데이트 표시에 쓴다).
 // 국제판과 내수판은 업데이트 일정이 달라 이력을 따로 둔다.
 type NewSongWindowEntry = { from: string; min: number; max: number; label?: string };
 const NEW_SONG_WINDOWS: NewSongWindowEntry[] = [
@@ -291,7 +291,7 @@ export function getSongVersion(title: string): number | null {
 
 // 레이팅 신곡(현재+이전 버전) 여부. version 데이터가 없으면 구곡으로 취급.
 // 서버별 세대 진행이 달라(내수판=MAGiCAL, 국제판=CiRCLE PLUS) 신곡 범위도 서버별 이력을 쓴다.
-// playDay 를 주면 그 시점의 신곡 범위로 판정한다(과거 레이팅표 역산·레이팅 추이 추정용).
+// playDay 를 주면 그 시점의 신곡 범위로 판정한다(과거 레이팅표 역산·히스토리 추정용).
 export function isNewSong(title: string, server: MaimaiServer = "intl", playDay?: string): boolean {
   const v = (server === "intl" ? intlVersionMap.get(title) : undefined) ?? versionMap.get(title);
   if (v === undefined) return false;

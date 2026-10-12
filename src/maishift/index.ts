@@ -3,13 +3,13 @@
  *
  * 프로필·기록은 캐롤봇 DB에 저장하지 않고 메모리에만 잠깐 둔다. 부하를 줄이려고:
  * - 프로필(작음)은 아이디마다 PROFILE_TTL_MS 에 한 번만 확인한다.
- * - 전체 기록(큼)은 프로필의 updatedAt(maishift 업로드 시각)이 바뀌었을 때만 다시 받는다.
+ * - 전체 기록(큼)과 레이팅 히스토리는 프로필의 updatedAt(maishift 업로드 시각)이 바뀌었을 때만 다시 받는다.
  * - 모든 요청은 serverFn.ts 에서 한 줄로 세워 간격을 둔다.
  */
 import { registerProfileOverlay, maishiftProfileKey, type MaishiftLink } from "../storage";
-import type { CachedProfile } from "../storage/types";
+import type { CachedProfile, MaishiftHistoryPoint } from "../storage/types";
 import { callServerFn, FN, MaishiftError, type MaishiftRegion } from "./serverFn";
-import { ratingTargets, allRecords, trophyClassOf, type MsProfileResult, type MsRecordsResult } from "./convert";
+import { ratingTargets, allRecords, trophyClassOf, historyPoints, type MsProfileResult, type MsRecordsResult, type MsHistoryPoint } from "./convert";
 
 export { MaishiftError } from "./serverFn";
 
@@ -34,6 +34,7 @@ interface Entry {
   friendCode: string;
   topJson: string;
   clearJson: string;
+  history: MaishiftHistoryPoint[];
 }
 
 const cache = new Map<string, Entry>();
@@ -56,10 +57,19 @@ async function refresh(link: MaishiftLink): Promise<Entry> {
   if (!rec?.profile) throw new MaishiftError("no record for region", "not_found");
   const p = rec.profile;
   const prev = cache.get(key);
-  let clearJson = prev && prev.updatedAt === p.updatedAt ? prev.clearJson : "";
+  const same = prev && prev.updatedAt === p.updatedAt ? prev : null;
+  let clearJson = same?.clearJson ?? "";
+  let history = same?.history ?? null;
   if (!clearJson) {
     const all = await callServerFn<MsRecordsResult>(FN.records, args);
     clearJson = JSON.stringify(allRecords(all));
+  }
+  if (!history) {
+    // 히스토리는 그래프용 부가 데이터라 못 받아도 프로필은 보여 준다(다음 업로드 때 다시 시도).
+    history = await callServerFn<MsHistoryPoint[]>(FN.history, args).then(historyPoints).catch((e) => {
+      console.error(`[maishift] ${link.handle} 히스토리:`, (e as Error).message);
+      return [];
+    });
   }
   const entry: Entry = {
     checkedAt: Date.now(),
@@ -76,6 +86,7 @@ async function refresh(link: MaishiftLink): Promise<Entry> {
     friendCode: p.friendCode ?? "",
     topJson: JSON.stringify(ratingTargets(rec)),
     clearJson,
+    history,
   };
   remember(key, entry);
   return entry;
@@ -140,6 +151,7 @@ function toProfile(base: CachedProfile | null, link: MaishiftLink, e: Entry): Ca
     lastSyncedAt: Date.parse(e.updatedAt) || shell.lastSyncedAt,
     topJson: e.topJson,
     clearJson: e.clearJson,
+    maishiftHistory: e.history,
     source: "maishift",
   };
 }

@@ -20,6 +20,8 @@ export const FN = {
   records: "4596ec22247ca585a111f9481e9c4ce1f2553f7b0f3fc7b98a4324205365ef54",
   /** {region} → 지역 곡 목록(곡·보면·상수·한국어 번역). /songs 페이지 */
   songs: "5c9650151df3f336ab6e8278251a186ce9b3e587a66c4100c738cc0e91398756",
+  /** {handle, region} → 업로드마다 한 점씩 쌓인 레이팅·플레이 횟수 히스토리. 프로필 홈 그래프 */
+  history: "086876d75e2fef4bee772eae80535e80dcbc84fa6e64fc0db1f0f2737222bc4f",
 } as const;
 
 export type MaishiftRegion = "ASIA" | "JAPAN";

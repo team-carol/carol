@@ -1,4 +1,4 @@
-// src/ratingHistory.ts — 레이팅 추이: 실측(스냅샷) + 성과 로그로 되돌린 추정(다음 실측에 맞춰 보정).
+// src/ratingHistory.ts — 히스토리: 실측(스냅샷) + 성과 로그로 되돌린 추정(다음 실측에 맞춰 보정).
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const h = require("../../dist/ratingHistory.js");
@@ -59,4 +59,37 @@ test("versionUpdatesBetween: 기간 안의 국제판 버전 업데이트만", ()
   const { versionUpdatesBetween } = require("../../dist/constants.js");
   assert.deepEqual(versionUpdatesBetween("2026-07-01", "2026-09-30"), [{ day: "2026-07-23", label: "CiRCLE PLUS" }]);
   assert.deepEqual(versionUpdatesBetween("2026-07-24", "2026-09-30"), []);
+});
+
+// maishift 히스토리: 업로드마다 한 점(실제 값). 시각은 한국 시간 오전 4시 기준 플레이 날짜로 묶는다.
+const kst = (day, hour) => Date.parse(`${day}T${String(hour).padStart(2, "0")}:00:00+09:00`);
+
+test("maishiftSeries: 기간 이전 값을 첫날에, 같은 날은 마지막 값, 플레이 횟수는 직전 업로드 대비", () => {
+  const days = h.recentPlayDays("2026-10-05", 5); // 10-01 ~ 10-05
+  const history = [
+    { at: kst("2026-09-20", 20), rating: 16000, playTotal: 2500 },
+    { at: kst("2026-10-02", 13), rating: 16100, playTotal: 2520 },
+    { at: kst("2026-10-02", 22), rating: 16150, playTotal: 2530 },
+    { at: kst("2026-10-05", 2), rating: 16150, playTotal: 2535 }, // 오전 4시 전 → 10-04
+    { at: kst("2026-10-05", 15), rating: 16200, playTotal: 2550 },
+  ];
+  const { points, plays } = h.maishiftSeries(history, days);
+  assert.deepEqual(points, [
+    { day: "2026-10-01", rating: 16000, estimated: false },
+    { day: "2026-10-02", rating: 16150, estimated: false },
+    { day: "2026-10-04", rating: 16150, estimated: false },
+    { day: "2026-10-05", rating: 16200, estimated: false },
+  ]);
+  assert.deepEqual(plays, [
+    { day: "2026-10-02", count: 30 },
+    { day: "2026-10-04", count: 5 },
+    { day: "2026-10-05", count: 15 },
+  ]);
+});
+
+test("maishiftSeries: 기간 안 업로드가 하나뿐이고 이전 기록이 없으면 플레이 횟수는 비어 있다", () => {
+  const days = h.recentPlayDays("2026-10-05", 5);
+  const { points, plays } = h.maishiftSeries([{ at: kst("2026-10-03", 12), rating: 15000, playTotal: 100 }], days);
+  assert.deepEqual(points, [{ day: "2026-10-03", rating: 15000, estimated: false }]);
+  assert.deepEqual(plays, []);
 });

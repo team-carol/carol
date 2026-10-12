@@ -12,7 +12,7 @@ import { getScoreRank, MAI_CM_COLOR } from "../../games";
 import { fetchJacketDataUrl, ratingBreakdown, ratingPlate } from "./ratingCard";
 import { musicKindIcons, KIND_ICON_RATIO } from "./dxnetAssets";
 import { alignLeftMargin } from "./textMetrics";
-import type { RatingPoint } from "../../ratingHistory";
+import type { RatingPoint, PlayCountPoint } from "../../ratingHistory";
 import { msg, cardTextSignature } from "../../messages";
 
 // /프로필 이미지 카드. 레이아웃·색은 /성과 카드와 같은 랜딩(carol-web) 토큰(src/brand.ts)을 따른다.
@@ -44,7 +44,7 @@ const MARK_COLOR: Record<string, string> = {
   "FDX+": "#10b981", FDX: "#34d399", "FS+": "#22c55e", FS: "#4ade80",
 };
 
-const PROFILE_CARD_VERSION = 13;
+const PROFILE_CARD_VERSION = 14;
 const PROFILE_CARD_CACHE_MAX = 64;
 const profileCardCache = new Map<string, Buffer>();
 
@@ -161,7 +161,7 @@ function recentRow(record: PlayRecord, profile: CachedProfile, jacket: string | 
   ]);
 }
 
-// ─── 레이팅 추이 그래프 ─────────────────────────────────────────────────────
+// ─── 히스토리 그래프 ─────────────────────────────────────────────────────
 // 선·격자는 SVG 이미지로 그리고(resvg 가 벡터로 렌더), 축 라벨·값은 satori 텍스트로 올린다
 // (중첩 SVG 안의 text 는 글꼴을 못 찾을 수 있어서). 실측끼리 잇는 구간은 실선, 추정이 끼면 점선.
 const CHART_W = 840;          // 패널 안쪽 폭
@@ -169,6 +169,7 @@ const CHART_Y_LABEL_W = 40;   // 왼쪽 눈금 라벨 칸
 const CHART_H = 150;
 const CHART_PAD_X = 10;
 const CHART_PAD_Y = 16;
+const PLAYS_H = 56;           // 플레이 횟수 막대 영역 높이
 
 function niceStep(range: number): number {
   const steps = [1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000];
@@ -183,7 +184,37 @@ function dashedSwatch(): El {
   return el("div", { display: "flex", gap: 3 }, [0, 1, 2].map(() => el("div", { width: 5, height: 2, background: ACCENT, opacity: 0.8 })));
 }
 
-function ratingChartPanel(points: RatingPoint[], days: string[], updates: { day: string; label: string }[] = []): El {
+// 플레이 횟수 막대. 레이팅 그래프와 같은 가로축(xOf)을 써서 날짜가 위아래로 맞는다.
+function playsBlock(plays: PlayCountPoint[], plotW: number, xOf: (day: string) => number, dayW: number): El {
+  const total = plays.reduce((a, p) => a + p.count, 0);
+  const max = Math.max(...plays.map((p) => p.count));
+  // 이웃한 날의 막대가 겹치지 않게 하루 간격의 60% 이하로.
+  const barW = Math.max(2, Math.min(10, dayW * 0.6));
+  const svg = [`<svg xmlns="http://www.w3.org/2000/svg" width="${plotW}" height="${PLAYS_H}" viewBox="0 0 ${plotW} ${PLAYS_H}">`,
+    `<line x1="0" x2="${plotW}" y1="${PLAYS_H - 0.5}" y2="${PLAYS_H - 0.5}" stroke="${BORDER}" stroke-width="1"/>`];
+  for (const p of plays) {
+    const h = Math.max(2, (p.count / max) * (PLAYS_H - 6));
+    const x = Math.max(0, Math.min(plotW - barW, xOf(p.day) - barW / 2));
+    svg.push(`<rect x="${x.toFixed(1)}" y="${(PLAYS_H - h).toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" rx="1.5" fill="${ACCENT}" fill-opacity="0.75"/>`);
+  }
+  svg.push("</svg>");
+  const svgUrl = `data:image/svg+xml;base64,${Buffer.from(svg.join("")).toString("base64")}`;
+  return el("div", { display: "flex", flexDirection: "column", marginTop: 14 }, [
+    el("div", { display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6, paddingLeft: CHART_Y_LABEL_W + 8 }, [
+      el("span", { color: INK, fontSize: 13, fontWeight: 700 }, msg("profileCard.playsTitle")),
+      el("span", { color: MUTED, fontSize: 11 }, msg("profileCard.playsMeta", { count: total.toLocaleString("en-US") })),
+    ]),
+    el("div", { display: "flex", gap: 8 }, [
+      el("div", { display: "flex", position: "relative", width: CHART_Y_LABEL_W, height: PLAYS_H }, [
+        el("span", { position: "absolute", right: 0, top: 0, color: FAINT, fontFamily: NUM_FONT, fontSize: 10, lineHeight: 1 }, String(max)),
+        el("span", { position: "absolute", right: 0, top: PLAYS_H - 10, color: FAINT, fontFamily: NUM_FONT, fontSize: 10, lineHeight: 1 }, "0"),
+      ]),
+      image(svgUrl, { width: plotW, height: PLAYS_H }),
+    ]),
+  ]);
+}
+
+function ratingChartPanel(points: RatingPoint[], days: string[], updates: { day: string; label: string }[] = [], plays: PlayCountPoint[] = []): El {
   if (!points.length) {
     return panel(msg("profileCard.ratingTitle"), "", [el("span", { color: MUTED, fontSize: 12, padding: "10px 0" }, msg("profileCard.ratingEmpty"))]);
   }
@@ -262,6 +293,8 @@ function ratingChartPanel(points: RatingPoint[], days: string[], updates: { day:
       el("div", { display: "flex", justifyContent: points.length > 1 ? "space-between" : "center", flex: 1, color: FAINT, fontSize: 10 },
         points.length > 1 ? [shortDay(first.day), shortDay(midDay), shortDay(last.day)].map((t) => el("span", {}, t)) : [el("span", {}, shortDay(last.day))]),
     ]),
+    // maishift 히스토리면 플레이 횟수 막대를 같은 가로축으로 아래에 붙인다.
+    ...(plays.length && points.length > 1 ? [playsBlock(plays, plotW, xOf, (plotW - 2 * CHART_PAD_X) / span)] : []),
     // 범례는 점선(추정)만 설명한다. 추정 구간이 없으면 범례를 두지 않는다.
     ...(points.some((p) => p.estimated)
       ? [el("div", { display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 6, marginTop: 8, color: MUTED, fontSize: 10 }, [
@@ -274,7 +307,7 @@ function ratingChartPanel(points: RatingPoint[], days: string[], updates: { day:
 export async function renderProfileCard(
   profile: CachedProfile,
   avatarBuf: Buffer | null,
-  opts: { translate?: boolean; friendCode?: string | null; circleName?: string | null; ratingHistory?: { points: RatingPoint[]; days: string[]; updates?: { day: string; label: string }[] } } = {},
+  opts: { translate?: boolean; friendCode?: string | null; circleName?: string | null; ratingHistory?: { points: RatingPoint[]; days: string[]; updates?: { day: string; label: string }[]; plays?: PlayCountPoint[] } } = {},
 ): Promise<Buffer> {
   const translate = !!opts.translate;
   const friendCode = opts.friendCode ?? null;
@@ -349,7 +382,7 @@ export async function renderProfileCard(
       { value: String(profile.totalPlayCount || profile.playCount || 0), label: msg("profileCard.totalPlayCount") },
     ]),
     clearPanel(clears),
-    ...(history ? [ratingChartPanel(history.points, history.days, history.updates)] : []),
+    ...(history ? [ratingChartPanel(history.points, history.days, history.updates, history.plays)] : []),
     panel(msg("profileCard.recentTitle"), msg("profileCard.recentMeta", { count: recent.length }), recent.length
       ? recent.map((r, i) => recentRow(r, profile, jackets[i], translate, kindIcons))
       : [el("span", { color: MUTED, fontSize: 12, padding: "12px 0" }, msg("profileCard.recentEmpty"))]),

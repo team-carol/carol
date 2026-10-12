@@ -37,7 +37,7 @@ src/bot/
 | Role assignment | `utils/roles.ts` | Rating-tier roles, guild setting gate. |
 | Rating card renderer | `utils/ratingCard.ts` | Largest file; satori element helper, no JSX. |
 | 프로필 카드 | `utils/profileCard.ts` | `/프로필` 기본 응답(이미지). 레이팅 플레이트·신곡/구곡 합(`ratingBreakdown`)·카탈로그 재킷(`jacketFileUrl`)은 `ratingCard.ts` 것을 재사용. `형식:임베드` 는 기존 `profileEmb`. 메모리 캐시 키에 lastSyncedAt 포함. |
-| 레이팅 추이 그래프 | `src/ratingHistory.ts`, `profileCard.ts` `ratingChartPanel` | 최근 90일. 실측=`rating_snapshots`(실선, 실측점 사이는 추정 없이 바로 잇는다), 추정=첫 실측 이전 구간만 성과 로그를 그날 끝까지 되돌린 계산값을 **다음 실측일 기준으로 보정**(점선). 마지막 동기화 이후는 점 없음. 버전 업데이트 날 세로선. 선은 SVG 이미지, 라벨은 satori 텍스트. |
+| 히스토리 그래프 | `src/ratingHistory.ts`, `profileCard.ts` `ratingChartPanel` | 최근 90일. maishift 연동이면 `maishiftSeries`(maishift 히스토리 = 업로드마다 실제 레이팅·누적 플레이 횟수, 추정 없음)로 그리고 아래에 플레이 횟수 막대(직전 업로드 대비 증가분)를 같은 가로축으로 붙인다. 아니면 실측=`rating_snapshots`(실선, 실측점 사이는 추정 없이 바로 잇는다), 추정=첫 실측 이전 구간만 성과 로그를 그날 끝까지 되돌린 계산값을 **다음 실측일 기준으로 보정**(점선). 마지막 동기화 이후는 점 없음. 버전 업데이트 날 세로선. 선은 SVG 이미지, 라벨은 satori 텍스트. |
 
 ## CONVENTIONS
 

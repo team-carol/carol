@@ -274,7 +274,7 @@ export class PostgresStorage {
     if(!r[0]) return null;
     return {...r[0], rating:Number(r[0].rating), syncedAt:Number(r[0].syncedAt)};
   }
-  // 레이팅 추이 그래프용. fromDay 이후 하루치 레이팅(오래된 날부터).
+  // 히스토리 그래프용. fromDay 이후 하루치 레이팅(오래된 날부터).
   async listRatingSnapshots(profileKey:string, fromDay:string):Promise<{playDay:string;rating:number}[]>{
     const r=await this.q<any>(`SELECT play_day AS "playDay",rating FROM rating_snapshots WHERE profile_key=$1 AND play_day >= $2 ORDER BY play_day`,[profileKey,fromDay]);
     return r.map((x:any)=>({playDay:x.playDay,rating:Number(x.rating)}));
