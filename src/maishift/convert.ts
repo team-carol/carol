@@ -3,7 +3,7 @@
  * 여기서 바꾼 값만 쓴다. 공식 API로 옮길 때 이 파일과 serverFn.ts 만 바꾸면 되게 하려는 것.
  */
 import type { PlayRecord } from "../scraper";
-import type { MaishiftHistoryPoint } from "../storage/types";
+import type { MaishiftHistoryPoint, MaishiftVersion } from "../storage/types";
 import { constantToDisplayLevel } from "../constants";
 
 export interface MsSong {
@@ -39,6 +39,7 @@ export interface MsProfileResult {
     /** tracks.tracks 의 인덱스 */
     ratingsLatest: number[];
     ratingsOld: number[];
+    availableVersions?: { value: number; name: string; releasedAt: string }[];
   } | null;
   ban?: { banned: boolean };
 }
@@ -96,4 +97,12 @@ export function historyPoints(list: MsHistoryPoint[]): MaishiftHistoryPoint[] {
     .map((h) => ({ at: Date.parse(h.date), rating: h.rating, playTotal: h.playCountTotal, playCurrent: h.playCountCurrent, versionId: h.versionId }))
     .filter((h) => Number.isFinite(h.at) && h.rating > 0)
     .sort((a, b) => a.at - b.at);
+}
+
+/** 지역 버전 목록(출시 시각). 시각을 못 읽는 버전은 버린다. */
+export function versionList(list: { value: number; name: string; releasedAt: string }[] | undefined): MaishiftVersion[] {
+  return (list ?? [])
+    .map((v) => ({ id: v.value, name: v.name, releasedAt: Date.parse(v.releasedAt) }))
+    .filter((v) => Number.isFinite(v.releasedAt))
+    .sort((a, b) => a.id - b.id);
 }

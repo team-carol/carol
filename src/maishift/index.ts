@@ -7,11 +7,11 @@
  * - 모든 요청은 serverFn.ts 에서 한 줄로 세워 간격을 둔다.
  */
 import { registerProfileOverlay, type MaishiftLink } from "../storage";
-import type { CachedProfile, MaishiftHistoryPoint } from "../storage/types";
+import type { CachedProfile, MaishiftHistoryPoint, MaishiftVersion } from "../storage/types";
 import { applyMaishiftUpdate } from "./sync";
 import { rankImage } from "../rankImages";
 import { callServerFn, FN, MaishiftError, type MaishiftRegion } from "./serverFn";
-import { ratingTargets, allRecords, trophyClassOf, historyPoints, type MsProfileResult, type MsRecordsResult, type MsHistoryPoint } from "./convert";
+import { ratingTargets, allRecords, trophyClassOf, historyPoints, versionList, type MsProfileResult, type MsRecordsResult, type MsHistoryPoint } from "./convert";
 
 export { MaishiftError } from "./serverFn";
 
@@ -39,6 +39,7 @@ interface Entry {
   topJson: string;
   clearJson: string;
   history: MaishiftHistoryPoint[];
+  versions: MaishiftVersion[];
 }
 
 const cache = new Map<string, Entry>();
@@ -102,6 +103,7 @@ async function refresh(link: MaishiftLink): Promise<Entry> {
     topJson: JSON.stringify(top),
     clearJson,
     history,
+    versions: versionList(rec.availableVersions),
   };
   remember(key, entry);
   return entry;
@@ -157,6 +159,7 @@ function toProfile(profileKey: string, link: MaishiftLink, e: Entry, extras: Cac
     clearJson: e.clearJson,
     mapJson: extras?.mapJson ?? "[]",
     maishiftHistory: e.history,
+    maishiftVersions: e.versions,
     source: "maishift",
   };
 }

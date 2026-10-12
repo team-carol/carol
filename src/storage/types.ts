@@ -1,7 +1,8 @@
 export const MAIMAI_SERVERS = ["intl", "jp"] as const;
 export type MaimaiServer = (typeof MAIMAI_SERVERS)[number];
 export function isMaimaiServer(value: string): value is MaimaiServer { return value === "intl" || value === "jp"; }
-export interface CachedProfile { profileKey:string; server:MaimaiServer; friendCode:string; playerName:string; rating:number; ratingMax:number; trophy:string; trophyClass:string; avatar:string; gradeImg:string; courseImg:string; circleJson?:string; stars:string; comment:string; playCount:number; totalPlayCount:number; lastSyncedAt:number; recentJson:string; topJson:string; clearJson:string; mapJson:string; /** "maishift" 면 프로필·기록이 maishift 에서 온 값(출처 표기용). */ source?:"maishift"; /** maishift 업로드마다의 레이팅·누적 플레이 횟수(시간순). maishift 연동일 때만. */ maishiftHistory?:MaishiftHistoryPoint[]; }
+export interface CachedProfile { profileKey:string; server:MaimaiServer; friendCode:string; playerName:string; rating:number; ratingMax:number; trophy:string; trophyClass:string; avatar:string; gradeImg:string; courseImg:string; circleJson?:string; stars:string; comment:string; playCount:number; totalPlayCount:number; lastSyncedAt:number; recentJson:string; topJson:string; clearJson:string; mapJson:string; /** "maishift" 면 프로필·기록이 maishift 에서 온 값(출처 표기용). */ source?:"maishift"; /** maishift 업로드마다의 레이팅·누적 플레이 횟수(시간순). maishift 연동일 때만. */ maishiftHistory?:MaishiftHistoryPoint[]; /** 그 지역의 버전 목록(출시 시각 포함). maishift 연동일 때만. */ maishiftVersions?:MaishiftVersion[]; }
+export interface MaishiftVersion { id:number; name:string; releasedAt:number; }
 export interface MaishiftHistoryPoint { at:number; rating:number; playTotal:number; playCurrent:number; /** maishift 세대 번호(25=CiRCLE, 26=CiRCLE PLUS …) */ versionId:number; }
 export interface ExtraBookmarklet { label:string; code:string; }
 export interface OptionPresetInput { name:string; server:MaimaiServer; values:Record<string,string>; labels:Record<string,[string,string]>; }
