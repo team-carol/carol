@@ -14,7 +14,7 @@ import { musicKindIcons, KIND_ICON_RATIO } from "./dxnetAssets";
 import { alignLeftMargin } from "./textMetrics";
 import type { RatingPoint, PlayCountPoint } from "../../ratingHistory";
 import { lineChart, lineSwatch, dashedSwatch } from "./historyChart";
-import { SHOW_CAROL_SYNC_EXTRAS } from "./syncExtras";
+import { hasCarolSync } from "./syncExtras";
 import { msg, cardTextSignature } from "../../messages";
 
 // /프로필 이미지 카드. 레이아웃·색은 /성과 카드와 같은 랜딩(carol-web) 토큰(src/brand.ts)을 따른다.
@@ -46,7 +46,7 @@ const MARK_COLOR: Record<string, string> = {
   "FDX+": "#10b981", FDX: "#34d399", "FS+": "#22c55e", FS: "#4ade80",
 };
 
-const PROFILE_CARD_VERSION = 18;
+const PROFILE_CARD_VERSION = 19;
 const PROFILE_CARD_CACHE_MAX = 64;
 const profileCardCache = new Map<string, Buffer>();
 
@@ -230,7 +230,8 @@ export async function renderProfileCard(
   const memo = profileCardCache.get(cacheKey);
   if (memo) return memo;
 
-  const recent = SHOW_CAROL_SYNC_EXTRAS ? parseList(profile.recentJson).slice(0, RECENT_COUNT) : [];
+  const synced = hasCarolSync(profile);
+  const recent = synced ? parseList(profile.recentJson).slice(0, RECENT_COUNT) : [];
   const clears = parseList(profile.clearJson);
   const breakdown = ratingBreakdown(profile);
   const [avatarUrl, courseUrl, gradeUrl, jackets, kindIcons] = await Promise.all([
@@ -296,8 +297,8 @@ export async function renderProfileCard(
     clearPanel(clears),
     ...(history ? [ratingChartPanel(history.points, history.days, history.updates)] : []),
     ...(history?.plays && history.plays.length > 1 ? [playCountPanel(history.plays, history.days, history.updates)] : []),
-    // 최근 플레이는 캐롤봇 추가 북마클릿 데이터라 우선 숨긴다(SHOW_CAROL_SYNC_EXTRAS).
-    ...(SHOW_CAROL_SYNC_EXTRAS ? [panel(msg("profileCard.recentTitle"), msg("profileCard.recentMeta", { count: recent.length }), recent.length
+    // 최근 플레이는 캐롤봇 추가 북마클릿 데이터라, 그 북마클릿을 실행한 사용자에게만 보인다.
+    ...(synced ? [panel(msg("profileCard.recentTitle"), msg("profileCard.recentMeta", { count: recent.length }), recent.length
       ? recent.map((r, i) => recentRow(r, profile, jackets[i], translate, kindIcons))
       : [el("span", { color: MUTED, fontSize: 12, padding: "12px 0" }, msg("profileCard.recentEmpty"))])] : []),
     // 푸터
