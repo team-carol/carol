@@ -44,7 +44,7 @@ const MARK_COLOR: Record<string, string> = {
   "FDX+": "#10b981", FDX: "#34d399", "FS+": "#22c55e", FS: "#4ade80",
 };
 
-const PROFILE_CARD_VERSION = 15;
+const PROFILE_CARD_VERSION = 16;
 const PROFILE_CARD_CACHE_MAX = 64;
 const profileCardCache = new Map<string, Buffer>();
 
@@ -164,7 +164,8 @@ function recentRow(record: PlayRecord, profile: CachedProfile, jacket: string | 
 // ─── 히스토리 그래프 ─────────────────────────────────────────────────────
 // 선·격자는 SVG 이미지로 그리고(resvg 가 벡터로 렌더), 축 라벨·값은 satori 텍스트로 올린다
 // (중첩 SVG 안의 text 는 글꼴을 못 찾을 수 있어서). 실측끼리 잇는 구간은 실선, 추정이 끼면 점선.
-// 점은 찍지 않고 선만 그린다(maishift 히스토리는 기간이 길어 점이 수백 개다).
+// 점은 찍지 않고 선만 그린다(maishift 히스토리는 기간이 길어 점이 수백 개다). 값은 다음 측정 전까지 그대로이므로
+// 계단 모양(가로로 이어 가다 다음 점에서 세로로)으로 그려 오르내린 폭이 잘 보이게 한다.
 const CHART_W = 840;          // 패널 안쪽 폭
 const CHART_Y_LABEL_W = 44;   // 왼쪽 눈금 라벨 칸
 const CHART_H = 150;
@@ -236,20 +237,21 @@ function lineChart(days: string[], series: ChartSeries[], opts: { height: number
     if (pts.length < 2) return;
     if (s.fill) {
       svg.push(`<defs><linearGradient id="fill${si}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${s.color}" stop-opacity="0.22"/><stop offset="1" stop-color="${s.color}" stop-opacity="0"/></linearGradient></defs>`);
-      svg.push(`<path d="M${pts[0].x},${bottom} ${pts.map((p) => `L${p.x},${p.y}`).join(" ")} L${pts[pts.length - 1].x},${bottom} Z" fill="url(#fill${si})"/>`);
+      const steps = pts.map((p, i) => (i ? `L${p.x},${pts[i - 1].y} L${p.x},${p.y}` : `L${p.x},${p.y}`)).join(" ");
+      svg.push(`<path d="M${pts[0].x},${bottom} ${steps} L${pts[pts.length - 1].x},${bottom} Z" fill="url(#fill${si})"/>`);
     }
     // 실측 구간은 한 줄(path)로, 추정이 낀 구간만 점선으로 따로 그린다.
     let solid = `M${pts[0].x},${pts[0].y}`;
     for (let i = 1; i < pts.length; i++) {
       const a = pts[i - 1], b = pts[i];
       if (a.estimated || b.estimated) {
-        svg.push(`<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="${s.color}" stroke-width="2.5" stroke-dasharray="6 5" stroke-opacity="0.75"/>`);
+        svg.push(`<path d="M${a.x},${a.y} L${b.x},${a.y} L${b.x},${b.y}" fill="none" stroke="${s.color}" stroke-width="2.5" stroke-dasharray="6 5" stroke-opacity="0.75"/>`);
         solid += ` M${b.x},${b.y}`;
       } else {
-        solid += ` L${b.x},${b.y}`;
+        solid += ` L${b.x},${a.y} L${b.x},${b.y}`;
       }
     }
-    svg.push(`<path d="${solid}" fill="none" stroke="${s.color}" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>`);
+    svg.push(`<path d="${solid}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="miter" stroke-linecap="square"/>`);
   });
   // 버전 업데이트 날: 세로 실선(그래프에 보이는 기간 안에 있을 때만). 라벨은 satori 텍스트로 올린다.
   const firstDay = main[0].day, lastDay = main[main.length - 1].day;
