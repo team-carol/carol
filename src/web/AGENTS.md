@@ -32,7 +32,7 @@ src/web/
 | Web-only local preview | `dev.ts` | Starts server without Discord token/login. |
 | 채보 플레이어 껍데기 | `chartPlayer.ts` | HTML/CSS와 컨트롤. 그리기 코어는 `chartRenderer.ts` 를 인라인한다. |
 | 노트·슬라이드 그리기 | `chartRenderer.ts` | canvas 링 렌더러. **백틱과 `${` 를 쓰지 말 것** (템플릿 문자열로 보관). `/보면` 미리보기 GIF도 이 코드를 vm 에 올려 쓴다. |
-| Scrape sync pipeline | `POST /sync` in `index.ts` | (feat/maishift) 친구 코드·최근 플레이(+상세)·지방·게임 설정·서클만 받아 `saveSyncExtras` 로 저장하고, 연동돼 있으면 30·90초 뒤 maishift 확인을 예약한다. 프로필·전체 기록·레이팅 대상·성과는 maishift 쪽(`src/maishift/sync.ts`). 서클(`ci`/`cm` → `parseCircle`)은 판단 불가(undefined)면 기존 `circle_json` 을 유지한다. |
+| Scrape sync pipeline | `POST /sync` in `index.ts` | (feat/maishift) 친구 코드·최근 플레이(+상세)·지방·게임 설정·서클·단위/클래스 이미지(`ri`, `saveRankImages`)만 받아 `saveSyncExtras` 로 저장하고, 연동돼 있으면 30·90초 뒤 maishift 확인을 예약한다. 프로필·전체 기록·레이팅 대상·성과는 maishift 쪽(`src/maishift/sync.ts`). 서클(`ci`/`cm` → `parseCircle`)은 판단 불가(undefined)면 기존 `circle_json` 을 유지한다. |
 | Jacket/avatar endpoints | `GET /jacket`, `GET /avatar` in `index.ts` | Cache-first asset responses. |
 
 ## ROUTES

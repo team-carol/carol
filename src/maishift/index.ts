@@ -9,6 +9,7 @@
 import { registerProfileOverlay, type MaishiftLink } from "../storage";
 import type { CachedProfile, MaishiftHistoryPoint } from "../storage/types";
 import { applyMaishiftUpdate } from "./sync";
+import { rankImage } from "../rankImages";
 import { callServerFn, FN, MaishiftError, type MaishiftRegion } from "./serverFn";
 import { ratingTargets, allRecords, trophyClassOf, historyPoints, type MsProfileResult, type MsRecordsResult, type MsHistoryPoint } from "./convert";
 
@@ -30,6 +31,8 @@ interface Entry {
   trophy: string;
   trophyClass: string;
   stars: number;
+  courseRank: number;
+  classRank: number;
   playCount: number;
   totalPlayCount: number;
   friendCode: string;
@@ -91,6 +94,8 @@ async function refresh(link: MaishiftLink): Promise<Entry> {
     trophy: p.trophy?.title ?? "",
     trophyClass: trophyClassOf(p.trophy?.tier),
     stars: p.stars,
+    courseRank: p.courseRank,
+    classRank: p.classRank,
     playCount: p.playCount?.current ?? 0,
     totalPlayCount: p.playCount?.total ?? 0,
     friendCode: p.friendCode ?? "",
@@ -138,9 +143,9 @@ function toProfile(profileKey: string, link: MaishiftLink, e: Entry, extras: Cac
     trophy: e.trophy,
     trophyClass: e.trophyClass,
     avatar: e.avatar,
-    // 클래스·단위 이미지는 DX NET 파일명에 임의 문자열이 붙어 있어 maishift 의 번호로 만들 수 없다.
-    gradeImg: "",
-    courseImg: "",
+    // 단위·클래스 이미지: maishift 의 번호로 캐롤봇이 모아 둔 이미지를 찾는다(src/rankImages.ts). 아직 없으면 "".
+    gradeImg: rankImage(link.server, "class", e.classRank),
+    courseImg: rankImage(link.server, "course", e.courseRank),
     circleJson: extras?.circleJson ?? "",
     stars: String(e.stars),
     comment: "",

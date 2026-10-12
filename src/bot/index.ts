@@ -42,6 +42,7 @@ import * as ratingcalc   from "./commands/ratingcalc";
 import * as maishift     from "./commands/maishift";
 import { initMaishift } from "../maishift";
 import { guardSlowAck } from "./utils/slowAck";
+import { loadRankImages } from "../rankImages";
 
 type Command = { data: { toJSON(): object; name: string }; execute: (i: ChatInputCommandInteraction) => Promise<void>; autocomplete?: (i: AutocompleteInteraction) => Promise<void> };
 
@@ -90,6 +91,7 @@ client.once(Events.ClientReady, async (c) => {
   }
   // maishift 연동(임시, 공식 API 전까지). 프로필 조회에 maishift 데이터를 덧씌운다.
   initMaishift();
+  await loadRankImages();
   try {
     await loadMessages();
   } catch (e) {

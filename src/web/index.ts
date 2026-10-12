@@ -8,6 +8,7 @@ import { saveSyncExtras, getMaishiftLink, saveUserSession, findUserBySyncToken, 
 import { POLICY_VERSION } from "../policy";
 import type { SongAliasRow } from "../storage/types";
 import { scheduleMaishiftCheck } from "../maishift";
+import { saveRankImages, knownRankImageFiles } from "../rankImages";
 import { buildBookmarkletJs, setBaseUrl, getBaseUrl, buildBookmarklet, BOOKMARKLET_PRESETS, getBookmarkletPresets } from "./bookmarklet";
 import { OPTION_CLIENT_JS, OPTION_PRESET_MAX, buildOptionBookmarklet, sanitizeOptionPreset } from "./optionPreset";
 import { optionsPage } from "./optionsPage";
@@ -488,7 +489,7 @@ export function startWebServer(port: number): void {
       const policyNotice = userId ? ((await getPolicyAck(userId)) ?? POLICY_VERSION) < POLICY_VERSION : false;
       const canonicalHost = CONFIG.baseUrl ? new URL(CONFIG.baseUrl).host : "";
       const isLegacyHost = !!canonicalHost && req.headers.host !== canonicalHost;
-      res.end(buildBookmarkletJs(bookmarklets, { policyNotice, deprecationCutoff: isLegacyHost ? DOMAIN_MIGRATION_CUTOFF : undefined }));
+      res.end(buildBookmarkletJs(bookmarklets, { policyNotice, deprecationCutoff: isLegacyHost ? DOMAIN_MIGRATION_CUTOFF : undefined, knownRankImages: { intl: knownRankImageFiles("intl"), jp: knownRankImageFiles("jp") } }));
       return;
     }
 
@@ -1257,6 +1258,14 @@ ${siteFooter()}
           } catch (circleError) {
             console.warn("[web] 서클 정보 저장 실패:", circleError instanceof Error ? circleError.message : circleError);
           }
+        }
+
+        // 단위·클래스 이미지(공용 게임 이미지). 북마클릿은 아직 저장되지 않은 것만 보낸다.
+        try {
+          const added = await saveRankImages(syncServer, data.ri);
+          if (added) console.log(`[web] 단위·클래스 이미지 ${added}개 저장`);
+        } catch (rankError) {
+          console.warn("[web] 단위·클래스 이미지 저장 실패:", rankError instanceof Error ? rankError.message : rankError);
         }
 
         const savedMapImages = await cacheMapImages(mapAreas, syncServer);
