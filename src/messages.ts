@@ -431,6 +431,7 @@ export const MESSAGES = {
   "trackCard.scoresHidden": "maishift에서 이전 기록을 공개하지 않았습니다.",
   "trackCard.scoresEmpty": "아직 점수 기록이 없습니다.",
   "trackCard.firstRecord": "초견",
+  "trackCard.theory": "이론치",
   "trackCard.levelHistory": "버전별 상수",
   "trackCard.levelsEmpty": "상수 기록이 없습니다.",
   "trackCard.distribution": "레이팅 구간별 달성률 분포",

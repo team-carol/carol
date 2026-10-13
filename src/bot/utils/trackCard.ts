@@ -40,9 +40,8 @@ export interface TrackCardData {
 const fmt = (n: number) => n.toLocaleString("en-US");
 const ymd = (ms: number) => kstStamp(ms).slice(0, 10);
 
-// maishift 기록의 콤보·싱크 이름 → 캐롤봇 표기
+// maishift 기록의 콤보 이름 → 캐롤봇 표기
 const COMBO: Record<string, string> = { FULL_COMBO: "FC", FULL_COMBO_PLUS: "FC+", ALL_PERFECT: "AP", ALL_PERFECT_PLUS: "AP+" };
-const SYNC: Record<string, string> = { SYNC_PLAY: "SYNC", FULL_SYNC: "FS", FULL_SYNC_PLUS: "FS+", FULL_SYNC_DX: "FDX", FULL_SYNC_DX_PLUS: "FDX+" };
 
 // 분포의 랭크 칸(서로 겹치지 않음). 낮은 랭크부터 왼쪽에.
 const DIST_RANKS: { key: string; label: string; color: string }[] = [
@@ -106,11 +105,45 @@ function achievementChart(points: TrackScore[], until: number): El {
   ]);
 }
 
-/** 기록이 바뀐 때 목록(최근부터, 전부). */
+const SCORE_RANKS = ["D", "C", "B", "BB", "BBB", "A", "AA", "AAA", "S", "S+", "SS", "SS+", "SSS", "SSS+"];
+const COMBO_ORDER = ["", "FC", "FC+", "AP", "AP+"];
+type Tag = { text: string; color: string; star?: boolean };
+
+/**
+ * 큰 성과가 있었던 기록만(최근부터). 첫 기록 + 랭크 상승·DX 별 증가·FC/FC+/AP/AP+ 첫 달성·이론치(101%).
+ * 비교는 바로 앞 기록과 하고, 오른 폭은 바로 아래(이전에 보인) 줄과의 차이.
+ */
+function milestones(list: TrackScore[]): { s: TrackScore; tags: Tag[] }[] {
+  const out: { s: TrackScore; tags: Tag[] }[] = [];
+  list.forEach((s, i) => {
+    if (i === 0) { out.push({ s, tags: [] }); return; }
+    const p = list[i - 1];
+    const tags: Tag[] = [];
+    const rank = getScoreRank(s.achievement);
+    if (SCORE_RANKS.indexOf(rank) > SCORE_RANKS.indexOf(getScoreRank(p.achievement))) tags.push({ text: rank, color: MAI_CM_COLOR[rank] ?? INK });
+    const pct = (x: TrackScore) => (x.dxMax ? (x.dxScore / x.dxMax) * 100 : 0);
+    if (dxStars(pct(s)) > dxStars(pct(p))) tags.push({ text: String(dxStars(pct(s))), color: INK, star: true });
+    const combo = COMBO[s.combo] ?? "";
+    if (COMBO_ORDER.indexOf(combo) > COMBO_ORDER.indexOf(COMBO[p.combo] ?? "")) tags.push({ text: combo, color: MARK_COLOR[combo] ?? MAI_CM_COLOR[combo] ?? INK });
+    if (s.achievement >= 101 && p.achievement < 101) tags.push({ text: msg("trackCard.theory"), color: "#fde047" });
+    if (tags.length) out.push({ s, tags });
+  });
+  return out;
+}
+
+function tagEl(t: Tag): El {
+  return el("div", { display: "flex", alignItems: "center", background: SURFACE2, borderRadius: 99, padding: "2px 8px" }, t.star
+    // ✦ 는 기호 글꼴로 그려져, 숫자를 같은 span 에 두면 숫자도 그 글꼴로 작게 나온다.
+    ? [el("span", { color: t.color, fontSize: 11 }, "✦"), el("span", { color: t.color, fontFamily: NUM_FONT, fontSize: 11, fontWeight: 800, marginLeft: 2 }, t.text)]
+    : [el("span", { color: t.color, fontSize: 11, fontWeight: 800 }, t.text)]);
+}
+
+/** 큰 성과 기록 목록(최근부터). */
 function changeRows(list: TrackScore[]): El {
-  const rows = [...list].reverse();
-  return el("div", { display: "flex", flexDirection: "column", marginTop: 12, borderTop: `1px solid ${BORDER}` }, rows.map((s, i) => {
-    const prev = list[list.length - 1 - i - 1];
+  const shown = milestones(list);
+  const rows = [...shown].reverse();
+  return el("div", { display: "flex", flexDirection: "column", marginTop: 12, borderTop: `1px solid ${BORDER}` }, rows.map(({ s, tags }, i) => {
+    const prev = rows[i + 1]?.s;
     const gain = prev ? s.achievement - prev.achievement : null;
     const dxPct = s.dxMax ? (s.dxScore / s.dxMax) * 100 : 0;
     return el("div", { display: "flex", alignItems: "center", gap: 12, padding: "7px 2px", borderBottom: i < rows.length - 1 ? `1px solid ${BORDER}` : "none" }, [
@@ -120,14 +153,12 @@ function changeRows(list: TrackScore[]): El {
         gain === null ? msg("trackCard.firstRecord") : gain > 0 ? `+${gain.toFixed(4)}%` : "—"),
       el("div", { display: "flex", alignItems: "center", flex: 1, color: TEXT, fontFamily: NUM_FONT, fontSize: 12 }, s.dxMax ? [
         el("span", {}, `DX ${fmt(s.dxScore)} / ${fmt(s.dxMax)} (${dxPct.toFixed(2)}%)`),
-        // ✦ 는 기호 글꼴로 그려져, 숫자를 같은 span 에 두면 숫자도 그 글꼴로 작게 나온다.
         ...(dxStars(dxPct) ? [
           el("span", { color: INK, marginLeft: 10 }, "✦"),
           el("span", { color: INK, fontFamily: NUM_FONT, fontWeight: 700, marginLeft: 3 }, String(dxStars(dxPct))),
         ] : []),
       ] : []),
-      el("span", { color: MAI_CM_COLOR[COMBO[s.combo] ?? ""] ?? FAINT, fontSize: 11, fontWeight: 800 }, COMBO[s.combo] ?? ""),
-      el("span", { color: MAI_CM_COLOR[SYNC[s.sync] ?? ""] ?? FAINT, fontSize: 11, fontWeight: 800, width: 34, textAlign: "right" }, SYNC[s.sync] ?? ""),
+      el("div", { display: "flex", gap: 6, justifyContent: "flex-end" }, tags.map(tagEl)),
     ]);
   }));
 }
