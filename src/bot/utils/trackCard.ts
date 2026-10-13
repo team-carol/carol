@@ -9,7 +9,7 @@ import { songVersionColor, inkOn } from "./ratingCard";
 import { MARK_COLOR } from "./achievementCard";
 import { MAI_DIFF_COLOR, MAI_CM_COLOR, getScoreRank } from "../../games";
 import { calcSongRating } from "../../constants";
-import { chartSRating, dxStars, dxRankLabel, formatChartSRating } from "../../sRating";
+import { chartSRating, dxRankStep, dxRankLabel, formatChartSRating } from "../../sRating";
 import type { TrackInfo, TrackScore } from "../../maishift/track";
 import { msg } from "../../messages";
 
@@ -114,7 +114,7 @@ const SYNC_ORDER = ["", "SYNC", "FS", "FS+", "FDX", "FDX+"];
 type Tag = { text: string; color: string; star?: boolean };
 
 /**
- * 큰 성과가 있었던 기록만(최근부터). 첫 기록 + 랭크 상승·DX 별 증가·FC/FC+/AP/AP+·SYNC/FS/FS+/FDX/FDX+ 첫 달성·이론치(101%) + 가장 최근 기록.
+ * 큰 성과가 있었던 기록만(최근부터). 첫 기록 + 랭크 상승·DX ✦ 랭크 상승(5.5·6·6.5·7 포함)·FC/FC+/AP/AP+·SYNC/FS/FS+/FDX/FDX+ 첫 달성·이론치(101%) + 가장 최근 기록.
  * 비교는 바로 앞 기록과 하고, 오른 폭은 바로 아래(이전에 보인) 줄과의 차이.
  */
 function milestones(list: TrackScore[], dxDecimal: boolean): { s: TrackScore; tags: Tag[] }[] {
@@ -126,7 +126,7 @@ function milestones(list: TrackScore[], dxDecimal: boolean): { s: TrackScore; ta
     const rank = getScoreRank(s.achievement);
     if (SCORE_RANKS.indexOf(rank) > SCORE_RANKS.indexOf(getScoreRank(p.achievement))) tags.push({ text: rank, color: MAI_CM_COLOR[rank] ?? INK });
     const pct = (x: TrackScore) => (x.dxMax ? (x.dxScore / x.dxMax) * 100 : 0);
-    if (dxStars(pct(s)) > dxStars(pct(p))) tags.push({ text: dxRankLabel(s.dxScore, s.dxMax, dxDecimal), color: INK, star: true });
+    if (dxRankStep(pct(s)) > dxRankStep(pct(p))) tags.push({ text: dxRankLabel(s.dxScore, s.dxMax, dxDecimal), color: INK, star: true });
     const combo = COMBO[s.combo] ?? "";
     if (COMBO_ORDER.indexOf(combo) > COMBO_ORDER.indexOf(COMBO[p.combo] ?? "")) tags.push({ text: combo, color: MARK_COLOR[combo] ?? MAI_CM_COLOR[combo] ?? INK });
     const sync = SYNC[s.sync] ?? "";
@@ -181,7 +181,7 @@ function changeRows(list: TrackScore[], dxDecimal: boolean): El {
         gain === null ? msg("trackCard.firstRecord") : gain > 0 ? `+${gain.toFixed(4)}%` : "—"),
       el("div", { display: "flex", alignItems: "center", flex: 1, color: TEXT, fontFamily: NUM_FONT, fontSize: 12 }, s.dxMax ? [
         el("span", {}, `DX ${fmt(s.dxScore)} / ${fmt(s.dxMax)} (${dxPct.toFixed(2)}%)`),
-        ...(dxStars(dxPct) || (dxDecimal && dxPct >= 85) ? [el("div", { display: "flex", marginLeft: 10 }, [starCount(dxRankLabel(s.dxScore, s.dxMax, dxDecimal), INK, 12)])] : []),
+        ...(dxRankStep(dxPct) ? [el("div", { display: "flex", marginLeft: 10 }, [starCount(dxRankLabel(s.dxScore, s.dxMax, dxDecimal), INK, 12)])] : []),
       ] : []),
       el("div", { display: "flex", alignItems: "center", gap: 6, justifyContent: "flex-end" }, tags.map(tagEl)),
     ]);
@@ -280,7 +280,7 @@ export async function renderTrackCard(d: TrackCardData): Promise<Buffer> {
             sub: dxPct !== null
               ? el("div", { display: "flex", alignItems: "center", gap: 5 }, [
                   el("span", { lineHeight: 1 }, `${dxPct.toFixed(2)}%`),
-                  ...(dxStars(dxPct) ? [el("span", { lineHeight: 1 }, "·"), starCount(dxRankLabel(r.dxScore ?? 0, r.dxMax ?? 0, d.dxDecimal), FAINT, 10)] : []),
+                  ...(dxRankStep(dxPct) ? [el("span", { lineHeight: 1 }, "·"), starCount(dxRankLabel(r.dxScore ?? 0, r.dxMax ?? 0, d.dxDecimal), FAINT, 10)] : []),
                 ])
               : undefined,
           },

@@ -154,4 +154,7 @@ test("DX ✦ 랭크 소수점: maishift 와 같은 단계(97% ✦5, 98% ✦5.5, 
   assert.equal(s.dxRankDecimal(849, 1000), 0);
   assert.equal(s.dxRankLabel(2465, 2577, true), "4.3");
   assert.equal(s.dxRankLabel(2465, 2577, false), "4");
+  // 소수점이 꺼져 있으면 maishift 곡 창 단계
+  assert.deepEqual([96.9, 97, 98, 99, 99.5, 100].map(s.dxRankStep), [4, 5, 5.5, 6, 6.5, 7]);
+  assert.equal(s.dxRankLabel(985, 1000, false), "5.5");
 });

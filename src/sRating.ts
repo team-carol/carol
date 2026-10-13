@@ -31,10 +31,18 @@ export function dxRankDecimal(score: number, max: number): number {
   return tenths / 10;
 }
 
-/** ✦ 뒤에 붙일 랭크 글자. decimal 이면 소수점 첫째 자리(5.7), 아니면 정수 별 개수(5). */
+/**
+ * maishift 곡 창의 DX ✦ 랭크(소수점 설정이 꺼졌을 때). 97% 까지는 별 개수와 같고,
+ * 그 위는 98% ✦5.5, 99% ✦6, 99.5% ✦6.5, 100% ✦7 로 더 나눈다. S-레이팅 계산에는 쓰지 않는다(그건 dxStars).
+ */
+export function dxRankStep(percent: number): number {
+  return percent >= 100 ? 7 : percent >= 99.5 ? 6.5 : percent >= 99 ? 6 : percent >= 98 ? 5.5 : dxStars(percent);
+}
+
+/** ✦ 뒤에 붙일 랭크 글자. decimal 이면 소수점 첫째 자리(5.7), 아니면 maishift 곡 창 단계(5, 5.5, 6, 6.5, 7). */
 export function dxRankLabel(score: number, max: number, decimal: boolean): string {
   if (!(max > 0)) return "0";
-  return decimal ? dxRankDecimal(score, max).toFixed(1) : String(dxStars((score / max) * 100));
+  return decimal ? dxRankDecimal(score, max).toFixed(1) : String(dxRankStep((score / max) * 100));
 }
 
 /** 평균 → 등급 이름(Bronze … Rainbow++ ✦✦). 6 미만은 null. */
