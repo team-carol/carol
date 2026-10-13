@@ -8,7 +8,7 @@
 import { chartKey, type PlayRecord } from "../scraper";
 import {
   getMaishiftUsers, getStoredProfile, hasChartClears, upsertChartClears, saveAchievementPlayEventLogBatch,
-  saveRatingSnapshot, listGoals, updateGoalProgress, maishiftProfileKey, type MaishiftLink,
+  listGoals, updateGoalProgress, maishiftProfileKey, type MaishiftLink,
 } from "../storage";
 import { hasValidRecordDate, recordPlayedAt, koreaPlayDayKey } from "../achievements";
 import { evaluateGoal, GOAL_KINDS, type GoalKind } from "../goals";
@@ -68,9 +68,6 @@ async function applyForUser(u: MaishiftUpdate, discordUserId: string, profileKey
     await saveAchievementPlayEventLogBatch(events, now);
     console.log(`[maishift] 성과 ${events.length}건 key=${profileKey}`);
   }
-
-  // 하루치 레이팅 대상 스냅샷(과거 레이팅표 조회용). maishift 기록에는 마크·ST/DX 가 이미 들어 있다.
-  if (u.top.length) await saveRatingSnapshot(profileKey, koreaPlayDayKey(new Date(u.uploadedAt)), JSON.stringify(u.top), u.rating, u.uploadedAt);
 
   const goals = await listGoals(discordUserId);
   for (const goal of goals) {

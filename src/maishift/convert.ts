@@ -39,9 +39,13 @@ export interface MsProfileResult {
     /** tracks.tracks 의 인덱스 */
     ratingsLatest: number[];
     ratingsOld: number[];
+    /** S-레이팅 대상(DX 점수 기준 상위 50) */
+    ratingsS?: number[];
     availableVersions?: { value: number; name: string; releasedAt: string }[];
   } | null;
   ban?: { banned: boolean };
+  /** 이전 기록(업로드별 스냅샷)을 볼 수 있는지 — 사용자의 maishift "이전 기록 공개" 설정 */
+  pastRecordsVisible?: boolean;
 }
 export interface MsRecordsResult { songs: MsSong[]; tracks: MsTrack[] }
 export interface MsHistoryPoint { rating: number; ratingNew: number; ratingOld: number; playCountTotal: number; playCountCurrent: number; date: string; versionId: number }
@@ -81,6 +85,22 @@ export function ratingTargets(rec: NonNullable<MsProfileResult["userRecord"]>): 
     .map((idx) => tracks[idx])
     .filter((t): t is MsTrack & { r: MsRecord } => !!t && played(t) && !!songs[t.s])
     .map((t) => toPlayRecord(songs[t.s], t));
+}
+
+/** S-레이팅 대상곡(maishift 가 고른 50곡). */
+export function sRatingTargets(rec: NonNullable<MsProfileResult["userRecord"]>): PlayRecord[] {
+  const { songs, tracks } = rec.tracks;
+  return (rec.ratingsS ?? [])
+    .map((idx) => tracks[idx])
+    .filter((t): t is MsTrack & { r: MsRecord } => !!t && played(t) && !!songs[t.s])
+    .map((t) => toPlayRecord(songs[t.s], t));
+}
+
+export interface MsUpload { id: number; at: number; rating: number }
+/** 업로드 목록(시간순). */
+export function uploadList(raw: string): MsUpload[] {
+  const { r } = JSON.parse(raw) as { r: [number, number, number, number, number][] };
+  return r.map(([id, at, rating]) => ({ id, at, rating })).filter((u) => Number.isFinite(u.at)).sort((a, b) => a.at - b.at);
 }
 
 /** 플레이한 모든 보면의 기록(캐롤봇 clearJson 자리). */

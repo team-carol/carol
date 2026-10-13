@@ -128,3 +128,19 @@ test("versionWeek: 출시 뒤 경과 주(내림)", () => {
   assert.deepEqual(hs.versionWeek(Date.parse("2026-10-11T09:28:00Z"), 26, versions), { name: "CiRCLE PLUS", week: 11 });
   assert.equal(hs.versionWeek(0, 99, versions), null);
 });
+
+test("uploadList: maishift 업로드 목록 문자열 → 시간순 {id, at, rating}", () => {
+  const { uploadList } = require("../../dist/maishift/convert.js");
+  const raw = JSON.stringify({ n: ["A"], r: [[1184, 1726473887182, 12171, 0, 22], [964, 1726142498625, 11963, 0, 22]] });
+  assert.deepEqual(uploadList(raw), [{ id: 964, at: 1726142498625, rating: 11963 }, { id: 1184, at: 1726473887182, rating: 12171 }]);
+});
+
+test("S-레이팅: 상수² × DX 별 ÷ 50, 평균으로 등급, 보면 값은 maishift 처럼 그대로 내림", () => {
+  const s = require("../../dist/sRating.js");
+  assert.deepEqual([84.9, 85, 90, 93, 95, 97].map(s.dxStars), [0, 1, 2, 3, 4, 5]);
+  assert.equal(s.formatChartSRating(s.chartSRating(13.0, 97.14)), "16.89");
+  assert.equal(s.formatChartSRating(s.chartSRating(14.1, 95.71)), "15.90");
+  assert.equal(s.sRatingTier(14.570), "Platinum ✦✦");
+  assert.equal(s.sRatingTier(5), null);
+  assert.equal(s.formatSRating(728.5066 / 50), "14.570");
+});

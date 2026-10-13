@@ -21,15 +21,14 @@ export const MESSAGES = {
 
   // ── /레이팅표 ───────────────────────────────────────────────────────────
   "ratingImage.noRecords": "레이팅 기록이 없습니다. maishift에 기록을 올린 뒤 다시 시도해 주세요.",
-  "ratingImage.snapshotNotice": "📅 {date} 기준 레이팅표",
-  "ratingImage.snapshotNoticeFallback": "📅 {actual} 기준 레이팅표 · {date} 에는 갱신 기록이 없어 직전 기록을 표시합니다",
-  "ratingImage.snapshotMissing": "{date} 이전의 레이팅표 기록이 없습니다. 조회 가능한 범위: {first} ~ {last}",
-  "ratingImage.rewindNotice": "📅 {date} 기준 레이팅표 (추정) · 저장된 기록이 없어 성과 이력으로 역산했습니다",
-  "ratingImage.rewindTooOld": "{date} 는 성과 추적 시작({first}) 이전이라 역산할 수 없습니다.",
-  "ratingImage.rewindNoData": "{date} 의 레이팅표를 복원할 자료가 없습니다. 저장된 기록도, 역산할 성과 이력도 없습니다.",
-  "ratingImage.snapshotNone": "아직 저장된 레이팅표 기록이 없습니다. 동기화하면 그날부터 하루씩 쌓입니다.",
+  "ratingImage.snapshotNotice": "📅 {date} 기준 레이팅표 · maishift {uploaded} 업로드 기록",
+  "ratingImage.snapshotMissing": "{date} 이전에 maishift에 올린 기록이 없습니다. 조회할 수 있는 범위: {first} ~ {last}",
+  "ratingImage.snapshotNone": "maishift에 올린 이전 기록이 없습니다.",
   "ratingImage.snapshotBadDate": "날짜는 YYYY-MM-DD 형식으로 입력해주세요. (예: 2026-09-03)",
-  "ratingImage.snapshotGameUnsupported": "과거 날짜 조회는 maimai DX 레이팅표만 지원합니다. S-레이팅과 다른 게임 환산은 전체 기록이 필요한데, 스냅샷은 레이팅 대상 50곡만 보관합니다.",
+  "ratingImage.snapshotGameUnsupported": "과거 날짜 조회는 maimai DX 레이팅과 S-레이팅만 지원합니다. 다른 게임 환산은 전체 기록이 필요한데, maishift 이전 기록은 레이팅 대상곡만 줍니다.",
+  "ratingImage.snapshotFailed": "maishift에서 이전 기록을 받지 못했습니다. 잠시 뒤에 다시 시도해 주세요.",
+  "ratingImage.pastPrivateSelf": "maishift에서 이전 기록을 공개하지 않아 과거 레이팅표를 볼 수 없습니다. maishift 설정에서 이전 기록을 공개해 주세요.",
+  "ratingImage.pastPrivate": "{user} 님은 maishift에서 이전 기록을 공개하지 않았습니다.",
   "ratingImage.sRatingNoData": "S-레이팅을 계산할 DX 점수 기록이 없습니다. maishift에 기록을 올린 뒤 다시 시도해 주세요.",
   "ratingImage.renderFailed": "이미지 생성에 실패했습니다.",
 

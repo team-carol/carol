@@ -22,6 +22,9 @@ export const FN = {
   songs: "5c9650151df3f336ab6e8278251a186ce9b3e587a66c4100c738cc0e91398756",
   /** {handle, region} → 업로드마다 한 점씩 쌓인 레이팅·플레이 횟수 히스토리. 프로필 홈 그래프 */
   history: "086876d75e2fef4bee772eae80535e80dcbc84fa6e64fc0db1f0f2737222bc4f",
+  /** {handle, region} → 업로드(이전 기록) 목록. JSON 문자열 {n: 이름들, r: [[업로드 번호, 시각(ms), 레이팅, 이름 번호, 버전]]}.
+   *  그 시점 프로필은 profile 에 handle 을 `<handle>~<업로드 번호>` 로 넘겨 받는다. 사용자가 이전 기록을 공개했을 때만. */
+  uploads: "860797bd9ce1315f04e84227bb43cf8a4763c4e22321283681b9b1398ac9a628",
 } as const;
 
 export type MaishiftRegion = "ASIA" | "JAPAN";

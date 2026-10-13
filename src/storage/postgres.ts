@@ -260,31 +260,6 @@ export class PostgresStorage {
   async getAllCachedProfiles(){return this.q(`SELECT friend_code AS "profileKey",COALESCE(NULLIF(display_friend_code,''),friend_code) AS "friendCode",server_region AS server,player_name AS "playerName",rating,rating_max AS "ratingMax",trophy,trophy_class AS "trophyClass",avatar,grade_img AS "gradeImg",COALESCE(course_img,'') AS "courseImg",COALESCE(circle_json,'') AS "circleJson",stars,comment,play_count AS "playCount",total_play_count AS "totalPlayCount",last_synced_at AS "lastSyncedAt",recent_json AS "recentJson",top_json AS "topJson",clear_json AS "clearJson",map_json AS "mapJson" FROM profiles`);}
   async deleteCachedProfile(fc:string){await this.q("DELETE FROM profiles WHERE friend_code=$1",[fc]);}
 
-  // 레이팅 대상 50곡 스냅샷. topJson 은 마크(FC/Sync)·ST/DX 보정까지 끝낸 상태로 넘어온다.
-  async saveRatingSnapshot(profileKey:string, playDay:string, topJson:string, rating:number, syncedAt:number){
-    await this.q(`INSERT INTO rating_snapshots(profile_key,play_day,top_json,rating,synced_at) VALUES($1,$2,$3,$4,$5)
-      ON CONFLICT(profile_key,play_day) DO UPDATE SET top_json=excluded.top_json,rating=excluded.rating,synced_at=excluded.synced_at`,
-      [profileKey,playDay,topJson,Math.round(rating)||0,syncedAt]);
-  }
-  // 요청 날짜 이하 중 가장 최근 스냅샷. 갱신하지 않은 날의 레이팅표는 직전 갱신 시점
-  // 상태와 같으므로, 정확히 일치하는 행이 없어도 직전 기록으로 답한다.
-  // 호출부는 반환된 playDay 가 요청 날짜와 다르면 그 사실을 함께 표시한다.
-  async getRatingSnapshot(profileKey:string, playDay:string){
-    const r=await this.q<any>(`SELECT play_day AS "playDay",top_json AS "topJson",rating,synced_at AS "syncedAt" FROM rating_snapshots WHERE profile_key=$1 AND play_day <= $2 ORDER BY play_day DESC LIMIT 1`,[profileKey,playDay]);
-    if(!r[0]) return null;
-    return {...r[0], rating:Number(r[0].rating), syncedAt:Number(r[0].syncedAt)};
-  }
-  // 히스토리 그래프용. fromDay 이후 하루치 레이팅(오래된 날부터).
-  async listRatingSnapshots(profileKey:string, fromDay:string):Promise<{playDay:string;rating:number}[]>{
-    const r=await this.q<any>(`SELECT play_day AS "playDay",rating FROM rating_snapshots WHERE profile_key=$1 AND play_day >= $2 ORDER BY play_day`,[profileKey,fromDay]);
-    return r.map((x:any)=>({playDay:x.playDay,rating:Number(x.rating)}));
-  }
-  // 조회 가능한 날짜 범위 안내용. 스냅샷이 없는 날짜를 요청했을 때 쓴다.
-  async getRatingSnapshotRange(profileKey:string){
-    const r=await this.q<any>(`SELECT MIN(play_day) AS "first",MAX(play_day) AS "last",COUNT(*)::int AS "count" FROM rating_snapshots WHERE profile_key=$1`,[profileKey]);
-    return r[0]?.count ? r[0] as {first:string;last:string;count:number} : null;
-  }
-
   // clearJson 스냅샷(chart_clears)을 곡별로 upsert하면서 갱신 전 값을 같은 쿼리에서 돌려받는다.
   // CTE는 이 문(statement)의 쓰기가 반영되기 전 스냅샷을 보므로 "직전 값 vs 이번 값" 비교가 원자적이다.
   // 오른 채보만 걸러서 반환 — 트래킹 시작 전부터 있던 곡이든 방금 처음 친 곡이든 chart_clears에 값이

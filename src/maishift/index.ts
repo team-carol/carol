@@ -11,7 +11,8 @@ import type { CachedProfile, MaishiftHistoryPoint, MaishiftVersion } from "../st
 import { applyMaishiftUpdate } from "./sync";
 import { rankImage } from "../rankImages";
 import { callServerFn, FN, MaishiftError, type MaishiftRegion } from "./serverFn";
-import { ratingTargets, allRecords, trophyClassOf, historyPoints, versionList, type MsProfileResult, type MsRecordsResult, type MsHistoryPoint } from "./convert";
+import { ratingTargets, sRatingTargets, allRecords, trophyClassOf, historyPoints, versionList, uploadList, type MsProfileResult, type MsRecordsResult, type MsHistoryPoint, type MsUpload } from "./convert";
+import type { PlayRecord } from "../scraper";
 
 export { MaishiftError } from "./serverFn";
 
@@ -40,6 +41,8 @@ interface Entry {
   clearJson: string;
   history: MaishiftHistoryPoint[];
   versions: MaishiftVersion[];
+  /** maishift "이전 기록 공개" 설정 */
+  pastRecordsVisible: boolean;
 }
 
 const cache = new Map<string, Entry>();
@@ -104,6 +107,7 @@ async function refresh(link: MaishiftLink): Promise<Entry> {
     clearJson,
     history,
     versions: versionList(rec.availableVersions),
+    pastRecordsVisible: res.pastRecordsVisible === true,
   };
   remember(key, entry);
   return entry;
@@ -203,6 +207,75 @@ export function scheduleMaishiftCheck(link: MaishiftLink): void {
       refreshOnce(link).catch((err) => console.error(`[maishift] ${link.handle} 동기화 뒤 확인:`, (err as Error).message));
     }, delay).unref();
   }
+}
+
+// ─── 이전 기록(업로드별 스냅샷) ────────────────────────────────────────────────
+// 과거 레이팅표는 캐롤봇이 저장하지 않고 maishift 의 이전 기록을 받는다. 지난 업로드는 바뀌지 않으므로
+// 업로드 목록은 PROFILE_TTL_MS 동안, 받은 스냅샷은 작은 LRU 에 둔다.
+const UPLOADS_TTL_MS = PROFILE_TTL_MS;
+const SNAPSHOT_CACHE_MAX = 50;
+const uploadsCache = new Map<string, { at: number; list: MsUpload[] }>();
+const snapshotCache = new Map<string, MaishiftSnapshot>();
+
+export interface MaishiftSnapshot {
+  uploadId: number;
+  uploadedAt: number;
+  rating: number;
+  name: string;
+  trophy: string;
+  trophyClass: string;
+  avatar: string;
+  /** 레이팅 대상(신곡 15 → 구곡 35) */
+  top: PlayRecord[];
+  /** S-레이팅 대상 50 */
+  sTop: PlayRecord[];
+}
+
+export type MaishiftSnapshotResult =
+  | { kind: "ok"; snapshot: MaishiftSnapshot }
+  /** 사용자가 maishift 에서 이전 기록을 공개하지 않음 */
+  | { kind: "private" }
+  /** 그 시각 이전 업로드가 없음. first/last: 볼 수 있는 업로드 범위(없으면 null) */
+  | { kind: "none"; first: number | null; last: number | null };
+
+async function uploadsOf(link: MaishiftLink): Promise<MsUpload[]> {
+  const key = keyOf(link);
+  const have = uploadsCache.get(key);
+  if (have && Date.now() - have.at < UPLOADS_TTL_MS) return have.list;
+  const list = uploadList(await callServerFn<string>(FN.uploads, { handle: link.handle, region: regionOf(link) }));
+  uploadsCache.set(key, { at: Date.now(), list });
+  while (uploadsCache.size > MAX_ENTRIES) uploadsCache.delete(uploadsCache.keys().next().value!);
+  return list;
+}
+
+/** before(ms) 보다 앞선 마지막 업로드의 프로필. */
+export async function getMaishiftSnapshot(link: MaishiftLink, before: number): Promise<MaishiftSnapshotResult> {
+  const entry = await getEntry(link);
+  if (!entry.pastRecordsVisible) return { kind: "private" };
+  const list = await uploadsOf(link);
+  const pick = [...list].reverse().find((u) => u.at < before);
+  if (!pick) return { kind: "none", first: list[0]?.at ?? null, last: list[list.length - 1]?.at ?? null };
+  const cacheKey = `${keyOf(link)}~${pick.id}`;
+  const memo = snapshotCache.get(cacheKey);
+  if (memo) return { kind: "ok", snapshot: memo };
+  const res = await callServerFn<MsProfileResult>(FN.profile, { handle: `${link.handle}~${pick.id}`, region: regionOf(link) });
+  const rec = res.userRecord;
+  if (!rec?.profile) throw new MaishiftError("no snapshot record", "not_found");
+  const p = rec.profile;
+  const snapshot: MaishiftSnapshot = {
+    uploadId: pick.id,
+    uploadedAt: pick.at,
+    rating: p.rating,
+    name: p.name,
+    trophy: p.trophy?.title ?? "",
+    trophyClass: trophyClassOf(p.trophy?.tier),
+    avatar: p.profileImageSrc,
+    top: ratingTargets(rec),
+    sTop: sRatingTargets(rec),
+  };
+  snapshotCache.set(cacheKey, snapshot);
+  while (snapshotCache.size > SNAPSHOT_CACHE_MAX) snapshotCache.delete(snapshotCache.keys().next().value!);
+  return { kind: "ok", snapshot };
 }
 
 // 곡 목록·상수·한국어 번역은 src/constants.ts 가 maishift 곡 목록에서 하루 한 번 받는다.
