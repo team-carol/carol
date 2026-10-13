@@ -116,8 +116,8 @@ function changeRows(list: TrackScore[]): El {
     return el("div", { display: "flex", alignItems: "center", gap: 12, padding: "7px 2px", borderBottom: i < rows.length - 1 ? `1px solid ${BORDER}` : "none" }, [
       el("span", { width: 86, color: MUTED, fontFamily: NUM_FONT, fontSize: 12 }, ymd(s.at)),
       el("span", { width: 92, color: INK, fontFamily: NUM_FONT, fontSize: 14, fontWeight: 700 }, `${s.achievement.toFixed(4)}%`),
-      el("span", { width: 70, color: gain !== null && gain > 0 ? "#4ade80" : FAINT, fontFamily: NUM_FONT, fontSize: 12, fontWeight: 700 },
-        gain === null ? msg("trackCard.firstRecord") : gain > 0 ? `+${gain.toFixed(4)}` : "—"),
+      el("span", { width: 80, color: gain !== null && gain > 0 ? "#4ade80" : FAINT, fontFamily: NUM_FONT, fontSize: 12, fontWeight: 700 },
+        gain === null ? msg("trackCard.firstRecord") : gain > 0 ? `+${gain.toFixed(4)}%` : "—"),
       el("span", { flex: 1, color: TEXT, fontFamily: NUM_FONT, fontSize: 12 }, s.dxMax ? `DX ${fmt(s.dxScore)} / ${fmt(s.dxMax)} (${dxPct.toFixed(2)}%)` : ""),
       el("span", { color: MAI_CM_COLOR[COMBO[s.combo] ?? ""] ?? FAINT, fontSize: 11, fontWeight: 800 }, COMBO[s.combo] ?? ""),
       el("span", { color: MAI_CM_COLOR[SYNC[s.sync] ?? ""] ?? FAINT, fontSize: 11, fontWeight: 800, width: 34, textAlign: "right" }, SYNC[s.sync] ?? ""),
