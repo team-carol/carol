@@ -29,7 +29,8 @@ export const MESSAGES = {
   "ratingImage.rewindNoData": "{date} 의 레이팅표를 복원할 자료가 없습니다. 저장된 기록도, 역산할 성과 이력도 없습니다.",
   "ratingImage.snapshotNone": "아직 저장된 레이팅표 기록이 없습니다. 동기화하면 그날부터 하루씩 쌓입니다.",
   "ratingImage.snapshotBadDate": "날짜는 YYYY-MM-DD 형식으로 입력해주세요. (예: 2026-09-03)",
-  "ratingImage.snapshotGameUnsupported": "과거 날짜 조회는 maimai DX 레이팅표만 지원합니다. 다른 게임 환산은 전체 클리어 기록이 필요한데, 스냅샷은 레이팅 대상 50곡만 보관합니다.",
+  "ratingImage.snapshotGameUnsupported": "과거 날짜 조회는 maimai DX 레이팅표만 지원합니다. S-레이팅과 다른 게임 환산은 전체 기록이 필요한데, 스냅샷은 레이팅 대상 50곡만 보관합니다.",
+  "ratingImage.sRatingNoData": "S-레이팅을 계산할 DX 점수 기록이 없습니다. maishift에 기록을 올린 뒤 다시 시도해 주세요.",
   "ratingImage.renderFailed": "이미지 생성에 실패했습니다.",
 
   // ── /보면 (simai 채보 플레이어) ─────────────────────────────────────────
@@ -487,11 +488,13 @@ export const MESSAGES = {
   "ratingCard.sectionOthers": "OTHERS",
   "ratingCard.sectionBest": "BEST",
   "ratingCard.sectionVolforce": "VOLFORCE",
+  "ratingCard.sectionSRating": "S-RATING",
   "ratingCard.top": "TOP {count}",
   "ratingCard.avg": "avg",
   "ratingCard.ratingLabel": "RATING",
   "ratingCard.volforceLabel": "VOLFORCE",
   "ratingCard.potentialLabel": "POTENTIAL",
+  "ratingCard.sRatingLabel": "S-RATING",
 
   // ── 패치노트 (관리 페이지에서 게시 → 다음 명령 때 1회) ────────────────────
   "patchNotes.defaultTitle": "📢 캐롤봇 {version} 업데이트",

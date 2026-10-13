@@ -104,6 +104,9 @@ export interface PlayRecord {
   track: number;
   fc: string;
   sync: string;
+  /** DX 점수 / 만점. maishift 기록에만 있다(S-레이팅 계산용). */
+  dxScore?: number;
+  dxScoreMax?: number;
   detailIdx?: string;
   ratingUp?: number;
   achievementGain?: number;

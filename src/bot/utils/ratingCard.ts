@@ -20,6 +20,7 @@ import {
   jacketFileUrl,
 } from "../../constants";
 import { displayTitle } from "../../aliases";
+import { S_RATING_COUNT, chartSRating, dxStars, formatSRating, sRatingTier } from "../../sRating";
 import { msg, cardCacheVersion, type MessageKey } from "../../messages";
 
 // 게임 설정(games.ts)의 섹션·레이팅 라벨을 관리 페이지에서 고칠 수 있는 문구로 바꾼다. 표에 없으면 그대로.
@@ -28,11 +29,13 @@ const LABEL_KEYS: Record<string, MessageKey> = {
   OTHERS: "ratingCard.sectionOthers",
   BEST: "ratingCard.sectionBest",
   VOLFORCE: "ratingCard.sectionVolforce",
+  SRATING: "ratingCard.sectionSRating",
 };
 const RATING_LABEL_KEYS: Record<string, MessageKey> = {
   RATING: "ratingCard.ratingLabel",
   VOLFORCE: "ratingCard.volforceLabel",
   POTENTIAL: "ratingCard.potentialLabel",
+  SRATING: "ratingCard.sRatingLabel",
 };
 const labelText = (label: string, table: Record<string, MessageKey>) => (table[label] ? msg(table[label]) : label);
 import type { GameId } from "../../games";
@@ -49,6 +52,9 @@ import {
   RS_DEFAULT_COLOR,
   RS_DOUBLE_COLOR,
 } from "../../games";
+
+/** /레이팅표 type: maimai DX 레이팅, S-레이팅, 다른 게임 환산. */
+export type RatingType = GameId | "srating";
 
 // ─── Design tokens (ported from mailog, colors from src/brand.ts) ──────────────────────────────────
 const CARD_W = 110;
@@ -614,20 +620,23 @@ export async function renderRatingCard(
   records: PlayRecord[],
   avatarBuf: Buffer | null,
   translate = false,
-  game: GameId = "maimai",
+  type: RatingType = "maimai",
   // 과거 스냅샷 렌더는 현재 프로필 기준 캐시(profileKey 단일 행)를 오염시키면 안 되므로 끈다.
   allowCache = true,
   // 과거 역산 렌더용. 주면 그 시점의 신곡 범위로 신곡/구곡을 나눈다.
   newSongDay?: string,
 ): Promise<Buffer> {
+  // S-레이팅은 maimai 기록을 그대로 쓰고(난이도·마크 표기 동일) 곡 값과 고르는 규칙만 다르다.
+  const sRating = type === "srating";
+  const game: GameId = sRating ? "maimai" : type;
   const cfg = GAMES[game];
-  const cmColor = GAME_CM_COLOR[game];
+  const cmColor = sRating ? { ...GAME_CM_COLOR.maimai, "✦5": "#fbbf24" } : GAME_CM_COLOR[game];
   // 곡별 RS는 게임별 포맷을 쓰되, 섹션 평균은 maimai만 기존 표기(소수 1자리)를 유지
-  const formatAvg = game === "maimai" ? (v: number) => v.toFixed(1) : cfg.formatRS;
+  const formatAvg = sRating ? (v: number) => v.toFixed(3) : game === "maimai" ? (v: number) => v.toFixed(1) : cfg.formatRS;
   // ─── Render cache: return cached PNG if profile and card version unchanged ─
   // 번역 표시본은 뷰어별로 달라 공유 캐시(원제 기준)를 쓰지 않고 매번 새로 렌더한다.
   // 타 게임 치환본도 마찬가지로 maimai 기준 캐시를 공유하지 않는다.
-  const cacheable = allowCache && !translate && game === "maimai";
+  const cacheable = allowCache && !translate && type === "maimai";
   const cached = cacheable ? await getRatingCardCache(profile.profileKey) : null;
   if (
     cached &&
@@ -660,8 +669,35 @@ export async function renderRatingCard(
   // 타 게임은 mai-log와 동일하게 전체 기록에서 게임별 규칙으로 다시 뽑는다.
   const sections: { label: string; cols: number; vms: CardVM[] }[] = [];
   let totalRs: string;
+  let sRatingMean = 0;
 
-  if (game === "maimai") {
+  if (sRating) {
+    // maishift 전체 기록에서 DX 점수가 있는 보면만. 값이 0 인 보면(DX 별 없음)도 50개가 안 되면 채운다.
+    const pool = clearRecords.length > 0 ? clearRecords : records;
+    const rated = pool
+      .filter((r) => r.achievementVal > 0 && (r.dxScoreMax ?? 0) > 0)
+      .map((r) => {
+        const fixed = fix(r);
+        const percent = ((fixed.dxScore ?? 0) / (fixed.dxScoreMax ?? 1)) * 100;
+        const constant = getConstant(fixed.title, fixed.musicKind, fixed.diff, profile.server) ?? levelToNumber(fixed.level);
+        const value = chartSRating(constant, percent);
+        const stars = dxStars(percent);
+        const vm: CardVM = {
+          ...vmOf(r),
+          rs: value,
+          rsText: formatSRating(value),
+          ach: `${percent.toFixed(2)}%`,
+          mark: stars ? `✦${stars}` : "",
+        };
+        return vm;
+      })
+      .sort((a, b) => b.rs - a.rs)
+      .slice(0, S_RATING_COUNT);
+    sections.push({ label: "SRATING", cols: 10, vms: rated });
+    const sum = rated.reduce((acc, v) => acc + v.rs, 0);
+    sRatingMean = rated.length ? sum / rated.length : 0;
+    totalRs = formatSRating(sum);
+  } else if (game === "maimai") {
     // 국제판: maimai net 파싱 순서(신곡 15 + 구곡 35)를 그대로 신뢰.
     // JP: 전체 기록에서 직접 산출하므로 버전(isNewSong)으로 분류(15/35 미만 오분류 방지).
     const newRecords =
@@ -808,8 +844,15 @@ export async function renderRatingCard(
       ])
     : mark;
 
-  const ratingBlock = game === "maimai"
+  const tier = sRating ? sRatingTier(sRatingMean) : null;
+  const ratingBlock = type === "maimai"
     ? ratingPlate(Number(totalRs) || 0)
+    : sRating
+    ? el("div", { display: "flex", flexDirection: "column", alignItems: "flex-end" }, [
+        el("span", { fontSize: 8, color: BRAND.dim }, labelText("SRATING", RATING_LABEL_KEYS)),
+        el("span", { fontSize: 20, fontWeight: 800, color: ACCENT, lineHeight: 1.1 }, totalRs),
+        ...(tier ? [el("span", { fontSize: 9, fontWeight: 700, color: BRAND.ink2, marginTop: 2 }, tier)] : []),
+      ])
     : el(
     "div",
     { display: "flex", flexDirection: "column", alignItems: "flex-end" },

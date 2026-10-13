@@ -1,10 +1,9 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, MessageFlags, AttachmentBuilder } from "discord.js";
 import { getCachedProfile, getUserFriendCode, getProfilePrivate, getTranslateTitles, getRatingSnapshot, getRatingSnapshotRange, getAchievementPlayEventLog, getAchievementLogRange } from "../../storage";
 import { getTopList, getClearList, loadAvatar } from "../utils/embeds";
-import { renderRatingCard } from "../utils/ratingCard";
+import { renderRatingCard, type RatingType } from "../utils/ratingCard";
 import { GAMES, isGameId } from "../../games";
 import { msg } from "../../messages";
-import type { GameId } from "../../games";
 import type { PlayRecord } from "../../scraper";
 import { koreaPlayDayRange, koreaPlayDayKey } from "../../achievements";
 import { computeRatingTarget } from "../../constants";
@@ -18,11 +17,13 @@ export const data = new SlashCommandBuilder()
   )
   .addStringOption((opt) =>
     opt
-      .setName("게임")
-      .setDescription("다른 리듬게임의 레이팅 체계로 환산 (생략 시 maimai DX)")
+      .setName("type")
+      .setDescription("레이팅 종류: S-레이팅, 다른 리듬게임 환산 (생략 시 maimai DX)")
       .setRequired(false)
       .addChoices(
-        ...Object.values(GAMES).map((g) => ({ name: g.label, value: g.id })),
+        { name: GAMES.maimai.label, value: "maimai" },
+        { name: "S-레이팅", value: "srating" },
+        ...Object.values(GAMES).filter((g) => g.id !== "maimai").map((g) => ({ name: g.label, value: g.id })),
       ),
   )
   .addStringOption((opt) =>
@@ -38,8 +39,8 @@ function isPlayDayKey(value: string): boolean {
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   const target = interaction.options.getUser("user") ?? interaction.user;
-  const gameOpt = interaction.options.getString("게임") ?? "maimai";
-  const game: GameId = isGameId(gameOpt) ? gameOpt : "maimai";
+  const typeOpt = interaction.options.getString("type") ?? "maimai";
+  const type: RatingType = typeOpt === "srating" || isGameId(typeOpt) ? typeOpt : "maimai";
   const dateOpt = (interaction.options.getString("date") ?? "").trim();
   const userId = target.id;
   if (target.id !== interaction.user.id && await getProfilePrivate(target.id)) {
@@ -67,7 +68,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       await interaction.reply({ content: msg("ratingImage.snapshotBadDate"), flags: MessageFlags.Ephemeral });
       return;
     }
-    if (game !== "maimai") {
+    if (type !== "maimai") {
       await interaction.reply({ content: msg("ratingImage.snapshotGameUnsupported"), flags: MessageFlags.Ephemeral });
       return;
     }
@@ -116,14 +117,16 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       profile = { ...cached, rating: 0, clearJson: JSON.stringify(rewound) };
     }
   }
-  // 치환 모드는 레이팅 대상 50곡이 아니라 전체 기록에서 다시 뽑으므로
-  // 레이팅 대상이 비어 있어도 clear 기록만 있으면 그릴 수 있다.
-  const hasSource =
-    records.length > 0 || (game !== "maimai" && getClearList(profile).length > 0);
+  // 치환 모드·S-레이팅은 레이팅 대상 50곡이 아니라 전체 기록에서 다시 뽑으므로
+  // 레이팅 대상이 비어 있어도 clear 기록만 있으면 그릴 수 있다. S-레이팅은 DX 점수가 있는 기록이 있어야 한다.
+  const hasSource = type === "srating"
+    ? [...getClearList(profile), ...records].some((r) => (r.dxScoreMax ?? 0) > 0)
+    : records.length > 0 || (type !== "maimai" && getClearList(profile).length > 0);
   if (!hasSource) {
+    const notice = msg(type === "srating" ? "ratingImage.sRatingNoData" : "ratingImage.noRecords");
     // 역산 경로는 이미 defer 된 상태라 reply 를 다시 쓸 수 없다.
-    if (deferred) await interaction.editReply({ content: msg("ratingImage.noRecords") });
-    else await interaction.reply({ content: msg("ratingImage.noRecords"), flags: MessageFlags.Ephemeral });
+    if (deferred) await interaction.editReply({ content: notice });
+    else await interaction.reply({ content: notice, flags: MessageFlags.Ephemeral });
     return;
   }
   if (!deferred) await interaction.deferReply();
@@ -133,7 +136,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       records,
       await loadAvatar(userId, profile),
       await getTranslateTitles(interaction.user.id),
-      game,
+      type,
       !snapshotDay && !rewindDay,
       rewindDay || undefined,
     );
@@ -145,7 +148,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
           : snapshotDay === dateOpt
             ? msg("ratingImage.snapshotNotice", { date: snapshotDay })
             : msg("ratingImage.snapshotNoticeFallback", { actual: snapshotDay, date: dateOpt }),
-      files: [new AttachmentBuilder(png, { name: dateOpt ? `rating-${dateOpt}.png` : `rating-${game}.png` })],
+      files: [new AttachmentBuilder(png, { name: dateOpt ? `rating-${dateOpt}.png` : `rating-${type}.png` })],
     });
   } catch (e) {
     console.error("[레이팅이미지]", e);
