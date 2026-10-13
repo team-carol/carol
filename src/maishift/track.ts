@@ -8,13 +8,15 @@ export interface TrackScore { at: number; achievement: number; dxScore: number; 
 export interface TrackLevel { versionId: number; constant: number }
 /** 레이팅 구간 하나. counts 는 랭크별 인원(AAA 미만 … SSS+, 서로 겹치지 않음). */
 export interface TrackDistBucket { min: number; max: number; total: number; counts: Record<string, number> }
-export interface TrackInfo { levels: TrackLevel[]; dist: TrackDistBucket[]; distAt: number | null; position: { order: number | null; total: number } | null }
+export interface TrackInfo { levels: TrackLevel[]; dist: TrackDistBucket[]; distAt: number | null }
+export interface TrackPosition { order: number | null; total: number }
 
 const INFO_TTL_MS = 24 * 60 * 60 * 1000;
 const SCORES_TTL_MS = 5 * 60 * 1000;
 const MAX_ENTRIES = 300;
 const infoCache = new Map<number, { at: number; info: TrackInfo }>();
 const scoresCache = new Map<string, { at: number; scores: TrackScore[] | null }>();
+const positionCache = new Map<number, { at: number; pos: TrackPosition | null }>();
 
 function remember<K, V>(m: Map<K, V>, k: K, v: V): void {
   m.delete(k);
@@ -22,7 +24,22 @@ function remember<K, V>(m: Map<K, V>, k: K, v: V): void {
   while (m.size > MAX_ENTRIES) m.delete(m.keys().next().value!);
 }
 
-/** 버전별 상수·분포·버전 안 순서. 하나가 실패해도 나머지는 보여 준다. */
+/** 버전 폴더 안 순서(order 는 0부터, 모르면 null). /검색·/랜덤·곡 상세가 같이 쓴다. 하루 둔다. */
+export async function getTrackPosition(trackId: number): Promise<TrackPosition | null> {
+  const have = positionCache.get(trackId);
+  if (have && Date.now() - have.at < INFO_TTL_MS) return have.pos;
+  try {
+    const p = await callServerFn<TrackPosition>(FN.trackPosition, { trackId });
+    const pos = p && p.total > 0 ? { order: p.order ?? null, total: p.total } : null;
+    remember(positionCache, trackId, { at: Date.now(), pos });
+    return pos;
+  } catch (e) {
+    console.error(`[maishift] track ${trackId} 순서:`, (e as Error).message);
+    return null;
+  }
+}
+
+/** 버전별 상수·분포. 하나가 실패해도 나머지는 보여 준다. */
 export async function getTrackInfo(trackId: number): Promise<TrackInfo> {
   const have = infoCache.get(trackId);
   if (have && Date.now() - have.at < INFO_TTL_MS) return have.info;
@@ -30,19 +47,17 @@ export async function getTrackInfo(trackId: number): Promise<TrackInfo> {
     console.error(`[maishift] track ${trackId} ${label}:`, (e as Error).message);
     return null;
   });
-  const [levels, dist, position] = await Promise.all([
+  const [levels, dist] = await Promise.all([
     soft(callServerFn<{ versionId: number; internalLevel: number }[]>(FN.trackLevels, { trackId }), "상수"),
     soft(callServerFn<{ buckets: { coarse: TrackDistBucket[] }; computedAt?: string }>(FN.trackDist, { trackId }), "분포"),
-    soft(callServerFn<{ order: number | null; total: number }>(FN.trackPosition, { trackId }), "순서"),
   ]);
   const info: TrackInfo = {
     levels: (levels ?? []).map((l) => ({ versionId: l.versionId, constant: l.internalLevel / 10 })).sort((a, b) => a.versionId - b.versionId),
     dist: dist?.buckets?.coarse ?? [],
     distAt: dist?.computedAt ? Date.parse(dist.computedAt) || null : null,
-    position: position && position.total > 0 ? position : null,
   };
   // 전부 실패했으면 캐시하지 않는다(다음에 다시 시도).
-  if (levels || dist || position) remember(infoCache, trackId, { at: Date.now(), info });
+  if (levels || dist) remember(infoCache, trackId, { at: Date.now(), info });
   return info;
 }
 

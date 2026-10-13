@@ -11,6 +11,7 @@ import {
 } from "../../constants";
 import { chartKey } from "../../scraper";
 import { msg } from "../../messages";
+import { versionPositionText } from "../utils/versionPosition";
 
 const MAI_DIFF_COLOR: Record<string, number> = {
   BASIC: 0x16a34a, ADVANCED: 0xea580c, EXPERT: 0xdc2626,
@@ -146,7 +147,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     verOpt ? verOpt + (plusOpt === "plus" ? " PLUS" : plusOpt === "base" ? " (무인)" : "") : undefined,
   ].filter(Boolean).join("  ·  ");
   const translate = await getTranslateTitles(interaction.user.id);
-  const embeds = picks.map((c, i) => {
+  const embeds = await Promise.all(picks.map(async (c, i) => {
     const rec = clearMap?.get(`${c.title}|${c.kind}|${c.diff}`);
     const ytQuery = encodeURIComponent(
       `maimai ${c.title} ${c.kind} ${c.diff} 外部出力`.replace(/\s+/g, " ").trim(),
@@ -164,9 +165,12 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     if (genre) emb.addFields({ name: msg("random.fieldGenre"), value: genre, inline: true });
     const versionName = getSongVersionName(c.title);
     if (versionName) {
+      const base = versionName + (isSongPlus(c.title) ? " PLUS" : "");
+      // 버전 정렬로 곡을 찾을 때의 위치(예: 43/79). /랜덤 후보는 국제판 수록곡이다.
+      const position = await versionPositionText(c.title, c.kind, "intl");
       emb.addFields({
         name: msg("random.fieldVersion"),
-        value: versionName + (isSongPlus(c.title) ? " PLUS" : ""),
+        value: position ? msg("searchResult.versionPosition", { version: base, position }) : base,
         inline: true,
       });
     }
@@ -178,7 +182,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     const jacket = getJacketFile(c.title);
     if (jacket) emb.setThumbnail(jacketFileUrl(jacket));
     return emb;
-  });
+  }));
 
   await interaction.reply({ embeds });
 }

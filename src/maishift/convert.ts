@@ -13,6 +13,8 @@ export interface MsSong {
   genre: string;
   songVersion: number;
   type: "DX" | "STANDARD" | string;
+  /** 그 지역 버전 폴더 안 순서(0부터). maishift 곡 창의 "버전 안 순서"와 같다. */
+  versionFolderOrder?: number;
   titleTranslations?: { title: string; language: string }[];
 }
 export interface MsRecord { a: number; d: number; m: number; g: number; c?: string; y?: string }

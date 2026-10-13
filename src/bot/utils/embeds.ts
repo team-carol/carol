@@ -41,6 +41,7 @@ import { koreaPlayDayKey } from "../../achievements";
 import { buildMarkMap, buildKindResolver, chartKey } from "../../scraper";
 import type { PlayRecord, ChartMarks, MaimaiServer, MapArea } from "../../scraper";
 import { msg } from "../../messages";
+import { versionPositionText } from "./versionPosition";
 
 // 곡 자켓 버퍼: DB 캐시 → maimai net(musicId) → 카탈로그 재킷(title) 순으로 확보하고 캐시
 export async function jacketBuffer(r: PlayRecord): Promise<Buffer | null> {
@@ -610,7 +611,10 @@ export async function searchResultEmbeds(
       // 장르(catcode)·수록 버전은 OTOGE DB 데이터. 있을 때만 리전 라벨 아래 들여써서 붙인다.
       const genre = getSongGenre(title);
       const versionName = getSongVersionName(title, p.server);
-      const versionLabel = versionName ? versionName + (isSongPlus(title, p.server) ? " PLUS" : "") : null;
+      const versionBase = versionName ? versionName + (isSongPlus(title, p.server) ? " PLUS" : "") : null;
+      // 버전 정렬로 곡을 찾을 때의 위치(예: 43/79)
+      const position = versionBase ? await versionPositionText(title, musicKind, p.server) : null;
+      const versionLabel = versionBase && position ? msg("searchResult.versionPosition", { version: versionBase, position }) : versionBase;
       const regionLine =
         (exclusive ? msg("searchResult.regionExclusive", { version: exclusive === "jp" ? "japan ver." : "intl ver." }) : verLabel)
         + (genre ? msg("searchResult.genreSuffix", { genre }) : "")

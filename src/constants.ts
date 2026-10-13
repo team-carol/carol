@@ -25,6 +25,10 @@ let jpTitles: Set<string> = new Set();
 let genreMap: Map<string, string> = new Map();
 // "제목|ST/DX|난이도" → maishift 보면 번호, 제목 → 아티스트(곡 상세 카드용)
 let trackIdMap: Map<string, number> = new Map();
+// 버전 폴더 안 순서(maishift 곡 창의 "11 / 79"). 지역마다 다르다. "제목|ST/DX" → [순서(0부터), 세대 번호]
+type FolderData = { orders: [string, [number, number]][]; latest: number };
+let folderIntl: FolderData | null = null;
+let folderJp: FolderData | null = null;
 let artistMap: Map<string, string> = new Map();
 
 // maimai 장르 목록 (랜덤 명령어 장르 선택지)
@@ -183,6 +187,8 @@ interface ConstantsCache {
   koTitles?: [string, string][];
   trackIds?: [string, number][];
   artists?: [string, string][];
+  folderIntl?: FolderData;
+  folderJp?: FolderData;
 }
 
 // 캐시 복원. maishift 에서 받은 캐시가 아니면 fresh=false 반환.
@@ -200,9 +206,10 @@ function applyCache(data: string): { fresh: boolean } {
   setExternalTranslations(new Map(parsed.koTitles ?? []));
   trackIdMap = new Map(parsed.trackIds ?? []);
   artistMap = new Map(parsed.artists ?? []);
+  setFolders(parsed.folderIntl ?? null, parsed.folderJp ?? null);
   rebuildDailyFortuneSongs();
-  // 보면 번호가 없는 옛 캐시면 새로 받는다(곡 상세 조회에 필요).
-  return { fresh: parsed.source === "maishift" && !!parsed.trackIds };
+  // 보면 번호·버전 폴더 순서가 없는 옛 캐시면 새로 받는다.
+  return { fresh: parsed.source === "maishift" && !!parsed.trackIds && !!parsed.folderIntl };
 }
 
 export async function loadConstants(): Promise<void> {
@@ -220,8 +227,11 @@ export async function loadConstants(): Promise<void> {
   }
 
   try {
-    const intl = await fetchCatalog("ASIA");
-    const jp = await fetchCatalog("JAPAN");
+    const intlRes = await fetchCatalog("ASIA");
+    const jpRes = await fetchCatalog("JAPAN");
+    const intl = intlRes.songs, jp = jpRes.songs;
+    const fIntl = folderDataOf(intlRes.songs, intlRes.latestVersion), fJp = folderDataOf(jpRes.songs, jpRes.latestVersion);
+    setFolders(fIntl, fJp);
     constantMap = new Map();
     jacketMap = new Map();
     jacketUrlMap = new Map();
@@ -255,6 +265,8 @@ export async function loadConstants(): Promise<void> {
       koTitles: Array.from(koTitles.entries()),
       trackIds: Array.from(trackIdMap.entries()),
       artists: Array.from(artistMap.entries()),
+      folderIntl: fIntl,
+      folderJp: fJp,
     } satisfies ConstantsCache));
     rebuildDailyFortuneSongs();
   } catch (e) {
@@ -386,6 +398,38 @@ export function getRegionExclusive(title: string): "jp" | "intl" | null {
 }
 
 // 곡 장르(catcode). 없으면 null.
+function folderDataOf(songs: CatalogSong[], latest: number): FolderData {
+  const orders: [string, [number, number]][] = [];
+  for (const s of songs) for (const f of s.folders ?? []) orders.push([`${s.title}|${f.kind}`, [f.order, f.version]]);
+  return { orders, latest };
+}
+
+interface FolderIndex { order: Map<string, [number, number]>; count: Map<number, number>; latest: number }
+let folderIndexIntl: FolderIndex | null = null;
+let folderIndexJp: FolderIndex | null = null;
+function indexOf(d: FolderData | null): FolderIndex | null {
+  if (!d) return null;
+  const count = new Map<number, number>();
+  for (const [, [, v]] of d.orders) count.set(v, (count.get(v) ?? 0) + 1);
+  return { order: new Map(d.orders), count, latest: d.latest };
+}
+function setFolders(intl: FolderData | null, jp: FolderData | null): void {
+  folderIntl = intl; folderJp = jp;
+  folderIndexIntl = indexOf(intl); folderIndexJp = indexOf(jp);
+}
+
+/**
+ * 버전 폴더 안 위치("11 / 79" — 게임에서 버전 정렬로 곡을 찾을 때). 지역 곡 목록 기준.
+ * tentative: 그 지역 최신 세대 곡이라 새 곡이 추가되면 순서가 바뀔 수 있음(maishift 는 "?" 를 붙인다).
+ */
+export function getVersionPosition(title: string, musicKind: string, server: MaimaiServer = "intl"): { order: number; total: number; tentative: boolean } | null {
+  const idx = server === "jp" ? folderIndexJp : folderIndexIntl;
+  const hit = idx?.order.get(`${title}|${musicKind === "DX" ? "DX" : "ST"}`);
+  if (!idx || !hit) return null;
+  const [order, version] = hit;
+  return { order: order + 1, total: idx.count.get(version) ?? 0, tentative: version >= idx.latest };
+}
+
 /** maishift 보면 번호. 곡 상세(달성률 변화·상수 변동·분포) 조회에 쓴다. */
 export function getTrackId(title: string, musicKind: string, diff: string): number | null {
   return trackIdMap.get(`${title}|${musicKind === "DX" ? "DX" : "ST"}|${diff}`) ?? null;

@@ -17,7 +17,11 @@ export interface CatalogSong {
   /** maishift 한국어 번역(원제와 같으면 없음) */
   korean?: string;
   charts: CatalogChart[];
+  /** ST/DX 곡마다 그 지역 버전 폴더 안 순서(0부터)와 세대 번호 */
+  folders?: { kind: "ST" | "DX"; order: number; version: number }[];
 }
+
+export interface RegionCatalog { songs: CatalogSong[]; /** 그 지역 최신 세대 번호(이 세대 곡은 순서가 아직 바뀔 수 있다) */ latestVersion: number }
 
 interface SongsResult { regionLatestVersion: number; tracks: { songs: MsSong[]; tracks: MsTrack[] } }
 
@@ -71,7 +75,12 @@ export function toCatalog(songs: MsSong[], tracks: MsTrack[]): CatalogSong[] {
     }
     return e;
   };
-  songs.forEach(entryOf);
+  songs.forEach((song) => {
+    const e = entryOf(song);
+    if (typeof song.versionFolderOrder === "number") {
+      (e.folders ??= []).push({ kind: song.type === "DX" ? "DX" : "ST", order: song.versionFolderOrder, version: song.songVersion });
+    }
+  });
   for (const t of tracks) {
     const song = songs[t.s];
     const diff = DIFF[t.d];
@@ -81,8 +90,8 @@ export function toCatalog(songs: MsSong[], tracks: MsTrack[]): CatalogSong[] {
   return [...byTitle.values()];
 }
 
-export async function fetchCatalog(region: MaishiftRegion): Promise<CatalogSong[]> {
+export async function fetchCatalog(region: MaishiftRegion): Promise<RegionCatalog> {
   const res = await callServerFn<SongsResult>(FN.songs, { region });
   if (!res?.tracks?.songs?.length) throw new Error(`maishift ${region} 곡 목록이 비어 있음`);
-  return toCatalog(res.tracks.songs, res.tracks.tracks);
+  return { songs: toCatalog(res.tracks.songs, res.tracks.tracks), latestVersion: res.regionLatestVersion };
 }

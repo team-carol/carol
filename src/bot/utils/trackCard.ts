@@ -37,6 +37,8 @@ export interface TrackCardData {
   playerRating: number;
   /** DX ✦ 랭크를 소수점 첫째 자리까지(보는 사람의 /설정) */
   dxDecimal: boolean;
+  /** 버전 폴더 안 위치 "11/79" (versionPosition.ts). 모르면 null */
+  positionText: string | null;
 }
 
 const fmt = (n: number) => n.toLocaleString("en-US");
@@ -234,7 +236,6 @@ export async function renderTrackCard(d: TrackCardData): Promise<Buffer> {
   const diffColor = MAI_DIFF_COLOR[d.diff] ?? "#888";
   const vColor = d.songVersion !== null ? songVersionColor(d.songVersion) : null;
   const vName = d.songVersion !== null ? d.versionName(d.songVersion) : null;
-  const pos = d.info.position;
   const marks = d.record && d.record.achievement > 0 ? [d.record.fc, d.record.sync].filter(Boolean) : [];
 
   // 머리
@@ -247,7 +248,7 @@ export async function renderTrackCard(d: TrackCardData): Promise<Buffer> {
         pill(d.diff, { background: diffColor, color: "#fff" }),
         pill(d.kind, { background: d.kind === "DX" ? "#f97316" : "#3b82f6", color: "#fff" }),
         ...(vName && vColor ? [pill(vName, { background: vColor, color: inkOn(vColor) })] : []),
-        ...(pos ? [el("span", { color: FAINT, fontSize: 10, marginLeft: 2 }, msg("trackCard.versionPosition", { order: pos.order === null ? "?" : pos.order + 1, total: pos.total }))] : []),
+        ...(d.positionText ? [el("span", { color: FAINT, fontSize: 10, marginLeft: 2 }, d.positionText)] : []),
       ]),
       el("span", { color: INK, fontSize: 24, fontWeight: 800, lineHeight: 1.15, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, d.title),
       el("span", { color: MUTED, fontSize: 12, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, d.artist ?? ""),

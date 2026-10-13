@@ -10,6 +10,7 @@ import { getConstant, getJacketFile, getSongArtist, getSongVersion, getTrackId }
 import { versionIndex, versionName } from "../../maishift/catalog";
 import { getTrackInfo, getTrackScores } from "../../maishift/track";
 import { displayTitle } from "../../aliases";
+import { versionPositionText } from "./versionPosition";
 import { msg } from "../../messages";
 
 const DIFFS = ["BASIC", "ADVANCED", "EXPERT", "MASTER", "Re:MASTER"];
@@ -59,13 +60,14 @@ export async function handleTrackButton(i: ButtonInteraction): Promise<void> {
 
     const record = records.find((r) => r.diff === diff) ?? null;
     const link = await getMaishiftLink(ctx.userId);
-    const [info, scores, translate, dxDecimal, jacket] = await Promise.all([
+    const [info, scores, translate, dxDecimal, jacket, positionText] = await Promise.all([
       getTrackInfo(trackId),
       link ? getTrackScores(trackId, link.handle) : Promise.resolve(null),
       getTranslateTitles(i.user.id),
       // DX ✦ 소수점 표시는 번역처럼 보는(누른) 사람의 설정.
       getDxRankDecimal(i.user.id),
       (async () => { const f = getJacketFile(title); return f ? fetchJacketDataUrl(f) : null; })(),
+      versionPositionText(title, musicKind, cached.server),
     ]);
     const code = getSongVersion(title, cached.server);
     const png = await renderTrackCard({
@@ -84,6 +86,7 @@ export async function handleTrackButton(i: ButtonInteraction): Promise<void> {
       playerName: cached.playerName,
       playerRating: cached.rating,
       dxDecimal,
+      positionText,
     });
     // 난이도 바꾸기 버튼(지금 보는 난이도는 강조).
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(diffs.map((d) =>
