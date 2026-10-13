@@ -50,11 +50,19 @@ import {
   GAME_CM_COLOR,
   GAME_DIFF_COLOR,
   MAI_DIFF_COLOR,
+  MAI_CM_COLOR,
   RS_DEFAULT_COLOR,
   RS_DOUBLE_COLOR,
 } from "../../games";
 
-const S_STAR5_COLOR = "#fbbf24";
+// S-레이팅 ✦ 색: ✦5 금색, ✦4·3·2 는 레이팅표의 SSS·SS·S 랭크 색, ✦1 흰색.
+function sStarColor(stars: number): string {
+  if (stars >= 5) return "#fbbf24";
+  if (stars === 4) return MAI_CM_COLOR["SSS"];
+  if (stars === 3) return MAI_CM_COLOR["SS"];
+  if (stars === 2) return MAI_CM_COLOR["S"];
+  return "#ffffff";
+}
 
 /** /레이팅표 type: maimai DX 레이팅, S-레이팅, 다른 게임 환산. */
 export type RatingType = GameId | "srating";
@@ -687,15 +695,13 @@ export async function renderRatingCard(
         const constant = getConstant(fixed.title, fixed.musicKind, fixed.diff, profile.server) ?? levelToNumber(fixed.level);
         const value = chartSRating(constant, percent);
         const stars = dxStars(percent);
-        const base = vmOf(r);
         const vm: CardVM = {
-          ...base,
+          ...vmOf(r),
           rs: value,
           rsText: formatChartSRating(value),
           ach: `${percent.toFixed(2)}%`,
           mark: stars ? `✦${stars}` : "",
-          // ✦5 는 금색, 나머지는 레이팅표에서 그 보면 랭크(SSS+ 등)에 쓰는 색.
-          markColor: stars === 5 ? S_STAR5_COLOR : (cmColor[base.mark] ?? undefined),
+          markColor: sStarColor(stars),
         };
         return { vm, ach: r.achievementVal };
       })
