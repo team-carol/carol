@@ -268,7 +268,16 @@ export async function renderTrackCard(d: TrackCardData): Promise<Buffer> {
         return statsPanel([
           { value: `${r.achievement.toFixed(4)}%`, label: msg("trackCard.achievement") },
           { value: getScoreRank(r.achievement), label: msg("trackCard.rank") },
-          { value: r.dxMax ? `${fmt(r.dxScore ?? 0)} / ${fmt(r.dxMax)}` : "—", label: msg("trackCard.dxScore"), sub: dxPct !== null ? `${dxPct.toFixed(2)}% · ✦${dxStars(dxPct)}` : undefined },
+          {
+            value: r.dxMax ? `${fmt(r.dxScore ?? 0)} / ${fmt(r.dxMax)}` : "—",
+            label: msg("trackCard.dxScore"),
+            sub: dxPct !== null
+              ? el("div", { display: "flex", alignItems: "center", gap: 5 }, [
+                  el("span", { lineHeight: 1 }, `${dxPct.toFixed(2)}%`),
+                  ...(dxStars(dxPct) ? [el("span", { lineHeight: 1 }, "·"), starCount(dxStars(dxPct), FAINT, 10)] : []),
+                ])
+              : undefined,
+          },
           { value: rating !== null ? String(rating) : "—", label: msg("trackCard.rating"), sub: sValue !== null ? msg("trackCard.sRating", { value: formatChartSRating(sValue) }) : undefined },
         ]);
       })()

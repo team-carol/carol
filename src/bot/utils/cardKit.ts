@@ -82,7 +82,7 @@ export function creditOf(profile: { source?: string }): string | undefined {
 }
 
 // 랜딩 Stats 섹션처럼 박스 없이 큰 숫자(accent-soft) + 라벨. 칸 사이는 세로선으로만 나눈다.
-export function statsPanel(items: { value: string; label: string; sub?: string }[]): El {
+export function statsPanel(items: { value: string; label: string; sub?: string | El }[]): El {
   return el("div", {
     display: "flex", marginTop: 16,
     background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 16, padding: "18px 0",
@@ -93,7 +93,11 @@ export function statsPanel(items: { value: string; label: string; sub?: string }
   }, [
     el("span", { color: SOFT, fontFamily: NUM_FONT, fontSize: 28, fontWeight: 700, lineHeight: 1 }, it.value),
     el("span", { color: MUTED, fontSize: 11 }, it.label),
-    ...(it.sub ? [el("span", { color: FAINT, fontSize: 10, lineHeight: 1 }, it.sub)] : []),
+    ...(it.sub
+      ? [typeof it.sub === "string"
+          ? el("span", { color: FAINT, fontSize: 10, lineHeight: 1 }, it.sub)
+          : el("div", { display: "flex", alignItems: "center", color: FAINT, fontSize: 10, lineHeight: 1 }, [it.sub])]
+      : []),
   ])));
 }
 
