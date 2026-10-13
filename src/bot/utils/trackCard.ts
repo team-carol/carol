@@ -6,6 +6,7 @@ import {
 } from "./cardKit";
 import { renderInWorker } from "./renderPool";
 import { songVersionColor, inkOn } from "./ratingCard";
+import { MARK_COLOR } from "./achievementCard";
 import { MAI_DIFF_COLOR, MAI_CM_COLOR, getScoreRank } from "../../games";
 import { calcSongRating } from "../../constants";
 import { chartSRating, dxStars, formatChartSRating } from "../../sRating";
@@ -171,6 +172,7 @@ export async function renderTrackCard(d: TrackCardData): Promise<Buffer> {
   const vColor = d.songVersion !== null ? songVersionColor(d.songVersion) : null;
   const vName = d.songVersion !== null ? d.versionName(d.songVersion) : null;
   const pos = d.info.position;
+  const marks = d.record && d.record.achievement > 0 ? [d.record.fc, d.record.sync].filter(Boolean) : [];
 
   // 머리
   const head = el("div", { display: "flex", alignItems: "center", paddingBottom: 18, borderBottom: `1px solid ${BORDER}` }, [
@@ -183,10 +185,6 @@ export async function renderTrackCard(d: TrackCardData): Promise<Buffer> {
         pill(d.kind, { background: d.kind === "DX" ? "#f97316" : "#3b82f6", color: "#fff" }),
         ...(vName && vColor ? [pill(vName, { background: vColor, color: inkOn(vColor) })] : []),
         ...(pos ? [el("span", { color: FAINT, fontSize: 10, marginLeft: 2 }, msg("trackCard.versionPosition", { order: pos.order === null ? "?" : pos.order + 1, total: pos.total }))] : []),
-        // 내 콤보·싱크(플레이했을 때만)
-        ...(d.record && d.record.achievement > 0
-          ? [d.record.fc, d.record.sync].filter(Boolean).map((m) => pill(m, { background: SURFACE2, color: MAI_CM_COLOR[m] ?? TEXT, marginLeft: 4 }))
-          : []),
       ]),
       el("span", { color: INK, fontSize: 24, fontWeight: 800, lineHeight: 1.15, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, d.title),
       el("span", { color: MUTED, fontSize: 12, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, d.artist ?? ""),
@@ -194,6 +192,9 @@ export async function renderTrackCard(d: TrackCardData): Promise<Buffer> {
     el("div", { display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 12, flexShrink: 0, marginLeft: 16 }, [
       wordmark(msg("maishift.credit")),
       el("div", { display: "flex", alignItems: "flex-start" }, [
+        // 내 콤보·싱크(플레이했을 때만) — 성과표처럼 마크 색의 큰 글씨로 상수 왼쪽에
+        ...(marks.length ? [el("div", { display: "flex", alignItems: "center", gap: 10, marginRight: 18, height: 34 }, marks.map((m) =>
+          el("span", { color: MARK_COLOR[m] ?? MAI_CM_COLOR[m] ?? TEXT, fontSize: 22, fontWeight: 800, lineHeight: 1 }, m)))] : []),
         el("span", { color: INK, fontFamily: NUM_FONT, fontSize: 34, fontWeight: 800, lineHeight: 1 }, d.constant !== null ? d.constant.toFixed(1) : "—"),
         ...(d.constantEstimated ? [el("span", { color: MUTED, fontFamily: NUM_FONT, fontSize: 16, fontWeight: 800, marginLeft: 2 }, "?")] : []),
       ]),

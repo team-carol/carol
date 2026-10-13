@@ -31,7 +31,7 @@ const DIFF_COLOR: Record<string, string> = {
   "Re:MASTER": "#c084fc",
 };
 
-const MARK_COLOR: Record<string, string> = {
+export const MARK_COLOR: Record<string, string> = {
   "AP+": "#d946ef",
   AP: "#d946ef",
   "FC+": "#3b82f6",
