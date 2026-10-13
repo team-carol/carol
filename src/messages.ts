@@ -13,7 +13,7 @@ export const MESSAGES = {
   // ── 공통 ────────────────────────────────────────────────────────────────
   "common.selfNotRegistered":
     "maishift 계정이 연동되어 있지 않습니다. `/마이시프트 연동`으로 먼저 연동해 주세요.\n계속해서 해당 메시지가 출력되면 잠시 후 다시 시도해 주세요.",
-  "common.selfRegionMissing": "maishift에 {server} 기록이 없습니다. maishift에 {server} 기록을 올리거나, `/설정`에서 기본 서버를 바꿔 주세요.",
+  "common.selfRegionMissing": "현재 maishift에 {server} 기록이 없습니다.",
   "common.otherRegionMissing": "{user} 님은 maishift에 {server} 기록이 없습니다.",
   "common.otherNotRegistered": "{user} 님은 아직 maishift 계정을 연동하지 않았습니다.",
   "common.noBookmarklet": "해당 기능은 캐롤봇 추가 북마클릿 실행이 필요합니다. `/북마클릿`으로 설치한 뒤 maimai DX NET에서 실행해 주세요.",
