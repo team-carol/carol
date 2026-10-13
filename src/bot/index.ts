@@ -43,6 +43,7 @@ import * as maishift     from "./commands/maishift";
 import * as history      from "./commands/history";
 import { initMaishift } from "../maishift";
 import { guardSlowAck } from "./utils/slowAck";
+import { handleTrackButton } from "./utils/trackDetail";
 import { loadRankImages } from "../rankImages";
 
 type Command = { data: { toJSON(): object; name: string }; execute: (i: ChatInputCommandInteraction) => Promise<void>; autocomplete?: (i: AutocompleteInteraction) => Promise<void> };
@@ -268,7 +269,7 @@ client.on(Events.InteractionCreate, async (i) => {
       return;
     }
     // 프로필을 읽는 버튼도 늦어지면 대신 defer 한다. 원래 메시지를 고치는 버튼은 deferUpdate.
-    guardSlowAck(i, ["page:", "search:", "map:", "goal:"].some((p) => i.customId.startsWith(p)) ? "update" : "reply");
+    guardSlowAck(i, ["page:", "search:", "map:", "goal:", "trkd:"].some((p) => i.customId.startsWith(p)) ? "update" : "reply");
     if (i.customId.startsWith("serverset:")) {
       try { await serverSettings.handleButton(i); } catch (e) { console.error("[serverset-btn]", e); }
       return;
@@ -397,6 +398,11 @@ client.on(Events.InteractionCreate, async (i) => {
       } catch (e) {
         console.error("[mapshare-btn]", e);
       }
+      return;
+    }
+    // /검색 "N번 상세"·상세 카드의 난이도 바꾸기
+    if (i.customId.startsWith("trk:") || i.customId.startsWith("trkd:")) {
+      try { await handleTrackButton(i as ButtonInteraction); } catch (e) { console.error("[track-btn]", e); }
       return;
     }
     if (i.customId.startsWith("search:")) {

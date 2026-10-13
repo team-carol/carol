@@ -5,7 +5,7 @@
 import { callServerFn, FN, type MaishiftRegion } from "./serverFn";
 import type { MsSong, MsTrack } from "./convert";
 
-export interface CatalogChart { kind: "ST" | "DX"; diff: string; constant: number }
+export interface CatalogChart { kind: "ST" | "DX"; diff: string; constant: number; /** maishift 보면 번호(곡 상세 조회용) */ trackId?: number }
 export interface CatalogSong {
   title: string;
   /** 캐롤봇 버전 코드(예: CiRCLE 26000, CiRCLE PLUS 26500). 같은 곡의 ST/DX 중 이른 쪽. */
@@ -13,6 +13,7 @@ export interface CatalogSong {
   /** 캐롤봇 장르명(예: "POPS＆アニメ"). 모르면 "". */
   genre: string;
   jacketUrl: string;
+  artist?: string;
   /** maishift 한국어 번역(원제와 같으면 없음) */
   korean?: string;
   charts: CatalogChart[];
@@ -24,6 +25,12 @@ interface SongsResult { regionLatestVersion: number; tracks: { songs: MsSong[]; 
 const OLD_VERSION_CODES = [10000, 11000, 12000, 13000, 14000, 15000, 16000, 17000, 18000, 18500, 19000, 19500, 19900];
 export function versionCode(index: number): number {
   return index < OLD_VERSION_CODES.length ? OLD_VERSION_CODES[index] : 20000 + (index - OLD_VERSION_CODES.length) * 500;
+}
+
+/** 캐롤봇 버전 코드 → maishift 세대 번호(versionCode 의 역). 모르면 null. */
+export function versionIndex(code: number): number | null {
+  for (let i = 0; i < 60; i++) if (versionCode(i) === code) return i;
+  return null;
 }
 
 // でらっくす(13)부터 세대마다 무印·PLUS 두 버전. 아직 모르는 세대는 번호로.
@@ -55,7 +62,7 @@ export function toCatalog(songs: MsSong[], tracks: MsTrack[]): CatalogSong[] {
     const title = song.title || "　"; // 곡 "　"(전각 공백)은 빈 제목으로 온다
     let e = byTitle.get(title);
     if (!e) {
-      e = { title, version: versionCode(song.songVersion), genre: GENRES[song.genre] ?? "", jacketUrl: song.jacketUrl, charts: [] };
+      e = { title, version: versionCode(song.songVersion), genre: GENRES[song.genre] ?? "", jacketUrl: song.jacketUrl, artist: song.artist, charts: [] };
       const ko = song.titleTranslations?.find((t) => t.language === "KOREAN")?.title;
       if (ko && ko !== title) e.korean = ko;
       byTitle.set(title, e);
@@ -69,7 +76,7 @@ export function toCatalog(songs: MsSong[], tracks: MsTrack[]): CatalogSong[] {
     const song = songs[t.s];
     const diff = DIFF[t.d];
     if (!song || !diff || !(t.l > 0)) continue;
-    entryOf(song).charts.push({ kind: song.type === "DX" ? "DX" : "ST", diff, constant: t.l / 10 });
+    entryOf(song).charts.push({ kind: song.type === "DX" ? "DX" : "ST", diff, constant: t.l / 10, trackId: t.i });
   }
   return [...byTitle.values()];
 }

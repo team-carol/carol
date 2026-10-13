@@ -118,7 +118,7 @@ interface CardVM {
 }
 
 // 버전(세대 번호)별 테마 색. maishift 신곡 버전 표시와 같은 구분.
-function versionColor(v: number): string {
+export function songVersionColor(v: number): string {
   if (v <= 1) return "#2b8791";
   if (v <= 3) return "#b5db01";
   if (v <= 5) return "#ff6809";
@@ -137,7 +137,7 @@ function versionColor(v: number): string {
 }
 
 /** 배경색 위에서 읽히는 글자색(밝은 배경엔 검정). */
-function inkOn(hex: string): string {
+export function inkOn(hex: string): string {
   const n = parseInt(hex.slice(1), 16);
   const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((c) => {
     const x = c / 255;
@@ -149,7 +149,7 @@ function inkOn(hex: string): string {
 /** 신곡 버전 배지. maishift 기록은 곡의 세대 번호, 아니면 곡 목록의 버전 이름(색은 기본). */
 function versionBadge(r: PlayRecord): CardVM["version"] {
   if (r.songVersion !== undefined) {
-    const color = versionColor(r.songVersion);
+    const color = songVersionColor(r.songVersion);
     return { label: versionName(r.songVersion), color, ink: inkOn(color) };
   }
   const name = getSongVersionName(r.title);

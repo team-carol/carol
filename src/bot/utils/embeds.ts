@@ -462,6 +462,8 @@ export interface SearchCtx {
   userId: string;
   query: string;
   typeFilter: string;
+  /** 검색 결과 곡(채보 종류별) 순서. 상세 버튼이 몇 번째 곡인지로 찾는다. */
+  groups?: { title: string; musicKind: string }[];
 }
 const searchCtx = new Map<string, SearchCtx>();
 const SEARCH_CTX_MAX = 1000;
@@ -616,7 +618,8 @@ export async function searchResultEmbeds(
         + "\n";
       const emb = new EmbedBuilder()
         .setColor(0x2b2d31)
-        .setTitle(displayTitle(title, translate) + kind)
+        // 번호는 아래 "N번 상세" 버튼과 맞춘다.
+        .setTitle(`${i + 1}. ${displayTitle(title, translate)}${kind}`)
         .setAuthor({ name: msg("searchResult.author", { query, type: typeLabel }) })
         .setDescription(
           regionLine +
@@ -636,6 +639,17 @@ export async function searchResultEmbeds(
 
   // 쿼리/필터는 토큰으로 대체 (customId 100자 제한 회피)
   const ctxToken = token ?? putSearchCtx({ userId, query, typeFilter });
+  const ctx = getSearchCtx(ctxToken);
+  if (ctx) ctx.groups = keys.map((k) => { const g = byChart.get(k)!; return { title: g.title, musicKind: g.musicKind }; });
+  // 이 페이지 곡마다 "N번 상세"(maishift 곡 창과 같은 정보의 이미지).
+  const detailRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    pageKeys.map((_, i) =>
+      new ButtonBuilder()
+        .setCustomId(`trk:${ctxToken}:${idx * PAGE_SIZE + i}`)
+        .setLabel(msg("searchResult.detailButton", { n: i + 1 }))
+        .setStyle(ButtonStyle.Secondary),
+    ),
+  );
   const prevBtn = new ButtonBuilder()
     .setCustomId(`search:${ctxToken}:${idx - 1}`)
     .setLabel(msg("embed.prev"))
@@ -658,7 +672,7 @@ export async function searchResultEmbeds(
     nextBtn,
   );
 
-  return { embeds, components: [navRow], files };
+  return { embeds, components: [navRow, detailRow], files };
 }
 
 const DIFF_ABBR: Record<string, string> = {

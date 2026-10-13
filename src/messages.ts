@@ -268,6 +268,10 @@ export const MESSAGES = {
   "searchResult.externalLink": "[▶ 외부출력]({url})",
   "searchResult.genreSuffix": "\n    {genre}",
   "searchResult.versionSuffix": "\n    {version}",
+  "searchResult.detailButton": "{n}번 상세",
+  "trackDetail.expired": "검색이 만료되었습니다. 다시 검색해 주세요.",
+  "trackDetail.noTrack": "maishift에서 이 보면의 정보를 찾지 못했습니다.",
+  "trackDetail.failed": "곡 상세 정보를 불러오지 못했습니다. 잠시 뒤에 다시 시도해 주세요.",
 
   // ── 레이팅 대상곡 ───────────────────────────────────────────────────────
   "ratingTarget.empty": "레이팅 기록 없음\nmaishift에 기록을 올리면 업데이트됩니다.",
@@ -416,6 +420,26 @@ export const MESSAGES = {
   "historyCard.ratingTitle": "레이팅",
   "historyCard.playsTitle": "플레이 횟수",
   "historyCard.gapDays": "+{days}일",
+  "trackCard.versionPosition": "버전 안 {order} / {total}",
+  "trackCard.player": "{name} 님의 기록",
+  "trackCard.myRecord": "내 기록",
+  "trackCard.noRecord": "아직 플레이 기록이 없습니다.",
+  "trackCard.achievement": "달성률",
+  "trackCard.dxScore": "DX 점수",
+  "trackCard.rating": "레이팅",
+  "trackCard.sRating": "S-레이팅 {value}",
+  "trackCard.comboSync": "콤보 · 싱크",
+  "trackCard.scoreHistory": "달성률 변화",
+  "trackCard.scoreHistoryMeta": "기록이 바뀐 업로드 {count}번",
+  "trackCard.scoresHidden": "maishift에서 이전 기록을 공개하지 않아 볼 수 없습니다.",
+  "trackCard.scoresEmpty": "아직 점수 기록이 없습니다.",
+  "trackCard.firstRecord": "첫 기록",
+  "trackCard.levelHistory": "버전별 상수",
+  "trackCard.levelsEmpty": "상수 기록이 없습니다.",
+  "trackCard.distribution": "레이팅 구간별 달성 분포",
+  "trackCard.distributionMeta": "maishift 사용자 기준 · {date} 집계",
+  "trackCard.distEmpty": "분포 정보가 없습니다.",
+  "trackCard.people": "{count}명",
   "historyChart.month": "{month}월",
   "historyChart.year": "{year}",
   "profileCard.playsTotal": "누적",
@@ -532,7 +556,7 @@ export function applyMessageOverrides(rows: { key: string; text: string }[]): vo
 }
 
 // 이미지 카드 문구의 서명. 카드 캐시 키(메모리)와 레이팅표 DB 캐시 버전에 섞어, 문구를 바꾸면 다시 그리게 한다.
-const CARD_KEY_PREFIXES = ["card.", "profileCard.", "circleCard.", "circleColor.", "achievementCard.", "ratingCard."];
+const CARD_KEY_PREFIXES = ["card.", "profileCard.", "circleCard.", "circleColor.", "achievementCard.", "ratingCard.", "trackCard."];
 let cardSignature: number | null = null;
 
 function fnv1a(text: string): number {

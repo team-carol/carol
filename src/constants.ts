@@ -23,6 +23,9 @@ let intlTitles: Set<string> = new Set();
 let jpTitles: Set<string> = new Set();
 // 곡 → 장르(catcode)
 let genreMap: Map<string, string> = new Map();
+// "제목|ST/DX|난이도" → maishift 보면 번호, 제목 → 아티스트(곡 상세 카드용)
+let trackIdMap: Map<string, number> = new Map();
+let artistMap: Map<string, string> = new Map();
 
 // maimai 장르 목록 (랜덤 명령어 장르 선택지)
 export const GENRES = [
@@ -110,9 +113,11 @@ function ingest(data: CatalogSong[]): void {
     if (file && !jacketMap.has(song.title)) jacketMap.set(song.title, file);
     if (file && !jacketUrlMap.has(file)) jacketUrlMap.set(file, song.jacketUrl);
     if (song.genre && !genreMap.has(song.title)) genreMap.set(song.title, song.genre);
+    if (song.artist && !artistMap.has(song.title)) artistMap.set(song.title, song.artist);
     for (const c of song.charts) {
       const key = `${song.title}|${c.kind}|${c.diff}`;
       if (!constantMap.has(key)) constantMap.set(key, c.constant);
+      if (c.trackId !== undefined && !trackIdMap.has(key)) trackIdMap.set(key, c.trackId);
     }
   }
 }
@@ -176,6 +181,8 @@ interface ConstantsCache {
   jpConstants?: [string, number][];
   jpTitles?: string[];
   koTitles?: [string, string][];
+  trackIds?: [string, number][];
+  artists?: [string, string][];
 }
 
 // 캐시 복원. maishift 에서 받은 캐시가 아니면 fresh=false 반환.
@@ -191,8 +198,11 @@ function applyCache(data: string): { fresh: boolean } {
   jpConstantMap = new Map(parsed.jpConstants ?? []);
   jpTitles = new Set(parsed.jpTitles ?? []);
   setExternalTranslations(new Map(parsed.koTitles ?? []));
+  trackIdMap = new Map(parsed.trackIds ?? []);
+  artistMap = new Map(parsed.artists ?? []);
   rebuildDailyFortuneSongs();
-  return { fresh: parsed.source === "maishift" };
+  // 보면 번호가 없는 옛 캐시면 새로 받는다(곡 상세 조회에 필요).
+  return { fresh: parsed.source === "maishift" && !!parsed.trackIds };
 }
 
 export async function loadConstants(): Promise<void> {
@@ -216,6 +226,8 @@ export async function loadConstants(): Promise<void> {
     jacketMap = new Map();
     jacketUrlMap = new Map();
     genreMap = new Map();
+    trackIdMap = new Map();
+    artistMap = new Map();
     intlTitles = new Set(intl.map((s) => s.title));
     jpTitles = new Set(jp.map((s) => s.title));
     ingest(intl);
@@ -241,6 +253,8 @@ export async function loadConstants(): Promise<void> {
       jpConstants: Array.from(jpConstantMap.entries()),
       jpTitles: Array.from(jpTitles),
       koTitles: Array.from(koTitles.entries()),
+      trackIds: Array.from(trackIdMap.entries()),
+      artists: Array.from(artistMap.entries()),
     } satisfies ConstantsCache));
     rebuildDailyFortuneSongs();
   } catch (e) {
@@ -366,6 +380,15 @@ export function getRegionExclusive(title: string): "jp" | "intl" | null {
 }
 
 // 곡 장르(catcode). 없으면 null.
+/** maishift 보면 번호. 곡 상세(달성률 변화·상수 변동·분포) 조회에 쓴다. */
+export function getTrackId(title: string, musicKind: string, diff: string): number | null {
+  return trackIdMap.get(`${title}|${musicKind === "DX" ? "DX" : "ST"}|${diff}`) ?? null;
+}
+
+export function getSongArtist(title: string): string | null {
+  return artistMap.get(title) ?? null;
+}
+
 export function getSongGenre(title: string): string | null {
   return genreMap.get(title) ?? null;
 }

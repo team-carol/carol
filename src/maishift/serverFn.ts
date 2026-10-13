@@ -25,6 +25,15 @@ export const FN = {
   /** {handle, region} → 업로드(이전 기록) 목록. JSON 문자열 {n: 이름들, r: [[업로드 번호, 시각(ms), 레이팅, 이름 번호, 버전]]}.
    *  그 시점 프로필은 profile 에 handle 을 `<handle>~<업로드 번호>` 로 넘겨 받는다. 사용자가 이전 기록을 공개했을 때만. */
   uploads: "860797bd9ce1315f04e84227bb43cf8a4763c4e22321283681b9b1398ac9a628",
+  // ─── 곡 카드를 눌렀을 때 창(곡 상세). trackId 는 보면 번호(곡 목록의 track.i). ───
+  /** {trackId, handle} → 그 보면의 업로드별 기록 [{recordedAt, achievement, dxScore, dxMax, dxPercent, combo, sync}] */
+  trackScores: "889a9e2084ba419653983b577d7991d39d7ee1a78ab2cbf0f666933c347e6acc",
+  /** {trackId} → 버전별 상수 [{versionId, internalLevel}] */
+  trackLevels: "01fd4ff066633d4bb53aa015e4bb81123eacabb135c4accb1c7689d1f3db58dd",
+  /** {trackId} → 레이팅 구간별 달성 분포 {buckets: {coarse, fine}, computedAt} */
+  trackDist: "7d8978fb357e3443c4203f10a2bd53f954e1595ce6d75b68ae8ccf79dbebb392",
+  /** {trackId} → 버전 안 순서 {order, total} */
+  trackPosition: "e2b0bdcb4cea152b04517824c971fed10afef3f7be8ff554153ca41d6a3ae9f9",
 } as const;
 
 export type MaishiftRegion = "ASIA" | "JAPAN";
@@ -69,10 +78,12 @@ export function decodeSeroval(node: unknown, refs = new Map<number, unknown>()):
 }
 
 /** {data: {handle, region}} 형태의 인자를 seroval JSON 으로. */
-function encodeArgs(args: Record<string, string>): string {
+function encodeArgs(args: Record<string, string | number>): string {
   const keys = Object.keys(args);
+  // seroval 노드: 0 숫자, 1 문자열
+  const node = (v: string | number) => (typeof v === "number" ? { t: 0, s: v } : { t: 1, s: v });
   return JSON.stringify({
-    t: { t: 10, i: 0, p: { k: ["data"], v: [{ t: 10, i: 1, p: { k: keys, v: keys.map((k) => ({ t: 1, s: args[k] })) }, o: 0 }] }, o: 0 },
+    t: { t: 10, i: 0, p: { k: ["data"], v: [{ t: 10, i: 1, p: { k: keys, v: keys.map((k) => node(args[k])) }, o: 0 }] }, o: 0 },
     f: 63,
     m: [],
   });
@@ -94,7 +105,7 @@ function throttled<T>(task: () => Promise<T>): Promise<T> {
   return run;
 }
 
-export async function callServerFn<T>(fn: string, args: Record<string, string>): Promise<T> {
+export async function callServerFn<T>(fn: string, args: Record<string, string | number>): Promise<T> {
   return throttled(async () => {
     const url = `${BASE}/_serverFn/${fn}?payload=${encodeURIComponent(encodeArgs(args))}`;
     let res: Response;
