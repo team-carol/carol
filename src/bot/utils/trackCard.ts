@@ -134,11 +134,30 @@ function milestones(list: TrackScore[]): { s: TrackScore; tags: Tag[] }[] {
   return out;
 }
 
+// ✦ 는 글자로 쓰면 기호 글꼴의 높이 기준이 달라 옆 글자·배지와 위아래가 어긋난다. 그림으로 그린다.
+const starCache = new Map<string, string>();
+function starIcon(color: string, size: number): El {
+  let url = starCache.get(color);
+  if (!url) {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20"><path d="M10 0 C11 7 13 9 20 10 C13 11 11 13 10 20 C9 13 7 11 0 10 C7 9 9 7 10 0 Z" fill="${color}"/></svg>`;
+    url = `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`;
+    starCache.set(color, url);
+  }
+  return image(url, { width: size, height: size, flexShrink: 0 });
+}
+
+/** ✦N(별 그림 + 숫자). */
+function starCount(n: number, color: string, fontSize: number): El {
+  return el("div", { display: "flex", alignItems: "center", gap: 3 }, [
+    starIcon(color, Math.round(fontSize * 0.9)),
+    el("span", { color, fontFamily: NUM_FONT, fontSize, fontWeight: 700, lineHeight: 1 }, String(n)),
+  ]);
+}
+
 function tagEl(t: Tag): El {
-  return el("div", { display: "flex", alignItems: "center", background: SURFACE2, borderRadius: 99, padding: "2px 8px" }, t.star
-    // ✦ 는 기호 글꼴로 그려져, 숫자를 같은 span 에 두면 숫자도 그 글꼴로 작게 나온다.
-    ? [el("span", { color: t.color, fontSize: 11 }, "✦"), el("span", { color: t.color, fontFamily: NUM_FONT, fontSize: 11, fontWeight: 800, marginLeft: 2 }, t.text)]
-    : [el("span", { color: t.color, fontSize: 11, fontWeight: 800 }, t.text)]);
+  return el("div", { display: "flex", alignItems: "center", justifyContent: "center", height: 20, background: SURFACE2, borderRadius: 99, padding: "0 8px" }, t.star
+    ? [starCount(Number(t.text), t.color, 11)]
+    : [el("span", { color: t.color, fontSize: 11, fontWeight: 800, lineHeight: 1 }, t.text)]);
 }
 
 /** 큰 성과 기록 목록(최근부터). */
@@ -156,12 +175,9 @@ function changeRows(list: TrackScore[]): El {
         gain === null ? msg("trackCard.firstRecord") : gain > 0 ? `+${gain.toFixed(4)}%` : "—"),
       el("div", { display: "flex", alignItems: "center", flex: 1, color: TEXT, fontFamily: NUM_FONT, fontSize: 12 }, s.dxMax ? [
         el("span", {}, `DX ${fmt(s.dxScore)} / ${fmt(s.dxMax)} (${dxPct.toFixed(2)}%)`),
-        ...(dxStars(dxPct) ? [
-          el("span", { color: INK, marginLeft: 10 }, "✦"),
-          el("span", { color: INK, fontFamily: NUM_FONT, fontWeight: 700, marginLeft: 3 }, String(dxStars(dxPct))),
-        ] : []),
+        ...(dxStars(dxPct) ? [el("div", { display: "flex", marginLeft: 10 }, [starCount(dxStars(dxPct), INK, 12)])] : []),
       ] : []),
-      el("div", { display: "flex", gap: 6, justifyContent: "flex-end" }, tags.map(tagEl)),
+      el("div", { display: "flex", alignItems: "center", gap: 6, justifyContent: "flex-end" }, tags.map(tagEl)),
     ]);
   }));
 }
