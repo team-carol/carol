@@ -7,6 +7,7 @@ import { ratingMilestones, playMilestones } from "../../historyStats";
 import { versionName } from "../../maishift/catalog";
 import { calcSongRating } from "../../constants";
 import { msg } from "../../messages";
+import { notRegisteredNotice } from "../utils/notRegistered";
 
 // /히스토리: maishift 히스토리(업로드마다의 레이팅·플레이 횟수)를 기간을 골라 이미지로.
 // maishift 히스토리 내보내기 그림과 같은 정보(그래프·달성 기록·버전 주차)를 담는다.
@@ -34,10 +35,10 @@ const MAX_RATING = calcSongRating(101, 15.0, "AP+") * 50;
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   const target = interaction.options.getUser("user") ?? interaction.user;
   const self = target.id === interaction.user.id;
-  const notRegistered = self ? msg("common.selfNotRegistered") : msg("common.otherNotRegistered", { user: `<@${target.id}>` });
+  const notRegistered = () => notRegisteredNotice(target.id, self);
   const friendCode = await getUserFriendCode(target.id);
   if (!friendCode) {
-    await interaction.reply({ content: notRegistered, flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: await notRegistered(), flags: MessageFlags.Ephemeral });
     return;
   }
   const raw = interaction.options.getString("기간") ?? "all";
@@ -46,7 +47,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   await interaction.deferReply();
   const cached = await getCachedProfile(friendCode);
   if (!cached) {
-    await interaction.editReply({ content: notRegistered });
+    await interaction.editReply({ content: await notRegistered() });
     return;
   }
   const history = cached.maishiftHistory ?? [];

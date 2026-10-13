@@ -2,6 +2,7 @@ import { SlashCommandBuilder, ChatInputCommandInteraction, MessageFlags } from "
 import { getCachedProfile, getUserFriendCode } from "../../storage";
 import { mapAreaEmbed, getMapAreaList } from "../utils/embeds";
 import { msg } from "../../messages";
+import { notRegisteredNotice } from "../utils/notRegistered";
 
 export const data = new SlashCommandBuilder()
   .setName("지방")
@@ -11,7 +12,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   const friendCode = await getUserFriendCode(interaction.user.id);
   if (!friendCode) {
     await interaction.reply({
-      content: msg("common.selfNotRegistered"),
+      content: await notRegisteredNotice(interaction.user.id, true),
       flags: MessageFlags.Ephemeral,
     });
     return;
@@ -20,7 +21,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   const cached = await getCachedProfile(friendCode);
   if (!cached) {
     await interaction.reply({
-      content: msg("common.selfNotRegistered"),
+      content: await notRegisteredNotice(interaction.user.id, true),
       flags: MessageFlags.Ephemeral,
     });
     return;

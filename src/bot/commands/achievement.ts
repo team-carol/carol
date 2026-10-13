@@ -4,6 +4,7 @@ import { koreaPlayDayKey, koreaPlayDayRange } from "../../achievements";
 import { renderAchievementCard } from "../utils/achievementCard";
 import { loadAvatar } from "../utils/embeds";
 import { msg } from "../../messages";
+import { notRegisteredNotice } from "../utils/notRegistered";
 
 export const data = new SlashCommandBuilder()
   .setName("성과")
@@ -40,9 +41,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   const cached = friendCode ? await getCachedProfile(friendCode) : null;
   if (!cached) {
     console.log(`[성과] 프로필 없음 scope=${targetScope}`);
-    const notice = target.id === interaction.user.id
-      ? msg("common.selfNotRegistered")
-      : msg("common.otherNotRegistered", { user: `<@${target.id}>` });
+    const notice = await notRegisteredNotice(target.id, target.id === interaction.user.id);
     await interaction.reply({ content: notice, flags: MessageFlags.Ephemeral });
     return;
   }

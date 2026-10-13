@@ -39,7 +39,8 @@ export const FN = {
 export type MaishiftRegion = "ASIA" | "JAPAN";
 
 export class MaishiftError extends Error {
-  constructor(message: string, readonly kind: "not_found" | "unavailable" | "format") { super(message); }
+  /** region_missing: 요청한 지역(ASIA/JAPAN)에 기록이 없음 — maishift 는 이때 그 사람의 대표 지역 기록을 준다. */
+  constructor(message: string, readonly kind: "not_found" | "unavailable" | "format" | "region_missing") { super(message); }
 }
 
 // ─── seroval JSON ───────────────────────────────────────────────────────────

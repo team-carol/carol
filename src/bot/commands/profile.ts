@@ -3,6 +3,7 @@ import { getCachedProfile, getUserFriendCode } from "../../storage";
 import { buildProfileReply } from "../utils/embeds";
 import { autoRole } from "../utils/roles";
 import { msg } from "../../messages";
+import { notRegisteredNotice } from "../utils/notRegistered";
 
 export const data = new SlashCommandBuilder()
   .setName("프로필")
@@ -18,19 +19,17 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   const target = interaction.options.getUser("user") ?? interaction.user;
   const userId = target.id;
-  const notRegistered = target.id === interaction.user.id
-    ? msg("common.selfNotRegistered")
-    : msg("common.otherNotRegistered", { user: `<@${target.id}>` });
+  const notRegistered = () => notRegisteredNotice(target.id, target.id === interaction.user.id);
   const friendCode = await getUserFriendCode(userId);
   if (!friendCode) {
-    await interaction.reply({ content: notRegistered, flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: await notRegistered(), flags: MessageFlags.Ephemeral });
     return;
   }
   // buildProfileReply 는 재킷 이미지를 받아오므로 3초 ack 한계를 넘길 수 있다. 먼저 defer.
   await interaction.deferReply();
   const cached = await getCachedProfile(friendCode);
   if (!cached) {
-    await interaction.editReply({ content: notRegistered });
+    await interaction.editReply({ content: await notRegistered() });
     return;
   }
   const format = interaction.options.getString("형식") === "embed" ? "embed" : "image";

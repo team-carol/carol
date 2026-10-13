@@ -6,6 +6,7 @@ import { renderCircleCard } from "../utils/circleCard";
 import type { CircleInfo } from "../../scraper";
 import type { CachedProfile } from "../../storage/types";
 import { msg } from "../../messages";
+import { notRegisteredNotice } from "../utils/notRegistered";
 
 // /서클: 마지막 동기화 때 가져온 DX NET 서클 정보. 서클 공개(/설정, 기본 공개)가 꺼져 있으면 본인만 본다.
 // 멤버 포인트는 최대 20명이라 길어서 버튼(circle:members:<userId>)으로 따로 띄운다.
@@ -31,7 +32,7 @@ async function loadCircle(targetId: string, viewerId: string): Promise<Loaded> {
 
   const friendCode = await getUserFriendCode(targetId);
   const cached = friendCode ? await getCachedProfile(friendCode) : null;
-  if (!cached) return { error: self ? msg("common.selfNotRegistered") : msg("common.otherNotRegistered", { user: mention }) };
+  if (!cached) return { error: await notRegisteredNotice(targetId, self) };
 
   const circle = circleOf(cached);
   if (circle === undefined) return { error: self ? msg("circle.notCollected") : msg("circle.otherNotCollected", { user: mention }) };
@@ -86,7 +87,7 @@ export async function handleButton(interaction: ButtonInteraction): Promise<void
     const friendCode = await getUserFriendCode(interaction.user.id);
     const viewer = friendCode ? await getCachedProfile(friendCode) : null;
     if (!viewer) {
-      await interaction.reply({ content: msg("common.selfNotRegistered"), flags: MessageFlags.Ephemeral });
+      await interaction.reply({ content: await notRegisteredNotice(interaction.user.id, true), flags: MessageFlags.Ephemeral });
       return;
     }
     await interaction.deferReply({ flags });

@@ -7,6 +7,7 @@ import { msg } from "../../messages";
 import { koreaPlayDayRange } from "../../achievements";
 import { getMaishiftSnapshot } from "../../maishift";
 import { kstStamp } from "../utils/cardKit";
+import { notRegisteredNotice } from "../utils/notRegistered";
 
 export const data = new SlashCommandBuilder()
   .setName("레이팅표")
@@ -57,7 +58,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   const friendCode = await getUserFriendCode(userId);
   const cached = friendCode ? await getCachedProfile(friendCode) : null;
   if (!cached) {
-    const text = self ? msg("common.selfNotRegistered") : msg("common.otherNotRegistered", { user: `<@${target.id}>` });
+    const text = await notRegisteredNotice(target.id, self);
     await interaction.reply({ content: text, flags: MessageFlags.Ephemeral });
     return;
   }

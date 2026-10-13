@@ -32,6 +32,7 @@ export interface MsProfile {
 }
 export interface MsProfileResult {
   handle: string;
+  /** 실제로 준 기록의 지역. 요청한 지역에 기록이 없으면 대표 지역(isPrimaryRegion)이 온다. */
   region: string;
   userRecord: {
     profile: MsProfile;

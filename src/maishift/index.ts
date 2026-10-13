@@ -46,6 +46,8 @@ interface Entry {
 }
 
 const cache = new Map<string, Entry>();
+/** 요청한 지역에 maishift 기록이 없는 연동(예: /설정 기본 서버를 내수판으로 했지만 국제판 기록만 있음). */
+const regionMissing = new Set<string>();
 const inflight = new Map<string, Promise<Entry>>();
 
 const regionOf = (link: MaishiftLink): MaishiftRegion => (link.server === "jp" ? "JAPAN" : "ASIA");
@@ -74,6 +76,13 @@ async function refresh(link: MaishiftLink): Promise<Entry> {
   const cold = prev ? null : { records: fetchRecords(), history: fetchHistory() };
   cold?.records.catch(() => {});
   const res = await profileReq;
+  // maishift 는 요청한 지역에 기록이 없으면 대표 지역 기록을 준다. 다른 지역 기록을 보여 주지 않는다.
+  if (res.region && res.region !== args.region) {
+    regionMissing.add(key);
+    cache.delete(key);
+    throw new MaishiftError(`no ${args.region} record (got ${res.region})`, "region_missing");
+  }
+  regionMissing.delete(key);
   const rec = res.userRecord;
   if (!rec?.profile) throw new MaishiftError("no record for region", "not_found");
   const p = rec.profile;
@@ -180,6 +189,11 @@ async function overlay(profileKey: string, link: MaishiftLink, extras: CachedPro
     e = cache.get(keyOf(link)) ?? null;
   }
   return e ? toProfile(profileKey, link, e, extras) : null;
+}
+
+/** 이 연동의 서버(지역)에 maishift 기록이 없다고 확인됐는지. 명령의 "미등록" 안내를 바꾸는 데 쓴다. */
+export function isRegionMissing(link: MaishiftLink): boolean {
+  return regionMissing.has(keyOf(link));
 }
 
 /** 연동 직후: 받아 둔 기록으로 비교 기준(chart_clears)·스냅샷을 바로 잡는다. 다음 업로드부터 성과가 생긴다. */

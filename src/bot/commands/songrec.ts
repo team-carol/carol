@@ -24,6 +24,7 @@ import {
 import { chartKey } from "../../scraper";
 import type { PlayRecord, MaimaiServer } from "../../scraper";
 import { msg } from "../../messages";
+import { notRegisteredNotice } from "../utils/notRegistered";
 
 // 목표 랭크 후보 (SSS~SSS+ 비중을 높게)
 const RANKS = [
@@ -282,10 +283,7 @@ export async function execute(
   const friendCode = await getUserFriendCode(userId);
   const cached = friendCode ? await getCachedProfile(friendCode) : null;
   if (!cached) {
-    const notice =
-      target.id === interaction.user.id
-        ? msg("common.selfNotRegistered")
-        : msg("common.otherNotRegistered", { user: `<@${target.id}>` });
+    const notice = await notRegisteredNotice(target.id, target.id === interaction.user.id);
     await interaction.reply({ content: notice, flags: MessageFlags.Ephemeral });
     return;
   }

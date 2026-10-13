@@ -40,7 +40,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     await applyCachedRecords({ handle: found.handle, server }).catch((e) => console.error("[maishift] 연동 기준 설정 실패:", e));
     await interaction.editReply({ content: msg("maishift.linked", { handle: found.handle, name: found.name, rating: found.rating }) });
   } catch (e) {
-    const notFound = e instanceof MaishiftError && e.kind === "not_found";
+    const notFound = e instanceof MaishiftError && (e.kind === "not_found" || e.kind === "region_missing");
     if (!notFound) console.error("[maishift] 연동 실패:", e);
     await interaction.editReply({
       content: notFound ? msg("maishift.notFound", { handle, server: server === "jp" ? "JAPAN" : "ASIA" }) : msg("maishift.unavailable"),
