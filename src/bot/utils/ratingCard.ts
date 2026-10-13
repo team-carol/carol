@@ -54,6 +54,8 @@ import {
   RS_DOUBLE_COLOR,
 } from "../../games";
 
+const S_STAR5_COLOR = "#fbbf24";
+
 /** /레이팅표 type: maimai DX 레이팅, S-레이팅, 다른 게임 환산. */
 export type RatingType = GameId | "srating";
 
@@ -93,6 +95,8 @@ interface CardVM {
   isDx: boolean;
   showKind: boolean;
   mark: string;
+  /** mark 색을 cmColor 대신 직접 줄 때(S-레이팅 ✦) */
+  markColor?: string;
   clearMark: string;
   jacketFile: string | null;
 }
@@ -284,7 +288,7 @@ function jacketCard(
               {
                 fontSize: 12,
                 fontWeight: 800,
-                color: cmColor[vm.mark] ?? "rgba(255,255,255,0.75)",
+                color: vm.markColor ?? cmColor[vm.mark] ?? "rgba(255,255,255,0.75)",
                 marginLeft: 5,
                 lineHeight: 1,
                 // 밝은 자켓 위에서도 읽히도록 어두운 그림자로 분리한다.
@@ -631,7 +635,7 @@ export async function renderRatingCard(
   const sRating = type === "srating";
   const game: GameId = sRating ? "maimai" : type;
   const cfg = GAMES[game];
-  const cmColor = sRating ? { ...GAME_CM_COLOR.maimai, "✦5": "#fbbf24" } : GAME_CM_COLOR[game];
+  const cmColor = GAME_CM_COLOR[game];
   // 곡별 RS는 게임별 포맷을 쓰되, 섹션 평균은 maimai만 기존 표기(소수 1자리)를 유지
   const formatAvg = sRating ? (v: number) => v.toFixed(3) : game === "maimai" ? (v: number) => v.toFixed(1) : cfg.formatRS;
   // ─── Render cache: return cached PNG if profile and card version unchanged ─
@@ -683,12 +687,15 @@ export async function renderRatingCard(
         const constant = getConstant(fixed.title, fixed.musicKind, fixed.diff, profile.server) ?? levelToNumber(fixed.level);
         const value = chartSRating(constant, percent);
         const stars = dxStars(percent);
+        const base = vmOf(r);
         const vm: CardVM = {
-          ...vmOf(r),
+          ...base,
           rs: value,
           rsText: formatChartSRating(value),
           ach: `${percent.toFixed(2)}%`,
           mark: stars ? `✦${stars}` : "",
+          // ✦5 는 금색, 나머지는 레이팅표에서 그 보면 랭크(SSS+ 등)에 쓰는 색.
+          markColor: stars === 5 ? S_STAR5_COLOR : (cmColor[base.mark] ?? undefined),
         };
         return { vm, ach: r.achievementVal };
       })
