@@ -1,7 +1,7 @@
 /**
  * S-레이팅. maishift 사진관의 "S-레이팅"과 같은 규칙(달성률이 아니라 DX 점수로 매긴다).
  * - 보면 하나: 상수² × DX 별 개수(0~5) ÷ 50. DX 별은 DX 점수 비율 85·90·93·95·97% 에서 하나씩 늘어난다.
- * - S-레이팅: 그 값이 큰 보면 50개의 합. 등급 이름은 50개 평균으로 정한다.
+ * - S-레이팅: 그 값이 큰 보면 50개(같으면 달성률이 높은 순)의 평균. 등급 이름도 평균으로 정한다.
  */
 export const S_RATING_COUNT = 50;
 
@@ -24,7 +24,12 @@ export function sRatingTier(mean: number): string | null {
   return `${name} ${stars}`;
 }
 
-/** 소수 2자리 내림 표기(maishift 와 같음). */
-export function formatSRating(v: number): string {
-  return (Math.floor(Number((v * 100).toFixed(6))) / 100).toFixed(2);
+/** 보면 값: 소수 2자리 내림. maishift 와 같은 숫자가 나오도록 부동소수점 보정 없이 그대로 내린다(13.0 ✦5 → 16.89). */
+export function formatChartSRating(v: number): string {
+  return (Math.floor(v * 100) / 100).toFixed(2);
+}
+
+/** S-레이팅(평균): 소수 3자리. */
+export function formatSRating(mean: number): string {
+  return mean.toFixed(3);
 }

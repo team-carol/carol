@@ -20,7 +20,7 @@ import {
   jacketFileUrl,
 } from "../../constants";
 import { displayTitle } from "../../aliases";
-import { S_RATING_COUNT, chartSRating, dxStars, formatSRating, sRatingTier } from "../../sRating";
+import { S_RATING_COUNT, chartSRating, dxStars, formatChartSRating, formatSRating, sRatingTier } from "../../sRating";
 import { msg, cardCacheVersion, type MessageKey } from "../../messages";
 
 // 게임 설정(games.ts)의 섹션·레이팅 라벨을 관리 페이지에서 고칠 수 있는 문구로 바꾼다. 표에 없으면 그대로.
@@ -685,18 +685,20 @@ export async function renderRatingCard(
         const vm: CardVM = {
           ...vmOf(r),
           rs: value,
-          rsText: formatSRating(value),
+          rsText: formatChartSRating(value),
           ach: `${percent.toFixed(2)}%`,
           mark: stars ? `✦${stars}` : "",
         };
-        return vm;
+        return { vm, ach: r.achievementVal };
       })
-      .sort((a, b) => b.rs - a.rs)
-      .slice(0, S_RATING_COUNT);
+      // 값이 같으면 달성률이 높은 보면부터(maishift 와 같은 순서).
+      .sort((a, b) => b.vm.rs - a.vm.rs || b.ach - a.ach)
+      .slice(0, S_RATING_COUNT)
+      .map((x) => x.vm);
     sections.push({ label: "SRATING", cols: 10, vms: rated });
-    const sum = rated.reduce((acc, v) => acc + v.rs, 0);
-    sRatingMean = rated.length ? sum / rated.length : 0;
-    totalRs = formatSRating(sum);
+    // S-레이팅은 합이 아니라 평균이다.
+    sRatingMean = rated.length ? rated.reduce((acc, v) => acc + v.rs, 0) / rated.length : 0;
+    totalRs = formatSRating(sRatingMean);
   } else if (game === "maimai") {
     // 국제판: maimai net 파싱 순서(신곡 15 + 구곡 35)를 그대로 신뢰.
     // JP: 전체 기록에서 직접 산출하므로 버전(isNewSong)으로 분류(15/35 미만 오분류 방지).
