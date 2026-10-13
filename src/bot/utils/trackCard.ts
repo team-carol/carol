@@ -40,7 +40,7 @@ export interface TrackCardData {
 const fmt = (n: number) => n.toLocaleString("en-US");
 const ymd = (ms: number) => kstStamp(ms).slice(0, 10);
 
-// maishift 기록의 콤보 이름 → 캐롤봇 표기
+// maishift 기록의 콤보·싱크 이름 → 캐롤봇 표기
 const COMBO: Record<string, string> = { FULL_COMBO: "FC", FULL_COMBO_PLUS: "FC+", ALL_PERFECT: "AP", ALL_PERFECT_PLUS: "AP+" };
 
 // 분포의 랭크 칸(서로 겹치지 않음). 낮은 랭크부터 왼쪽에.
@@ -107,10 +107,12 @@ function achievementChart(points: TrackScore[], until: number): El {
 
 const SCORE_RANKS = ["D", "C", "B", "BB", "BBB", "A", "AA", "AAA", "S", "S+", "SS", "SS+", "SSS", "SSS+"];
 const COMBO_ORDER = ["", "FC", "FC+", "AP", "AP+"];
+const SYNC: Record<string, string> = { SYNC_PLAY: "SYNC", FULL_SYNC: "FS", FULL_SYNC_PLUS: "FS+", FULL_SYNC_DX: "FDX", FULL_SYNC_DX_PLUS: "FDX+" };
+const SYNC_ORDER = ["", "SYNC", "FS", "FS+", "FDX", "FDX+"];
 type Tag = { text: string; color: string; star?: boolean };
 
 /**
- * 큰 성과가 있었던 기록만(최근부터). 첫 기록 + 랭크 상승·DX 별 증가·FC/FC+/AP/AP+ 첫 달성·이론치(101%) + 가장 최근 기록.
+ * 큰 성과가 있었던 기록만(최근부터). 첫 기록 + 랭크 상승·DX 별 증가·FC/FC+/AP/AP+·SYNC/FS/FS+/FDX/FDX+ 첫 달성·이론치(101%) + 가장 최근 기록.
  * 비교는 바로 앞 기록과 하고, 오른 폭은 바로 아래(이전에 보인) 줄과의 차이.
  */
 function milestones(list: TrackScore[]): { s: TrackScore; tags: Tag[] }[] {
@@ -125,6 +127,8 @@ function milestones(list: TrackScore[]): { s: TrackScore; tags: Tag[] }[] {
     if (dxStars(pct(s)) > dxStars(pct(p))) tags.push({ text: String(dxStars(pct(s))), color: INK, star: true });
     const combo = COMBO[s.combo] ?? "";
     if (COMBO_ORDER.indexOf(combo) > COMBO_ORDER.indexOf(COMBO[p.combo] ?? "")) tags.push({ text: combo, color: MARK_COLOR[combo] ?? MAI_CM_COLOR[combo] ?? INK });
+    const sync = SYNC[s.sync] ?? "";
+    if (SYNC_ORDER.indexOf(sync) > SYNC_ORDER.indexOf(SYNC[p.sync] ?? "")) tags.push({ text: sync, color: MARK_COLOR[sync] ?? MAI_CM_COLOR[sync] ?? INK });
     if (s.achievement >= 101 && p.achievement < 101) tags.push({ text: msg("trackCard.theory"), color: "#fde047" });
     if (tags.length) out.push({ s, tags });
   });
