@@ -55,9 +55,9 @@ import {
   RS_DOUBLE_COLOR,
 } from "../../games";
 
-// S-레이팅 ✦ 색: ✦5 금색, ✦4·3·2 는 레이팅표의 SSS·SS·S 랭크 색, ✦1 흰색.
+// S-레이팅 ✦ 색: ✦5 밝은 노랑(✦3 SS 색과 구분), ✦4·3·2 는 레이팅표의 SSS·SS·S 랭크 색, ✦1 흰색.
 function sStarColor(stars: number): string {
-  if (stars >= 5) return "#fbbf24";
+  if (stars >= 5) return "#fde047";
   if (stars === 4) return MAI_CM_COLOR["SSS"];
   if (stars === 3) return MAI_CM_COLOR["SS"];
   if (stars === 2) return MAI_CM_COLOR["S"];
@@ -105,6 +105,8 @@ interface CardVM {
   mark: string;
   /** mark 색을 cmColor 대신 직접 줄 때(S-레이팅 ✦) */
   markColor?: string;
+  /** mark 에 빛 번짐을 줄 때(S-레이팅 ✦5) */
+  markGlow?: string;
   clearMark: string;
   jacketFile: string | null;
 }
@@ -300,7 +302,9 @@ function jacketCard(
                 marginLeft: 5,
                 lineHeight: 1,
                 // 밝은 자켓 위에서도 읽히도록 어두운 그림자로 분리한다.
-                textShadow: "0 1px 2px rgba(0,0,0,0.95), 0 0 4px rgba(0,0,0,0.8)",
+                textShadow: vm.markGlow
+                  ? `0 1px 2px rgba(0,0,0,0.95), 0 0 6px ${vm.markGlow}, 0 0 10px ${vm.markGlow}`
+                  : "0 1px 2px rgba(0,0,0,0.95), 0 0 4px rgba(0,0,0,0.8)",
               },
               vm.mark,
             ),
@@ -702,6 +706,7 @@ export async function renderRatingCard(
           ach: `${percent.toFixed(2)}%`,
           mark: stars ? `✦${stars}` : "",
           markColor: sStarColor(stars),
+          markGlow: stars >= 5 ? "rgba(253,224,71,0.7)" : undefined,
         };
         return { vm, ach: r.achievementVal };
       })
