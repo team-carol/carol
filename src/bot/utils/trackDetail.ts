@@ -67,7 +67,7 @@ export async function handleTrackButton(i: ButtonInteraction): Promise<void> {
       getDxRankDecimal(i.user.id),
       (async () => { const f = getJacketFile(title); return f ? fetchJacketDataUrl(f) : null; })(),
     ]);
-    const code = getSongVersion(title);
+    const code = getSongVersion(title, cached.server);
     const png = await renderTrackCard({
       title: displayTitle(title, translate),
       artist: getSongArtist(title),

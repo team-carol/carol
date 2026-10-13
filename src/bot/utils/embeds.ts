@@ -609,8 +609,8 @@ export async function searchResultEmbeds(
       const verLabel = p.server === "jp" ? "japan ver." : "intl ver.";
       // 장르(catcode)·수록 버전은 OTOGE DB 데이터. 있을 때만 리전 라벨 아래 들여써서 붙인다.
       const genre = getSongGenre(title);
-      const versionName = getSongVersionName(title);
-      const versionLabel = versionName ? versionName + (isSongPlus(title) ? " PLUS" : "") : null;
+      const versionName = getSongVersionName(title, p.server);
+      const versionLabel = versionName ? versionName + (isSongPlus(title, p.server) ? " PLUS" : "") : null;
       const regionLine =
         (exclusive ? msg("searchResult.regionExclusive", { version: exclusive === "jp" ? "japan ver." : "intl ver." }) : verLabel)
         + (genre ? msg("searchResult.genreSuffix", { genre }) : "")

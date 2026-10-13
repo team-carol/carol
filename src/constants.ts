@@ -299,15 +299,21 @@ export function getTitleByJacket(fileOrUrl: string): string | null {
 }
 
 // 곡 version 세대 코드 (없으면 null)
-export function getSongVersion(title: string): number | null {
-  return versionMap.get(title) ?? null;
+// 곡 버전은 서버마다 다를 수 있다(예: Galaxy Blaster 는 국제판 CiRCLE, 내수판 CiRCLE PLUS).
+// versionMap 은 국제판 위에 내수판을 덮어쓴 맵이라 내수판 기준이고, 국제판은 intlVersionMap 을 먼저 본다.
+function versionOf(title: string, server: MaimaiServer): number | undefined {
+  return (server === "intl" ? intlVersionMap.get(title) : undefined) ?? versionMap.get(title);
+}
+
+export function getSongVersion(title: string, server: MaimaiServer = "intl"): number | null {
+  return versionOf(title, server) ?? null;
 }
 
 // 레이팅 신곡(현재+이전 버전) 여부. version 데이터가 없으면 구곡으로 취급.
 // 서버별 세대 진행이 달라(내수판=MAGiCAL, 국제판=CiRCLE PLUS) 신곡 범위도 서버별 이력을 쓴다.
 // playDay 를 주면 그 시점의 신곡 범위로 판정한다(과거 레이팅표 역산·히스토리 추정용).
 export function isNewSong(title: string, server: MaimaiServer = "intl", playDay?: string): boolean {
-  const v = (server === "intl" ? intlVersionMap.get(title) : undefined) ?? versionMap.get(title);
+  const v = versionOf(title, server);
   if (v === undefined) return false;
   const w = newSongWindowAt(playDay, server);
   return v >= w.min && v < w.max;
@@ -344,15 +350,15 @@ function findGeneration(v: number): [number, number, string] | null {
 }
 
 // 곡의 수록 버전(세대명). version 데이터 없으면 null.
-export function getSongVersionName(title: string): string | null {
-  const v = versionMap.get(title);
+export function getSongVersionName(title: string, server: MaimaiServer = "intl"): string | null {
+  const v = versionOf(title, server);
   if (v === undefined) return null;
   return findGeneration(v)?.[2] ?? null;
 }
 
 // 곡이 해당 세대의 PLUS 버전인지 여부.
-export function isSongPlus(title: string): boolean {
-  const v = versionMap.get(title);
+export function isSongPlus(title: string, server: MaimaiServer = "intl"): boolean {
+  const v = versionOf(title, server);
   if (v === undefined) return false;
   const g = findGeneration(v);
   return g ? v >= g[1] : false;
@@ -416,7 +422,7 @@ export function getAllSongTitles(): AliasSongInfo[] {
   return Array.from(titles)
     .filter((title) => !isUtageSong(title))
     .map((title) => {
-      const version = versionMap.get(title) ?? 0;
+      const version = versionOf(title, "intl") ?? 0;
       return {
         title,
         version,

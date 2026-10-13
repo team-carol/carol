@@ -147,12 +147,12 @@ export function inkOn(hex: string): string {
 }
 
 /** 신곡 버전 배지. maishift 기록은 곡의 세대 번호, 아니면 곡 목록의 버전 이름(색은 기본). */
-function versionBadge(r: PlayRecord): CardVM["version"] {
+function versionBadge(r: PlayRecord, server: MaimaiServer): CardVM["version"] {
   if (r.songVersion !== undefined) {
     const color = songVersionColor(r.songVersion);
     return { label: versionName(r.songVersion), color, ink: inkOn(color) };
   }
-  const name = getSongVersionName(r.title);
+  const name = getSongVersionName(r.title, server);
   return name ? { label: name, color: BRAND.surface2, ink: BRAND.ink } : undefined;
 }
 
@@ -188,7 +188,7 @@ function toVM(
       ? (allMarks.find((m) => MAI_COMBO_MARKS.includes(m)) ?? "")
       : (allMarks[1] ?? "");
 
-  const version = getSongVersion(r.title) ?? undefined;
+  const version = getSongVersion(r.title, server) ?? undefined;
   const diffLabel = game === "maimai" ? r.diff : convertDiff(game, r.diff, version);
   const diffColor =
     game === "maimai"
@@ -804,7 +804,7 @@ export async function renderRatingCard(
       profile.server === "jp"
         ? records.filter((r) => !isNewSong(r.title, "jp", newSongDay)).slice(0, 35)
         : records.slice(15, 50);
-    const newVms: CardVM[] = newRecords.map((r) => ({ ...vmOf(r), version: versionBadge(r) }));
+    const newVms: CardVM[] = newRecords.map((r) => ({ ...vmOf(r), version: versionBadge(r, profile.server) }));
     const otherVms = otherRecords.map(vmOf);
     sections.push({ label: "NEW", cols: 3, vms: newVms });
     sections.push({ label: "OTHERS", cols: 7, vms: otherVms });
