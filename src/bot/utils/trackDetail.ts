@@ -2,7 +2,7 @@
 // customId: trk:<검색 토큰>:<곡 순서>            — 새 메시지로 상세 카드(기본 난이도: 내가 플레이한 가장 높은 난이도)
 //           trkd:<검색 토큰>:<곡 순서>:<난이도 번호> — 상세 카드 메시지에서 난이도 바꾸기
 import { ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, ComponentType, type ButtonInteraction } from "discord.js";
-import { getCachedProfile, getMaishiftLink, getTranslateTitles, loadUserSession } from "../../storage";
+import { getCachedProfile, getDxRankDecimal, getMaishiftLink, getTranslateTitles, loadUserSession } from "../../storage";
 import { getSearchCtx, getClearList } from "./embeds";
 import { fetchJacketDataUrl } from "./ratingCard";
 import { renderTrackCard } from "./trackCard";
@@ -59,10 +59,12 @@ export async function handleTrackButton(i: ButtonInteraction): Promise<void> {
 
     const record = records.find((r) => r.diff === diff) ?? null;
     const link = await getMaishiftLink(ctx.userId);
-    const [info, scores, translate, jacket] = await Promise.all([
+    const [info, scores, translate, dxDecimal, jacket] = await Promise.all([
       getTrackInfo(trackId),
       link ? getTrackScores(trackId, link.handle) : Promise.resolve(null),
       getTranslateTitles(i.user.id),
+      // DX ✦ 소수점 표시는 번역처럼 보는(누른) 사람의 설정.
+      getDxRankDecimal(i.user.id),
       (async () => { const f = getJacketFile(title); return f ? fetchJacketDataUrl(f) : null; })(),
     ]);
     const code = getSongVersion(title);
@@ -81,6 +83,7 @@ export async function handleTrackButton(i: ButtonInteraction): Promise<void> {
       info,
       playerName: cached.playerName,
       playerRating: cached.rating,
+      dxDecimal,
     });
     // 난이도 바꾸기 버튼(지금 보는 난이도는 강조).
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(diffs.map((d) =>

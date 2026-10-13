@@ -2,9 +2,9 @@ import type { ExtraBookmarklet, MaimaiServer } from "../storage/types";
 import { BOOKMARKLET_PRESETS } from "./bookmarklet";
 import { BASE_CSS, pageHead, topbar, siteFooter, userNav } from "./theme";
 
-export function settingsPage(token: string, enabledPresetIds: string[], bookmarklets: ExtraBookmarklet[], defaultServer: MaimaiServer, translate = false, circlePublic = true): string {
+export function settingsPage(token: string, enabledPresetIds: string[], bookmarklets: ExtraBookmarklet[], defaultServer: MaimaiServer, translate = false, circlePublic = true, dxDecimal = false): string {
   const presets = BOOKMARKLET_PRESETS.map((preset) => ({ ...preset, enabled: !!preset.required || enabledPresetIds.includes(preset.id) }));
-  const dataJson = JSON.stringify({ presets, bookmarklets, defaultServer, translate, circlePublic })
+  const dataJson = JSON.stringify({ presets, bookmarklets, defaultServer, translate, circlePublic, dxDecimal })
     .replace(/</g, "\\u003c").replace(/>/g, "\\u003e");
   const tokenJson = JSON.stringify(token);
 
@@ -110,6 +110,17 @@ ${topbar(userNav(token, "settings"))}
 <div class="status" id="transStatus"></div>
 </div>
 <div class="card">
+<p class="section-label">DX ✦ 랭크 표시</p>
+<div class="toggle-row">
+<div class="toggle-info">
+<div class="toggle-title">DX ✦ 랭크를 소수점 첫째 자리까지 표시</div>
+<div class="toggle-desc">곡 상세에서 DX ✦ 랭크를 다음 단계까지의 진행도와 함께 ✦5.7처럼 보여 줍니다. maishift 표시 설정과 같은 방식입니다.</div>
+</div>
+<label class="toggle"><input type="checkbox" id="dxDecToggle" onchange="toggleDxDecimal()"><span class="slider"></span></label>
+</div>
+<div class="status" id="dxDecStatus"></div>
+</div>
+<div class="card">
 <p class="section-label">오늘의 성과 필터</p>
 <div class="toggle-desc" style="margin-bottom:14px">이 기준 이상 오른 기록만 표시합니다. FC/FS 이상 플레이는 기준보다 낮아도 계속 표시됩니다.</div>
 <div class="achievement-filter"><div class="input-group"><label for="achievementMin">최소 달성률 (%)</label><input id="achievementMin" type="number" min="0" max="101" step="0.0001" value="95.0000"></div><button class="btn btn-primary filter-save" id="achievementSave" onclick="saveAchievementFilter()">저장</button></div>
@@ -145,6 +156,7 @@ var MAX_BM=5;
 (function init(){
   renderDefaultServer();
   renderTranslate();
+  renderDxDecimal();
   renderCircle();
   loadAchievementFilter();
   renderPresetList();
@@ -233,6 +245,19 @@ function toggleCircle(){
 
 function renderTranslate(){
   document.getElementById('transToggle').checked=!!DATA.translate;
+}
+
+function renderDxDecimal(){
+  document.getElementById('dxDecToggle').checked=!!DATA.dxDecimal;
+}
+
+function toggleDxDecimal(){
+  var cb=document.getElementById('dxDecToggle');
+  var want=cb.checked;
+  fetch('/api/settings/dx-decimal?code='+TOKEN,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({decimal:want})})
+  .then(function(r){if(!r.ok)throw new Error(r.status);return r.json();})
+  .then(function(){DATA.dxDecimal=want;showStatus('dxDecStatus','ok','저장됨');})
+  .catch(function(){cb.checked=!cb.checked;showStatus('dxDecStatus','err','저장 실패');});
 }
 
 function toggleTranslate(){

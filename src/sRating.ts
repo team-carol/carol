@@ -13,6 +13,30 @@ export function chartSRating(constant: number, dxPercent: number): number {
   return (constant * constant * dxStars(dxPercent)) / 50;
 }
 
+// DX ✦ 랭크 소수점 표시(maishift "DX ✦ 랭크를 소수점 첫째 자리까지 표시"). 다음 단계까지의 진행도를 0.1 단위로.
+// 단계: 85% ✦1, 90% ✦2, 93% ✦3, 95% ✦4, 97% ✦5, 98% ✦5.5, 99% ✦6, 100% ✦7. 정수 계산으로 내린다.
+const DX_DECIMAL_PCT = [0, 85, 90, 93, 95, 97, 98, 99, 100];
+const DX_DECIMAL_TENTHS = [0, 10, 20, 30, 40, 50, 55, 60, 70];
+
+/** DX 점수 → ✦ 랭크(0.1 단위, 0 ~ 7). */
+export function dxRankDecimal(score: number, max: number): number {
+  if (!(max > 0)) return 0;
+  const e = score * 100;
+  const t = DX_DECIMAL_PCT.map((p) => max * p);
+  let n = 0;
+  while (n + 1 < t.length && e >= t[n + 1]) n++;
+  if (n === 0) return 0;
+  if (n === t.length - 1) return DX_DECIMAL_TENTHS[n] / 10;
+  const tenths = DX_DECIMAL_TENTHS[n] + Math.floor(((DX_DECIMAL_TENTHS[n + 1] - DX_DECIMAL_TENTHS[n]) * (e - t[n])) / (t[n + 1] - t[n]));
+  return tenths / 10;
+}
+
+/** ✦ 뒤에 붙일 랭크 글자. decimal 이면 소수점 첫째 자리(5.7), 아니면 정수 별 개수(5). */
+export function dxRankLabel(score: number, max: number, decimal: boolean): string {
+  if (!(max > 0)) return "0";
+  return decimal ? dxRankDecimal(score, max).toFixed(1) : String(dxStars((score / max) * 100));
+}
+
 /** 평균 → 등급 이름(Bronze … Rainbow++ ✦✦). 6 미만은 null. */
 export function sRatingTier(mean: number): string | null {
   if (mean < 6) return null;

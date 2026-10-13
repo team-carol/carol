@@ -4,7 +4,7 @@ import { createHash, timingSafeEqual } from "crypto";
 import { gunzip } from "zlib";
 import { promisify } from "util";
 import { parseFriendCode as parseFC, parseRecentRecords, parsePlaylogHistory, getMaimaiBaseUrl, parseMapAreas, parsePlaylogDetail, parseUserOptions, parseCircle } from "../scraper";
-import { saveSyncExtras, getMaishiftLink, saveUserSession, findUserBySyncToken, getAvatarBlob, getSongJacket, saveSongJacket, getExtraBookmarklets, addExtraBookmarklet, removeExtraBookmarklet, getEnabledBookmarkletPresetIds, setBookmarkletPresetEnabled, getUserDefaultServer, setUserDefaultServer, isMaimaiServer, getMapImage, saveMapImage, backfillEventRatingUp, getAllAliases, addAlias, deleteAlias, setAliasTranslation, setMessageOverride, deleteMessageOverride, getTranslateTitles, setTranslateTitles, saveProfileCircle, getCirclePublic, setCirclePublic, getRegisteredUserCount, getAchievementMinimum, setAchievementMinimum, getPolicyAck, setPolicyAck, getSimaiChart, saveSimaiChart, listRegistryCharts, auditRegistryCharts, listOptionPresets, saveOptionPreset, deleteOptionPreset, saveOptionSnapshot, getOptionSnapshots, listPatchNotes, savePatchNote, setPatchNotePublished, deletePatchNote } from "../storage";
+import { saveSyncExtras, getMaishiftLink, saveUserSession, findUserBySyncToken, getAvatarBlob, getSongJacket, saveSongJacket, getExtraBookmarklets, addExtraBookmarklet, removeExtraBookmarklet, getEnabledBookmarkletPresetIds, setBookmarkletPresetEnabled, getUserDefaultServer, setUserDefaultServer, isMaimaiServer, getMapImage, saveMapImage, backfillEventRatingUp, getAllAliases, addAlias, deleteAlias, setAliasTranslation, setMessageOverride, deleteMessageOverride, getTranslateTitles, setTranslateTitles, getDxRankDecimal, setDxRankDecimal, saveProfileCircle, getCirclePublic, setCirclePublic, getRegisteredUserCount, getAchievementMinimum, setAchievementMinimum, getPolicyAck, setPolicyAck, getSimaiChart, saveSimaiChart, listRegistryCharts, auditRegistryCharts, listOptionPresets, saveOptionPreset, deleteOptionPreset, saveOptionSnapshot, getOptionSnapshots, listPatchNotes, savePatchNote, setPatchNotePublished, deletePatchNote } from "../storage";
 import { POLICY_VERSION } from "../policy";
 import type { SongAliasRow } from "../storage/types";
 import { scheduleMaishiftCheck } from "../maishift";
@@ -572,8 +572,9 @@ ${siteFooter()}
       const defaultServer = userId ? await getUserDefaultServer(userId) : "intl";
       const translate = userId ? await getTranslateTitles(userId) : false;
       const circlePublic = userId ? await getCirclePublic(userId) : true;
+      const dxDecimal = userId ? await getDxRankDecimal(userId) : false;
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-      res.end(settingsPage(token, presetIds, bookmarklets, defaultServer, translate, circlePublic));
+      res.end(settingsPage(token, presetIds, bookmarklets, defaultServer, translate, circlePublic, dxDecimal));
       return;
     }
 
@@ -957,6 +958,23 @@ ${siteFooter()}
       const token=url.searchParams.get("code")||"", userId=await findUserBySyncToken(token);
       if(!userId){res.writeHead(403,{"content-type":"application/json"});res.end(JSON.stringify({error:"expired"}));return;}
       try { const body=JSON.parse(await readBody(req)); const value=body.minimumAchievement; if(typeof value!=="number"||!Number.isFinite(value)||value<0||value>101){res.writeHead(400,{"content-type":"application/json"});res.end(JSON.stringify({error:"invalid_minimum_achievement"}));return;} await setAchievementMinimum(userId,value); res.writeHead(200,{"content-type":"application/json"});res.end(JSON.stringify({minimumAchievement:value})); } catch {res.writeHead(400,{"content-type":"application/json"});res.end(JSON.stringify({error:"invalid_body"}));}
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/settings/dx-decimal") {
+      const token = url.searchParams.get("code") || "";
+      const userId = await findUserBySyncToken(token);
+      if (!userId) { res.writeHead(403, { "content-type": "application/json" }); res.end(JSON.stringify({ error: "expired" })); return; }
+      try {
+        const body = JSON.parse(await readBody(req));
+        const value = body.decimal === true;
+        await setDxRankDecimal(userId, value);
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ decimal: value }));
+      } catch {
+        res.writeHead(400, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: "invalid_body" }));
+      }
       return;
     }
 

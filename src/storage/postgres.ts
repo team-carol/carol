@@ -220,6 +220,8 @@ CREATE INDEX IF NOT EXISTS idx_user_goals_owner ON user_goals(discord_user_id, c
   ALTER TABLE sessions ADD COLUMN IF NOT EXISTS circle_public integer NOT NULL DEFAULT 1;`,],
   // maishift 연동(/마이시프트 연동). ''=연동 안 함. 프로필·기록은 저장하지 않고 maishift 에서 그때그때 받는다.
   [28, `ALTER TABLE sessions ADD COLUMN IF NOT EXISTS maishift_handle text NOT NULL DEFAULT '';`,],
+  // DX ✦ 랭크를 소수점 첫째 자리까지(maishift 표시 설정과 같은 항목). 보는 사람 기준.
+  [29, `ALTER TABLE sessions ADD COLUMN IF NOT EXISTS dx_rank_decimal integer NOT NULL DEFAULT 0;`,],
 ];
 
 export interface MainotesSongRow { id:string; title:string; artist:string; bpm:string; genre:string; version:string; type:string }
@@ -517,6 +519,7 @@ SELECT u.chart_key AS "chartKey",u.achievement_val AS "achievementVal",u.fc,u.sy
   async setPolicyAck(id:string,v:number){await this.q("INSERT INTO sessions(discord_user_id,policy_ack) VALUES($1,$2) ON CONFLICT(discord_user_id) DO UPDATE SET policy_ack=excluded.policy_ack",[id,v]);}
   async saveProfileCircle(profileKey:string, json:string){await this.q("UPDATE profiles SET circle_json=$2 WHERE friend_code=$1",[profileKey,json]);}
   async getCirclePublic(id:string){const r=await this.q<any>("SELECT circle_public FROM sessions WHERE discord_user_id=$1",[id]);return Number(r[0]?.circle_public??1)===1;} async setCirclePublic(id:string,v:boolean){await this.q("INSERT INTO sessions(discord_user_id,circle_public) VALUES($1,$2) ON CONFLICT(discord_user_id) DO UPDATE SET circle_public=excluded.circle_public",[id,v?1:0]);}
+  async getDxRankDecimal(id:string){const r=await this.q<any>("SELECT dx_rank_decimal FROM sessions WHERE discord_user_id=$1",[id]);return r[0]?.dx_rank_decimal===1;} async setDxRankDecimal(id:string,v:boolean){await this.q("INSERT INTO sessions(discord_user_id,dx_rank_decimal) VALUES($1,$2) ON CONFLICT(discord_user_id) DO UPDATE SET dx_rank_decimal=excluded.dx_rank_decimal",[id,v?1:0]);}
   async getTranslateTitles(id:string){const r=await this.q<any>("SELECT translate_titles FROM sessions WHERE discord_user_id=$1",[id]);return r[0]?.translate_titles===1;} async setTranslateTitles(id:string,v:boolean){await this.q("INSERT INTO sessions(discord_user_id,translate_titles) VALUES($1,$2) ON CONFLICT(discord_user_id) DO UPDATE SET translate_titles=excluded.translate_titles",[id,v?1:0]);}
   async getEnabledBookmarkletPresetIds(id:string){const r=await this.q<any>("SELECT preset_bookmarklets FROM sessions WHERE discord_user_id=$1",[id]);try{const x=JSON.parse(r[0]?.preset_bookmarklets??"[]");return Array.isArray(x)?x.filter((v):v is string=>typeof v==='string'):[];}catch{return [];}}
   async setBookmarkletPresetEnabled(id:string,p:string,v:boolean){const a=await this.getEnabledBookmarkletPresetIds(id),n=v?[...new Set([...a,p])]:a.filter(x=>x!==p);const r=await this.pool.query("UPDATE sessions SET preset_bookmarklets=$1 WHERE discord_user_id=$2",[JSON.stringify(n),id]);return r.rowCount??0;}

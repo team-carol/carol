@@ -9,7 +9,7 @@ import { songVersionColor, inkOn } from "./ratingCard";
 import { MARK_COLOR } from "./achievementCard";
 import { MAI_DIFF_COLOR, MAI_CM_COLOR, getScoreRank } from "../../games";
 import { calcSongRating } from "../../constants";
-import { chartSRating, dxStars, formatChartSRating } from "../../sRating";
+import { chartSRating, dxStars, dxRankLabel, formatChartSRating } from "../../sRating";
 import type { TrackInfo, TrackScore } from "../../maishift/track";
 import { msg } from "../../messages";
 
@@ -35,6 +35,8 @@ export interface TrackCardData {
   playerName: string;
   /** 분포에서 강조할 내 레이팅 */
   playerRating: number;
+  /** DX ✦ 랭크를 소수점 첫째 자리까지(보는 사람의 /설정) */
+  dxDecimal: boolean;
 }
 
 const fmt = (n: number) => n.toLocaleString("en-US");
@@ -115,7 +117,7 @@ type Tag = { text: string; color: string; star?: boolean };
  * 큰 성과가 있었던 기록만(최근부터). 첫 기록 + 랭크 상승·DX 별 증가·FC/FC+/AP/AP+·SYNC/FS/FS+/FDX/FDX+ 첫 달성·이론치(101%) + 가장 최근 기록.
  * 비교는 바로 앞 기록과 하고, 오른 폭은 바로 아래(이전에 보인) 줄과의 차이.
  */
-function milestones(list: TrackScore[]): { s: TrackScore; tags: Tag[] }[] {
+function milestones(list: TrackScore[], dxDecimal: boolean): { s: TrackScore; tags: Tag[] }[] {
   const out: { s: TrackScore; tags: Tag[] }[] = [];
   list.forEach((s, i) => {
     if (i === 0) { out.push({ s, tags: [] }); return; }
@@ -124,7 +126,7 @@ function milestones(list: TrackScore[]): { s: TrackScore; tags: Tag[] }[] {
     const rank = getScoreRank(s.achievement);
     if (SCORE_RANKS.indexOf(rank) > SCORE_RANKS.indexOf(getScoreRank(p.achievement))) tags.push({ text: rank, color: MAI_CM_COLOR[rank] ?? INK });
     const pct = (x: TrackScore) => (x.dxMax ? (x.dxScore / x.dxMax) * 100 : 0);
-    if (dxStars(pct(s)) > dxStars(pct(p))) tags.push({ text: String(dxStars(pct(s))), color: INK, star: true });
+    if (dxStars(pct(s)) > dxStars(pct(p))) tags.push({ text: dxRankLabel(s.dxScore, s.dxMax, dxDecimal), color: INK, star: true });
     const combo = COMBO[s.combo] ?? "";
     if (COMBO_ORDER.indexOf(combo) > COMBO_ORDER.indexOf(COMBO[p.combo] ?? "")) tags.push({ text: combo, color: MARK_COLOR[combo] ?? MAI_CM_COLOR[combo] ?? INK });
     const sync = SYNC[s.sync] ?? "";
@@ -151,7 +153,7 @@ function starIcon(color: string, size: number): El {
 }
 
 /** ✦N(별 그림 + 숫자). */
-function starCount(n: number, color: string, fontSize: number): El {
+function starCount(n: string, color: string, fontSize: number): El {
   return el("div", { display: "flex", alignItems: "center", gap: 3 }, [
     starIcon(color, Math.round(fontSize * 0.9)),
     el("span", { color, fontFamily: NUM_FONT, fontSize, fontWeight: 700, lineHeight: 1 }, String(n)),
@@ -160,13 +162,13 @@ function starCount(n: number, color: string, fontSize: number): El {
 
 function tagEl(t: Tag): El {
   return el("div", { display: "flex", alignItems: "center", justifyContent: "center", height: 20, background: SURFACE2, borderRadius: 99, padding: "0 8px" }, t.star
-    ? [starCount(Number(t.text), t.color, 11)]
+    ? [starCount(t.text, t.color, 11)]
     : [el("span", { color: t.color, fontSize: 11, fontWeight: 800, lineHeight: 1 }, t.text)]);
 }
 
 /** 큰 성과 기록 목록(최근부터). */
-function changeRows(list: TrackScore[]): El {
-  const shown = milestones(list);
+function changeRows(list: TrackScore[], dxDecimal: boolean): El {
+  const shown = milestones(list, dxDecimal);
   const rows = [...shown].reverse();
   return el("div", { display: "flex", flexDirection: "column", marginTop: 12, borderTop: `1px solid ${BORDER}` }, rows.map(({ s, tags }, i) => {
     const prev = rows[i + 1]?.s;
@@ -179,7 +181,7 @@ function changeRows(list: TrackScore[]): El {
         gain === null ? msg("trackCard.firstRecord") : gain > 0 ? `+${gain.toFixed(4)}%` : "—"),
       el("div", { display: "flex", alignItems: "center", flex: 1, color: TEXT, fontFamily: NUM_FONT, fontSize: 12 }, s.dxMax ? [
         el("span", {}, `DX ${fmt(s.dxScore)} / ${fmt(s.dxMax)} (${dxPct.toFixed(2)}%)`),
-        ...(dxStars(dxPct) ? [el("div", { display: "flex", marginLeft: 10 }, [starCount(dxStars(dxPct), INK, 12)])] : []),
+        ...(dxStars(dxPct) || (dxDecimal && dxPct >= 85) ? [el("div", { display: "flex", marginLeft: 10 }, [starCount(dxRankLabel(s.dxScore, s.dxMax, dxDecimal), INK, 12)])] : []),
       ] : []),
       el("div", { display: "flex", alignItems: "center", gap: 6, justifyContent: "flex-end" }, tags.map(tagEl)),
     ]);
@@ -278,7 +280,7 @@ export async function renderTrackCard(d: TrackCardData): Promise<Buffer> {
             sub: dxPct !== null
               ? el("div", { display: "flex", alignItems: "center", gap: 5 }, [
                   el("span", { lineHeight: 1 }, `${dxPct.toFixed(2)}%`),
-                  ...(dxStars(dxPct) ? [el("span", { lineHeight: 1 }, "·"), starCount(dxStars(dxPct), FAINT, 10)] : []),
+                  ...(dxStars(dxPct) ? [el("span", { lineHeight: 1 }, "·"), starCount(dxRankLabel(r.dxScore ?? 0, r.dxMax ?? 0, d.dxDecimal), FAINT, 10)] : []),
                 ])
               : undefined,
           },
@@ -292,7 +294,7 @@ export async function renderTrackCard(d: TrackCardData): Promise<Buffer> {
   const history = panel(msg("trackCard.scoreHistory"), list && list.length ? msg("trackCard.scoreHistoryMeta", { count: list.length }) : "",
     list === null ? [emptyNote(msg("trackCard.scoresHidden"))]
       : list.length === 0 ? [emptyNote(msg("trackCard.scoresEmpty"))]
-      : [...(list.length > 1 ? [achievementChart(list, Date.now())] : []), changeRows(list)]);
+      : [...(list.length > 1 ? [achievementChart(list, Date.now())] : []), changeRows(list, d.dxDecimal)]);
 
   // 버전별 상수
   const levels = panel(msg("trackCard.levelHistory"), "", d.info.levels.length ? [levelRow(d.info, d.versionName)] : [emptyNote(msg("trackCard.levelsEmpty"))]);

@@ -144,3 +144,14 @@ test("S-레이팅: 상수² × DX 별 ÷ 50, 평균으로 등급, 보면 값은 
   assert.equal(s.sRatingTier(5), null);
   assert.equal(s.formatSRating(728.5066 / 50), "14.570");
 });
+
+test("DX ✦ 랭크 소수점: maishift 와 같은 단계(97% ✦5, 98% ✦5.5, 99% ✦6, 100% ✦7)와 진행도 내림", () => {
+  const s = require("../../dist/sRating.js");
+  assert.equal(s.dxRankDecimal(2465, 2577), 4.3); // 95.65%
+  assert.equal(s.dxRankDecimal(1358, 1398), 5); // 97.14%
+  assert.equal(s.dxRankDecimal(985, 1000), 5.7);
+  assert.equal(s.dxRankDecimal(1000, 1000), 7);
+  assert.equal(s.dxRankDecimal(849, 1000), 0);
+  assert.equal(s.dxRankLabel(2465, 2577, true), "4.3");
+  assert.equal(s.dxRankLabel(2465, 2577, false), "4");
+});
