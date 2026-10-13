@@ -77,7 +77,7 @@ const TILE_R = 10; // 자켓 타일 모서리 (랜딩 카드처럼 둥글게)
 const PANEL_R = 16; // 섹션 패널 모서리 (랜딩 rounded-2xl)
 const ACCENT = BRAND.accent;
 // 카드 레이아웃/계산이 바뀌면 올린다 → 기존 렌더 캐시가 자동 무효화됨
-const CARD_VERSION = 20;
+const CARD_VERSION = 21;
 
 // ─── Satori element helper (no JSX) ───────────────────────────────────────
 type El = {
@@ -100,6 +100,8 @@ interface CardVM {
   rsText: string;
   rsColor: string;
   lv: string;
+  /** 상수가 추정값(maishift "?") — 상수 오른쪽 위에 작은 "?" */
+  lvEstimated?: boolean;
   diff: string;
   diffColor: string;
   isDx: boolean;
@@ -207,10 +209,11 @@ function toVM(
     lv:
       game === "maimai"
         ? constant !== null
-          // maishift 가 추정 상수로 표시한 보면은 maishift 처럼 "?" 를 붙인다.
-          ? constant.toFixed(1) + (r.constant !== undefined && r.constantEstimated ? "?" : "")
+          ? constant.toFixed(1)
           : r.level
         : getDisplayLv(lvNum, game, r.title).toFixed(1),
+    // maishift 가 추정 상수로 표시한 보면은 maishift 처럼 "?" 를 붙인다.
+    lvEstimated: game === "maimai" && constant !== null && r.constant !== undefined && !!r.constantEstimated,
     diff: diffLabel,
     diffColor,
     isDx: r.musicKind === "DX",
@@ -389,6 +392,9 @@ function jacketCard(
         { fontSize: 9, fontWeight: 700, color: "rgba(255,255,255,0.9)" },
         vm.lv,
       ),
+      ...(vm.lvEstimated
+        ? [el("span", { fontSize: 6, fontWeight: 700, color: "rgba(255,255,255,0.9)", marginLeft: 1, position: "relative", top: -3 }, "?")]
+        : []),
       el(
         "span",
         {
