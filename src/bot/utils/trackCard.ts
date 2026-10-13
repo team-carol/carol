@@ -118,7 +118,14 @@ function changeRows(list: TrackScore[]): El {
       el("span", { width: 92, color: INK, fontFamily: NUM_FONT, fontSize: 14, fontWeight: 700 }, `${s.achievement.toFixed(4)}%`),
       el("span", { width: 80, color: gain !== null && gain > 0 ? "#4ade80" : FAINT, fontFamily: NUM_FONT, fontSize: 12, fontWeight: 700 },
         gain === null ? msg("trackCard.firstRecord") : gain > 0 ? `+${gain.toFixed(4)}%` : "—"),
-      el("span", { flex: 1, color: TEXT, fontFamily: NUM_FONT, fontSize: 12 }, s.dxMax ? `DX ${fmt(s.dxScore)} / ${fmt(s.dxMax)} (${dxPct.toFixed(2)}%)` : ""),
+      el("div", { display: "flex", alignItems: "center", flex: 1, color: TEXT, fontFamily: NUM_FONT, fontSize: 12 }, s.dxMax ? [
+        el("span", {}, `DX ${fmt(s.dxScore)} / ${fmt(s.dxMax)} (${dxPct.toFixed(2)}%)`),
+        // ✦ 는 기호 글꼴로 그려져, 숫자를 같은 span 에 두면 숫자도 그 글꼴로 작게 나온다.
+        ...(dxStars(dxPct) ? [
+          el("span", { color: INK, marginLeft: 10 }, "✦"),
+          el("span", { color: INK, fontFamily: NUM_FONT, fontWeight: 700, marginLeft: 3 }, String(dxStars(dxPct))),
+        ] : []),
+      ] : []),
       el("span", { color: MAI_CM_COLOR[COMBO[s.combo] ?? ""] ?? FAINT, fontSize: 11, fontWeight: 800 }, COMBO[s.combo] ?? ""),
       el("span", { color: MAI_CM_COLOR[SYNC[s.sync] ?? ""] ?? FAINT, fontSize: 11, fontWeight: 800, width: 34, textAlign: "right" }, SYNC[s.sync] ?? ""),
     ]);
