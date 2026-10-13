@@ -17,10 +17,12 @@ import {
   getJacketFile,
   isNewSong,
   getSongVersion,
+  getSongVersionName,
   jacketFileUrl,
 } from "../../constants";
 import { displayTitle } from "../../aliases";
 import { TROPHY_STYLE, pill } from "./cardKit";
+import { versionName } from "../../maishift/catalog";
 import { S_RATING_COUNT, chartSRating, dxStars, formatChartSRating, formatSRating, sRatingTier } from "../../sRating";
 import { msg, cardCacheVersion, type MessageKey } from "../../messages";
 
@@ -75,7 +77,7 @@ const TILE_R = 10; // 자켓 타일 모서리 (랜딩 카드처럼 둥글게)
 const PANEL_R = 16; // 섹션 패널 모서리 (랜딩 rounded-2xl)
 const ACCENT = BRAND.accent;
 // 카드 레이아웃/계산이 바뀌면 올린다 → 기존 렌더 캐시가 자동 무효화됨
-const CARD_VERSION = 19;
+const CARD_VERSION = 20;
 
 // ─── Satori element helper (no JSX) ───────────────────────────────────────
 type El = {
@@ -109,6 +111,47 @@ interface CardVM {
   markGlow?: string;
   clearMark: string;
   jacketFile: string | null;
+  /** 신곡 카드 오른쪽 위 버전 배지 */
+  version?: { label: string; color: string; ink: string };
+}
+
+// 버전(세대 번호)별 테마 색. maishift 신곡 버전 표시와 같은 구분.
+function versionColor(v: number): string {
+  if (v <= 1) return "#2b8791";
+  if (v <= 3) return "#b5db01";
+  if (v <= 5) return "#ff6809";
+  if (v <= 7) return "#ff006f";
+  if (v <= 9) return "#9b6bff";
+  if (v <= 11) return "#6decfd";
+  if (v === 12) return "#202e80";
+  if (v <= 14) return "#30a3ee";
+  if (v <= 16) return "#68c0ab";
+  if (v <= 18) return "#079edf";
+  if (v <= 20) return "#be89ff";
+  if (v <= 22) return "#ffbd1f";
+  if (v <= 24) return "#1d6faa";
+  if (v <= 26) return "#ff65c4";
+  return "#148462";
+}
+
+/** 배경색 위에서 읽히는 글자색(밝은 배경엔 검정). */
+function inkOn(hex: string): string {
+  const n = parseInt(hex.slice(1), 16);
+  const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((c) => {
+    const x = c / 255;
+    return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.4 ? "#111111" : "#ffffff";
+}
+
+/** 신곡 버전 배지. maishift 기록은 곡의 세대 번호, 아니면 곡 목록의 버전 이름(색은 기본). */
+function versionBadge(r: PlayRecord): CardVM["version"] {
+  if (r.songVersion !== undefined) {
+    const color = versionColor(r.songVersion);
+    return { label: versionName(r.songVersion), color, ink: inkOn(color) };
+  }
+  const name = getSongVersionName(r.title);
+  return name ? { label: name, color: BRAND.surface2, ink: BRAND.ink } : undefined;
 }
 
 const MAI_COMBO_MARKS = ["AP+", "AP", "FC+", "FC"];
@@ -164,7 +207,8 @@ function toVM(
     lv:
       game === "maimai"
         ? constant !== null
-          ? constant.toFixed(1)
+          // maishift 가 추정 상수로 표시한 보면은 maishift 처럼 "?" 를 붙인다.
+          ? constant.toFixed(1) + (r.constant !== undefined && r.constantEstimated ? "?" : "")
           : r.level
         : getDisplayLv(lvNum, game, r.title).toFixed(1),
     diff: diffLabel,
@@ -273,6 +317,30 @@ function jacketCard(
       ),
     ),
   );
+
+  // 신곡 버전 배지(오른쪽 위)
+  if (vm.version) {
+    layers.push(
+      el(
+        "div",
+        {
+          position: "absolute",
+          top: 5,
+          right: 5,
+          display: "flex",
+          padding: "1px 6px",
+          borderRadius: 99,
+          background: vm.version.color,
+          maxWidth: CARD_W - 40,
+        },
+        el(
+          "span",
+          { fontSize: 7, color: vm.version.ink, fontWeight: 800, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
+          vm.version.label,
+        ),
+      ),
+    );
+  }
 
   // bottom info block
   const infoRows: El[] = [];
@@ -730,7 +798,7 @@ export async function renderRatingCard(
       profile.server === "jp"
         ? records.filter((r) => !isNewSong(r.title, "jp", newSongDay)).slice(0, 35)
         : records.slice(15, 50);
-    const newVms = newRecords.map(vmOf);
+    const newVms: CardVM[] = newRecords.map((r) => ({ ...vmOf(r), version: versionBadge(r) }));
     const otherVms = otherRecords.map(vmOf);
     sections.push({ label: "NEW", cols: 3, vms: newVms });
     sections.push({ label: "OTHERS", cols: 7, vms: otherVms });

@@ -16,8 +16,8 @@ export interface MsSong {
   titleTranslations?: { title: string; language: string }[];
 }
 export interface MsRecord { a: number; d: number; m: number; g: number; c?: string; y?: string }
-/** s: songs 인덱스, l: 상수×10, p: 1 이면 추정 상수로 보임, r: 기록(플레이한 보면만) */
-export interface MsTrack { s: number; i: number; d: string; l: number; p?: number; r?: MsRecord }
+/** s: songs 인덱스, l: 상수×10, x: 0 이면 그 시점 상수가 확정되지 않은 추정값(maishift 는 "?" 표시), r: 기록(플레이한 보면만) */
+export interface MsTrack { s: number; i: number; d: string; l: number; p?: number; x?: number; r?: MsRecord }
 export interface MsProfile {
   name: string;
   rating: number;
@@ -74,6 +74,8 @@ export function toPlayRecord(song: MsSong, track: MsTrack & { r: MsRecord }): Pl
     dxScore: track.r.d,
     dxScoreMax: track.r.m,
     constant: track.l / 10,
+    constantEstimated: track.x === 0 || undefined,
+    songVersion: song.songVersion,
   };
 }
 

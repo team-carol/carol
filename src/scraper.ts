@@ -109,6 +109,10 @@ export interface PlayRecord {
   dxScoreMax?: number;
   /** 보면 상수. maishift 기록에만 있다 — 이전 기록이면 그 시점의 상수(나중에 바뀐 상수가 아니라). */
   constant?: number;
+  /** constant 가 확정되지 않은 추정값이면 true(maishift "?"). */
+  constantEstimated?: boolean;
+  /** 곡 버전(maishift 세대 번호: 0=maimai … 26=CiRCLE PLUS). maishift 기록에만 있다. */
+  songVersion?: number;
   detailIdx?: string;
   ratingUp?: number;
   achievementGain?: number;
