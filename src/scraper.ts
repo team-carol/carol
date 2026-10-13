@@ -107,6 +107,8 @@ export interface PlayRecord {
   /** DX 점수 / 만점. maishift 기록에만 있다(S-레이팅 계산용). */
   dxScore?: number;
   dxScoreMax?: number;
+  /** 보면 상수. maishift 기록에만 있다 — 이전 기록이면 그 시점의 상수(나중에 바뀐 상수가 아니라). */
+  constant?: number;
   detailIdx?: string;
   ratingUp?: number;
   achievementGain?: number;

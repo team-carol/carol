@@ -73,6 +73,7 @@ export function toPlayRecord(song: MsSong, track: MsTrack & { r: MsRecord }): Pl
     sync: SYNC[track.r.y ?? ""] ?? "",
     dxScore: track.r.d,
     dxScoreMax: track.r.m,
+    constant: track.l / 10,
   };
 }
 

@@ -75,7 +75,7 @@ const TILE_R = 10; // 자켓 타일 모서리 (랜딩 카드처럼 둥글게)
 const PANEL_R = 16; // 섹션 패널 모서리 (랜딩 rounded-2xl)
 const ACCENT = BRAND.accent;
 // 카드 레이아웃/계산이 바뀌면 올린다 → 기존 렌더 캐시가 자동 무효화됨
-const CARD_VERSION = 18;
+const CARD_VERSION = 19;
 
 // ─── Satori element helper (no JSX) ───────────────────────────────────────
 type El = {
@@ -120,7 +120,8 @@ function toVM(
   translate = false,
   game: GameId = "maimai",
 ): CardVM {
-  const constant = getConstant(r.title, r.musicKind, r.diff, server);
+  // 기록에 상수가 있으면(maishift) 그 값 — 과거 레이팅표는 그 시점 상수로 계산한다.
+  const constant = r.constant ?? getConstant(r.title, r.musicKind, r.diff, server);
   const lvNum = constant !== null ? constant : levelToNumber(r.level);
   // 레이팅 대상 페이지엔 FC/AP·Sync 아이콘이 없어 clear 기록의 마크를 우선 사용
   const marks = markMap?.get(chartKey(r));
@@ -696,7 +697,7 @@ export async function renderRatingCard(
       .map((r) => {
         const fixed = fix(r);
         const percent = ((fixed.dxScore ?? 0) / (fixed.dxScoreMax ?? 1)) * 100;
-        const constant = getConstant(fixed.title, fixed.musicKind, fixed.diff, profile.server) ?? levelToNumber(fixed.level);
+        const constant = fixed.constant ?? getConstant(fixed.title, fixed.musicKind, fixed.diff, profile.server) ?? levelToNumber(fixed.level);
         const value = chartSRating(constant, percent);
         const stars = dxStars(percent);
         const vm: CardVM = {
