@@ -110,7 +110,7 @@ const COMBO_ORDER = ["", "FC", "FC+", "AP", "AP+"];
 type Tag = { text: string; color: string; star?: boolean };
 
 /**
- * 큰 성과가 있었던 기록만(최근부터). 첫 기록 + 랭크 상승·DX 별 증가·FC/FC+/AP/AP+ 첫 달성·이론치(101%).
+ * 큰 성과가 있었던 기록만(최근부터). 첫 기록 + 랭크 상승·DX 별 증가·FC/FC+/AP/AP+ 첫 달성·이론치(101%) + 가장 최근 기록.
  * 비교는 바로 앞 기록과 하고, 오른 폭은 바로 아래(이전에 보인) 줄과의 차이.
  */
 function milestones(list: TrackScore[]): { s: TrackScore; tags: Tag[] }[] {
@@ -128,6 +128,9 @@ function milestones(list: TrackScore[]): { s: TrackScore; tags: Tag[] }[] {
     if (s.achievement >= 101 && p.achievement < 101) tags.push({ text: msg("trackCard.theory"), color: "#fde047" });
     if (tags.length) out.push({ s, tags });
   });
+  // 가장 최근 기록은 큰 성과가 아니어도 맨 위에 보인다(지금 기록까지 오른 폭을 알 수 있게).
+  const last = list[list.length - 1];
+  if (last && out[out.length - 1]?.s !== last) out.push({ s: last, tags: [] });
   return out;
 }
 
