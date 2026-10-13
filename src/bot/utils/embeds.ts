@@ -618,8 +618,7 @@ export async function searchResultEmbeds(
         + "\n";
       const emb = new EmbedBuilder()
         .setColor(0x2b2d31)
-        // 번호는 아래 "N번 상세" 버튼과 맞춘다.
-        .setTitle(`${i + 1}. ${displayTitle(title, translate)}${kind}`)
+        .setTitle(displayTitle(title, translate) + kind)
         .setAuthor({ name: msg("searchResult.author", { query, type: typeLabel }) })
         .setDescription(
           regionLine +

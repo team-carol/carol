@@ -183,6 +183,10 @@ export async function renderTrackCard(d: TrackCardData): Promise<Buffer> {
         pill(d.kind, { background: d.kind === "DX" ? "#f97316" : "#3b82f6", color: "#fff" }),
         ...(vName && vColor ? [pill(vName, { background: vColor, color: inkOn(vColor) })] : []),
         ...(pos ? [el("span", { color: FAINT, fontSize: 10, marginLeft: 2 }, msg("trackCard.versionPosition", { order: pos.order === null ? "?" : pos.order + 1, total: pos.total }))] : []),
+        // 내 콤보·싱크(플레이했을 때만)
+        ...(d.record && d.record.achievement > 0
+          ? [d.record.fc, d.record.sync].filter(Boolean).map((m) => pill(m, { background: SURFACE2, color: MAI_CM_COLOR[m] ?? TEXT, marginLeft: 4 }))
+          : []),
       ]),
       el("span", { color: INK, fontSize: 24, fontWeight: 800, lineHeight: 1.15, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, d.title),
       el("span", { color: MUTED, fontSize: 12, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, d.artist ?? ""),
@@ -204,10 +208,10 @@ export async function renderTrackCard(d: TrackCardData): Promise<Buffer> {
         const rating = d.constant !== null ? calcSongRating(r.achievement, d.constant, r.fc) : null;
         const sValue = d.constant !== null && dxPct !== null ? chartSRating(d.constant, dxPct) : null;
         return statsPanel([
-          { value: `${r.achievement.toFixed(4)}%`, label: msg("trackCard.achievement"), sub: getScoreRank(r.achievement) },
+          { value: `${r.achievement.toFixed(4)}%`, label: msg("trackCard.achievement") },
+          { value: getScoreRank(r.achievement), label: msg("trackCard.rank") },
           { value: r.dxMax ? `${fmt(r.dxScore ?? 0)} / ${fmt(r.dxMax)}` : "—", label: msg("trackCard.dxScore"), sub: dxPct !== null ? `${dxPct.toFixed(2)}% · ✦${dxStars(dxPct)}` : undefined },
           { value: rating !== null ? String(rating) : "—", label: msg("trackCard.rating"), sub: sValue !== null ? msg("trackCard.sRating", { value: formatChartSRating(sValue) }) : undefined },
-          { value: [r.fc, r.sync].filter(Boolean).join(" · ") || "—", label: msg("trackCard.comboSync") },
         ]);
       })()
     : panel(msg("trackCard.myRecord"), "", [emptyNote(msg("trackCard.noRecord"))]);
