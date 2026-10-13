@@ -164,6 +164,8 @@ function toProfile(profileKey: string, link: MaishiftLink, e: Entry, extras: Cac
     mapJson: extras?.mapJson ?? "[]",
     maishiftHistory: e.history,
     maishiftVersions: e.versions,
+    maishiftFriendCode: e.friendCode,
+    maishiftPastPublic: e.pastRecordsVisible,
     source: "maishift",
   };
 }

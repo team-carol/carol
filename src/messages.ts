@@ -16,7 +16,6 @@ export const MESSAGES = {
   "common.otherNotRegistered": "{user} 님은 아직 maishift 계정을 연동하지 않았습니다.",
   "common.noBookmarklet": "이 기능은 캐롤봇 추가 북마클릿 등록이 필요합니다. `/북마클릿`으로 설치한 뒤 maimai DX NET에서 실행해 주세요.",
   "common.needCarolBookmarklet": "이 기능은 캐롤봇 추가 북마클릿 등록이 필요합니다. `/북마클릿`으로 설치한 뒤 maimai DX NET에서 실행해 주세요.",
-  "common.profilePrivate": "{user} 님은 프로필을 비공개로 설정했습니다.",
   "common.adminGuildOnly": "이 명령어는 지정된 서버에서만 사용할 수 있습니다.",
 
   // ── /레이팅표 ───────────────────────────────────────────────────────────
@@ -118,7 +117,7 @@ export const MESSAGES = {
   "settings.title": "⚙️ 웹 설정",
   "settings.currentServerField": "현재 서버",
   "settings.manageField": "설정 페이지에서 관리",
-  "settings.manageBody": "프로필 공개 여부, 친구 코드·서클 공개 여부, 프리셋 북마클릿, 사설 북마클릿을 웹에서 관리할 수 있습니다.",
+  "settings.manageBody": "서클 공개 여부, 프리셋 북마클릿, 사설 북마클릿을 웹에서 관리할 수 있습니다. 프로필·친구 코드·이전 기록 공개 여부는 maishift 설정을 따릅니다.",
   "settings.termsField": "이용약관",
   "settings.termsBody": "추가 북마클릿 사용 책임과 면책 조항은 이용약관에서 확인할 수 있습니다.",
   "settings.openButton": "웹 설정 열기",
@@ -219,6 +218,7 @@ export const MESSAGES = {
   "search.failed": "검색에 실패했습니다.",
 
   // ── /성과 ───────────────────────────────────────────────────────────────
+  "achievement.pastPrivate": "{user} 님은 maishift에서 이전 기록을 공개하지 않아 성과를 볼 수 없습니다.",
   "achievement.renderFailed": "성과 이미지 생성에 실패했습니다.",
   "achievement.loadFailed": "성과 데이터를 불러오지 못했습니다.",
   // 최근 플레이 기록(50곡)에서 찾지 못한 성과 — 동기화 전에 50곡 넘게 플레이한 경우
@@ -289,7 +289,6 @@ export const MESSAGES = {
   "goal.listTitle": "🎯 {name} 님의 목표",
   "goal.listFooter": "{done}/{total} 완료{page} · 동기화할 때마다 자동 갱신",
   "goal.listFooterPage": " · {index}/{pages}페이지",
-  "goal.otherPrivate": "해당 유저는 프로필을 비공개로 설정했습니다.",
   "goal.defaultName": "유저",
   "goal.notFound": "{number}번 목표가 없습니다. `/목표 목록` 에서 번호를 확인해주세요.",
   "goal.limitReached": "목표는 최대 {max}개까지 등록할 수 있습니다. 먼저 `/목표 삭제` 로 정리해주세요.",

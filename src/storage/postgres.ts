@@ -210,7 +210,7 @@ CREATE INDEX IF NOT EXISTS idx_user_goals_owner ON user_goals(discord_user_id, c
   );
   ALTER TABLE sessions ADD COLUMN IF NOT EXISTS patch_ack bigint NOT NULL DEFAULT 0;
   ALTER TABLE sessions ALTER COLUMN patch_ack SET DEFAULT (floor(extract(epoch from clock_timestamp()) * 1000))::bigint;`,],
-  // 친구 코드 공개 여부(/설정). 켜면 /프로필 임베드에 친구 코드를 보여 준다. 기본은 비공개.
+  // 친구 코드 공개 여부(옛 /설정). 지금은 maishift 친구 코드 공개 설정을 따라 쓰지 않는다(마이그레이션이라 열은 남김).
   [25, `ALTER TABLE sessions ADD COLUMN IF NOT EXISTS friend_code_public integer NOT NULL DEFAULT 0;`,],
   // 단위(段位) 이미지 URL. 프로필 카드에 클래스 이미지와 함께 표시한다. 다음 동기화부터 채워진다.
   [26, `ALTER TABLE profiles ADD COLUMN IF NOT EXISTS course_img text NOT NULL DEFAULT '';`,],
@@ -512,13 +512,11 @@ SELECT u.chart_key AS "chartKey",u.achievement_val AS "achievementVal",u.fc,u.sy
   }
 
   async getGuildSetting(id:string){const r=await this.q<any>("SELECT auto_role FROM guild_settings WHERE guild_id=$1",[id]);return r[0]?.auto_role!==0;} async setGuildSetting(id:string,v:boolean){await this.q("INSERT INTO guild_settings VALUES($1,$2) ON CONFLICT(guild_id) DO UPDATE SET auto_role=excluded.auto_role",[id,v?1:0]);}
-  async getProfilePrivate(id:string){const r=await this.q<any>("SELECT profile_private FROM sessions WHERE discord_user_id=$1",[id]);return r[0]?.profile_private===1;} async setProfilePrivate(id:string,v:boolean){const r=await this.pool.query("UPDATE sessions SET profile_private=$1 WHERE discord_user_id=$2",[v?1:0,id]);return r.rowCount??0;}
   // 세션 행이 없으면 null(= carol을 쓴 적 없는 사용자 → 방침 변경 고지 대상 아님).
   async getPolicyAck(id:string):Promise<number|null>{const r=await this.q<any>("SELECT policy_ack FROM sessions WHERE discord_user_id=$1",[id]);return r[0]?Number(r[0].policy_ack??0):null;}
   async setPolicyAck(id:string,v:number){await this.q("INSERT INTO sessions(discord_user_id,policy_ack) VALUES($1,$2) ON CONFLICT(discord_user_id) DO UPDATE SET policy_ack=excluded.policy_ack",[id,v]);}
   async saveProfileCircle(profileKey:string, json:string){await this.q("UPDATE profiles SET circle_json=$2 WHERE friend_code=$1",[profileKey,json]);}
   async getCirclePublic(id:string){const r=await this.q<any>("SELECT circle_public FROM sessions WHERE discord_user_id=$1",[id]);return Number(r[0]?.circle_public??1)===1;} async setCirclePublic(id:string,v:boolean){await this.q("INSERT INTO sessions(discord_user_id,circle_public) VALUES($1,$2) ON CONFLICT(discord_user_id) DO UPDATE SET circle_public=excluded.circle_public",[id,v?1:0]);}
-  async getFriendCodePublic(id:string){const r=await this.q<any>("SELECT friend_code_public FROM sessions WHERE discord_user_id=$1",[id]);return Number(r[0]?.friend_code_public??0)===1;} async setFriendCodePublic(id:string,v:boolean){await this.q("INSERT INTO sessions(discord_user_id,friend_code_public) VALUES($1,$2) ON CONFLICT(discord_user_id) DO UPDATE SET friend_code_public=excluded.friend_code_public",[id,v?1:0]);}
   async getTranslateTitles(id:string){const r=await this.q<any>("SELECT translate_titles FROM sessions WHERE discord_user_id=$1",[id]);return r[0]?.translate_titles===1;} async setTranslateTitles(id:string,v:boolean){await this.q("INSERT INTO sessions(discord_user_id,translate_titles) VALUES($1,$2) ON CONFLICT(discord_user_id) DO UPDATE SET translate_titles=excluded.translate_titles",[id,v?1:0]);}
   async getEnabledBookmarkletPresetIds(id:string){const r=await this.q<any>("SELECT preset_bookmarklets FROM sessions WHERE discord_user_id=$1",[id]);try{const x=JSON.parse(r[0]?.preset_bookmarklets??"[]");return Array.isArray(x)?x.filter((v):v is string=>typeof v==='string'):[];}catch{return [];}}
   async setBookmarkletPresetEnabled(id:string,p:string,v:boolean){const a=await this.getEnabledBookmarkletPresetIds(id),n=v?[...new Set([...a,p])]:a.filter(x=>x!==p);const r=await this.pool.query("UPDATE sessions SET preset_bookmarklets=$1 WHERE discord_user_id=$2",[JSON.stringify(n),id]);return r.rowCount??0;}

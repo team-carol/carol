@@ -4,7 +4,7 @@ import { createHash, timingSafeEqual } from "crypto";
 import { gunzip } from "zlib";
 import { promisify } from "util";
 import { parseFriendCode as parseFC, parseRecentRecords, parsePlaylogHistory, getMaimaiBaseUrl, parseMapAreas, parsePlaylogDetail, parseUserOptions, parseCircle } from "../scraper";
-import { saveSyncExtras, getMaishiftLink, saveUserSession, findUserBySyncToken, getAvatarBlob, getSongJacket, saveSongJacket, getExtraBookmarklets, getProfilePrivate, setProfilePrivate, addExtraBookmarklet, removeExtraBookmarklet, getEnabledBookmarkletPresetIds, setBookmarkletPresetEnabled, getUserDefaultServer, setUserDefaultServer, isMaimaiServer, getMapImage, saveMapImage, backfillEventRatingUp, getAllAliases, addAlias, deleteAlias, setAliasTranslation, setMessageOverride, deleteMessageOverride, getTranslateTitles, setTranslateTitles, getFriendCodePublic, setFriendCodePublic, saveProfileCircle, getCirclePublic, setCirclePublic, getRegisteredUserCount, getAchievementMinimum, setAchievementMinimum, getPolicyAck, setPolicyAck, getSimaiChart, saveSimaiChart, listRegistryCharts, auditRegistryCharts, listOptionPresets, saveOptionPreset, deleteOptionPreset, saveOptionSnapshot, getOptionSnapshots, listPatchNotes, savePatchNote, setPatchNotePublished, deletePatchNote } from "../storage";
+import { saveSyncExtras, getMaishiftLink, saveUserSession, findUserBySyncToken, getAvatarBlob, getSongJacket, saveSongJacket, getExtraBookmarklets, addExtraBookmarklet, removeExtraBookmarklet, getEnabledBookmarkletPresetIds, setBookmarkletPresetEnabled, getUserDefaultServer, setUserDefaultServer, isMaimaiServer, getMapImage, saveMapImage, backfillEventRatingUp, getAllAliases, addAlias, deleteAlias, setAliasTranslation, setMessageOverride, deleteMessageOverride, getTranslateTitles, setTranslateTitles, saveProfileCircle, getCirclePublic, setCirclePublic, getRegisteredUserCount, getAchievementMinimum, setAchievementMinimum, getPolicyAck, setPolicyAck, getSimaiChart, saveSimaiChart, listRegistryCharts, auditRegistryCharts, listOptionPresets, saveOptionPreset, deleteOptionPreset, saveOptionSnapshot, getOptionSnapshots, listPatchNotes, savePatchNote, setPatchNotePublished, deletePatchNote } from "../storage";
 import { POLICY_VERSION } from "../policy";
 import type { SongAliasRow } from "../storage/types";
 import { scheduleMaishiftCheck } from "../maishift";
@@ -567,15 +567,13 @@ ${siteFooter()}
       const token = url.searchParams.get("code") || "";
       const userId = await findUserBySyncToken(token);
       if (!userId && !isDev) { res.writeHead(403); res.end("expired"); return; }
-      const isPrivate = userId ? await getProfilePrivate(userId) : false;
       const presetIds = userId ? await getEnabledBookmarkletPresetIds(userId) : [];
       const bookmarklets = userId ? await getExtraBookmarklets(userId) : [];
       const defaultServer = userId ? await getUserDefaultServer(userId) : "intl";
       const translate = userId ? await getTranslateTitles(userId) : false;
-      const friendCodePublic = userId ? await getFriendCodePublic(userId) : false;
       const circlePublic = userId ? await getCirclePublic(userId) : true;
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-      res.end(settingsPage(token, isPrivate, presetIds, bookmarklets, defaultServer, translate, friendCodePublic, circlePublic));
+      res.end(settingsPage(token, presetIds, bookmarklets, defaultServer, translate, circlePublic));
       return;
     }
 
@@ -946,13 +944,12 @@ ${siteFooter()}
       const token = url.searchParams.get("code") || "";
       const userId = await findUserBySyncToken(token);
       if (!userId) { res.writeHead(403, { "content-type": "application/json" }); res.end(JSON.stringify({ error: "expired" })); return; }
-      const isPrivate = await getProfilePrivate(userId);
       const presets = await getEnabledBookmarkletPresetIds(userId);
       const bookmarklets = await getExtraBookmarklets(userId);
       const defaultServer = await getUserDefaultServer(userId);
       const translate = await getTranslateTitles(userId);
       res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({ private: isPrivate, presets, bookmarklets, defaultServer, translate, friendCodePublic: await getFriendCodePublic(userId), circlePublic: await getCirclePublic(userId), minimumAchievement: await getAchievementMinimum(userId) }));
+      res.end(JSON.stringify({ presets, bookmarklets, defaultServer, translate, circlePublic: await getCirclePublic(userId), minimumAchievement: await getAchievementMinimum(userId) }));
       return;
     }
 
@@ -980,23 +977,6 @@ ${siteFooter()}
       return;
     }
 
-    if (req.method === "POST" && url.pathname === "/api/settings/friend-code") {
-      const token = url.searchParams.get("code") || "";
-      const userId = await findUserBySyncToken(token);
-      if (!userId) { res.writeHead(403, { "content-type": "application/json" }); res.end(JSON.stringify({ error: "expired" })); return; }
-      try {
-        const body = JSON.parse(await readBody(req));
-        const value = body.public === true;
-        await setFriendCodePublic(userId, value);
-        res.writeHead(200, { "content-type": "application/json" });
-        res.end(JSON.stringify({ friendCodePublic: value }));
-      } catch {
-        res.writeHead(400, { "content-type": "application/json" });
-        res.end(JSON.stringify({ error: "invalid_body" }));
-      }
-      return;
-    }
-
     if (req.method === "POST" && url.pathname === "/api/settings/circle") {
       const token = url.searchParams.get("code") || "";
       const userId = await findUserBySyncToken(token);
@@ -1007,23 +987,6 @@ ${siteFooter()}
         await setCirclePublic(userId, value);
         res.writeHead(200, { "content-type": "application/json" });
         res.end(JSON.stringify({ circlePublic: value }));
-      } catch {
-        res.writeHead(400, { "content-type": "application/json" });
-        res.end(JSON.stringify({ error: "invalid_body" }));
-      }
-      return;
-    }
-
-    if (req.method === "POST" && url.pathname === "/api/settings/privacy") {
-      const token = url.searchParams.get("code") || "";
-      const userId = await findUserBySyncToken(token);
-      if (!userId) { res.writeHead(403, { "content-type": "application/json" }); res.end(JSON.stringify({ error: "expired" })); return; }
-      try {
-        const body = JSON.parse(await readBody(req));
-        const value = !!body.private;
-        await setProfilePrivate(userId, value);
-        res.writeHead(200, { "content-type": "application/json" });
-        res.end(JSON.stringify({ private: value }));
       } catch {
         res.writeHead(400, { "content-type": "application/json" });
         res.end(JSON.stringify({ error: "invalid_body" }));

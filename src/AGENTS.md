@@ -43,7 +43,7 @@ src/
 - `db.ts` owns all table creation and migrations at import time. Add columns with `ALTER TABLE ... ADD COLUMN` in `try/catch`; never drop/rename.
 - Store user-specific web access via `sync_token`; routes resolve it through `findUserBySyncToken`.
 - Session settings live on `sessions`: `profile_private`, `extra_bookmarklets`, `preset_bookmarklets`.
-- `profile_private` default is public (`0`); `getProfilePrivate()` treats missing/null as public.
+- Profile / friend-code / past-record visibility follows the user's maishift settings (no carol toggles). `sessions.profile_private` and `friend_code_public` columns remain from migrations but are unused. Circle visibility (`circle_public`) is still a carol setting because circle data only comes from the carol extra bookmarklet.
 - Bookmarklet presets are stored as JSON ID arrays in `preset_bookmarklets`, not as dedicated per-preset columns.
 - Constants cache survives restarts in `constants_cache`; network failure at startup should remain non-fatal.
 

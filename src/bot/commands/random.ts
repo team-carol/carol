@@ -1,7 +1,7 @@
 import {
   SlashCommandBuilder, ChatInputCommandInteraction, EmbedBuilder, MessageFlags,
 } from "discord.js";
-import { getCachedProfile, getUserFriendCode, getProfilePrivate, getTranslateTitles } from "../../storage";
+import { getCachedProfile, getUserFriendCode, getTranslateTitles } from "../../storage";
 import { getClearList } from "../utils/embeds";
 import { displayTitle } from "../../aliases";
 import {
@@ -101,10 +101,6 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   let clearMap: Map<string, ReturnType<typeof getClearList>[number]> | null = null;
   if (playOpt) {
     const target = interaction.options.getUser("user") ?? interaction.user;
-    if (target.id !== interaction.user.id && await getProfilePrivate(target.id)) {
-      await interaction.reply({ content: msg("common.profilePrivate", { user: `<@${target.id}>` }), flags: MessageFlags.Ephemeral });
-      return;
-    }
     const fc = await getUserFriendCode(target.id);
     const cached = fc ? await getCachedProfile(fc) : null;
     if (!cached) {

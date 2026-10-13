@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, MessageFlags } from "discord.js";
-import { getCachedProfile, getUserFriendCode, getProfilePrivate } from "../../storage";
+import { getCachedProfile, getUserFriendCode } from "../../storage";
 import { buildProfileReply } from "../utils/embeds";
 import { autoRole } from "../utils/roles";
 import { msg } from "../../messages";
@@ -18,10 +18,6 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   const target = interaction.options.getUser("user") ?? interaction.user;
   const userId = target.id;
-  if (target.id !== interaction.user.id && await getProfilePrivate(target.id)) {
-    await interaction.reply({ content: msg("common.profilePrivate", { user: `<@${target.id}>` }), flags: MessageFlags.Ephemeral });
-    return;
-  }
   const notRegistered = target.id === interaction.user.id
     ? msg("common.selfNotRegistered")
     : msg("common.otherNotRegistered", { user: `<@${target.id}>` });

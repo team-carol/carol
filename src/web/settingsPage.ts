@@ -2,9 +2,9 @@ import type { ExtraBookmarklet, MaimaiServer } from "../storage/types";
 import { BOOKMARKLET_PRESETS } from "./bookmarklet";
 import { BASE_CSS, pageHead, topbar, siteFooter, userNav } from "./theme";
 
-export function settingsPage(token: string, isPrivate: boolean, enabledPresetIds: string[], bookmarklets: ExtraBookmarklet[], defaultServer: MaimaiServer, translate = false, friendCodePublic = false, circlePublic = true): string {
+export function settingsPage(token: string, enabledPresetIds: string[], bookmarklets: ExtraBookmarklet[], defaultServer: MaimaiServer, translate = false, circlePublic = true): string {
   const presets = BOOKMARKLET_PRESETS.map((preset) => ({ ...preset, enabled: !!preset.required || enabledPresetIds.includes(preset.id) }));
-  const dataJson = JSON.stringify({ private: isPrivate, presets, bookmarklets, defaultServer, translate, friendCodePublic, circlePublic })
+  const dataJson = JSON.stringify({ presets, bookmarklets, defaultServer, translate, circlePublic })
     .replace(/</g, "\\u003c").replace(/>/g, "\\u003e");
   const tokenJson = JSON.stringify(token);
 
@@ -22,6 +22,8 @@ h1{font-size:clamp(36px,5vw,52px);font-weight:500;color:var(--ink);letter-spacin
 .toggle-info{flex:1}
 .toggle-title{color:var(--ink);font-size:16px;font-weight:500;margin-bottom:4px}
 .toggle-desc{font-size:14px;color:var(--muted);line-height:1.55}
+.ms-link{display:inline-block;margin-top:10px;font-size:14px;font-weight:600;color:var(--accent);text-decoration:none}
+.ms-link:hover{text-decoration:underline}
 .toggle{position:relative;width:48px;height:28px;flex-shrink:0}
 .toggle input{opacity:0;width:0;height:0;position:absolute}
 .toggle .slider{position:absolute;cursor:pointer;inset:0;background:var(--surface-2);box-shadow:inset 0 0 0 1px var(--border-2);border-radius:28px;transition:.2s}
@@ -82,25 +84,8 @@ ${topbar(userNav(token, "settings"))}
 </div>
 <div class="card">
 <p class="section-label">프로필 공개 여부</p>
-<div class="toggle-row">
-<div class="toggle-info">
-<div class="toggle-title" id="privTitle"></div>
-<div class="toggle-desc" id="privDesc"></div>
-</div>
-<label class="toggle"><input type="checkbox" id="privToggle" onchange="togglePrivacy()"><span class="slider"></span></label>
-</div>
-<div class="status" id="privStatus"></div>
-</div>
-<div class="card">
-<p class="section-label">친구 코드 공개 여부</p>
-<div class="toggle-row">
-<div class="toggle-info">
-<div class="toggle-title" id="fcTitle"></div>
-<div class="toggle-desc" id="fcDesc"></div>
-</div>
-<label class="toggle"><input type="checkbox" id="fcToggle" onchange="toggleFriendCode()"><span class="slider"></span></label>
-</div>
-<div class="status" id="fcStatus"></div>
+<div class="toggle-desc">프로필·친구 코드·이전 기록(과거 레이팅표·성과)의 공개 여부는 maishift 설정을 따릅니다. maishift에서 비공개로 한 정보는 캐롤봇에서도 보이지 않습니다.</div>
+<a class="ms-link" href="https://maimai.shiftpsh.com/settings" target="_blank" rel="noopener">maishift 설정 열기 →</a>
 </div>
 <div class="card">
 <p class="section-label">서클 공개 여부</p>
@@ -159,9 +144,7 @@ var MAX_BM=5;
 
 (function init(){
   renderDefaultServer();
-  renderPrivacy();
   renderTranslate();
-  renderFriendCode();
   renderCircle();
   loadAchievementFilter();
   renderPresetList();
@@ -207,19 +190,6 @@ function setDefaultServer(server){
   .catch(function(){DATA.defaultServer=prev;renderDefaultServer();showStatus('serverStatus','err','저장 실패');});
 }
 
-function renderPrivacy(){
-  var cb=document.getElementById('privToggle');
-  var t=document.getElementById('privTitle');
-  var d=document.getElementById('privDesc');
-  cb.checked=!DATA.private;
-  if(DATA.private){
-    t.textContent='\uD83D\uDD12 \uBE44\uACF5\uAC1C';
-    d.textContent='\uB2E4\uB978 \uC0AC\uB78C\uC774 \uB0B4 \uD504\uB85C\uD544/\uAC80\uC0C9/\uB808\uC774\uD305\uD45C\uB97C \uC870\uD68C\uD560 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4.';
-  } else {
-    t.textContent='\uD83C\uDF10 \uACF5\uAC1C';
-    d.textContent='\uB2E4\uB978 \uC0AC\uB78C\uC774 \uB0B4 \uD504\uB85C\uD544\uC744 \uC870\uD68C\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4.';
-  }
-}
 
 function renderBmList(){
   var list=document.getElementById('bmList');
@@ -241,23 +211,7 @@ function renderBmList(){
   });
 }
 
-function renderFriendCode(){
-  var on=!!DATA.friendCodePublic;
-  document.getElementById('fcToggle').checked=on;
-  document.getElementById('fcTitle').textContent=on?'공개':'비공개';
-  document.getElementById('fcDesc').textContent=on
-    ?'/프로필에 친구 코드가 표시됩니다. 내 프로필을 조회하는 사람은 모두 볼 수 있습니다.'
-    :'/프로필에 친구 코드를 표시하지 않습니다.';
-}
 
-function toggleFriendCode(){
-  var cb=document.getElementById('fcToggle');
-  var want=cb.checked;
-  fetch('/api/settings/friend-code?code='+TOKEN,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({public:want})})
-  .then(function(r){if(!r.ok)throw new Error(r.status);return r.json();})
-  .then(function(){DATA.friendCodePublic=want;renderFriendCode();showStatus('fcStatus','ok','저장됨');})
-  .catch(function(){cb.checked=!want;showStatus('fcStatus','err','저장 실패');});
-}
 
 function renderCircle(){
   var on=DATA.circlePublic!==false;
@@ -290,18 +244,6 @@ function toggleTranslate(){
   .catch(function(){cb.checked=!cb.checked;showStatus('transStatus','err','저장 실패');});
 }
 
-function togglePrivacy(){
-  var cb=document.getElementById('privToggle');
-  var wantPrivate=!cb.checked;
-  fetch('/api/settings/privacy?code='+TOKEN,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({private:wantPrivate})})
-  .then(function(r){if(!r.ok)throw new Error(r.status);return r.text();})
-  .then(function(){
-    DATA.private=wantPrivate;
-    renderPrivacy();
-    showStatus('privStatus','ok','\uC800\uC7A5\uB428');
-  })
-  .catch(function(){cb.checked=!cb.checked;showStatus('privStatus','err','\uC800\uC7A5 \uC2E4\uD328');});
-}
 
 function renderPresetList(){
   var list=document.getElementById('presetList');

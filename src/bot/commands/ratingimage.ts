@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, MessageFlags, AttachmentBuilder } from "discord.js";
-import { getCachedProfile, getUserFriendCode, getProfilePrivate, getTranslateTitles, getMaishiftLink } from "../../storage";
+import { getCachedProfile, getUserFriendCode, getTranslateTitles, getMaishiftLink } from "../../storage";
 import { getTopList, getClearList, loadAvatar } from "../utils/embeds";
 import { renderRatingCard, type RatingType } from "../utils/ratingCard";
 import { GAMES, isGameId } from "../../games";
@@ -45,10 +45,6 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   const type: RatingType = typeOpt === "srating" || isGameId(typeOpt) ? typeOpt : "maimai";
   const dateOpt = (interaction.options.getString("date") ?? "").trim();
   const userId = target.id;
-  if (!self && await getProfilePrivate(target.id)) {
-    await interaction.reply({ content: msg("common.profilePrivate", { user: `<@${target.id}>` }), flags: MessageFlags.Ephemeral });
-    return;
-  }
   if (dateOpt && !isPlayDayKey(dateOpt)) {
     await interaction.reply({ content: msg("ratingImage.snapshotBadDate"), flags: MessageFlags.Ephemeral });
     return;

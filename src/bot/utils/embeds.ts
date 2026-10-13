@@ -13,7 +13,6 @@ import {
   getMapImage,
   saveSongJacket,
   getTranslateTitles,
-  getFriendCodePublic,
   getCirclePublic,
 } from "../../storage";
 import { getMaimaiBaseUrl } from "../../scraper";
@@ -173,7 +172,6 @@ export async function buildAvatarAttachment(
 export function profileEmb(
   p: NonNullable<Awaited<ReturnType<typeof getCachedProfile>>>,
   hasAvatar: boolean,
-  showFriendCode = false,
   circleName: string | null = null,
 ) {
   const stars = p.stars && p.stars !== "0" ? " · ★×" + p.stars : "";
@@ -195,8 +193,7 @@ export function profileEmb(
         + (p.source === "maishift" ? `  ·  ${msg("maishift.credit")}` : ""),
     });
   if (hasAvatar) emb.setThumbnail("attachment://avatar.png");
-  // 친구 코드는 본인이 /설정 에서 공개로 바꾼 경우에만 보인다(기본 비공개).
-  const friendCode = showFriendCode ? (p.friendCode ?? "").match(/\d{13}/)?.[0] : undefined;
+  const friendCode = publicFriendCode(p) ?? undefined;
   if (friendCode) emb.addFields({ name: msg("embed.friendCodeField"), value: `\`${friendCode}\``, inline: true });
   // 서클 이름은 /설정 의 서클 공개(기본 공개)가 켜져 있을 때만.
   if (circleName) emb.addFields({ name: msg("embed.circleField"), value: escapeMarkdown(circleName), inline: true });
@@ -773,13 +770,18 @@ function loadRatingHistory(cached: NonNullable<Awaited<ReturnType<typeof getCach
   return { points, days, updates, plays };
 }
 
+/** 친구 코드는 maishift 에서 공개한 사용자만(maishift 가 공개한 값이 있을 때) 보인다. */
+function publicFriendCode(p: { maishiftFriendCode?: string }): string | null {
+  return (p.maishiftFriendCode ?? "").match(/\d{13}/)?.[0] ?? null;
+}
+
 export async function buildProfileReply(
   cached: NonNullable<Awaited<ReturnType<typeof getCachedProfile>>>,
   userId: string,
   format: "image" | "embed" = "embed",
   viewerId?: string,
 ) {
-  const [avatar, showFriendCode, circlePublic] = await Promise.all([buildAvatarAttachment(userId, cached), getFriendCodePublic(userId), getCirclePublic(userId)]);
+  const [avatar, circlePublic] = await Promise.all([buildAvatarAttachment(userId, cached), getCirclePublic(userId)]);
   // 서클·최근 플레이·지방은 캐롤봇 추가 북마클릿 데이터라, 그 북마클릿을 실행한 사용자에게만 보인다.
   const synced = hasCarolSync(cached);
   const circleName = synced && circlePublic ? circleOf(cached)?.name ?? null : null;
@@ -800,13 +802,13 @@ export async function buildProfileReply(
   );
   if (format === "image") {
     const [avatarBuf, translate] = await Promise.all([loadAvatar(userId, cached), getTranslateTitles(viewerId ?? userId)]);
-    const friendCode = showFriendCode ? (cached.friendCode ?? "").match(/\d{13}/)?.[0] ?? null : null;
+    const friendCode = publicFriendCode(cached);
     const ratingHistory = loadRatingHistory(cached);
     const png = await renderProfileCard(cached, avatarBuf, { translate, friendCode, circleName, ratingHistory });
     return { embeds: [], files: [new AttachmentBuilder(png, { name: "profile.png" })], components: [row] };
   }
   return {
-    embeds: [profileEmb(cached, !!avatar, showFriendCode, circleName)],
+    embeds: [profileEmb(cached, !!avatar, circleName)],
     files: avatar ? [avatar] : [],
     components: [row],
   };

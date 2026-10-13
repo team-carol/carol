@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, MessageFlags, AttachmentBuilder } from "discord.js";
-import { getCachedProfile, getUserFriendCode, getProfilePrivate } from "../../storage";
+import { getCachedProfile, getUserFriendCode } from "../../storage";
 import { loadAvatar } from "../utils/embeds";
 import { renderHistoryCard } from "../utils/historyCard";
 import { historyPeriodDays, maishiftSeries, HISTORY_PERIODS, type HistoryPeriod } from "../../ratingHistory";
@@ -34,10 +34,6 @@ const MAX_RATING = calcSongRating(101, 15.0, "AP+") * 50;
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   const target = interaction.options.getUser("user") ?? interaction.user;
   const self = target.id === interaction.user.id;
-  if (!self && await getProfilePrivate(target.id)) {
-    await interaction.reply({ content: msg("common.profilePrivate", { user: `<@${target.id}>` }), flags: MessageFlags.Ephemeral });
-    return;
-  }
   const notRegistered = self ? msg("common.selfNotRegistered") : msg("common.otherNotRegistered", { user: `<@${target.id}>` });
   const friendCode = await getUserFriendCode(target.id);
   if (!friendCode) {

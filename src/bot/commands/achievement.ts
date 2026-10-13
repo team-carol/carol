@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, MessageFlags, AttachmentBuilder } from "discord.js";
-import { getDailyAchievementSummaries, getCachedProfile, getProfilePrivate, getUserFriendCode, getTranslateTitles } from "../../storage";
+import { getDailyAchievementSummaries, getCachedProfile, getUserFriendCode, getTranslateTitles } from "../../storage";
 import { koreaPlayDayKey, koreaPlayDayRange } from "../../achievements";
 import { renderAchievementCard } from "../utils/achievementCard";
 import { loadAvatar } from "../utils/embeds";
@@ -36,11 +36,6 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   const requestedDay = interaction.options.getString("date") ?? "";
   let replyDeferred = false;
   console.log(`[성과] 시작 scope=${targetScope} userSuffix=${userId.slice(-6)} requestedDay=${requestedDay || "today"}`);
-  if (target.id !== interaction.user.id && await getProfilePrivate(target.id)) {
-    console.log(`[성과] 비공개 차단 scope=${targetScope}`);
-    await interaction.reply({ content: msg("common.profilePrivate", { user: `<@${target.id}>` }), flags: MessageFlags.Ephemeral });
-    return;
-  }
   const friendCode = await getUserFriendCode(userId);
   const cached = friendCode ? await getCachedProfile(friendCode) : null;
   if (!cached) {
@@ -49,6 +44,11 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       ? msg("common.selfNotRegistered")
       : msg("common.otherNotRegistered", { user: `<@${target.id}>` });
     await interaction.reply({ content: notice, flags: MessageFlags.Ephemeral });
+    return;
+  }
+  // 성과는 기록이 언제 얼마나 올랐는지라, 다른 사람에게는 maishift 에서 이전 기록을 공개한 경우에만 보인다.
+  if (target.id !== interaction.user.id && cached.maishiftPastPublic === false) {
+    await interaction.reply({ content: msg("achievement.pastPrivate", { user: `<@${target.id}>` }), flags: MessageFlags.Ephemeral });
     return;
   }
 

@@ -7,7 +7,6 @@ import {
 import {
   getCachedProfile,
   getUserFriendCode,
-  getProfilePrivate,
   getTranslateTitles,
 } from "../../storage";
 import { getClearList } from "../utils/embeds";
@@ -280,13 +279,6 @@ export async function execute(
 ): Promise<void> {
   const target = interaction.options.getUser("user") ?? interaction.user;
   const userId = target.id;
-  if (target.id !== interaction.user.id && await getProfilePrivate(target.id)) {
-    await interaction.reply({
-      content: msg("common.profilePrivate", { user: `<@${target.id}>` }),
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
-  }
   const friendCode = await getUserFriendCode(userId);
   const cached = friendCode ? await getCachedProfile(friendCode) : null;
   if (!cached) {

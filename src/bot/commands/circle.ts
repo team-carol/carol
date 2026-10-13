@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, ButtonInteraction, MessageFlags, AttachmentBuilder } from "discord.js";
-import { getCachedProfile, getUserFriendCode, getProfilePrivate, getCirclePublic, getTranslateTitles } from "../../storage";
+import { getCachedProfile, getUserFriendCode, getCirclePublic, getTranslateTitles } from "../../storage";
 import { circleOf, circleEmbed, circleMembersEmbed, circleButtonsRow } from "../utils/circle";
 import { searchResultEmbeds } from "../utils/embeds";
 import { renderCircleCard } from "../utils/circleCard";
@@ -26,7 +26,6 @@ type Loaded = { error: string } | { circle: CircleInfo; cached: CachedProfile; c
 async function loadCircle(targetId: string, viewerId: string): Promise<Loaded> {
   const self = targetId === viewerId;
   const mention = `<@${targetId}>`;
-  if (!self && await getProfilePrivate(targetId)) return { error: msg("common.profilePrivate", { user: mention }) };
   const circlePublic = await getCirclePublic(targetId);
   if (!self && !circlePublic) return { error: msg("circle.private", { user: mention }) };
 
