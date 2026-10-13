@@ -106,9 +106,9 @@ function achievementChart(points: TrackScore[], until: number): El {
   ]);
 }
 
-/** 기록이 바뀐 때 목록(최근부터). */
+/** 기록이 바뀐 때 목록(최근부터, 전부). */
 function changeRows(list: TrackScore[]): El {
-  const rows = [...list].reverse().slice(0, 6);
+  const rows = [...list].reverse();
   return el("div", { display: "flex", flexDirection: "column", marginTop: 12, borderTop: `1px solid ${BORDER}` }, rows.map((s, i) => {
     const prev = list[list.length - 1 - i - 1];
     const gain = prev ? s.achievement - prev.achievement : null;
