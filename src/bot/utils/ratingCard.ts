@@ -20,6 +20,7 @@ import {
   jacketFileUrl,
 } from "../../constants";
 import { displayTitle } from "../../aliases";
+import { TROPHY_STYLE, pill } from "./cardKit";
 import { S_RATING_COUNT, chartSRating, dxStars, formatChartSRating, formatSRating, sRatingTier } from "../../sRating";
 import { msg, cardCacheVersion, type MessageKey } from "../../messages";
 
@@ -64,7 +65,7 @@ const TILE_R = 10; // 자켓 타일 모서리 (랜딩 카드처럼 둥글게)
 const PANEL_R = 16; // 섹션 패널 모서리 (랜딩 rounded-2xl)
 const ACCENT = BRAND.accent;
 // 카드 레이아웃/계산이 바뀌면 올린다 → 기존 렌더 캐시가 자동 무효화됨
-const CARD_VERSION = 17;
+const CARD_VERSION = 18;
 
 // ─── Satori element helper (no JSX) ───────────────────────────────────────
 type El = {
@@ -811,15 +812,19 @@ export async function renderRatingCard(
             display: "flex",
           }),
       el("div", { display: "flex", flexDirection: "column" }, [
-        ...(profile.trophy
-          ? [
-              el(
-                "span",
-                { fontSize: 8, color: BRAND.dim, marginBottom: 1 },
-                profile.trophy,
-              ),
-            ]
-          : []),
+        // 칭호: /프로필·/서클 카드와 같은 등급 색 띠. 문구가 비면 빈 띠만.
+        el("div", { display: "flex", marginBottom: 3 }, [
+          pill(profile.trophy || "\u00a0", {
+            ...(TROPHY_STYLE[profile.trophyClass] ?? TROPHY_STYLE.normal),
+            fontSize: 8,
+            padding: "2px 7px",
+            maxWidth: 260,
+            overflow: "hidden",
+            whiteSpace: "nowrap",
+            textOverflow: "ellipsis",
+            ...(profile.trophy ? {} : { width: 100 }),
+          }),
+        ]),
         el(
           "span",
           { fontSize: 12, fontWeight: 700, color: BRAND.ink },
