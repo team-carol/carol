@@ -21,9 +21,20 @@ export interface CatalogSong {
   folders?: { kind: "ST" | "DX"; order: number; version: number }[];
 }
 
-export interface RegionCatalog { songs: CatalogSong[]; /** 그 지역 최신 세대 번호(이 세대 곡은 순서가 아직 바뀔 수 있다) */ latestVersion: number }
+/** 그 지역 버전(세대 번호·이름·출시 시각 ms). maishift 곡 목록의 availableVersions. */
+export interface RegionVersion { index: number; name: string; releasedAt: number }
+export interface RegionCatalog {
+  songs: CatalogSong[];
+  /** 그 지역 최신 세대 번호(이 세대 곡은 순서가 아직 바뀔 수 있다) */
+  latestVersion: number;
+  versions: RegionVersion[];
+}
 
-interface SongsResult { regionLatestVersion: number; tracks: { songs: MsSong[]; tracks: MsTrack[] } }
+interface SongsResult {
+  regionLatestVersion: number;
+  availableVersions?: { value: number; name: string; releasedAt: string }[];
+  tracks: { songs: MsSong[]; tracks: MsTrack[] };
+}
 
 // maishift 세대 번호 → 캐롤봇(옛 otoge-db) 버전 코드. でらっくす(13)부터는 세대·PLUS 가 500 단위로 이어진다.
 const OLD_VERSION_CODES = [10000, 11000, 12000, 13000, 14000, 15000, 16000, 17000, 18000, 18500, 19000, 19500, 19900];
@@ -41,11 +52,17 @@ export function versionIndex(code: number): number | null {
 const DX_GENERATIONS = ["でらっくす", "Splash", "UNiVERSE", "FESTiVAL", "BUDDiES", "PRiSM", "CiRCLE", "MAGiCAL"];
 const OLD_VERSION_NAMES = ["maimai", "maimai PLUS", "GreeN", "GreeN PLUS", "ORANGE", "ORANGE PLUS", "PiNK", "PiNK PLUS", "MURASAKi", "MURASAKi PLUS", "MiLK", "MiLK PLUS", "FiNALE"];
 /** maishift 세대 번호 → 버전 이름(그래프의 버전 표시용). */
+// 위 표에 없는(새로 나온) 세대는 maishift 곡 목록의 버전 이름을 쓴다(src/constants.ts 가 채운다).
+const extraNames = new Map<number, string>();
+export function setMaishiftVersionNames(list: RegionVersion[]): void {
+  for (const v of list) if (!extraNames.has(v.index)) extraNames.set(v.index, v.name);
+}
+
 export function versionName(index: number): string {
   if (index < OLD_VERSION_NAMES.length) return OLD_VERSION_NAMES[index] ?? `ver.${index}`;
   const k = index - OLD_VERSION_NAMES.length;
   const gen = DX_GENERATIONS[Math.floor(k / 2)];
-  return gen ? (k % 2 ? `${gen} PLUS` : gen) : `ver.${index}`;
+  return gen ? (k % 2 ? `${gen} PLUS` : gen) : extraNames.get(index) ?? `ver.${index}`;
 }
 
 const GENRES: Record<string, string> = {
@@ -93,5 +110,9 @@ export function toCatalog(songs: MsSong[], tracks: MsTrack[]): CatalogSong[] {
 export async function fetchCatalog(region: MaishiftRegion): Promise<RegionCatalog> {
   const res = await callServerFn<SongsResult>(FN.songs, { region });
   if (!res?.tracks?.songs?.length) throw new Error(`maishift ${region} 곡 목록이 비어 있음`);
-  return { songs: toCatalog(res.tracks.songs, res.tracks.tracks), latestVersion: res.regionLatestVersion };
+  const versions = (res.availableVersions ?? [])
+    .map((v) => ({ index: v.value, name: v.name, releasedAt: Date.parse(v.releasedAt) }))
+    .filter((v) => Number.isFinite(v.releasedAt))
+    .sort((a, b) => a.index - b.index);
+  return { songs: toCatalog(res.tracks.songs, res.tracks.tracks), latestVersion: res.regionLatestVersion, versions };
 }

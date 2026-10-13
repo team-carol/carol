@@ -1,6 +1,6 @@
 import { getConstantsCache, saveConstantsCache } from "./storage";
 import { setExternalTranslations } from "./aliases";
-import { fetchCatalog, type CatalogSong } from "./maishift/catalog";
+import { fetchCatalog, setMaishiftVersionNames, versionCode, versionName as msVersionName, type CatalogSong, type RegionVersion } from "./maishift/catalog";
 import type { PlayRecord, MaimaiServer } from "./scraper";
 
 // 곡·상수 카탈로그는 maishift 곡 목록(국제판 ASIA, 내수판 JAPAN)에서 받는다(예전엔 otoge-db).
@@ -56,7 +56,7 @@ const NEW_SONG_MAX_VERSION_JP = 27500; // MAGiCAL PLUS(27500) 미포함
 // 레이팅 "신곡" 범위는 버전 업데이트마다 통째로 옮겨간다. 과거 레이팅표를 역산할 때
 // 현재 범위로 신곡/구곡을 나누면 그 시점과 어긋나므로, 적용 시작일과 함께 이력을 둔다.
 // from 은 그 범위가 적용되기 시작한 play-day(포함). 최신순으로 정렬해 첫 일치를 쓴다.
-// 새 버전이 나오면 위에 한 줄 추가하고 NEW_SONG_MIN/MAX 도 함께 갱신할 것.
+// maishift 버전 목록(windowsFromVersions)을 받으면 그걸 쓰고, 이 표는 받기 전에만 쓴다.
 // label 은 그 날 나온 버전 이름(프로필 히스토리 그래프의 업데이트 표시에 쓴다).
 // 국제판과 내수판은 업데이트 일정이 달라 이력을 따로 둔다.
 type NewSongWindowEntry = { from: string; min: number; max: number; label?: string };
@@ -73,8 +73,37 @@ const NEW_SONG_WINDOWS_JP: NewSongWindowEntry[] = [
   // otoge-db 에 없어(release 000000) 그보다 앞선 범위는 두지 않는다.
   { from: "", min: 26000, max: 27000 },
 ];
+// 위 표는 maishift 버전 목록을 아직 못 받았을 때만 쓴다. 받았으면 지역별 버전 출시 시각으로 계산한다:
+// 버전 i 가 나온 날부터 신곡 = 버전 i-1 ~ i (레이팅 신곡은 현재 버전과 바로 이전 버전).
+// isNewSong 이 기록마다 불리므로 버전 목록을 받을 때 한 번만 계산해 둔다.
+let windowsIntl: NewSongWindowEntry[] = [];
+let windowsJp: NewSongWindowEntry[] = [];
+
+/** 출시 시각(ms) → play-day(한국 시간 오전 4시 기준 날짜). achievements.ts 의 koreaPlayDayKey 와 같은 계산. */
+function playDayOf(ms: number): string {
+  return new Date(ms + 5 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+function windowsFromVersions(list: RegionVersion[]): NewSongWindowEntry[] {
+  const out: NewSongWindowEntry[] = list
+    .filter((v) => v.index >= 1)
+    .map((v) => ({ from: playDayOf(v.releasedAt), min: versionCode(v.index - 1), max: versionCode(v.index + 1), label: msVersionName(v.index) }))
+    .sort((a, b) => b.from.localeCompare(a.from));
+  // 가장 오래된 버전 이전 날짜도 그 범위로(표의 from: "" 와 같은 역할).
+  if (out.length) out.push({ ...out[out.length - 1], from: "", label: undefined });
+  return out;
+}
+
 function windowsFor(server: MaimaiServer): NewSongWindowEntry[] {
+  const computed = server === "jp" ? windowsJp : windowsIntl;
+  if (computed.length) return computed;
   return server === "jp" ? NEW_SONG_WINDOWS_JP : NEW_SONG_WINDOWS;
+}
+
+function setRegionVersions(intl: RegionVersion[], jp: RegionVersion[]): void {
+  setMaishiftVersionNames([...intl, ...jp]);
+  windowsIntl = windowsFromVersions(intl);
+  windowsJp = windowsFromVersions(jp);
 }
 
 export interface NewSongWindow { min: number; max: number }
@@ -87,10 +116,11 @@ export function versionUpdatesBetween(fromDay: string, toDay: string, server: Ma
     .sort((a, b) => a.day.localeCompare(b.day));
 }
 
-// playDay(YYYY-MM-DD)가 없으면 현재 범위. 이력보다 오래된 날짜는 가장 오래된 범위를 쓴다.
+// playDay(YYYY-MM-DD)가 없으면 오늘 범위(아직 출시 전인 버전은 빼고). 이력보다 오래된 날짜는 가장 오래된 범위를 쓴다.
 export function newSongWindowAt(playDay?: string, server: MaimaiServer = "intl"): NewSongWindow {
   const list = windowsFor(server);
-  const hit = playDay ? (list.find((w) => playDay >= w.from) ?? list[list.length - 1]) : list[0];
+  const day = playDay ?? playDayOf(Date.now());
+  const hit = list.find((w) => day >= w.from) ?? list[list.length - 1];
   return { min: hit.min, max: hit.max };
 }
 
@@ -189,6 +219,8 @@ interface ConstantsCache {
   artists?: [string, string][];
   folderIntl?: FolderData;
   folderJp?: FolderData;
+  versionsIntl?: RegionVersion[];
+  versionsJp?: RegionVersion[];
 }
 
 // 캐시 복원. maishift 에서 받은 캐시가 아니면 fresh=false 반환.
@@ -207,9 +239,10 @@ function applyCache(data: string): { fresh: boolean } {
   trackIdMap = new Map(parsed.trackIds ?? []);
   artistMap = new Map(parsed.artists ?? []);
   setFolders(parsed.folderIntl ?? null, parsed.folderJp ?? null);
+  setRegionVersions(parsed.versionsIntl ?? [], parsed.versionsJp ?? []);
   rebuildDailyFortuneSongs();
-  // 보면 번호·버전 폴더 순서가 없는 옛 캐시면 새로 받는다.
-  return { fresh: parsed.source === "maishift" && !!parsed.trackIds && !!parsed.folderIntl };
+  // 보면 번호·버전 폴더 순서·버전 목록이 없는 옛 캐시면 새로 받는다.
+  return { fresh: parsed.source === "maishift" && !!parsed.trackIds && !!parsed.folderIntl && !!parsed.versionsIntl?.length };
 }
 
 export async function loadConstants(): Promise<void> {
@@ -232,6 +265,7 @@ export async function loadConstants(): Promise<void> {
     const intl = intlRes.songs, jp = jpRes.songs;
     const fIntl = folderDataOf(intlRes.songs, intlRes.latestVersion), fJp = folderDataOf(jpRes.songs, jpRes.latestVersion);
     setFolders(fIntl, fJp);
+    setRegionVersions(intlRes.versions, jpRes.versions);
     constantMap = new Map();
     jacketMap = new Map();
     jacketUrlMap = new Map();
@@ -267,6 +301,8 @@ export async function loadConstants(): Promise<void> {
       artists: Array.from(artistMap.entries()),
       folderIntl: fIntl,
       folderJp: fJp,
+      versionsIntl: intlRes.versions,
+      versionsJp: jpRes.versions,
     } satisfies ConstantsCache));
     rebuildDailyFortuneSongs();
   } catch (e) {
