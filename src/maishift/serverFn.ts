@@ -25,6 +25,8 @@ export const FN = {
   /** {handle, region} → 업로드(이전 기록) 목록. JSON 문자열 {n: 이름들, r: [[업로드 번호, 시각(ms), 레이팅, 이름 번호, 버전]]}.
    *  그 시점 프로필은 profile 에 handle 을 `<handle>~<업로드 번호>` 로 넘겨 받는다. 사용자가 이전 기록을 공개했을 때만. */
   uploads: "860797bd9ce1315f04e84227bb43cf8a4763c4e22321283681b9b1398ac9a628",
+  /** {handle, region} → 스탬프 카드 목록(/profile/<id>/stamp 페이지) */
+  stamps: "65fab9a29adf0d76bf504a523d5d3d4b5432a1ddb98b9444ab9f5d7027e39bf0",
   // ─── 곡 카드를 눌렀을 때 창(곡 상세). trackId 는 보면 번호(곡 목록의 track.i). ───
   /** {trackId, handle} → 그 보면의 업로드별 기록 [{recordedAt, achievement, dxScore, dxMax, dxPercent, combo, sync}] */
   trackScores: "889a9e2084ba419653983b577d7991d39d7ee1a78ab2cbf0f666933c347e6acc",

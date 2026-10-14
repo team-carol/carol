@@ -466,6 +466,11 @@ export function getVersionPosition(title: string, musicKind: string, server: Mai
   return { order: order + 1, total: idx.count.get(version) ?? 0, tentative: version >= idx.latest };
 }
 
+/** 그 지역 최신 세대 번호(maishift 곡 목록 regionLatestVersion). 모르면 null. */
+export function regionLatestVersion(server: MaimaiServer = "intl"): number | null {
+  return (server === "jp" ? folderIndexJp : folderIndexIntl)?.latest ?? null;
+}
+
 /** maishift 보면 번호. 곡 상세(달성률 변화·상수 변동·분포) 조회에 쓴다. */
 export function getTrackId(title: string, musicKind: string, diff: string): number | null {
   return trackIdMap.get(`${title}|${musicKind === "DX" ? "DX" : "ST"}|${diff}`) ?? null;

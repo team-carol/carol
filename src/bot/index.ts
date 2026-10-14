@@ -41,6 +41,7 @@ import * as chart        from "./commands/chart";
 import * as ratingcalc   from "./commands/ratingcalc";
 import * as maishift     from "./commands/maishift";
 import * as history      from "./commands/history";
+import * as stamp        from "./commands/stamp";
 import { initMaishift } from "../maishift";
 import { guardSlowAck } from "./utils/slowAck";
 import { handleTrackButton } from "./utils/trackDetail";
@@ -48,7 +49,7 @@ import { loadRankImages } from "../rankImages";
 
 type Command = { data: { toJSON(): object; name: string }; execute: (i: ChatInputCommandInteraction) => Promise<void>; autocomplete?: (i: AutocompleteInteraction) => Promise<void> };
 
-const COMMANDS: Command[] = [profile, circle, bookmarklet, ratingtable, ratingimage, achievement, fortune, settings, gameOptions, serverSettings, newsSettings, search, status, songrec, random, areaMap, report, admin, goal, chart, ratingcalc, maishift, history];
+const COMMANDS: Command[] = [profile, circle, bookmarklet, ratingtable, ratingimage, achievement, fortune, settings, gameOptions, serverSettings, newsSettings, search, status, songrec, random, areaMap, report, admin, goal, chart, ratingcalc, maishift, history, stamp];
 const EPHEMERAL_REPLY = { flags: MessageFlags.Ephemeral } as const;
 
 const RATING_CARD_GC_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000;

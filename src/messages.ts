@@ -269,6 +269,8 @@ export const MESSAGES = {
   "searchResult.versionSuffix": "\n    {version}",
   "searchResult.versionPosition": "{version} · {position}",
   "searchResult.detailButton": "{n}번 상세",
+  "stamp.empty": "maishift에 스탬프 카드 정보가 없습니다.",
+  "stamp.failed": "maishift에서 스탬프 카드를 불러오지 못했습니다. 잠시 뒤에 다시 시도해 주세요.",
   "trackDetail.expired": "검색이 만료되었습니다. 다시 검색해 주세요.",
   "trackDetail.noTrack": "maishift에서 해당 보면의 정보를 찾지 못했습니다.",
   "trackDetail.failed": "곡 상세 정보를 불러오지 못했습니다. 잠시 뒤에 다시 시도해 주세요.",
@@ -420,6 +422,16 @@ export const MESSAGES = {
   "historyCard.ratingTitle": "레이팅",
   "historyCard.playsTitle": "플레이 횟수",
   "historyCard.gapDays": "+{days}일",
+  "stampCard.eyebrow": "STAMP CARD · {server}",
+  "stampCard.summary": "{count}장 · 완료 {complete}장",
+  "stampCard.partner": "파트너",
+  "stampCard.songs": "곡",
+  "stampCard.others": "기타",
+  "stampCard.complete": "COMPLETE",
+  "stampCard.completeMeta": "{count}장",
+  "stampCard.remaining": "완료까지 {days}일 출석 남음 (2인 {daysDuo}일)",
+  "stampCard.songsRemaining": "전체 완료까지 {total}일, 새 채보 완료까지 {latest}일 출석 남음 (2인 {totalDuo}일, {latestDuo}일)",
+  "stampCard.newChart": "새 채보",
   "trackCard.versionPosition": "{order}/{total}",
   "trackCard.player": "{name} 님의 기록",
   "trackCard.myRecord": "내 기록",
@@ -557,7 +569,7 @@ export function applyMessageOverrides(rows: { key: string; text: string }[]): vo
 }
 
 // 이미지 카드 문구의 서명. 카드 캐시 키(메모리)와 레이팅표 DB 캐시 버전에 섞어, 문구를 바꾸면 다시 그리게 한다.
-const CARD_KEY_PREFIXES = ["card.", "profileCard.", "circleCard.", "circleColor.", "achievementCard.", "ratingCard.", "trackCard."];
+const CARD_KEY_PREFIXES = ["card.", "profileCard.", "circleCard.", "circleColor.", "achievementCard.", "ratingCard.", "trackCard.", "stampCard."];
 let cardSignature: number | null = null;
 
 function fnv1a(text: string): number {
