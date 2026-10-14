@@ -99,12 +99,13 @@ function duoIcon(): El {
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="${MUTED}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7a4 4 0 1 0 8 0a4 4 0 1 0 -8 0"/><path d="M3 21v-2a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v2"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/><path d="M21 21v-2a4 4 0 0 0 -3 -3.85"/></svg>`;
     duoIconUrl = `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`;
   }
-  return image(duoIconUrl, { width: 12, height: 12, margin: "0 2px" });
+  // 글자(숫자) 몸통과 높이가 맞도록 1px 내리고, 앞뒤 여백은 괄호·숫자 쪽 모두 같게.
+  return image(duoIconUrl, { width: 11, height: 11, margin: "1px 3px 0 0" });
 }
 function withDuoIcon(text: string): El {
   const parts = text.split(DUO);
   return el("div", { display: "flex", alignItems: "center" }, parts.flatMap((p, i) => [
-    ...(p ? [el("span", {}, p)] : []),
+    ...(p ? [el("span", { lineHeight: 1 }, p)] : []),
     ...(i < parts.length - 1 ? [duoIcon()] : []),
   ]));
 }
