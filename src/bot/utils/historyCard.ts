@@ -7,7 +7,7 @@ import {
 import { renderInWorker } from "./renderPool";
 import type { CachedProfile, MaishiftVersion } from "../../storage/types";
 import { ratingPlate } from "./ratingCard";
-import { alignLeftMargin } from "./textMetrics";
+import { userCardHeader } from "./cardHeader";
 import { lineChart, lineSwatch } from "./historyChart";
 import { PLAY_CURRENT_COLOR, RATING_AXES } from "./profileCard";
 import type { RatingPoint, PlayCountPoint } from "../../ratingHistory";
@@ -93,8 +93,6 @@ export async function renderHistoryCard(profile: CachedProfile, avatarBuf: Buffe
   ]);
   const serverLabel = profile.server === "jp" ? "JP" : "INTERNATIONAL";
   const eyebrow = msg("historyCard.eyebrow", { server: serverLabel });
-  const name = profile.playerName || "—";
-  const nameShift = alignLeftMargin({ text: name, size: 26 }, { text: eyebrow, size: 10 });
   const stars = Number(profile.stars) || 0;
   const end = d.days[d.days.length - 1];
   const rangeText = msg("historyCard.range", { from: d.days[0].replace(/-/g, "."), to: end.replace(/-/g, "."), days: d.days.length });
@@ -108,20 +106,7 @@ export async function renderHistoryCard(profile: CachedProfile, avatarBuf: Buffe
     background: CANVAS, padding: 24, color: TEXT, fontFamily: "Noto Sans JP",
   }, [
     // 머리
-    el("div", { display: "flex", alignItems: "center", paddingBottom: 18, borderBottom: `1px solid ${BORDER}` }, [
-      avatarUrl
-        ? image(avatarUrl, { width: 88, height: 88, objectFit: "cover", borderRadius: 16, marginRight: 18, flexShrink: 0 })
-        : el("div", { width: 88, height: 88, borderRadius: 16, background: SURFACE2, marginRight: 18, flexShrink: 0 }),
-      el("div", { display: "flex", flexDirection: "column", flex: 1, minWidth: 0, gap: 7 }, [
-        el("span", { color: MUTED, fontSize: 10, fontWeight: 700, letterSpacing: 0.4 }, eyebrow),
-        el("span", { color: INK, fontSize: 26, fontWeight: 800, lineHeight: 1.1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginLeft: nameShift }, name),
-        el("span", { color: MUTED, fontSize: 12 }, [kstStamp(d.lastAt), weekText(d.lastAt, d.lastVersionId, d.versions)].filter(Boolean).join("  ·  ")),
-      ]),
-      el("div", { display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 16, flexShrink: 0 }, [
-        wordmark(creditOf(profile)),
-        ratingPlate(profile.rating || 0),
-      ]),
-    ]),
+    userCardHeader(profile, avatarUrl, eyebrow, [kstStamp(d.lastAt), weekText(d.lastAt, d.lastVersionId, d.versions)].filter(Boolean).join("  ·  ")),
     // 플레이 카운트·단위·클래스·투어 멤버
     el("div", { display: "flex", background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 16, padding: "14px 18px", marginTop: 12 }, [
       statCell(msg("historyCard.playCount"), el("div", { display: "flex", alignItems: "baseline", gap: 6 }, [

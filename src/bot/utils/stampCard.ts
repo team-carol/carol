@@ -3,8 +3,9 @@
 // 완료한 카드는 맨 아래에 보상 이미지만 모은다.
 import {
   SURFACE2, BORDER, TEXT, MUTED, CANVAS, INK,
-  type El, el, image, pill, panel, wordmark, remoteDataUrl, creditOf,
+  type El, el, image, pill, panel, remoteDataUrl,
 } from "./cardKit";
+import { userCardHeader, avatarDataUrl } from "./cardHeader";
 import { renderInWorker } from "./renderPool";
 import { MAI_DIFF_COLOR } from "../../games";
 import { displayTitle } from "../../aliases";
@@ -90,6 +91,24 @@ function row(c: StampCard, img: string | null, latestVersion: number | null, tra
   ]);
 }
 
+// 2인 플레이 아이콘(maishift 와 같은 사람 둘 아이콘). 문구의 {duo} 자리에 들어간다.
+const DUO = "\u0000";
+let duoIconUrl: string | null = null;
+function duoIcon(): El {
+  if (!duoIconUrl) {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="${MUTED}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7a4 4 0 1 0 8 0a4 4 0 1 0 -8 0"/><path d="M3 21v-2a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v2"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/><path d="M21 21v-2a4 4 0 0 0 -3 -3.85"/></svg>`;
+    duoIconUrl = `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`;
+  }
+  return image(duoIconUrl, { width: 12, height: 12, margin: "0 2px" });
+}
+function withDuoIcon(text: string): El {
+  const parts = text.split(DUO);
+  return el("div", { display: "flex", alignItems: "center" }, parts.flatMap((p, i) => [
+    ...(p ? [el("span", {}, p)] : []),
+    ...(i < parts.length - 1 ? [duoIcon()] : []),
+  ]));
+}
+
 const remainingOf = (list: StampCard[]) => list.reduce((a, c) => a + Math.max(0, c.maxCount - c.stampCount), 0);
 
 export async function renderStampCard(profile: CachedProfile, avatarBuf: Buffer | null, cards: StampCard[], latestVersion: number | null, translate: boolean): Promise<Buffer> {
@@ -101,33 +120,23 @@ export async function renderStampCard(profile: CachedProfile, avatarBuf: Buffer 
 
   const urls = [...new Set(cards.map((c) => c.imageUrl).filter(Boolean))];
   const imgs = new Map<string, string | null>(await Promise.all(urls.map(async (u) => [u, await remoteDataUrl(u)] as [string, string | null])));
-  const avatarUrl = avatarBuf ? `data:image/png;base64,${avatarBuf.toString("base64")}` : await remoteDataUrl(profile.avatar);
+  const avatarUrl = await avatarDataUrl(profile, avatarBuf);
 
-  const section = (title: string, meta: string, list: StampCard[]) => {
+  const section = (title: string, meta: string | El, list: StampCard[]) => {
     const colWidth = Math.max(...list.map((c) => rewardBox(c.type, 60).width));
     return panel(title, meta, [el("div", { display: "flex", flexDirection: "column" }, list.map((c, i) => row(c, imgs.get(c.imageUrl) ?? null, latestVersion, translate, i === list.length - 1, colWidth)))]);
   };
-  const days = (list: StampCard[]) => { const d = remainingOf(list); return msg("stampCard.remaining", { days: d, daysDuo: Math.ceil(d / 2) }); };
+  const days = (list: StampCard[]) => { const d = remainingOf(list); return withDuoIcon(msg("stampCard.remaining", { days: d, daysDuo: Math.ceil(d / 2), duo: DUO })); };
   const songTotal = remainingOf(songs);
   const songLatest = remainingOf(songs.filter((c) => latestVersion !== null && c.song?.song.songVersion === latestVersion));
 
   const serverLabel = profile.server === "jp" ? "JP" : "INTERNATIONAL";
-  const head = el("div", { display: "flex", alignItems: "center", paddingBottom: 16, borderBottom: `1px solid ${BORDER}` }, [
-    avatarUrl
-      ? image(avatarUrl, { width: 64, height: 64, objectFit: "cover", borderRadius: 14, marginRight: 16, flexShrink: 0 })
-      : el("div", { width: 64, height: 64, borderRadius: 14, background: SURFACE2, marginRight: 16, flexShrink: 0 }),
-    el("div", { display: "flex", flexDirection: "column", flex: 1, minWidth: 0, gap: 6 }, [
-      el("span", { color: MUTED, fontSize: 10, fontWeight: 700, letterSpacing: 0.4 }, msg("stampCard.eyebrow", { server: serverLabel })),
-      el("span", { color: INK, fontSize: 22, fontWeight: 800, lineHeight: 1.1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, profile.playerName || "—"),
-      el("span", { color: MUTED, fontSize: 12 }, msg("stampCard.summary", { count: cards.length, complete: done.length })),
-    ]),
-    wordmark(creditOf(profile)),
-  ]);
+  const head = userCardHeader(profile, avatarUrl, msg("stampCard.eyebrow", { server: serverLabel }), msg("stampCard.summary", { count: cards.length, complete: done.length }));
 
   const root = el("div", { display: "flex", flexDirection: "column", width: WIDTH, background: CANVAS, padding: 24, color: TEXT, fontFamily: "Noto Sans JP" }, [
     head,
     ...(partners.length ? [section(msg("stampCard.partner"), days(partners), partners)] : []),
-    ...(songs.length ? [section(msg("stampCard.songs"), msg("stampCard.songsRemaining", { total: songTotal, latest: songLatest, totalDuo: Math.ceil(songTotal / 2), latestDuo: Math.ceil(songLatest / 2) }), songs)] : []),
+    ...(songs.length ? [section(msg("stampCard.songs"), withDuoIcon(msg("stampCard.songsRemaining", { total: songTotal, latest: songLatest, totalDuo: Math.ceil(songTotal / 2), latestDuo: Math.ceil(songLatest / 2), duo: DUO })), songs)] : []),
     ...(others.length ? [section(msg("stampCard.others"), days(others), others)] : []),
     ...(done.length ? [panel(msg("stampCard.complete"), msg("stampCard.completeMeta", { count: done.length }), [
       el("div", { display: "flex", flexWrap: "wrap", gap: 8 }, done.map((c) => {

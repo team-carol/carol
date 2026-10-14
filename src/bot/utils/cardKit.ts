@@ -101,14 +101,16 @@ export function statsPanel(items: { value: string; label: string; sub?: string |
   ])));
 }
 
-export function panel(title: string, meta: string, children: El[]): El {
+export function panel(title: string, meta: string | El, children: El[]): El {
   return el("div", {
     display: "flex", flexDirection: "column",
     background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 16, padding: "14px 16px", marginTop: 12,
   }, [
     el("div", { display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 12 }, [
       el("span", { color: INK, fontSize: 14, fontWeight: 700 }, title),
-      el("span", { color: MUTED, fontSize: 10 }, meta),
+      typeof meta === "string"
+        ? el("span", { color: MUTED, fontSize: 10 }, meta)
+        : el("div", { display: "flex", alignItems: "center", color: MUTED, fontSize: 10 }, [meta]),
     ]),
     ...children,
   ]);
