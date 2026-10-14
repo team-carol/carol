@@ -41,9 +41,12 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     await interaction.editReply({ content: msg("maishift.linked", { handle: found.handle, name: found.name, rating: found.rating }) });
   } catch (e) {
     const notFound = e instanceof MaishiftError && (e.kind === "not_found" || e.kind === "region_missing");
-    if (!notFound) console.error("[maishift] 연동 실패:", e);
+    const isPrivate = e instanceof MaishiftError && e.kind === "private";
+    if (!notFound && !isPrivate) console.error("[maishift] 연동 실패:", e);
     await interaction.editReply({
-      content: notFound ? msg("maishift.notFound", { handle, server: server === "jp" ? "JAPAN" : "ASIA" }) : msg("maishift.unavailable"),
+      content: isPrivate ? msg("maishift.privateOnLink", { handle })
+        : notFound ? msg("maishift.notFound", { handle, server: server === "jp" ? "JAPAN" : "ASIA" })
+        : msg("maishift.unavailable"),
     });
   }
 }

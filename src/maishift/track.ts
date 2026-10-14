@@ -61,6 +61,11 @@ export async function getTrackInfo(trackId: number): Promise<TrackInfo> {
   return info;
 }
 
+/** 그 아이디의 보면 기록 변화 캐시를 지운다(프로필이 비공개로 바뀌었을 때). */
+export function forgetTrackScores(handle: string): void {
+  for (const k of [...scoresCache.keys()]) if (k.startsWith(`${handle.toLowerCase()}#`)) scoresCache.delete(k);
+}
+
 /** 그 사용자의 보면 기록 변화(업로드마다 한 점, 시간순). 이전 기록 비공개 등으로 못 받으면 null. */
 export async function getTrackScores(trackId: number, handle: string): Promise<TrackScore[] | null> {
   const key = `${handle.toLowerCase()}#${trackId}`;

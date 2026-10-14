@@ -22,6 +22,11 @@ export interface StampCard {
 const TTL_MS = 5 * 60 * 1000;
 const cache = new Map<string, { at: number; cards: StampCard[] }>();
 
+/** 그 아이디의 스탬프 캐시를 지운다(프로필이 비공개로 바뀌었을 때). */
+export function forgetStampCards(handle: string): void {
+  for (const k of [...cache.keys()]) if (k.endsWith(`:${handle.toLowerCase()}`)) cache.delete(k);
+}
+
 export async function getStampCards(handle: string, region: MaishiftRegion): Promise<StampCard[]> {
   const key = `${region}:${handle.toLowerCase()}`;
   const have = cache.get(key);

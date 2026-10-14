@@ -13,6 +13,8 @@ import { rankImage } from "../rankImages";
 import { callServerFn, FN, MaishiftError, type MaishiftRegion } from "./serverFn";
 import { ratingTargets, sRatingTargets, allRecords, trophyClassOf, historyPoints, versionList, uploadList, type MsProfileResult, type MsRecordsResult, type MsHistoryPoint, type MsUpload } from "./convert";
 import type { PlayRecord } from "../scraper";
+import { forgetStampCards } from "./stamps";
+import { forgetTrackScores } from "./track";
 
 export { MaishiftError } from "./serverFn";
 
@@ -48,6 +50,8 @@ interface Entry {
 const cache = new Map<string, Entry>();
 /** 요청한 지역에 maishift 기록이 없는 연동(예: /설정 기본 서버를 내수판으로 했지만 국제판 기록만 있음). */
 const regionMissing = new Set<string>();
+/** maishift 에서 프로필을 비공개로 한 연동. 확인되면 받아 둔 기록을 모두 지우고 보여 주지 않는다. */
+const privateProfiles = new Set<string>();
 const inflight = new Map<string, Promise<Entry>>();
 
 const regionOf = (link: MaishiftLink): MaishiftRegion => (link.server === "jp" ? "JAPAN" : "ASIA");
@@ -72,7 +76,11 @@ async function refresh(link: MaishiftLink): Promise<Entry> {
   // 캐시가 없으면(재시작 직후·첫 조회) 세 가지를 한꺼번에 요청해 기다리는 시간을 줄인다.
   // 캐시가 있으면 프로필(작음)만 먼저 보고, 업로드 시각이 바뀌었을 때만 나머지를 받는다.
   // 프로필이 제일 느려서(약 2초) 먼저 줄 세운다.
-  const profileReq = callServerFn<MsProfileResult>(FN.profile, args);
+  const profileReq = callServerFn<MsProfileResult>(FN.profile, args).catch((e) => {
+    // 비공개로 바뀌었으면 메모리에 남은 기록도 지운다(다시 공개할 때까지 보여 주지 않음).
+    if (e instanceof MaishiftError && e.kind === "private") forgetUser(link);
+    throw e;
+  });
   const cold = prev ? null : { records: fetchRecords(), history: fetchHistory() };
   cold?.records.catch(() => {});
   const res = await profileReq;
@@ -83,6 +91,7 @@ async function refresh(link: MaishiftLink): Promise<Entry> {
     throw new MaishiftError(`no ${args.region} record (got ${res.region})`, "region_missing");
   }
   regionMissing.delete(key);
+  privateProfiles.delete(key);
   const rec = res.userRecord;
   if (!rec?.profile) throw new MaishiftError("no record for region", "not_found");
   const p = rec.profile;
@@ -186,9 +195,29 @@ async function overlay(profileKey: string, link: MaishiftLink, extras: CachedPro
     e = await getEntry(link);
   } catch (err) {
     console.error(`[maishift] ${link.handle}:`, (err as Error).message);
-    e = cache.get(keyOf(link)) ?? null;
+    // 일시적인 실패면 받아 둔 값으로 답한다. 비공개·지역 없음이면 보여 주지 않는다(그때 캐시는 이미 지웠다).
+    e = privateProfiles.has(keyOf(link)) ? null : cache.get(keyOf(link)) ?? null;
   }
   return e ? toProfile(profileKey, link, e, extras) : null;
+}
+
+/** 비공개로 확인된 사용자의 받아 둔 maishift 데이터를 모두 지운다. 지역과 관계없이 그 아이디 전부. */
+function forgetUser(link: MaishiftLink): void {
+  const handle = link.handle.toLowerCase();
+  for (const server of ["intl", "jp"] as const) {
+    const key = keyOf({ handle: link.handle, server });
+    privateProfiles.add(key);
+    cache.delete(key);
+    uploadsCache.delete(key);
+  }
+  for (const k of [...snapshotCache.keys()]) if (k.split("~")[0].endsWith(`:${handle}`)) snapshotCache.delete(k);
+  forgetStampCards(link.handle);
+  forgetTrackScores(link.handle);
+}
+
+/** 사용자가 maishift 에서 프로필을 비공개로 했다고 확인됐는지. 명령의 "미등록" 안내를 바꾸는 데 쓴다. */
+export function isProfilePrivate(link: MaishiftLink): boolean {
+  return privateProfiles.has(keyOf(link));
 }
 
 /** 이 연동의 서버(지역)에 maishift 기록이 없다고 확인됐는지. 명령의 "미등록" 안내를 바꾸는 데 쓴다. */

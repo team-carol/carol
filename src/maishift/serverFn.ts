@@ -42,7 +42,8 @@ export type MaishiftRegion = "ASIA" | "JAPAN";
 
 export class MaishiftError extends Error {
   /** region_missing: 요청한 지역(ASIA/JAPAN)에 기록이 없음 — maishift 는 이때 그 사람의 대표 지역 기록을 준다. */
-  constructor(message: string, readonly kind: "not_found" | "unavailable" | "format" | "region_missing") { super(message); }
+  /** private: 사용자가 maishift 에서 프로필(개인 성과 페이지)을 비공개로 함 — "User record is not public." */
+  constructor(message: string, readonly kind: "not_found" | "unavailable" | "format" | "region_missing" | "private") { super(message); }
 }
 
 // ─── seroval JSON ───────────────────────────────────────────────────────────
@@ -130,7 +131,10 @@ export async function callServerFn<T>(fn: string, args: Record<string, string | 
     const result = decoded?.result as { error?: unknown } | undefined;
     if (decoded?.error || !result) throw new MaishiftError(String(decoded?.error ?? "no result"), "format");
     // 없는 아이디: result = { error: "Handle not found." }
-    if (typeof result.error === "string") throw new MaishiftError(result.error, /not found/i.test(result.error) ? "not_found" : "unavailable");
+    if (typeof result.error === "string") {
+      const kind = /not found/i.test(result.error) ? "not_found" : /not public/i.test(result.error) ? "private" : "unavailable";
+      throw new MaishiftError(result.error, kind);
+    }
     return result as T;
   });
 }

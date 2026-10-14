@@ -13,6 +13,8 @@ export const MESSAGES = {
   // ── 공통 ────────────────────────────────────────────────────────────────
   "common.selfNotRegistered":
     "maishift 계정이 연동되어 있지 않습니다. `/마이시프트 연동`으로 먼저 연동해 주세요.\n계속해서 해당 메시지가 출력되면 잠시 후 다시 시도해 주세요.",
+  "common.selfMaishiftPrivate": "maishift 프로필이 비공개로 설정되어 있습니다. maishift 설정에서 개인 성과 페이지를 공개해야 캐롤봇에서 볼 수 있습니다.",
+  "common.otherMaishiftPrivate": "{user} 님은 maishift 프로필을 비공개로 설정했습니다.",
   "common.selfRegionMissing": "현재 maishift에 {server} 기록이 없습니다.",
   "common.otherRegionMissing": "{user} 님은 maishift에 {server} 기록이 없습니다.",
   "common.otherNotRegistered": "{user} 님은 아직 maishift 계정을 연동하지 않았습니다.",
@@ -170,6 +172,7 @@ export const MESSAGES = {
   "maishift.notLinked": "연동된 maishift 계정이 없습니다.",
   "maishift.invalidHandle": "maishift 아이디 형식이 올바르지 않습니다. 프로필 주소(maimai.shiftpsh.com/profile/아이디)의 아이디를 입력해 주세요.",
   "maishift.notFound": "maishift에서 **{handle}** 아이디를 찾지 못했습니다. 아이디와 {server} 지역 기록이 있는지 확인해 주세요.",
+  "maishift.privateOnLink": "maishift **{handle}** 프로필이 비공개로 설정되어 있어 연동할 수 없습니다. maishift 설정에서 개인 성과 페이지를 공개한 뒤 다시 시도해 주세요.",
   "maishift.unavailable": "maishift에서 정보를 가져오는 데 실패했습니다. 잠시 후 다시 시도해 주세요.",
   "maishift.credit": "maishift 제공",
   "circle.footer": "{player} · {server} · 마지막 동기화 {synced}",
