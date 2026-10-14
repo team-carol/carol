@@ -13,7 +13,7 @@ export const MESSAGES = {
   // ── 공통 ────────────────────────────────────────────────────────────────
   "common.selfNotRegistered":
     "maishift 계정이 연동되어 있지 않습니다. `/마이시프트 연동`으로 먼저 연동해 주세요.\n계속해서 해당 메시지가 출력되면 잠시 후 다시 시도해 주세요.",
-  "common.selfMaishiftPrivate": "maishift 프로필이 비공개로 설정되어 있습니다. maishift 설정에서 개인 성과 페이지를 공개해야 캐롤봇에서 볼 수 있습니다.",
+  "common.selfMaishiftPrivate": "maishift 프로필이 비공개로 설정되어 있습니다.",
   "common.otherMaishiftPrivate": "{user} 님은 maishift 프로필을 비공개로 설정했습니다.",
   "common.selfRegionMissing": "현재 maishift에 {server} 기록이 없습니다.",
   "common.otherRegionMissing": "{user} 님은 maishift에 {server} 기록이 없습니다.",
