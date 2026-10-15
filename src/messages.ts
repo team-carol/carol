@@ -348,6 +348,8 @@ export const MESSAGES = {
   "status.minutes": "{value}분",
   "status.pingMeasuring": "측정 중",
   "status.none": "없음",
+  // 봇 프로필의 상태 메시지. 30분마다, 서버에 들어가거나 나갈 때, /관리에서 문구를 바꿀 때 다시 적용한다.
+  "status.presence": "v{version} ✦ /북마클릿",
 
   // ── 목표 문구 ───────────────────────────────────────────────────────────
   "goalText.orAbove": "{value} 이상",
@@ -558,9 +560,16 @@ export function validateOverride(key: MessageKey, text: string): string | null {
 }
 
 // DB의 오버라이드를 읽어 캐시에 반영한다. 기동 시와 문구 수정 직후에 호출한다.
+// 문구를 다시 읽은 뒤 바로 다시 그려야 하는 곳(봇 상태 메시지 등)이 등록한다.
+const reloadListeners: (() => void)[] = [];
+export function onMessagesReloaded(fn: () => void): void { reloadListeners.push(fn); }
+
 export async function loadMessages(): Promise<void> {
   const { getMessageOverrides } = await import("./storage");
   const rows = await getMessageOverrides();
   applyMessageOverrides(rows);
   console.log(`[messages] 문구 ${MESSAGE_KEYS.length}개 중 오버라이드 ${overrides.size}개 로드`);
+  for (const fn of reloadListeners) {
+    try { fn(); } catch (e) { console.error("[messages] 다시 읽은 뒤 처리 실패:", e); }
+  }
 }

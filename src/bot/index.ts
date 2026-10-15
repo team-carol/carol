@@ -1,4 +1,4 @@
-import { Client, Events, GatewayIntentBits, ChatInputCommandInteraction, AutocompleteInteraction, ButtonInteraction, REST, Routes, MessageFlags, AttachmentBuilder, EmbedBuilder } from "discord.js";
+import { Client, Events, GatewayIntentBits, ActivityType, ChatInputCommandInteraction, AutocompleteInteraction, ButtonInteraction, REST, Routes, MessageFlags, AttachmentBuilder, EmbedBuilder } from "discord.js";
 import { initEncryption } from "../crypto";
 import { startWebServer, setBaseUrl, setGuildCountProvider, setGatewayPingProvider, getBaseUrl } from "../web";
 import { closeStorage, initializeStorage, loadUserSession, getCachedProfile, clearRatingCardCacheForInactive, getTranslateTitles, getPolicyAck, setPolicyAck, getUnseenPatchNotes, setPatchAck, pruneSimaiCharts, getSimaiChart, getOrphanChartVideos, deleteChartVideo } from "../storage";
@@ -14,7 +14,8 @@ import { recentEmbeds, rtTableEmbed, searchResultEmbeds, getSearchCtx, mapAreaEm
 import { loadConstants } from "../constants";
 import { loadAliases } from "../aliases";
 import { loadRegistryIndex } from "../simai/registryIndex";
-import { loadMessages, msg } from "../messages";
+import { loadMessages, msg, onMessagesReloaded } from "../messages";
+import { appVersion } from "../version";
 import { loadFonts } from "../fonts";
 
 import * as profile      from "./commands/profile";
@@ -101,8 +102,27 @@ client.once(Events.ClientReady, async (c) => {
   void runSimaiChartGC();
   setInterval(() => void runSimaiChartGC(), SIMAI_CHART_GC_INTERVAL_MS);
   startNewsPoller(c);
+  updatePresence();
+  setInterval(updatePresence, PRESENCE_INTERVAL_MS).unref();
   console.log("[maimai] 준비 완료");
 });
+
+// 봇 프로필 아래 상태 메시지("v1.13.3 ✦ /북마클릿"). 문구는 /관리 봇 문구(status.presence)에서 바꾸면 바로 반영된다.
+const PRESENCE_INTERVAL_MS = 30 * 60 * 1000;
+let presenceTimer: NodeJS.Timeout | undefined;
+function updatePresence(): void {
+  if (!client.user) return;
+  const state = msg("status.presence", { version: appVersion(), servers: client.guilds.cache.size.toLocaleString("ko-KR") });
+  client.user.setPresence({ activities: [{ name: "status", type: ActivityType.Custom, state }], status: "online" });
+}
+// 서버 입장·퇴장이 몰려도 한 번만 바꾸도록 잠깐 모았다가 적용한다.
+function schedulePresenceUpdate(): void {
+  clearTimeout(presenceTimer);
+  presenceTimer = setTimeout(updatePresence, 10_000);
+}
+onMessagesReloaded(updatePresence);
+client.on(Events.GuildCreate, schedulePresenceUpdate);
+client.on(Events.GuildDelete, schedulePresenceUpdate);
 
 
 // 업로드된 simai 채보는 링크를 아는 사람만 열 수 있는 임시 자료라 무한히 쌓아둘 이유가 없다.
