@@ -9,6 +9,7 @@ function fake(isButton = false) {
   const i = {
     deferred: false, replied: false,
     isButton: () => isButton,
+    isMessageComponent: () => isButton,
     reply: async (o) => { calls.push(["reply", o]); i.replied = true; },
     deferReply: async (o) => { calls.push(["deferReply", o]); i.deferred = true; },
     editReply: async (o) => { calls.push(["editReply", o]); },
@@ -67,4 +68,13 @@ test("원래 메시지를 고치는 버튼: deferUpdate 후 editReply", async (t
   t.mock.timers.tick(2300);
   await i.update({ content: "page 2" });
   assert.deepEqual(names(calls), ["deferUpdate", "editReply"]);
+});
+
+test("늦은 Components V2 응답: 대신 defer 한 뒤에도 V2 플래그는 남긴다", async (t) => {
+  const { i, calls } = fake();
+  guardSlowAck(i);
+  t.mock.timers.tick(2300);
+  await i.reply({ components: [], flags: MessageFlags.IsComponentsV2 });
+  const edit = calls.find((c) => c[0] === "editReply");
+  assert.equal(edit[1].flags, MessageFlags.IsComponentsV2);
 });

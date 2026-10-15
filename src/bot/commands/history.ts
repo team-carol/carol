@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, ChatInputCommandInteraction, MessageFlags, AttachmentBuilder } from "discord.js";
+import { SlashCommandBuilder, ChatInputCommandInteraction, MessageFlags, AttachmentBuilder, type RepliableInteraction } from "discord.js";
 import { getCachedProfile, getUserFriendCode } from "../../storage";
 import { loadAvatar } from "../utils/embeds";
 import { renderHistoryCard } from "../utils/historyCard";
@@ -33,7 +33,14 @@ export const data = new SlashCommandBuilder()
 const MAX_RATING = calcSongRating(101, 15.0, "AP+") * 50;
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
-  const target = interaction.options.getUser("user") ?? interaction.user;
+  const raw = interaction.options.getString("기간") ?? "all";
+  const period: HistoryPeriod = (HISTORY_PERIODS as readonly string[]).includes(raw) ? (raw as HistoryPeriod) : "all";
+  await show(interaction, (interaction.options.getUser("user") ?? interaction.user).id, period);
+}
+
+/** /히스토리 와 /사진관 버튼이 같이 쓴다. */
+export async function show(interaction: RepliableInteraction, targetId: string, period: HistoryPeriod): Promise<void> {
+  const target = { id: targetId };
   const self = target.id === interaction.user.id;
   const notRegistered = () => notRegisteredNotice(target.id, self);
   const friendCode = await getUserFriendCode(target.id);
@@ -41,8 +48,6 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     await interaction.reply({ content: await notRegistered(), flags: MessageFlags.Ephemeral });
     return;
   }
-  const raw = interaction.options.getString("기간") ?? "all";
-  const period: HistoryPeriod = (HISTORY_PERIODS as readonly string[]).includes(raw) ? (raw as HistoryPeriod) : "all";
 
   await interaction.deferReply();
   const cached = await getCachedProfile(friendCode);

@@ -44,6 +44,7 @@ import * as ratingcalc   from "./commands/ratingcalc";
 import * as maishift     from "./commands/maishift";
 import * as history      from "./commands/history";
 import * as stamp        from "./commands/stamp";
+import * as photo        from "./commands/photo";
 import { initMaishift } from "../maishift";
 import { guardSlowAck } from "./utils/slowAck";
 import { handleTrackButton } from "./utils/trackDetail";
@@ -51,7 +52,7 @@ import { loadRankImages } from "../rankImages";
 
 type Command = { data: { toJSON(): object; name: string }; execute: (i: ChatInputCommandInteraction) => Promise<void>; autocomplete?: (i: AutocompleteInteraction) => Promise<void> };
 
-const COMMANDS: Command[] = [profile, circle, bookmarklet, ratingtable, ratingimage, achievement, fortune, settings, gameOptions, serverSettings, newsSettings, search, status, songrec, random, areaMap, report, admin, goal, chart, ratingcalc, maishift, history, stamp];
+const COMMANDS: Command[] = [profile, circle, bookmarklet, ratingtable, ratingimage, achievement, fortune, settings, gameOptions, serverSettings, newsSettings, search, status, songrec, random, areaMap, report, admin, goal, chart, ratingcalc, maishift, history, stamp, photo];
 const EPHEMERAL_REPLY = { flags: MessageFlags.Ephemeral } as const;
 
 const RATING_CARD_GC_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000;
@@ -292,6 +293,13 @@ client.on(Events.InteractionCreate, async (i) => {
     }
     return;
   }
+  // /사진관 다른 리듬게임 환산·다른 이용자 선택
+  if ((i.isStringSelectMenu() || i.isUserSelectMenu()) && i.customId.startsWith("photo:")) {
+    // 환산 레이팅표는 새 메시지로 보내므로 늦어지면 대신 defer 한다. 이용자 선택은 핸들러가 바로 defer 한다.
+    if (i.isStringSelectMenu()) guardSlowAck(i);
+    try { await photo.handleComponent(i); } catch (e) { console.error("[photo-select]", e); }
+    return;
+  }
   if (i.isButton()) {
     if (i.customId.startsWith("report:")) {
       try { await report.handleButton(i); } catch (e) { console.error("[report-btn]", e); }
@@ -309,6 +317,10 @@ client.on(Events.InteractionCreate, async (i) => {
     }
     if (i.customId.startsWith("chartvid:")) {
       try { await handleChartVideoButton(i); } catch (e) { console.error("[chartvid-btn]", e); }
+      return;
+    }
+    if (i.customId.startsWith("photo:")) {
+      try { await photo.handleComponent(i); } catch (e) { console.error("[photo-btn]", e); }
       return;
     }
     if (i.customId.startsWith("circle:")) {

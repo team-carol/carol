@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, ChatInputCommandInteraction, MessageFlags, AttachmentBuilder } from "discord.js";
+import { SlashCommandBuilder, ChatInputCommandInteraction, MessageFlags, AttachmentBuilder, type RepliableInteraction } from "discord.js";
 import { getDailyAchievementSummaries, getCachedProfile, getUserFriendCode, getTranslateTitles, getMaishiftLink, achievementProfileKeys } from "../../storage";
 import { settleMaishiftRecords } from "../../maishift";
 import { hasCarolSync } from "../utils/syncExtras";
@@ -33,10 +33,14 @@ function isPlayDayKey(value: string): boolean {
 const ACHIEVEMENT_PAGE_SIZE = 5;
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
-  const target = interaction.options.getUser("user") ?? interaction.user;
+  await show(interaction, (interaction.options.getUser("user") ?? interaction.user).id, interaction.options.getString("date") ?? "");
+}
+
+/** /성과 와 /사진관 버튼이 같이 쓴다. requestedDay 가 비면 오늘. */
+export async function show(interaction: RepliableInteraction, targetId: string, requestedDay: string): Promise<void> {
+  const target = { id: targetId };
   const userId = target.id;
   const targetScope = target.id === interaction.user.id ? "self" : "other";
-  const requestedDay = interaction.options.getString("date") ?? "";
   let replyDeferred = false;
   console.log(`[성과] 시작 scope=${targetScope} userSuffix=${userId.slice(-6)} requestedDay=${requestedDay || "today"}`);
   const friendCode = await getUserFriendCode(userId);

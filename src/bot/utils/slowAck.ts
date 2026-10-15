@@ -1,6 +1,6 @@
 import {
   MessageFlags, MessageFlagsBitField,
-  type ButtonInteraction, type ChatInputCommandInteraction, type InteractionReplyOptions, type Message,
+  type MessageComponentInteraction, type ChatInputCommandInteraction, type InteractionReplyOptions, type Message,
 } from "discord.js";
 
 /**
@@ -13,7 +13,7 @@ import {
  */
 const ACK_DEADLINE_MS = 2300;
 
-type Guarded = ChatInputCommandInteraction | ButtonInteraction;
+type Guarded = ChatInputCommandInteraction | MessageComponentInteraction;
 type ReplyOpts = string | (InteractionReplyOptions & { ephemeral?: boolean });
 
 function isEphemeral(opts: unknown): boolean {
@@ -27,10 +27,21 @@ function isEphemeral(opts: unknown): boolean {
   }
 }
 
+function isComponentsV2(opts: unknown): boolean {
+  if (!opts || typeof opts !== "object") return false;
+  const flags = (opts as { flags?: unknown }).flags;
+  try {
+    return flags != null && new MessageFlagsBitField(flags as never).has(MessageFlags.IsComponentsV2);
+  } catch {
+    return false;
+  }
+}
+
+/** 공개/비공개 플래그는 뺀다. Components V2 플래그는 남겨야 컨테이너가 그려진다. */
 function withoutFlags(opts: ReplyOpts): Record<string, unknown> {
   if (typeof opts === "string") return { content: opts };
   const { flags: _f, ephemeral: _e, withResponse: _w, fetchReply: _r, ...rest } = opts as Record<string, unknown>;
-  return rest;
+  return isComponentsV2(opts) ? { ...rest, flags: MessageFlags.IsComponentsV2 } : rest;
 }
 
 /** mode: 버튼이 원래 메시지를 고치는(update) 종류면 "update". 핸들러가 제때 응답하면 타이머는 저절로 꺼진다. */
@@ -44,7 +55,7 @@ export function guardSlowAck(i: Guarded, mode: "reply" | "update" = "reply"): ()
 
   const timer = setTimeout(() => {
     if (acking || i.deferred || i.replied) return;
-    auto = (mode === "update" && i.isButton() ? i.deferUpdate() : i.deferReply()).catch((e) => console.warn("[slow-ack] defer 실패:", (e as Error).message));
+    auto = (mode === "update" && i.isMessageComponent() ? i.deferUpdate() : i.deferReply()).catch((e) => console.warn("[slow-ack] defer 실패:", (e as Error).message));
   }, ACK_DEADLINE_MS);
 
   const target = i as unknown as Record<string, (...args: unknown[]) => Promise<unknown>>;
@@ -52,14 +63,14 @@ export function guardSlowAck(i: Guarded, mode: "reply" | "update" = "reply"): ()
     reply: target.reply.bind(i),
     deferReply: target.deferReply.bind(i),
     editReply: target.editReply.bind(i),
-    update: i.isButton() ? target.update.bind(i) : null,
-    deferUpdate: i.isButton() ? target.deferUpdate.bind(i) : null,
+    update: i.isMessageComponent() ? target.update.bind(i) : null,
+    deferUpdate: i.isMessageComponent() ? target.deferUpdate.bind(i) : null,
   };
 
   const sendPrivate = async (opts: ReplyOpts): Promise<unknown> => {
     if (privateMsg) return i.webhook.editMessage(await privateMsg, withoutFlags(opts));
     if (mode === "reply") await i.deleteReply().catch(() => {});
-    privateMsg = i.followUp({ ...withoutFlags(opts), flags: MessageFlags.Ephemeral });
+    privateMsg = i.followUp({ ...withoutFlags(opts), flags: isComponentsV2(opts) ? MessageFlags.Ephemeral | MessageFlags.IsComponentsV2 : MessageFlags.Ephemeral });
     return privateMsg;
   };
 

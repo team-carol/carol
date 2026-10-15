@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, ChatInputCommandInteraction, ButtonInteraction, MessageFlags, AttachmentBuilder } from "discord.js";
+import { SlashCommandBuilder, ChatInputCommandInteraction, ButtonInteraction, MessageFlags, AttachmentBuilder, type RepliableInteraction } from "discord.js";
 import { getCachedProfile, getUserFriendCode, getCirclePublic, getTranslateTitles } from "../../storage";
 import { circleOf, circleEmbed, circleMembersEmbed, circleButtonsRow } from "../utils/circle";
 import { searchResultEmbeds } from "../utils/embeds";
@@ -42,13 +42,18 @@ async function loadCircle(targetId: string, viewerId: string): Promise<Loaded> {
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   const target = interaction.options.getUser("user") ?? interaction.user;
+  await show(interaction, target.id, interaction.options.getString("형식") === "embed" ? "embed" : "image");
+}
+
+/** /서클 과 /사진관 버튼이 같이 쓴다. */
+export async function show(interaction: RepliableInteraction, targetId: string, format: "image" | "embed"): Promise<void> {
+  const target = { id: targetId };
   const loaded = await loadCircle(target.id, interaction.user.id);
   if ("error" in loaded) {
     await interaction.reply({ content: loaded.error, flags: MessageFlags.Ephemeral });
     return;
   }
   const { circle, cached, circlePublic } = loaded;
-  const format = interaction.options.getString("형식") === "embed" ? "embed" : "image";
   // 과제곡 제목 번역은 보는 사람의 설정을 따른다.
   const translate = await getTranslateTitles(interaction.user.id);
   // 비공개인데 본인이 보는 경우엔 채널에 남기지 않는다.

@@ -361,6 +361,11 @@ export interface MaishiftFuture {
   top: PlayRecord[];
 }
 
+/** 받아 둔 프로필 기준으로 미래시로 볼 세대가 있는지(요청은 하지 않는다). 프로필을 아직 받지 않았으면 null. */
+export function maishiftFutureVersion(link: MaishiftLink): number | null {
+  return cache.get(keyOf(link))?.futureVersion ?? null;
+}
+
 /** 미래시 레이팅 대상. 볼 세대가 없으면(내수판·두 지역 세대가 같을 때) null. */
 export async function getMaishiftFuture(link: MaishiftLink): Promise<MaishiftFuture | null> {
   const entry = await getEntry(link);

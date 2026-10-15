@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, ChatInputCommandInteraction, MessageFlags, AttachmentBuilder } from "discord.js";
+import { SlashCommandBuilder, ChatInputCommandInteraction, MessageFlags, AttachmentBuilder, type RepliableInteraction } from "discord.js";
 import { getCachedProfile, getUserFriendCode, getMaishiftLink, getTranslateTitles } from "../../storage";
 import { loadAvatar } from "../utils/embeds";
 import { renderStampCard } from "../utils/stampCard";
@@ -15,7 +15,12 @@ export const data = new SlashCommandBuilder()
   .addUserOption((opt) => opt.setName("user").setDescription("조회할 유저 (생략 시 본인)").setRequired(false));
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
-  const target = interaction.options.getUser("user") ?? interaction.user;
+  await show(interaction, (interaction.options.getUser("user") ?? interaction.user).id);
+}
+
+/** /스탬프 와 /사진관 버튼이 같이 쓴다. */
+export async function show(interaction: RepliableInteraction, targetId: string): Promise<void> {
+  const target = { id: targetId };
   const self = target.id === interaction.user.id;
   const friendCode = await getUserFriendCode(target.id);
   const link = await getMaishiftLink(target.id);

@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, ChatInputCommandInteraction, MessageFlags, AttachmentBuilder } from "discord.js";
+import { SlashCommandBuilder, ChatInputCommandInteraction, MessageFlags, AttachmentBuilder, type RepliableInteraction } from "discord.js";
 import { getCachedProfile, getUserFriendCode, getTranslateTitles, getMaishiftLink } from "../../storage";
 import { getTopList, getClearList, loadAvatar } from "../utils/embeds";
 import { renderRatingCard, type RatingType } from "../utils/ratingCard";
@@ -42,13 +42,21 @@ function isPlayDayKey(value: string): boolean {
 const dayOf = (ms: number) => kstStamp(ms).slice(0, 10);
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
-  const target = interaction.options.getUser("user") ?? interaction.user;
+  await show(
+    interaction,
+    (interaction.options.getUser("user") ?? interaction.user).id,
+    interaction.options.getString("type") ?? "maimai",
+    (interaction.options.getString("date") ?? "").trim(),
+  );
+}
+
+/** /레이팅표 와 /사진관 버튼이 같이 쓴다. typeOpt: type 옵션 값(maimai·srating·future·다른 게임), dateOpt: 비면 최신. */
+export async function show(interaction: RepliableInteraction, targetId: string, typeOpt: string, dateOpt: string): Promise<void> {
+  const target = { id: targetId };
   const self = target.id === interaction.user.id;
-  const typeOpt = interaction.options.getString("type") ?? "maimai";
   // 미래시는 maimai DX 레이팅표를 다음 버전 기준으로 다시 계산한 것이다.
   const future = typeOpt === "future";
   const type: RatingType = typeOpt === "srating" || isGameId(typeOpt) ? typeOpt : "maimai";
-  const dateOpt = (interaction.options.getString("date") ?? "").trim();
   const userId = target.id;
   if (dateOpt && !isPlayDayKey(dateOpt)) {
     await interaction.reply({ content: msg("ratingImage.snapshotBadDate"), flags: MessageFlags.Ephemeral });
