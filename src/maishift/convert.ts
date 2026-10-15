@@ -45,6 +45,10 @@ export interface MsProfileResult {
     /** S-레이팅 대상(DX 점수 기준 상위 50) */
     ratingsS?: number[];
     availableVersions?: { value: number; name: string; releasedAt: string }[];
+    /** 그 지역의 최신 세대 번호 */
+    regionLatestVersion?: number;
+    /** 미래시 세대 번호. 내수판이 앞서 있으면 regionLatestVersion 보다 크다. 그 세대 상수로 본 프로필은 handle 을 `<handle>:<세대>` 로 넘겨 받는다. */
+    futureVersion?: number | null;
   } | null;
   ban?: { banned: boolean };
   /** 이전 기록(업로드별 스냅샷)을 볼 수 있는지 — 사용자의 maishift "이전 기록 공개" 설정 */
@@ -91,6 +95,12 @@ export function ratingTargets(rec: NonNullable<MsProfileResult["userRecord"]>): 
     .map((idx) => tracks[idx])
     .filter((t): t is MsTrack & { r: MsRecord } => !!t && played(t) && !!songs[t.s])
     .map((t) => toPlayRecord(songs[t.s], t));
+}
+
+/** 레이팅 대상곡의 곡별 레이팅(소수점 아래 버림) 합. 미래시처럼 프로필 레이팅과 다른 세대로 볼 때 쓴다. */
+export function ratingTargetSum(rec: NonNullable<MsProfileResult["userRecord"]>): number {
+  const { tracks } = rec.tracks;
+  return [...rec.ratingsLatest, ...rec.ratingsOld].reduce((sum, idx) => sum + Math.floor(tracks[idx]?.r?.g ?? 0), 0);
 }
 
 /** S-레이팅 대상곡(maishift 가 고른 50곡). */

@@ -32,6 +32,10 @@ export const MESSAGES = {
   "ratingImage.snapshotFailed": "maishift에서 이전 기록을 불러오는데 실패했습니다. 잠시 뒤에 다시 시도해 주세요.",
   "ratingImage.pastPrivateSelf": "maishift에서 이전 기록 공개 설정이 꺼져 있어 과거 레이팅표를 볼 수 없습니다.",
   "ratingImage.pastPrivate": "{user} 님은 maishift에서 이전 기록을 공개하지 않았습니다.",
+  "ratingImage.futureNotice": "- {version} 기준 미래시 레이팅표입니다. 내수판의 {version} 상수와 신곡 범위로 계산했고, 지금 레이팅은 {rating}입니다.",
+  "ratingImage.futureNone": "지금은 미래시로 볼 버전이 없습니다. 미래시는 내수판이 국제판보다 앞선 버전일 때 국제판 기록으로만 볼 수 있습니다.",
+  "ratingImage.futureWithDate": "미래시는 날짜와 함께 볼 수 없습니다. date 옵션을 빼고 다시 실행해 주세요.",
+  "ratingImage.futureFailed": "maishift에서 미래시를 불러오는데 실패했습니다. 잠시 뒤에 다시 시도해 주세요.",
   "ratingImage.sRatingNoData": "S-레이팅을 계산할 디럭스코어 기록이 없습니다.",
   "ratingImage.renderFailed": "이미지 생성에 실패했습니다.",
 

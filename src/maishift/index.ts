@@ -11,7 +11,7 @@ import type { CachedProfile, MaishiftHistoryPoint, MaishiftVersion } from "../st
 import { applyMaishiftUpdate } from "./sync";
 import { rankImage } from "../rankImages";
 import { callServerFn, FN, MaishiftError, type MaishiftRegion } from "./serverFn";
-import { ratingTargets, sRatingTargets, allRecords, trophyClassOf, historyPoints, versionList, uploadList, type MsProfileResult, type MsRecordsResult, type MsHistoryPoint, type MsUpload } from "./convert";
+import { ratingTargets, ratingTargetSum, sRatingTargets, allRecords, trophyClassOf, historyPoints, versionList, uploadList, type MsProfileResult, type MsRecordsResult, type MsHistoryPoint, type MsUpload } from "./convert";
 import type { PlayRecord } from "../scraper";
 import { forgetStampCards } from "./stamps";
 import { forgetTrackScores } from "./track";
@@ -45,6 +45,8 @@ interface Entry {
   versions: MaishiftVersion[];
   /** maishift "이전 기록 공개" 설정 */
   pastRecordsVisible: boolean;
+  /** 미래시로 볼 세대(내수판이 앞서 있을 때). 없으면 null. */
+  futureVersion: number | null;
 }
 
 const cache = new Map<string, Entry>();
@@ -130,6 +132,7 @@ async function refresh(link: MaishiftLink): Promise<Entry> {
     history,
     versions: versionList(rec.availableVersions),
     pastRecordsVisible: res.pastRecordsVisible === true,
+    futureVersion: rec.futureVersion != null && rec.futureVersion > (rec.regionLatestVersion ?? Infinity) ? rec.futureVersion : null,
   };
   remember(key, entry);
   return entry;
@@ -231,6 +234,7 @@ function forgetUser(link: MaishiftLink): void {
     privateProfiles.add(key);
     cache.delete(key);
     uploadsCache.delete(key);
+    for (const k of [...futureCache.keys()]) if (k.startsWith(`${key}:`)) futureCache.delete(k);
   }
   for (const k of [...snapshotCache.keys()]) if (k.split("~")[0].endsWith(`:${handle}`)) snapshotCache.delete(k);
   forgetStampCards(link.handle);
@@ -343,6 +347,36 @@ export async function getMaishiftSnapshot(link: MaishiftLink, before: number): P
   snapshotCache.set(cacheKey, snapshot);
   while (snapshotCache.size > SNAPSHOT_CACHE_MAX) snapshotCache.delete(snapshotCache.keys().next().value!);
   return { kind: "ok", snapshot };
+}
+
+// 미래시: 내수판에 먼저 나온 세대의 상수·신곡 범위로 다시 계산한 레이팅 대상. maishift 프로필 화면의 "미래시 보기".
+// 그 세대 상수는 바뀔 수 있으므로 업로드 시각이 같아도 PROFILE_TTL_MS 가 지나면 다시 받는다.
+const futureCache = new Map<string, { at: number; future: MaishiftFuture }>();
+
+export interface MaishiftFuture {
+  versionId: number;
+  /** 그 세대 기준 레이팅(레이팅 대상곡 레이팅 합) */
+  rating: number;
+  /** 레이팅 대상(신곡 15 → 구곡 35) */
+  top: PlayRecord[];
+}
+
+/** 미래시 레이팅 대상. 볼 세대가 없으면(내수판·두 지역 세대가 같을 때) null. */
+export async function getMaishiftFuture(link: MaishiftLink): Promise<MaishiftFuture | null> {
+  const entry = await getEntry(link);
+  const version = entry.futureVersion;
+  if (version === null) return null;
+  const cacheKey = `${keyOf(link)}:${version}@${entry.updatedAt}`;
+  const memo = futureCache.get(cacheKey);
+  if (memo && Date.now() - memo.at < PROFILE_TTL_MS) return memo.future;
+  const res = await callServerFn<MsProfileResult>(FN.profile, { handle: `${link.handle}:${version}`, region: regionOf(link) });
+  const rec = res.userRecord;
+  if (!rec?.profile) throw new MaishiftError("no future record", "not_found");
+  const future: MaishiftFuture = { versionId: version, rating: ratingTargetSum(rec), top: ratingTargets(rec) };
+  futureCache.delete(cacheKey);
+  futureCache.set(cacheKey, { at: Date.now(), future });
+  while (futureCache.size > SNAPSHOT_CACHE_MAX) futureCache.delete(futureCache.keys().next().value!);
+  return future;
 }
 
 // 곡 목록·상수·한국어 번역은 src/constants.ts 가 maishift 곡 목록에서 하루 한 번 받는다.
