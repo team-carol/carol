@@ -16,6 +16,7 @@ import { loadAliases } from "../aliases";
 import { loadNameTranslations, backfillAreaNames } from "../nameTranslations";
 import { loadRegistryIndex } from "../simai/registryIndex";
 import { loadMessages, msg } from "../messages";
+import { appVersion } from "../version";
 import { loadFonts } from "../fonts";
 
 import * as profile      from "./commands/profile";
@@ -124,13 +125,13 @@ client.once(Events.ClientReady, async (c) => {
   console.log("[maimai] 준비 완료");
 });
 
-// 봇 프로필 아래 상태 메시지("N개의 서버에서 활동 중"). 문구는 /관리 봇 문구(status.presence)에서 바꿀 수 있고,
+// 봇 프로필 아래 상태 메시지("v1.13.2 | /마이시프트 연동"). 문구는 /관리 봇 문구(status.presence)에서 바꿀 수 있고,
 // 바꾼 문구는 다음 갱신(최대 30분) 때 반영된다.
 const PRESENCE_INTERVAL_MS = 30 * 60 * 1000;
 let presenceTimer: NodeJS.Timeout | undefined;
 function updatePresence(): void {
   if (!client.user) return;
-  const state = msg("status.presence", { servers: client.guilds.cache.size.toLocaleString("ko-KR") });
+  const state = msg("status.presence", { version: appVersion(), servers: client.guilds.cache.size.toLocaleString("ko-KR") });
   client.user.setPresence({ activities: [{ name: "status", type: ActivityType.Custom, state }], status: "online" });
 }
 // 서버 입장·퇴장이 몰려도 한 번만 바꾸도록 잠깐 모았다가 적용한다.
