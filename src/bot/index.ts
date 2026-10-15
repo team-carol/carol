@@ -288,6 +288,10 @@ client.on(Events.InteractionCreate, async (i) => {
     return;
   }
   if (i.isModalSubmit()) {
+    if (i.customId.startsWith("photo:")) {
+      try { await photo.handleModal(i); } catch (e) { console.error("[photo-modal]", e); }
+      return;
+    }
     if (i.customId.startsWith("report:modal:")) {
       try { await report.handleModal(i); } catch (e) { console.error("[report-modal]", e); }
     }

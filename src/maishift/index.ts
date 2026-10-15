@@ -15,6 +15,7 @@ import { ratingTargets, ratingTargetSum, sRatingTargets, allRecords, trophyClass
 import type { PlayRecord } from "../scraper";
 import { forgetStampCards } from "./stamps";
 import { forgetTrackScores } from "./track";
+import { koreaPlayDayKey } from "../achievements";
 
 export { MaishiftError } from "./serverFn";
 
@@ -317,6 +318,14 @@ async function uploadsOf(link: MaishiftLink): Promise<MsUpload[]> {
   uploadsCache.set(key, { at: Date.now(), list });
   while (uploadsCache.size > MAX_ENTRIES) uploadsCache.delete(uploadsCache.keys().next().value!);
   return list;
+}
+
+/** maishift 에 업로드한 날(오전 4시 기준 하루, 최근 순). 이전 기록을 공개하지 않았으면 null. /사진관 과거 레이팅표 날짜 목록용. */
+export async function getMaishiftUploadDays(link: MaishiftLink): Promise<string[] | null> {
+  const entry = await getEntry(link);
+  if (!entry.pastRecordsVisible) return null;
+  const list = await uploadsOf(link);
+  return [...new Set([...list].reverse().map((u) => koreaPlayDayKey(new Date(u.at))))];
 }
 
 /** before(ms) 보다 앞선 마지막 업로드의 프로필. */
