@@ -20,27 +20,37 @@ import * as history from "./history";
 
 // /사진관: maishift 사진관처럼 이미지 명령을 한곳에 모은 메뉴(Components V2 컨테이너).
 // 사진 종류와 이용자를 고르고 맨 아래 버튼을 누르면 그때 이미지를 만들어 메뉴 아래 새 메시지로 보낸다.
-// 고른 값은 메시지 컴포넌트에만 둔다(선택 메뉴 기본값·버튼 customId).
-// customId — 종류 photo:kind:<메뉴 주인>:<대상>, 이용자 photo:user:<메뉴 주인>:<종류>, 만들기 photo:make:<대상>:<종류>.
+// 레이팅표를 고르면 그 아래에 레이팅 종류(maimai DX·미래시·S-레이팅·다른 게임 변환) 선택 메뉴가 생긴다.
+// 고른 값은 메시지 컴포넌트에만 둔다(선택 메뉴 기본값·customId). <선택> 은 "<종류>.<레이팅 종류>".
+// customId — 종류 photo:kind:<메뉴 주인>:<대상>:<선택>, 레이팅 종류 photo:rtype:<메뉴 주인>:<대상>:<선택>,
+//            이용자 photo:user:<메뉴 주인>:<선택>, 만들기 photo:make:<대상>:<선택>.
 export const data = new SlashCommandBuilder()
   .setName("사진관")
   .setDescription("프로필·레이팅표·성과 같은 이미지를 한곳에서 만들기");
 
-/** 사진 종류. 다른 리듬게임 환산 레이팅표는 게임 id 를 그대로 쓴다. */
-const BASE_KINDS = ["rating", "future", "srating", "profile", "history", "achievement", "stamp", "circle"] as const;
-type BaseKind = (typeof BASE_KINDS)[number];
-const GAME_KINDS = Object.values(GAMES).filter((g) => g.id !== "maimai");
-const DEFAULT_KIND = "profile";
+const KINDS = ["rating", "profile", "history", "achievement", "stamp", "circle"] as const;
+type Kind = (typeof KINDS)[number];
+/** 레이팅표 종류. 다른 리듬게임 변환은 게임 id 를 그대로 쓴다(/레이팅표 type 옵션 값과 같다). */
+const RATING_TYPES = ["maimai", "future", "srating", ...Object.values(GAMES).filter((g) => g.id !== "maimai").map((g) => g.id)];
+interface Selection { kind: string; rtype: string }
+const DEFAULT: Selection = { kind: "profile", rtype: "maimai" };
 
-function kindLabel(kind: string): string {
-  return isGameId(kind) ? msg("photo.kind.game", { game: GAMES[kind].label }) : msg(`photo.kind.${kind as BaseKind}`);
+const encode = (sel: Selection) => `${sel.kind}.${sel.rtype}`;
+function decode(raw: string): Selection {
+  const [kind = DEFAULT.kind, rtype = DEFAULT.rtype] = raw.split(".");
+  return { kind, rtype };
+}
+
+function ratingTypeLabel(rtype: string): string {
+  if (rtype === "future" || rtype === "srating" || rtype === "maimai") return msg(`photo.ratingType.${rtype}`);
+  return isGameId(rtype) ? msg("photo.ratingType.game", { game: GAMES[rtype].label }) : rtype;
 }
 
 /**
  * 대상이 연동하지 않았어도 메뉴는 띄운다(다른 이용자를 고를 수 있게). 그때는 안내문을 넣고 종류·만들기를 끈다.
- * 대상에게 없는 종류(미래시 버전이 없음, 서클 정보가 없음)는 목록에서 뺀다.
+ * 대상에게 없는 것(미래시 버전이 없음, 서클 정보가 없음)은 목록에서 뺀다.
  */
-async function buildMenu(targetId: string, ownerId: string, wanted: string = DEFAULT_KIND): Promise<ContainerBuilder> {
+async function buildMenu(targetId: string, ownerId: string, wanted: Selection = DEFAULT): Promise<ContainerBuilder> {
   const self = targetId === ownerId;
   const friendCode = await getUserFriendCode(targetId);
   const cached = friendCode ? await getCachedProfile(friendCode).catch(() => null) : null;
@@ -51,14 +61,17 @@ async function buildMenu(targetId: string, ownerId: string, wanted: string = DEF
     if (!link || maishiftFutureVersion(link) === null) unavailable.add("future");
     if (!hasCarolSync(cached) || !circleOf(cached)) unavailable.add("circle");
   }
-  // 다른 리듬게임 환산은 맨 아래에.
-  const kinds: string[] = [...BASE_KINDS, ...GAME_KINDS.map((g) => g.id)].filter((k) => !unavailable.has(k));
-  const kind = kinds.includes(wanted) ? wanted : DEFAULT_KIND;
+  const kinds = KINDS.filter((k) => !unavailable.has(k));
+  const rtypes = RATING_TYPES.filter((t) => !unavailable.has(t));
+  const sel: Selection = {
+    kind: (kinds as readonly string[]).includes(wanted.kind) ? wanted.kind : DEFAULT.kind,
+    rtype: rtypes.includes(wanted.rtype) ? wanted.rtype : DEFAULT.rtype,
+  };
   const title = cached
     ? msg("photo.title", { name: cached.playerName || "—", user: `<@${targetId}>` })
     : msg("photo.titleNotRegistered", { user: `<@${targetId}>`, notice: await notRegisteredNotice(targetId, self) });
 
-  return new ContainerBuilder()
+  const container = new ContainerBuilder()
     .setAccentColor(parseInt(BRAND.accent.slice(1), 16))
     .addTextDisplayComponents((t) => t.setContent(title))
     .addSeparatorComponents((s) => s.setSpacing(SeparatorSpacingSize.Small))
@@ -66,17 +79,29 @@ async function buildMenu(targetId: string, ownerId: string, wanted: string = DEF
     .addActionRowComponents(
       new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
         new StringSelectMenuBuilder()
-          .setCustomId(`photo:kind:${ownerId}:${targetId}`)
+          .setCustomId(`photo:kind:${ownerId}:${targetId}:${encode(sel)}`)
           .setPlaceholder(msg("photo.kindPlaceholder"))
           .setDisabled(!cached)
-          .addOptions(kinds.map((k) => ({ label: kindLabel(k), value: k, default: k === kind }))),
+          .addOptions(kinds.map((k) => ({ label: msg(`photo.kind.${k}`), value: k, default: k === sel.kind }))),
       ),
-    )
+    );
+  if (cached && sel.kind === "rating") {
+    container
+      .addTextDisplayComponents((t) => t.setContent(msg("photo.ratingTypeHeading")))
+      .addActionRowComponents(
+        new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
+          new StringSelectMenuBuilder()
+            .setCustomId(`photo:rtype:${ownerId}:${targetId}:${encode(sel)}`)
+            .addOptions(rtypes.map((t) => ({ label: ratingTypeLabel(t), value: t, default: t === sel.rtype }))),
+        ),
+      );
+  }
+  return container
     .addTextDisplayComponents((t) => t.setContent(msg("photo.userHeading")))
     .addActionRowComponents(
       new ActionRowBuilder<UserSelectMenuBuilder>().addComponents(
         new UserSelectMenuBuilder()
-          .setCustomId(`photo:user:${ownerId}:${kind}`)
+          .setCustomId(`photo:user:${ownerId}:${encode(sel)}`)
           .setPlaceholder(msg("photo.userPlaceholder"))
           .setDefaultUsers(targetId),
       ),
@@ -85,8 +110,8 @@ async function buildMenu(targetId: string, ownerId: string, wanted: string = DEF
     .addActionRowComponents(
       new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder()
-          .setCustomId(`photo:make:${targetId}:${kind}`)
-          .setLabel(msg("photo.make", { kind: kindLabel(kind) }))
+          .setCustomId(`photo:make:${targetId}:${encode(sel)}`)
+          .setLabel(msg("photo.make", { kind: msg(`photo.kind.${sel.kind as Kind}`) }))
           .setStyle(ButtonStyle.Primary)
           .setDisabled(!cached),
       ),
@@ -101,38 +126,37 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 /**
  * 메뉴 주인이 고르면 메뉴를 고치고, 다른 사람이 고르면 공개 메뉴는 두고 그 사람에게만 새 메뉴를 보여 준다.
  */
-async function rebuild(i: StringSelectMenuInteraction | UserSelectMenuInteraction, ownerId: string, targetId: string, kind: string): Promise<void> {
+async function rebuild(i: StringSelectMenuInteraction | UserSelectMenuInteraction, ownerId: string, targetId: string, sel: Selection): Promise<void> {
   const own = i.user.id === ownerId;
   if (own) await i.deferUpdate();
   else await i.deferReply({ flags: MessageFlags.Ephemeral });
-  const menu = await buildMenu(targetId, i.user.id, kind);
+  const menu = await buildMenu(targetId, i.user.id, sel);
   await i.editReply({ components: [menu], flags: MessageFlags.IsComponentsV2 });
 }
 
 /** photo: 로 시작하는 버튼·선택 메뉴. */
 export async function handleComponent(i: ButtonInteraction | StringSelectMenuInteraction | UserSelectMenuInteraction): Promise<void> {
-  const [, action = "", a = "", b = ""] = i.customId.split(":");
+  const [, action = "", a = "", b = "", c = ""] = i.customId.split(":");
   if (i.isUserSelectMenu()) {
     const picked = i.values[0];
     if (!picked) { await i.deferUpdate(); return; }
-    await rebuild(i, a, picked, b);
+    await rebuild(i, a, picked, decode(b));
     return;
   }
   if (i.isStringSelectMenu()) {
-    if (action === "kind" && i.values[0]) await rebuild(i, a, b, i.values[0]);
+    const value = i.values[0];
+    if (!value) return;
+    const sel = decode(c);
+    if (action === "kind") await rebuild(i, a, b, { ...sel, kind: value });
+    else if (action === "rtype") await rebuild(i, a, b, { ...sel, rtype: value });
     return;
   }
   if (action !== "make") return;
-  const [targetId, kind] = [a, b];
-  if (isGameId(kind)) {
-    await ratingimage.show(i, targetId, kind, "");
-    return;
-  }
-  switch (kind as BaseKind) {
+  const targetId = a;
+  const sel = decode(b);
+  switch (sel.kind as Kind) {
+    case "rating": await ratingimage.show(i, targetId, sel.rtype, ""); return;
     case "profile": await profile.show(i, targetId, "image"); return;
-    case "rating": await ratingimage.show(i, targetId, "maimai", ""); return;
-    case "future": await ratingimage.show(i, targetId, "future", ""); return;
-    case "srating": await ratingimage.show(i, targetId, "srating", ""); return;
     case "history": await history.show(i, targetId, "all"); return;
     case "achievement": await achievement.show(i, targetId, ""); return;
     case "stamp": await stamp.show(i, targetId); return;
