@@ -637,9 +637,16 @@ export function validateOverride(key: MessageKey, text: string): string | null {
 }
 
 // DB의 오버라이드를 읽어 캐시에 반영한다. 기동 시와 문구 수정 직후에 호출한다.
+// 문구를 다시 읽은 뒤 바로 다시 그려야 하는 곳(봇 상태 메시지 등)이 등록한다.
+const reloadListeners: (() => void)[] = [];
+export function onMessagesReloaded(fn: () => void): void { reloadListeners.push(fn); }
+
 export async function loadMessages(): Promise<void> {
   const { getMessageOverrides } = await import("./storage");
   const rows = await getMessageOverrides();
   applyMessageOverrides(rows);
   console.log(`[messages] 문구 ${MESSAGE_KEYS.length}개 중 오버라이드 ${overrides.size}개 로드`);
+  for (const fn of reloadListeners) {
+    try { fn(); } catch (e) { console.error("[messages] 다시 읽은 뒤 처리 실패:", e); }
+  }
 }

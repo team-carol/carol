@@ -15,7 +15,7 @@ import { loadConstants } from "../constants";
 import { loadAliases } from "../aliases";
 import { loadNameTranslations, backfillAreaNames } from "../nameTranslations";
 import { loadRegistryIndex } from "../simai/registryIndex";
-import { loadMessages, msg } from "../messages";
+import { loadMessages, msg, onMessagesReloaded } from "../messages";
 import { appVersion } from "../version";
 import { loadFonts } from "../fonts";
 
@@ -125,8 +125,7 @@ client.once(Events.ClientReady, async (c) => {
   console.log("[maimai] 준비 완료");
 });
 
-// 봇 프로필 아래 상태 메시지("v1.13.2 | /마이시프트 연동"). 문구는 /관리 봇 문구(status.presence)에서 바꿀 수 있고,
-// 바꾼 문구는 다음 갱신(최대 30분) 때 반영된다.
+// 봇 프로필 아래 상태 메시지("v1.13.2 | /마이시프트 연동"). 문구는 /관리 봇 문구(status.presence)에서 바꾸면 바로 반영된다.
 const PRESENCE_INTERVAL_MS = 30 * 60 * 1000;
 let presenceTimer: NodeJS.Timeout | undefined;
 function updatePresence(): void {
@@ -139,6 +138,7 @@ function schedulePresenceUpdate(): void {
   clearTimeout(presenceTimer);
   presenceTimer = setTimeout(updatePresence, 10_000);
 }
+onMessagesReloaded(updatePresence);
 client.on(Events.GuildCreate, schedulePresenceUpdate);
 client.on(Events.GuildDelete, schedulePresenceUpdate);
 
