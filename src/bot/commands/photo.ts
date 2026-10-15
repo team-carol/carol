@@ -22,10 +22,10 @@ import * as stamp from "./stamp";
 import * as history from "./history";
 
 // /사진관: maishift 사진관처럼 이미지 명령을 한곳에 모은 메뉴(Components V2 컨테이너).
-// 사진 종류와 유저를 고르고 맨 아래 버튼을 누르면 그때 이미지를 만들어 메뉴 아래 새 메시지로 보낸다.
+// 메뉴는 실행한 사람에게만 보인다. 사진 종류와 유저를 고르고 맨 아래 버튼을 누르면 그때 이미지를 만들어 채널에 새 메시지로 보낸다.
 // 명령어에 있던 추가 옵션은 사진 종류에 따라 그 아래에 선택 메뉴로 생긴다:
 //   레이팅표 — 레이팅 종류(maimai DX·미래시·S-레이팅·다른 게임 변환), 날짜(maimai DX·S-레이팅만, maishift 업로드한 날)
-//   프로필·서클 — 형식(이미지·임베드) / 히스토리 — 기간 / 성과 — 날짜(성과가 있는 날)
+//   히스토리 — 기간 / 성과 — 날짜(성과가 있는 날). 프로필·서클은 이미지로만 만든다.
 // 날짜 선택 메뉴의 "직접 입력"을 고르면 입력 창(모달)이 뜬다(메시지에는 텍스트 입력을 넣을 수 없다).
 // 고른 값은 메시지 컴포넌트에만 둔다. <선택> 은 "<종류>.<옵션1>.<옵션2>" 이고, 종류를 바꾸면 옵션은 그 종류의 기본값으로.
 // customId — 종류 photo:kind:<주인>:<대상>:<선택>, 옵션 photo:o1|o2:<주인>:<대상>:<선택>, 날짜 입력 창 photo:date:<주인>:<대상>:<선택>:<o1|o2>,
@@ -40,10 +40,9 @@ type Kind = (typeof KINDS)[number];
 const RATING_TYPES = ["maimai", "future", "srating", ...Object.values(GAMES).filter((g) => g.id !== "maimai").map((g) => g.id)];
 /** 과거 날짜를 볼 수 있는 레이팅 종류(maishift 이전 기록이 주는 것). */
 const DATED_RATING_TYPES = ["maimai", "srating"];
-const FORMATS = ["image", "embed"];
 /** 종류마다 옵션 기본값. 날짜는 "" 이 최신(레이팅표)·오늘(성과). */
 const DEFAULT_OPTS: Record<Kind, [string, string]> = {
-  rating: ["maimai", ""], profile: ["image", ""], circle: ["image", ""], history: ["all", ""], achievement: ["", ""], stamp: ["", ""],
+  rating: ["maimai", ""], profile: ["", ""], circle: ["", ""], history: ["all", ""], achievement: ["", ""], stamp: ["", ""],
 };
 const DATE_INPUT = "input";
 /** 날짜 선택 메뉴의 첫 항목(최신·오늘). 선택 메뉴 값은 비울 수 없어서 따로 둔다. 선택에는 "" 로 담는다. */
@@ -53,7 +52,7 @@ const MAX_DAYS = 22;
 const ACHIEVEMENT_DAYS_LOOKBACK_MS = 180 * 24 * 60 * 60 * 1000;
 
 interface Selection { kind: Kind; o1: string; o2: string }
-const DEFAULT: Selection = { kind: "profile", o1: "image", o2: "" };
+const DEFAULT: Selection = { kind: "profile", o1: "", o2: "" };
 
 const encode = (sel: Selection) => `${sel.kind}.${sel.o1}.${sel.o2}`;
 function decode(raw: string): Selection {
@@ -118,9 +117,6 @@ async function buildMenu(targetId: string, ownerId: string, wanted: Selection = 
       const days = DATED_RATING_TYPES.includes(sel.o1) && link ? await getMaishiftUploadDays(link).catch(() => null) : null;
       if (days) rows.push(dateRow(msg("photo.dateHeading"), "o2", msg("photo.dateLatest"), days, isDay(sel.o2) ? sel.o2 : ""));
       if (!days || !isDay(sel.o2)) sel.o2 = "";
-    } else if (sel.kind === "profile" || sel.kind === "circle") {
-      if (!FORMATS.includes(sel.o1)) sel.o1 = "image";
-      rows.push({ heading: msg("photo.formatHeading"), slot: "o1", value: sel.o1, options: FORMATS.map((f) => ({ label: msg(`photo.format.${f as "image" | "embed"}`), value: f })) });
     } else if (sel.kind === "history") {
       if (!(HISTORY_PERIODS as readonly string[]).includes(sel.o1)) sel.o1 = "all";
       rows.push({ heading: msg("photo.periodHeading"), slot: "o1", value: sel.o1, options: HISTORY_PERIODS.map((p) => ({ label: msg(`history.period.${p}`), value: p })) });
@@ -189,7 +185,7 @@ async function buildMenu(targetId: string, ownerId: string, wanted: Selection = 
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   const menu = await buildMenu(interaction.user.id, interaction.user.id);
-  await interaction.reply({ components: [menu], flags: MessageFlags.IsComponentsV2 });
+  await interaction.reply({ components: [menu], flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral });
 }
 
 /**
@@ -238,8 +234,8 @@ export async function handleComponent(i: ButtonInteraction | StringSelectMenuInt
   const sel = decode(b);
   switch (sel.kind) {
     case "rating": await ratingimage.show(i, targetId, sel.o1 || "maimai", sel.o2); return;
-    case "profile": await profile.show(i, targetId, sel.o1 === "embed" ? "embed" : "image"); return;
-    case "circle": await circle.show(i, targetId, sel.o1 === "embed" ? "embed" : "image"); return;
+    case "profile": await profile.show(i, targetId, "image"); return;
+    case "circle": await circle.show(i, targetId, "image"); return;
     case "history": await history.show(i, targetId, (HISTORY_PERIODS as readonly string[]).includes(sel.o1) ? sel.o1 as (typeof HISTORY_PERIODS)[number] : "all"); return;
     case "achievement": await achievement.show(i, targetId, sel.o1); return;
     case "stamp": await stamp.show(i, targetId); return;
