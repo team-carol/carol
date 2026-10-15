@@ -23,30 +23,33 @@ import * as history from "./history";
 // customId — 버튼 photo:<종류>:<대상 userId>, 다른 게임 환산 photo:game:<대상>, 다른 이용자 photo:user:<메뉴 주인>.
 export const data = new SlashCommandBuilder()
   .setName("사진관")
-  .setDescription("프로필·레이팅표·성과 같은 이미지를 한곳에서 만들기 (생략 시 본인)")
-  .addUserOption((opt) => opt.setName("user").setDescription("조회할 유저 (생략 시 본인)").setRequired(false));
+  .setDescription("프로필·레이팅표·성과 같은 이미지를 한곳에서 만들기");
 
 const KINDS = ["profile", "rating", "future", "srating", "history", "achievement", "stamp", "circle"] as const;
 type Kind = (typeof KINDS)[number];
 
-async function buildMenu(targetId: string, ownerId: string): Promise<{ error: string } | { container: ContainerBuilder }> {
+/**
+ * 대상이 연동하지 않았어도 메뉴는 띄운다(다른 이용자를 고를 수 있게). 그때는 안내문을 넣고 사진 버튼을 모두 끈다.
+ */
+async function buildMenu(targetId: string, ownerId: string): Promise<ContainerBuilder> {
   const self = targetId === ownerId;
   const friendCode = await getUserFriendCode(targetId);
-  const cached = friendCode ? await getCachedProfile(friendCode) : null;
-  if (!cached) return { error: await notRegisteredNotice(targetId, self) };
-  const link = await getMaishiftLink(targetId);
+  const cached = friendCode ? await getCachedProfile(friendCode).catch(() => null) : null;
+  const link = cached ? await getMaishiftLink(targetId) : null;
   // 프로필을 받아 둔 뒤라 요청 없이 알 수 있는 것만으로 못 쓰는 버튼을 끈다.
-  const disabled: Partial<Record<Kind, boolean>> = {
-    future: !link || maishiftFutureVersion(link) === null,
-    circle: !hasCarolSync(cached) || !circleOf(cached),
-  };
+  const disabled: Partial<Record<Kind, boolean>> = cached
+    ? { future: !link || maishiftFutureVersion(link) === null, circle: !hasCarolSync(cached) || !circleOf(cached) }
+    : Object.fromEntries(KINDS.map((k) => [k, true]));
   const button = (kind: Kind, style = ButtonStyle.Secondary) =>
     new ButtonBuilder().setCustomId(`photo:${kind}:${targetId}`).setLabel(msg(`photo.button.${kind}`)).setStyle(style).setDisabled(!!disabled[kind]);
   const games = Object.values(GAMES).filter((g) => g.id !== "maimai");
+  const title = cached
+    ? msg("photo.title", { name: cached.playerName || "—", user: `<@${targetId}>` })
+    : msg("photo.titleNotRegistered", { user: `<@${targetId}>`, notice: await notRegisteredNotice(targetId, self) });
 
   const container = new ContainerBuilder()
     .setAccentColor(parseInt(BRAND.accent.slice(1), 16))
-    .addTextDisplayComponents((t) => t.setContent(msg("photo.title", { name: cached.playerName || "—", user: `<@${targetId}>` })))
+    .addTextDisplayComponents((t) => t.setContent(title))
     .addSeparatorComponents((s) => s.setSpacing(SeparatorSpacingSize.Small))
     .addTextDisplayComponents((t) => t.setContent(msg("photo.photosHeading")))
     .addActionRowComponents(
@@ -59,6 +62,7 @@ async function buildMenu(targetId: string, ownerId: string): Promise<{ error: st
         new StringSelectMenuBuilder()
           .setCustomId(`photo:game:${targetId}`)
           .setPlaceholder(msg("photo.gamePlaceholder"))
+          .setDisabled(!cached)
           .addOptions(games.map((g) => ({ label: g.label, value: g.id }))),
       ),
     )
@@ -72,17 +76,12 @@ async function buildMenu(targetId: string, ownerId: string): Promise<{ error: st
           .setDefaultUsers(targetId),
       ),
     );
-  return { container };
+  return container;
 }
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
-  const target = interaction.options.getUser("user") ?? interaction.user;
-  const menu = await buildMenu(target.id, interaction.user.id);
-  if ("error" in menu) {
-    await interaction.reply({ content: menu.error, flags: MessageFlags.Ephemeral });
-    return;
-  }
-  await interaction.reply({ components: [menu.container], flags: MessageFlags.IsComponentsV2 });
+  const menu = await buildMenu(interaction.user.id, interaction.user.id);
+  await interaction.reply({ components: [menu], flags: MessageFlags.IsComponentsV2 });
 }
 
 /** photo: 로 시작하는 버튼·선택 메뉴. */
@@ -99,12 +98,7 @@ export async function handleComponent(i: ButtonInteraction | StringSelectMenuInt
     if (own) await i.deferUpdate();
     else await i.deferReply({ flags: MessageFlags.Ephemeral });
     const menu = await buildMenu(picked, i.user.id);
-    if ("error" in menu) {
-      if (own) await i.followUp({ content: menu.error, flags: MessageFlags.Ephemeral });
-      else await i.editReply({ content: menu.error });
-      return;
-    }
-    await i.editReply({ components: [menu.container], flags: MessageFlags.IsComponentsV2 });
+    await i.editReply({ components: [menu], flags: MessageFlags.IsComponentsV2 });
     return;
   }
   if (i.isStringSelectMenu()) {

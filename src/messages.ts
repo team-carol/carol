@@ -33,6 +33,7 @@ export const MESSAGES = {
   "ratingImage.pastPrivateSelf": "maishift에서 이전 기록 공개 설정이 꺼져 있어 과거 레이팅표를 볼 수 없습니다.",
   "ratingImage.pastPrivate": "{user} 님은 maishift에서 이전 기록을 공개하지 않았습니다.",
   "photo.title": "## {name} 님의 사진관\n{user} · 보고 싶은 사진을 누르면 그때 이미지를 만들어 보내 드립니다.",
+  "photo.titleNotRegistered": "## 사진관\n{user} · {notice}",
   "photo.photosHeading": "### 사진 고르기",
   "photo.gameHeading": "### 다른 리듬게임으로 환산한 레이팅표",
   "photo.gamePlaceholder": "환산할 리듬게임을 선택하세요",
