@@ -32,7 +32,7 @@ export const MESSAGES = {
   "ratingImage.snapshotFailed": "maishift에서 이전 기록을 불러오는데 실패했습니다. 잠시 뒤에 다시 시도해 주세요.",
   "ratingImage.pastPrivateSelf": "maishift에서 이전 기록 공개 설정이 꺼져 있어 과거 레이팅표를 볼 수 없습니다.",
   "ratingImage.pastPrivate": "{user} 님은 maishift에서 이전 기록을 공개하지 않았습니다.",
-  "ratingImage.futureNotice": "- {version} 기준 미래시 레이팅표입니다. 내수판의 {version} 상수와 신곡 범위로 계산했고, 지금 레이팅은 {rating}입니다.",
+  "ratingImage.futureNotice": "- {version} 기준 미래시 레이팅표입니다. (기존 {rating})",
   "ratingImage.futureNone": "현재 미래시가 존재하지 않습니다.",
   "ratingImage.futureWithDate": "미래시는 date 옵션과 함께 실행될 수 없습니다.",
   "ratingImage.futureFailed": "maishift에서 미래시를 불러오는데 실패했습니다. 잠시 뒤에 다시 시도해 주세요.",
