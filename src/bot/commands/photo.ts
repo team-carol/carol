@@ -27,7 +27,7 @@ export const data = new SlashCommandBuilder()
   .setDescription("프로필·레이팅표·성과 같은 이미지를 한곳에서 만들기");
 
 /** 사진 종류. 다른 리듬게임 환산 레이팅표는 게임 id 를 그대로 쓴다. */
-const BASE_KINDS = ["profile", "rating", "future", "srating", "history", "achievement", "stamp", "circle"] as const;
+const BASE_KINDS = ["rating", "future", "srating", "profile", "history", "achievement", "stamp", "circle"] as const;
 type BaseKind = (typeof BASE_KINDS)[number];
 const GAME_KINDS = Object.values(GAMES).filter((g) => g.id !== "maimai");
 const DEFAULT_KIND = "profile";
