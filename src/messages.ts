@@ -366,6 +366,8 @@ export const MESSAGES = {
   "status.minutes": "{value}분",
   "status.pingMeasuring": "측정 중",
   "status.none": "없음",
+  // 봇 프로필의 상태 메시지. 30분마다, 서버에 들어가거나 나갈 때 다시 적용한다.
+  "status.presence": "{servers}개의 서버에서 활동 중",
 
   // ── 목표 문구 ───────────────────────────────────────────────────────────
   "goalText.orAbove": "{value} 이상",
