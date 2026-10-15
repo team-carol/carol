@@ -293,10 +293,8 @@ client.on(Events.InteractionCreate, async (i) => {
     }
     return;
   }
-  // /사진관 다른 리듬게임 환산·다른 이용자 선택
+  // /사진관 사진 종류·이용자 선택(핸들러가 바로 defer 한다)
   if ((i.isStringSelectMenu() || i.isUserSelectMenu()) && i.customId.startsWith("photo:")) {
-    // 환산 레이팅표는 새 메시지로 보내므로 늦어지면 대신 defer 한다. 이용자 선택은 핸들러가 바로 defer 한다.
-    if (i.isStringSelectMenu()) guardSlowAck(i);
     try { await photo.handleComponent(i); } catch (e) { console.error("[photo-select]", e); }
     return;
   }
