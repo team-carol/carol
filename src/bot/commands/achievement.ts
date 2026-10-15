@@ -1,5 +1,7 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, MessageFlags, AttachmentBuilder } from "discord.js";
-import { getDailyAchievementSummaries, getCachedProfile, getUserFriendCode, getTranslateTitles } from "../../storage";
+import { getDailyAchievementSummaries, getCachedProfile, getUserFriendCode, getTranslateTitles, getMaishiftLink, achievementProfileKeys } from "../../storage";
+import { settleMaishiftRecords } from "../../maishift";
+import { hasCarolSync } from "../utils/syncExtras";
 import { koreaPlayDayKey, koreaPlayDayRange } from "../../achievements";
 import { renderAchievementCard } from "../utils/achievementCard";
 import { loadAvatar } from "../utils/embeds";
@@ -38,7 +40,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   let replyDeferred = false;
   console.log(`[성과] 시작 scope=${targetScope} userSuffix=${userId.slice(-6)} requestedDay=${requestedDay || "today"}`);
   const friendCode = await getUserFriendCode(userId);
-  const cached = friendCode ? await getCachedProfile(friendCode) : null;
+  let cached = friendCode ? await getCachedProfile(friendCode) : null;
   if (!cached) {
     console.log(`[성과] 프로필 없음 scope=${targetScope}`);
     const notice = await notRegisteredNotice(target.id, target.id === interaction.user.id);
@@ -56,19 +58,28 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     // 집계라 콜드 커넥션 풀에서 그 한계를 넘길 수 있어, 무거운 작업 전에 먼저 defer 한다.
     await interaction.deferReply();
     replyDeferred = true;
+    // maishift 에 방금 올린 기록이 아직 성과로 반영되지 않았을 수 있다. 반영될 때까지(최대 몇 초) 기다린다.
+    const link = await getMaishiftLink(userId);
+    if (link) {
+      await settleMaishiftRecords(link);
+      cached = (friendCode ? await getCachedProfile(friendCode) : null) ?? cached;
+    }
+    // 캐롤봇 추가 북마클릿을 실행하지 않았으면 maishift 로 알 수 있는 것(달성률 변화·FC/FS)만 보여 준다.
+    // 플레이 시각과 레이팅 상승분은 추가 북마클릿이 모은 DX NET 최근 플레이 기록에서만 온다.
+    const limited = !hasCarolSync(cached);
     const playDay = requestedDay && isPlayDayKey(requestedDay)
       ? requestedDay
       : koreaPlayDayKey(new Date());
     const { from, to } = koreaPlayDayRange(playDay);
-    const summaries = await getDailyAchievementSummaries(userId, from, to);
+    const summaries = await getDailyAchievementSummaries(userId, from, to, await achievementProfileKeys(userId));
     const records = summaries.map((e) => {
       // record_json에는 원본 스크래핑 당시의 PlayRecord(jacketUrl 포함)가 그대로 들어있다.
       let jacketUrl = "";
       try { jacketUrl = JSON.parse(e.recordJson)?.jacketUrl || ""; } catch { jacketUrl = ""; }
       // 플레이 기록(최근 50곡)에서 찾은 성과만 실제 플레이 시각을 안다. 못 찾은 것(sourcePlayId 가
       // "clear:…")은 playedAt 이 동기화 시각이라 시각 대신 그 사실을 적는다.
-      const date = String(e.sourcePlayId ?? "").startsWith("clear:") ? msg("achievement.unknownPlayTime") : kstTime(Number(e.playedAt));
-      return { title:e.title, achievement:e.achievementAfter.toFixed(4)+"%", diff:e.diff, level:e.level, date, jacketUrl, musicKind:e.musicKind, achievementVal:Number(e.achievementAfter), track:0, fc:e.fc, sync:e.sync, ratingUp:e.ratingUp ?? undefined, playedAt:Number(e.playedAt), achievementGain:e.achievementGain, ratingGain:e.ratingGain, achievementBefore:e.achievementBefore, achievementAfter:e.achievementAfter, levelConstant:e.levelConstant ?? undefined };
+      const date = limited ? "" : String(e.sourcePlayId ?? "").startsWith("clear:") ? msg("achievement.unknownPlayTime") : kstTime(Number(e.playedAt));
+      return { title:e.title, achievement:e.achievementAfter.toFixed(4)+"%", diff:e.diff, level:e.level, date, jacketUrl, musicKind:e.musicKind, achievementVal:Number(e.achievementAfter), track:0, fc:e.fc, sync:e.sync, ratingUp:limited ? undefined : e.ratingUp ?? undefined, playedAt:Number(e.playedAt), achievementGain:e.achievementGain, ratingGain:limited ? undefined : e.ratingGain, achievementBefore:e.achievementBefore, achievementAfter:e.achievementAfter, levelConstant:e.levelConstant ?? undefined };
     });
     console.log(`[성과] 데이터 summaries=${summaries.length} records=${records.length}`);
     if (records.length === 0) {
@@ -89,7 +100,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     console.log(`[성과] 렌더 시작 records=${records.length} pages=${totalPages} avatarBytes=${avatar?.length ?? 0}`);
     const pngs = await Promise.all(
       Array.from({ length: totalPages }, (_, pageIndex) =>
-        renderAchievementCard(cached, records, playDay, avatar, translate, pageIndex, ACHIEVEMENT_PAGE_SIZE),
+        renderAchievementCard(cached!, records, playDay, avatar, translate, pageIndex, ACHIEVEMENT_PAGE_SIZE, limited),
       ),
     );
     console.log(`[성과] 렌더 완료 pages=${pngs.length} elapsedMs=${Date.now() - renderStartedAt}`);

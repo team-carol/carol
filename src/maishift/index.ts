@@ -53,6 +53,8 @@ const regionMissing = new Set<string>();
 /** maishift 에서 프로필을 비공개로 한 연동. 확인되면 받아 둔 기록을 모두 지우고 보여 주지 않는다. */
 const privateProfiles = new Set<string>();
 const inflight = new Map<string, Promise<Entry>>();
+/** 새로 받은 전체 기록으로 성과·스냅샷·목표를 갱신하는 중인 작업. /성과 가 끝나길 기다린다. */
+const applying = new Map<string, Promise<void>>();
 
 const regionOf = (link: MaishiftLink): MaishiftRegion => (link.server === "jp" ? "JAPAN" : "ASIA");
 const keyOf = (link: MaishiftLink) => `${link.server}:${link.handle.toLowerCase()}`;
@@ -102,8 +104,10 @@ async function refresh(link: MaishiftLink): Promise<Entry> {
     const records = allRecords(await (cold?.records ?? fetchRecords()));
     clearJson = JSON.stringify(records);
     // 새 기록이 올라왔으면 성과·스냅샷·목표를 갱신한다. 조회는 기다리게 하지 않는다.
-    void applyMaishiftUpdate({ link, records, top, rating: p.rating, uploadedAt: Date.parse(p.updatedAt) || Date.now() })
-      .catch((e) => console.error(`[maishift] ${link.handle} 기록 반영:`, e));
+    const job: Promise<void> = applyMaishiftUpdate({ link, records, top, rating: p.rating, uploadedAt: Date.parse(p.updatedAt) || Date.now() })
+      .catch((e) => console.error(`[maishift] ${link.handle} 기록 반영:`, e))
+      .finally(() => { if (applying.get(key) === job) applying.delete(key); });
+    applying.set(key, job);
   }
   const history = same?.history ?? await (cold?.history ?? fetchHistory());
   const entry: Entry = {
@@ -153,6 +157,24 @@ async function getEntry(link: MaishiftLink): Promise<Entry> {
   pending.catch(() => {});
   const timeout = new Promise<null>((r) => setTimeout(() => r(null), WAIT_BUDGET_MS));
   return (await Promise.race([pending, timeout])) ?? have;
+}
+
+/**
+ * /성과 용: maishift 에 새로 올린 기록이 성과로 반영될 때까지 기다린다(최대 budgetMs).
+ * 프로필을 확인한 지 maxAgeMs 가 지났으면 업로드 시각부터 다시 확인한다(5분 캐시를 기다리지 않게).
+ */
+export async function settleMaishiftRecords(link: MaishiftLink, maxAgeMs = 60_000, budgetMs = 8_000): Promise<void> {
+  const key = keyOf(link);
+  const have = cache.get(key);
+  const pending: Promise<unknown> | undefined = inflight.get(key)
+    ?? (!have || Date.now() - have.checkedAt > maxAgeMs ? refreshOnce(link) : undefined);
+  const work = (async () => {
+    if (pending) await pending.catch(() => {});
+    await applying.get(key);
+  })();
+  let timer: NodeJS.Timeout | undefined;
+  await Promise.race([work, new Promise<void>((r) => { timer = setTimeout(r, budgetMs); })]);
+  clearTimeout(timer);
 }
 
 /** 프로필 = maishift 값 + 캐롤봇 북마클릿 부가 데이터(서클·최근 플레이·지방). 캐롤봇 프로필 값은 쓰지 않는다. */

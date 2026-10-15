@@ -134,6 +134,23 @@ test("chart_clears diff → 이벤트 로그 → 일일 성과 요약", async ()
     assert.equal(dedup.find((x) => x.chartKey === "C|DX|MASTER").achievementAfter, 82);
     assert.equal(dedup.find((x) => x.chartKey === "C|DX|MASTER").achievementGain, 2);
 
+    // ── maishift 키와 캐롤봇 친구 코드 키를 같이 보기(추가 북마클릿 실행 전·후 성과를 합침) ──
+    const MS = "ms:intl:diffuser";
+    await db.saveAchievementPlayEventLogBatch([ev("ms1", "H|DX|MASTER", 99, 98, DAY0 + 50, { profileKey: MS })]);
+    // 키를 주지 않으면 예전처럼 세션 친구 코드 키만 본다
+    assert.equal((await db.getDailyAchievementSummaries("disc-1", DAY0, DAY0 + DAY)).some((x) => x.chartKey === "H|DX|MASTER"), false);
+    const merged = await db.getDailyAchievementSummaries("disc-1", DAY0, DAY0 + DAY, [MS, KEY]);
+    assert.ok(merged.some((x) => x.chartKey === "H|DX|MASTER"));
+    assert.ok(merged.some((x) => x.chartKey === "A|DX|MASTER"));
+    assert.deepEqual((await db.getDailyAchievementSummaries("disc-1", DAY0, DAY0 + DAY, [MS])).map((x) => x.chartKey), ["H|DX|MASTER"]);
+
+    // ── copyChartClears: maishift 키의 비교 기준을 친구 코드 키로 옮긴다(있는 보면은 그대로) ──
+    await db.upsertChartClears(MS, [cc("X|DX|MASTER", 97), cc("Y|DX|MASTER", 80)]);
+    await db.upsertChartClears("intl:copied", [cc("Y|DX|MASTER", 85)]);
+    assert.equal(await db.copyChartClears(MS, "intl:copied"), 1);
+    const afterCopy = await db.upsertChartClears("intl:copied", [cc("X|DX|MASTER", 98), cc("Y|DX|MASTER", 85)]);
+    assert.deepEqual(afterCopy.map((d) => [d.chartKey, d.achievementBefore]), [["X|DX|MASTER", 97]]);
+
     // ── 검증 & 원자성 ──
     await assert.rejects(() => db.saveAchievementPlayEventLogBatch([
       ev("x", "P|DX|MASTER", 1, 0, DAY0, { profileKey: "intl:conflict-a" }),

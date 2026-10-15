@@ -7,7 +7,7 @@
  */
 import { chartKey, type PlayRecord } from "../scraper";
 import {
-  getMaishiftUsers, getStoredProfile, hasChartClears, upsertChartClears, saveAchievementPlayEventLogBatch,
+  getMaishiftUsers, getStoredProfile, hasChartClears, copyChartClears, upsertChartClears, saveAchievementPlayEventLogBatch,
   listGoals, updateGoalProgress, maishiftProfileKey, type MaishiftLink,
 } from "../storage";
 import { hasValidRecordDate, recordPlayedAt, koreaPlayDayKey } from "../achievements";
@@ -36,7 +36,14 @@ function playHistoryOf(recentJson: string | undefined): PlayRecord[] {
 
 async function applyForUser(u: MaishiftUpdate, discordUserId: string, profileKey: string): Promise<void> {
   const now = Date.now();
-  const had = await hasChartClears(profileKey);
+  let had = await hasChartClears(profileKey);
+  // 추가 북마클릿을 처음 실행하면 프로필 키가 maishift 키에서 친구 코드 키로 바뀐다. 그동안 쌓은 비교 기준을 옮겨
+  // 이번 업로드의 성과를 놓치지 않게 한다.
+  const msKey = maishiftProfileKey(u.link);
+  if (!had && profileKey !== msKey && await hasChartClears(msKey)) {
+    await copyChartClears(msKey, profileKey);
+    had = true;
+  }
   const diffs = await upsertChartClears(profileKey, u.records.map((r) => ({ chartKey: chartKey(r), achievementVal: r.achievementVal, fc: r.fc, sync: r.sync })));
   if (had && diffs.length) {
     const stored = profileKey.startsWith("ms:") ? null : await getStoredProfile(profileKey);

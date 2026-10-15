@@ -49,6 +49,7 @@ export const getMaishiftLink = method("getMaishiftLink"); export const getMaishi
 export const getConstantsCache = method("getConstantsCache"); export const saveConstantsCache = method("saveConstantsCache");
 export const getRatingCardCache = method("getRatingCardCache"); export const saveRatingCardCache = method("saveRatingCardCache");
 export const listNameTranslations = method("listNameTranslations"); export const noteNames = method("noteNames"); export const setNameTranslation = method("setNameTranslation"); export const listStoredAreas = method("listStoredAreas");
+export const copyChartClears = method("copyChartClears");
 export const getAllAliases = method("getAllAliases"); export const getTranslationAliases = method("getTranslationAliases"); export const addAlias = method("addAlias"); export const deleteAlias = method("deleteAlias"); export const setAliasTranslation = method("setAliasTranslation"); export const getMessageOverrides = method("getMessageOverrides"); export const setMessageOverride = method("setMessageOverride"); export const deleteMessageOverride = method("deleteMessageOverride");
 export const getRegisteredUserCount = method("getRegisteredUserCount"); export const getLastSyncTime = method("getLastSyncTime"); export const getInactiveProfileFriendCodes = method("getInactiveProfileFriendCodes"); export const clearRatingCardCacheForInactive = method("clearRatingCardCacheForInactive");
 
@@ -87,6 +88,14 @@ export async function getCachedProfile(key: string): Promise<CachedProfile | nul
 
 async function profileKeyOf(id: string, link: MaishiftLink): Promise<string> {
   return (await getUserFriendCodeForServer(id, link.server)) || maishiftProfileKey(link);
+}
+
+/** 성과·비교 기준이 쌓이는 프로필 키들: maishift 키(추가 북마클릿 실행 전)와 그 서버의 캐롤봇 친구 코드 키(실행 후). */
+export async function achievementProfileKeys(id: string): Promise<string[]> {
+  const link = await getMaishiftLink(id);
+  if (!link) return [];
+  const carol = await getUserFriendCodeForServer(id, link.server);
+  return carol ? [maishiftProfileKey(link), carol] : [maishiftProfileKey(link)];
 }
 
 /** 프로필 키. maishift 를 연동하지 않았으면 null. */
