@@ -15,6 +15,7 @@ export interface PatchNoteRow extends PatchNoteInput { id:number; publishedAt:nu
 export interface OptionSnapshot { server:MaimaiServer; fields:UserOptionField[]; syncedAt:number; }
 export interface SongAliasRow { id:number; title:string; alias:string; isTranslation:boolean; }
 export interface BotMessageRow { key:string; text:string; }
+export interface NameTranslationRow { kind:string; source:string; ko:string; imageUrl:string; }
 export interface AchievementPlayEventInput { profileKey:string; discordUserId?:string; playDay:string; chartKey:string; detailIdx?:string; sourceSequence:number; playedAt:number; firstCapturedAt?:number; sourceKind?:string; legacyUpdatedAt?:number; recordJson:string; achievementVal:number; isNewScore?:boolean; ratingUp?:number|null; title?:string; diff?:string; level?:string; musicKind?:string; achievementText?:string; fc?:string; sync?:string; }
 export interface AchievementPlayEventLogInput { profileKey:string; sourcePlayId?:string; playedAt:number; chartKey:string; sourceSequence:number; capturedAt?:number; recordJson:string; achievementVal:number; achievementBefore:number; fc:string; sync:string; ratingUp?:number|null; title:string; diff:string; level:string; musicKind:string; achievementText:string; levelConstant?:number|null; }
 export interface AchievementPlayEventLogRecord extends AchievementPlayEventLogInput { eventKey:string; payloadHash:string; scoreGain?:number; isMeaningful?:boolean; levelConstant?:number|null; ratingGain?:number; }

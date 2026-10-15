@@ -9,6 +9,7 @@ import { userCardHeader, avatarDataUrl } from "./cardHeader";
 import { renderInWorker } from "./renderPool";
 import { MAI_DIFF_COLOR } from "../../games";
 import { displayTitle } from "../../aliases";
+import { stampDisplayName } from "../../nameTranslations";
 import type { CachedProfile } from "../../storage/types";
 import type { StampCard } from "../../maishift/stamps";
 import { msg } from "../../messages";
@@ -71,7 +72,7 @@ function rewardBox(type: string, height: number): { width: number; height: numbe
 function row(c: StampCard, img: string | null, latestVersion: number | null, translate: boolean, last: boolean, colWidth: number): El {
   const song = c.song?.song;
   const isNew = !!song && latestVersion !== null && song.songVersion === latestVersion;
-  const name = song ? displayTitle(song.title || c.displayName, translate) : c.displayName;
+  const name = song ? displayTitle(song.title || c.displayName, translate) : stampDisplayName(c.displayName, translate);
   return el("div", { display: "flex", alignItems: "center", gap: 14, padding: "9px 0", borderBottom: last ? "none" : `1px solid ${BORDER}` }, [
     // 이미지 칸 폭은 섹션 안에서 같게(이름·스탬프 칸이 줄마다 같은 자리에서 시작하도록).
     el("div", { display: "flex", justifyContent: "center", width: colWidth, flexShrink: 0 }, [

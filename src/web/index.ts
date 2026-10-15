@@ -4,7 +4,7 @@ import { createHash, timingSafeEqual } from "crypto";
 import { gunzip } from "zlib";
 import { promisify } from "util";
 import { parseFriendCode as parseFC, parseRecentRecords, parsePlaylogHistory, getMaimaiBaseUrl, parseMapAreas, parsePlaylogDetail, parseUserOptions, parseCircle } from "../scraper";
-import { saveSyncExtras, getMaishiftLink, saveUserSession, findUserBySyncToken, getAvatarBlob, getSongJacket, saveSongJacket, getExtraBookmarklets, addExtraBookmarklet, removeExtraBookmarklet, getEnabledBookmarkletPresetIds, setBookmarkletPresetEnabled, getUserDefaultServer, setUserDefaultServer, isMaimaiServer, getMapImage, saveMapImage, backfillEventRatingUp, getAllAliases, addAlias, deleteAlias, setAliasTranslation, setMessageOverride, deleteMessageOverride, getTranslateTitles, setTranslateTitles, getDxRankDecimal, setDxRankDecimal, saveProfileCircle, getCirclePublic, setCirclePublic, getRegisteredUserCount, getAchievementMinimum, setAchievementMinimum, getPolicyAck, setPolicyAck, getSimaiChart, saveSimaiChart, listRegistryCharts, auditRegistryCharts, listOptionPresets, saveOptionPreset, deleteOptionPreset, saveOptionSnapshot, getOptionSnapshots, listPatchNotes, savePatchNote, setPatchNotePublished, deletePatchNote } from "../storage";
+import { saveSyncExtras, getMaishiftLink, saveUserSession, findUserBySyncToken, getAvatarBlob, getSongJacket, saveSongJacket, getExtraBookmarklets, addExtraBookmarklet, removeExtraBookmarklet, getEnabledBookmarkletPresetIds, setBookmarkletPresetEnabled, getUserDefaultServer, setUserDefaultServer, isMaimaiServer, getMapImage, saveMapImage, backfillEventRatingUp, getAllAliases, listNameTranslations, setNameTranslation, addAlias, deleteAlias, setAliasTranslation, setMessageOverride, deleteMessageOverride, getTranslateTitles, setTranslateTitles, getDxRankDecimal, setDxRankDecimal, saveProfileCircle, getCirclePublic, setCirclePublic, getRegisteredUserCount, getAchievementMinimum, setAchievementMinimum, getPolicyAck, setPolicyAck, getSimaiChart, saveSimaiChart, listRegistryCharts, auditRegistryCharts, listOptionPresets, saveOptionPreset, deleteOptionPreset, saveOptionSnapshot, getOptionSnapshots, listPatchNotes, savePatchNote, setPatchNotePublished, deletePatchNote } from "../storage";
 import { POLICY_VERSION } from "../policy";
 import type { SongAliasRow } from "../storage/types";
 import { scheduleMaishiftCheck } from "../maishift";
@@ -36,6 +36,8 @@ import {
 } from "../messages";
 import { isValidAdminToken, issueAdminToken } from "./adminAuth";
 import { loadAliases } from "../aliases";
+import { noteAreaNames, setNameTranslationCache, NAME_KINDS, type NameKind } from "../nameTranslations";
+import { namesAdminPage } from "./namesAdminPage";
 import { CONFIG, PORT } from "../config";
 
 const isDev = !CONFIG.baseUrl;
@@ -849,6 +851,35 @@ ${siteFooter()}
       return;
     }
 
+    // ─── 지방·스탬프 카드 이름 번역 (namesAdminPage.ts) ────────────────────
+    if (req.method === "GET" && url.pathname === "/admin/names") {
+      const token = url.searchParams.get("code") || "";
+      if (!isValidAdminToken(token)) { res.writeHead(403); res.end("expired"); return; }
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" });
+      res.end(namesAdminPage(token, await listNameTranslations()));
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/api/admin/names") {
+      const json = (status: number, data: unknown) => { res.writeHead(status, { "content-type": "application/json" }); res.end(JSON.stringify(data)); };
+      if (!isValidAdminToken(url.searchParams.get("code") || "")) { json(403, { ok: false, error: "expired" }); return; }
+      try {
+        const body = JSON.parse(await readBody(req));
+        const kind = body.kind as NameKind;
+        const source = typeof body.source === "string" ? body.source : "";
+        const ko = (typeof body.ko === "string" ? body.ko : "").trim();
+        if (!NAME_KINDS.includes(kind) || !source) { json(400, { ok: false, error: "invalid_body" }); return; }
+        if (ko.length > 100) { json(400, { ok: false, error: "100자 이하로 입력하세요" }); return; }
+        if (!(await setNameTranslation(kind, source, ko))) { json(404, { ok: false, error: "목록에 없는 이름입니다" }); return; }
+        setNameTranslationCache(kind, source, ko);
+        json(200, { ok: true, ko });
+      } catch (e) {
+        console.error("[admin] 이름 번역 저장 실패:", e);
+        const badBody = e instanceof SyntaxError;
+        json(badBody ? 400 : 500, { ok: false, error: badBody ? "invalid_body" : "서버 오류가 발생했습니다" });
+      }
+      return;
+    }
+
     // 별명을 해당 곡의 한국어 번역으로 지정/해제 (곡당 1개)
     if (req.method === "POST" && url.pathname === "/api/admin/aliases/translation") {
       const token = url.searchParams.get("code") || "";
@@ -1249,6 +1280,8 @@ ${siteFooter()}
           console.warn("[web] 단위·클래스 이미지 저장 실패:", rankError instanceof Error ? rankError.message : rankError);
         }
 
+        // 처음 보는 지방 이름은 /관리 이름 번역에 번역 대기로 올린다.
+        noteAreaNames(mapAreas).catch((e) => console.error("[names] 지방 이름 기록 실패:", e));
         const savedMapImages = await cacheMapImages(mapAreas, syncServer);
         console.log(`[web] map images saved: ${savedMapImages}`);
         console.log(`[web] 저장: server=${syncServer} fc=${fc}`);

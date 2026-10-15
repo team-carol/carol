@@ -32,6 +32,7 @@ import {
   jacketFileUrl,
 } from "../../constants";
 import { aliasMatches, normalizeQuery, displayTitle } from "../../aliases";
+import { areaDisplayName } from "../../nameTranslations";
 import { ratingColor } from "./roles";
 import { renderProfileCard } from "./profileCard";
 import { circleOf } from "./circle";
@@ -380,10 +381,11 @@ function buildMapAreaCard(
   absoluteIdx: number,
   totalAreas: number,
   imageRef: string,
+  translate: boolean,
 ): EmbedBuilder {
   const emb = new EmbedBuilder()
     .setColor(area.kind === "event" ? 0x9333ea : 0x2b2d31)
-    .setTitle(truncateVisual(area.name || msg("map.unnamedArea"), 32))
+    .setTitle(truncateVisual(areaDisplayName(area.name, translate) || msg("map.unnamedArea"), 32))
     .setAuthor({ name: areaKindLabel(area.kind) })
     .setDescription(mapAreaDescription(area))
     .setFooter({
@@ -415,13 +417,14 @@ export async function mapAreaEmbed(
   const idx = Math.max(0, Math.min(pageIdx, totalPages - 1));
   const start = idx * MAP_PAGE_SIZE;
   const pageAreas = areas.slice(start, start + MAP_PAGE_SIZE);
+  const translate = await getTranslateTitles(userId);
   const files: AttachmentBuilder[] = [];
   const embeds = await Promise.all(pageAreas.map(async (area, offset) => {
     const buf = area.imageUrl ? await getMapImage(area.imageUrl) : null;
     const fileName = buf ? `map${start + offset}.png` : "";
     if (buf) files.push(new AttachmentBuilder(buf, { name: fileName }));
     const imageRef = buf ? `attachment://${fileName}` : "";
-    return buildMapAreaCard(p, area, start + offset, areas.length, imageRef);
+    return buildMapAreaCard(p, area, start + offset, areas.length, imageRef, translate);
   }));
 
   const prevBtn = new ButtonBuilder()
@@ -442,7 +445,7 @@ export async function mapAreaEmbed(
   const shareButtons = pageAreas.map((area, offset) =>
     new ButtonBuilder()
       .setCustomId(`mapshare:${userId}:${start + offset}`)
-      .setLabel(msg("map.shareButton", { area: truncateVisual(area.name || msg("map.areaFallback"), 10) }))
+      .setLabel(msg("map.shareButton", { area: truncateVisual(areaDisplayName(area.name, translate) || msg("map.areaFallback"), 10) }))
       .setStyle(ButtonStyle.Success),
   );
 

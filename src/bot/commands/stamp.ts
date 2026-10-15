@@ -6,6 +6,7 @@ import { notRegisteredNotice } from "../utils/notRegistered";
 import { getStampCards } from "../../maishift/stamps";
 import { regionLatestVersion } from "../../constants";
 import { msg } from "../../messages";
+import { noteStampNames } from "../../nameTranslations";
 
 // /스탬프: maishift 스탬프 카드 현황(파트너·곡·기타 진행 중 카드와 완료한 카드)을 이미지로.
 export const data = new SlashCommandBuilder()
@@ -31,6 +32,8 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   }
   try {
     const cards = await getStampCards(link.handle, link.server === "jp" ? "JAPAN" : "ASIA");
+    // 처음 보는 카드 이름은 /관리 이름 번역에 번역 대기로 올린다.
+    noteStampNames(cards).catch((e) => console.error("[names] 스탬프 이름 기록 실패:", e));
     if (!cards.length) {
       await interaction.editReply({ content: msg("stamp.empty") });
       return;

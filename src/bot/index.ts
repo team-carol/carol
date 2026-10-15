@@ -13,6 +13,7 @@ import { recentEmbeds, rtTableEmbed, searchResultEmbeds, getSearchCtx, mapAreaEm
 
 import { loadConstants } from "../constants";
 import { loadAliases } from "../aliases";
+import { loadNameTranslations, backfillAreaNames } from "../nameTranslations";
 import { loadRegistryIndex } from "../simai/registryIndex";
 import { loadMessages, msg } from "../messages";
 import { loadFonts } from "../fonts";
@@ -91,6 +92,13 @@ client.once(Events.ClientReady, async (c) => {
     await loadAliases();
   } catch (e) {
     console.error("[aliases] 로드 실패:", e);
+  }
+  try {
+    await loadNameTranslations();
+    // 이름 번역 이전에 동기화한 지방 이름도 관리 화면에 보이게. 응답을 막지 않도록 기다리지 않는다.
+    backfillAreaNames().catch((e) => console.error("[names] 지방 이름 수집 실패:", e));
+  } catch (e) {
+    console.error("[names] 로드 실패:", e);
   }
   // maishift 연동(임시, 공식 API 전까지). 프로필 조회에 maishift 데이터를 덧씌운다.
   initMaishift();

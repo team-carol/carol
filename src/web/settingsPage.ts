@@ -99,11 +99,11 @@ ${topbar(userNav(token, "settings"))}
 <div class="status" id="circleStatus"></div>
 </div>
 <div class="card">
-<p class="section-label">곡 제목 한국어 번역</p>
+<p class="section-label">한국어 번역</p>
 <div class="toggle-row">
 <div class="toggle-info">
-<div class="toggle-title">일본어·한자 곡 번역 표시</div>
-<div class="toggle-desc">제목이 일본어/한자로만 된 곡을 한국어 번역으로 표시합니다. 번역이 등록된 곡에만 적용됩니다.</div>
+<div class="toggle-title">곡 제목·지방·스탬프 카드 번역 표시</div>
+<div class="toggle-desc">일본어·한자로 된 곡 제목과 지방 이름, 스탬프 카드 이름을 한국어로 표시합니다. 번역이 등록된 것에만 적용됩니다.</div>
 </div>
 <label class="toggle"><input type="checkbox" id="transToggle" onchange="toggleTranslate()"><span class="slider"></span></label>
 </div>
