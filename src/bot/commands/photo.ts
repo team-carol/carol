@@ -51,7 +51,8 @@ async function buildMenu(targetId: string, ownerId: string, wanted: string = DEF
     if (!link || maishiftFutureVersion(link) === null) unavailable.add("future");
     if (!hasCarolSync(cached) || !circleOf(cached)) unavailable.add("circle");
   }
-  const kinds: string[] = [...BASE_KINDS.slice(0, 4), ...GAME_KINDS.map((g) => g.id), ...BASE_KINDS.slice(4)].filter((k) => !unavailable.has(k));
+  // 다른 리듬게임 환산은 맨 아래에.
+  const kinds: string[] = [...BASE_KINDS, ...GAME_KINDS.map((g) => g.id)].filter((k) => !unavailable.has(k));
   const kind = kinds.includes(wanted) ? wanted : DEFAULT_KIND;
   const title = cached
     ? msg("photo.title", { name: cached.playerName || "—", user: `<@${targetId}>` })
