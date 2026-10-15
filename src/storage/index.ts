@@ -45,7 +45,6 @@ export const listPatchNotes = method("listPatchNotes"); export const savePatchNo
 export const saveProfileCircle = method("saveProfileCircle"); export const getCirclePublic = method("getCirclePublic"); export const setCirclePublic = method("setCirclePublic");
 export const getTranslateTitles = method("getTranslateTitles"); export const setTranslateTitles = method("setTranslateTitles");
 export const getDxRankDecimal = method("getDxRankDecimal"); export const setDxRankDecimal = method("setDxRankDecimal");
-export const getEnabledBookmarkletPresetIds = method("getEnabledBookmarkletPresetIds"); export const setBookmarkletPresetEnabled = method("setBookmarkletPresetEnabled"); export const getExtraBookmarklets = method("getExtraBookmarklets"); export const addExtraBookmarklet = method("addExtraBookmarklet"); export const removeExtraBookmarklet = method("removeExtraBookmarklet");
 export const getMaishiftLink = method("getMaishiftLink"); export const getMaishiftUsers = method("getMaishiftUsers"); export const saveSyncExtras = method("saveSyncExtras"); export const hasChartClears = method("hasChartClears"); export const setMaishiftHandle = method("setMaishiftHandle"); export const getKvCache = method("getKvCache"); export const saveKvCache = method("saveKvCache");
 export const getConstantsCache = method("getConstantsCache"); export const saveConstantsCache = method("saveConstantsCache");
 export const getRatingCardCache = method("getRatingCardCache"); export const saveRatingCardCache = method("saveRatingCardCache");
@@ -108,4 +107,4 @@ export async function closeStorage(): Promise<void> {
   adapter = undefined;
 }
 
-export type { CachedProfile, ExtraBookmarklet, OptionPresetInput, OptionPresetRow, UserOptionField, OptionSnapshot, PatchNoteInput, PatchNoteRow, MaimaiServer, SongAliasRow, BotMessageRow, AchievementPlayEventInput, AchievementPlayEventLogInput, AchievementPlayEventLogRecord, DailyAchievementSummary, ChartClearInput, ChartClearDiff, GoalRow, GoalProgressUpdate } from "./types";
+export type { CachedProfile, OptionPresetInput, OptionPresetRow, UserOptionField, OptionSnapshot, PatchNoteInput, PatchNoteRow, MaimaiServer, SongAliasRow, BotMessageRow, AchievementPlayEventInput, AchievementPlayEventLogInput, AchievementPlayEventLogRecord, DailyAchievementSummary, ChartClearInput, ChartClearDiff, GoalRow, GoalProgressUpdate } from "./types";

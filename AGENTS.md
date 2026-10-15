@@ -64,9 +64,9 @@ TypeScript LSP was unavailable in this workspace, and codegraph is not indexed. 
 | `client.on(Events.InteractionCreate)` | router | `src/bot/index.ts` | Dispatches commands plus `serverset:`, `recent:`, `page:`, `share:`, `rt:`, `search:`, `goal:` buttons. |
 | `startWebServer` | entry | `src/web/index.ts` | Owns all HTTP routes and `/sync` parse/cache pipeline. |
 | `guidePage` | HTML generator | `src/web/index.ts` | `/sync` install UI for PC/mobile plus settings link. |
-| `settingsPage` | HTML generator | `src/web/settingsPage.ts` | Privacy, preset bookmarklets, extra bookmarklet CRUD. |
+| `settingsPage` | HTML generator | `src/web/settingsPage.ts` | Default server, circle privacy, translation, DX ✦ decimal, achievement filter. |
 | `buildBookmarkletJs` | generator | `src/web/bookmarklet.ts` | Wraps embedded sync JS and evaluates enabled extra scripts. |
-| `BOOKMARKLET_PRESETS` | config list | `src/web/bookmarklet.ts` | Built-in bookmarklets; first preset is `maishift`. |
+| `MAISHIFT_BOOKMARKLET` | constant | `src/web/bookmarklet.ts` | maishift bookmarklet, always run with carol's bookmarklet. |
 | `saveSyncExtras` / `saveUserSession` | persistence | `src/storage/postgres.ts` | Main write path after `/sync` (feat/maishift: 부가 데이터만; 프로필은 maishift). |
 | `getUserSyncToken` / `findUserBySyncToken` | auth link | `src/storage/postgres.ts` | Token-based web access for `/sync` and `/settings`. |
 | `parseHome` / `parseMusicScore` | scraper | `src/scraper.ts` | CSS-selector parsing of DX NET HTML. |

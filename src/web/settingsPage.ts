@@ -1,10 +1,8 @@
-import type { ExtraBookmarklet, MaimaiServer } from "../storage/types";
-import { BOOKMARKLET_PRESETS } from "./bookmarklet";
+import type { MaimaiServer } from "../storage/types";
 import { BASE_CSS, pageHead, topbar, siteFooter, userNav } from "./theme";
 
-export function settingsPage(token: string, enabledPresetIds: string[], bookmarklets: ExtraBookmarklet[], defaultServer: MaimaiServer, translate = false, circlePublic = true, dxDecimal = false): string {
-  const presets = BOOKMARKLET_PRESETS.map((preset) => ({ ...preset, enabled: !!preset.required || enabledPresetIds.includes(preset.id) }));
-  const dataJson = JSON.stringify({ presets, bookmarklets, defaultServer, translate, circlePublic, dxDecimal })
+export function settingsPage(token: string, defaultServer: MaimaiServer, translate = false, circlePublic = true, dxDecimal = false): string {
+  const dataJson = JSON.stringify({ defaultServer, translate, circlePublic, dxDecimal })
     .replace(/</g, "\\u003c").replace(/>/g, "\\u003e");
   const tokenJson = JSON.stringify(token);
 
@@ -39,22 +37,10 @@ h1{font-size:clamp(36px,5vw,52px);font-weight:500;color:var(--ink);letter-spacin
 .server-btn span{display:block;color:var(--dim);font-size:13px}
 .server-btn.active{border-color:var(--accent);background:rgba(255,146,148,.08)}
 .server-btn.active strong{color:var(--accent-soft)}
-.bm-list{list-style:none}
-.bm-item{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 0;border-top:1px solid var(--border)}
-.bm-item:first-child{border-top:none;padding-top:0}
-.bm-item-info{flex:1;min-width:0}
-.bm-label{color:var(--ink);font-size:15px;font-weight:500}
-.bm-code-preview{font-family:var(--font-mono);font-size:11.5px;color:var(--faint);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.bm-del{background:none;border:1px solid var(--border-2);color:var(--muted);border-radius:10px;padding:6px 14px;font-size:13px;cursor:pointer;transition:border-color .15s,color .15s;flex-shrink:0}
-.bm-del:hover{border-color:var(--err);color:var(--err)}
-.add-form{margin-top:18px;padding-top:18px;border-top:1px solid var(--border)}
 .input-group{margin-bottom:12px}
 .input-group label{display:block;font-size:13px;font-weight:500;color:var(--dim);margin-bottom:6px}
-.input-group input,.input-group textarea{width:100%;background:var(--canvas-alt);border:1px solid var(--border);border-radius:12px;padding:11px 14px;color:var(--ink);font-size:15px;outline:none;transition:border-color .15s}
-.input-group input:focus,.input-group textarea:focus{border-color:var(--accent)}
-.input-group input::placeholder,.input-group textarea::placeholder{color:var(--faint)}
-.input-group textarea{resize:vertical;min-height:72px;font-family:var(--font-mono);font-size:12.5px}
-.add-btn{width:100%;margin-top:4px}
+.input-group input,.input-group input:focus{border-color:var(--accent)}
+.input-group input::placeholder{color:var(--faint)}
 .achievement-filter{display:flex;align-items:end;gap:10px}
 .achievement-filter .input-group{flex:1;margin-bottom:0}
 .filter-save{padding:11px 20px}
@@ -62,8 +48,6 @@ h1{font-size:clamp(36px,5vw,52px);font-weight:500;color:var(--ink);letter-spacin
 .status:empty{min-height:0;margin-top:0}
 .status.ok{color:var(--ok)}
 .status.err{color:var(--err)}
-.empty{color:var(--faint);font-size:14px;text-align:center;padding:12px 0}
-.count{font-weight:400;color:var(--faint)}
 .link-card{display:flex;align-items:center;gap:16px;transition:border-color .15s}
 .link-card:hover{border-color:var(--border-2)}
 .link-arrow{font-size:20px;color:var(--accent-soft)}
@@ -84,7 +68,7 @@ ${topbar(userNav(token, "settings"))}
 </div>
 <div class="card">
 <p class="section-label">프로필 공개 여부</p>
-<div class="toggle-desc">프로필·친구 코드·이전 기록(과거 레이팅표·성과)의 공개 여부는 maishift 설정을 따릅니다. maishift에서 비공개로 한 정보는 캐롤봇에서도 보이지 않습니다.</div>
+<div class="toggle-desc">프로필, 친구 코드, 이전 기록의 공개 여부는 maishift 설정을 따릅니다.</div>
 <a class="ms-link" href="https://maimai.shiftpsh.com/settings" target="_blank" rel="noopener">maishift 설정 열기 →</a>
 </div>
 <div class="card">
@@ -102,8 +86,8 @@ ${topbar(userNav(token, "settings"))}
 <p class="section-label">한국어 번역</p>
 <div class="toggle-row">
 <div class="toggle-info">
-<div class="toggle-title">곡 제목·지방·스탬프 카드 번역 표시</div>
-<div class="toggle-desc">일본어·한자로 된 곡 제목과 지방 이름, 스탬프 카드 이름을 한국어로 표시합니다. 번역이 등록된 것에만 적용됩니다.</div>
+<div class="toggle-title">곡 제목, 지방, 스탬프 카드 번역 표시</div>
+<div class="toggle-desc">일본어 및 한자로 된 곡 제목과 지방 이름, 스탬프 카드 이름을 한국어로 번역합니다.</div>
 </div>
 <label class="toggle"><input type="checkbox" id="transToggle" onchange="toggleTranslate()"><span class="slider"></span></label>
 </div>
@@ -114,7 +98,7 @@ ${topbar(userNav(token, "settings"))}
 <div class="toggle-row">
 <div class="toggle-info">
 <div class="toggle-title">DX ✦ 랭크를 소수점 첫째 자리까지 표시</div>
-<div class="toggle-desc">곡 상세에서 DX ✦ 랭크를 다음 단계까지의 진행도와 함께 ✦5.7처럼 보여 줍니다. maishift 표시 설정과 같은 방식입니다.</div>
+<div class="toggle-desc">곡 상세에서 DX ✦ 랭크를 ✦5.7과 같이 표시합니다.</div>
 </div>
 <label class="toggle"><input type="checkbox" id="dxDecToggle" onchange="toggleDxDecimal()"><span class="slider"></span></label>
 </div>
@@ -131,27 +115,11 @@ ${topbar(userNav(token, "settings"))}
 <div class="toggle-desc">maimai DX NET 게임 옵션을 확인하고, 프리셋으로 저장해 두었다가 한 번에 적용할 수 있습니다.</div></div>
 <span class="link-arrow">\u2192</span>
 </a>
-<div class="card">
-<p class="section-label">프리셋 북마클릿 <span class="count" id="presetCount"></span></p>
-<ul class="bm-list" id="presetList"></ul>
-<div class="status" id="presetStatus"></div>
-</div>
-<div class="card">
-<p class="section-label">사설 북마클릿 <span class="count" id="bmCount"></span></p>
-<ul class="bm-list" id="bmList"></ul>
-<div class="add-form" id="addForm">
-<div class="input-group"><label>이름</label><input type="text" id="bmName" placeholder="\uC608: \uC2A4\uCF54\uC5B4 \uD45C\uC2DC" maxlength="30"></div>
-<div class="input-group"><label>코드</label><textarea id="bmCode" placeholder="javascript:..."></textarea></div>
-<button class="btn btn-primary add-btn" id="addBtn" onclick="addBm()">\uCD94\uAC00</button>
-<div class="status" id="bmStatus"></div>
-</div>
-</div>
 </main>
 ${siteFooter()}
 <script>
 var TOKEN=${tokenJson};
 var DATA=${dataJson};
-var MAX_BM=5;
 
 (function init(){
   renderDefaultServer();
@@ -159,8 +127,6 @@ var MAX_BM=5;
   renderDxDecimal();
   renderCircle();
   loadAchievementFilter();
-  renderPresetList();
-  renderBmList();
 })();
 
 
@@ -201,28 +167,6 @@ function setDefaultServer(server){
   .then(function(){showStatus('serverStatus','ok','저장됨');})
   .catch(function(){DATA.defaultServer=prev;renderDefaultServer();showStatus('serverStatus','err','저장 실패');});
 }
-
-
-function renderBmList(){
-  var list=document.getElementById('bmList');
-  var countEl=document.getElementById('bmCount');
-  countEl.textContent=DATA.bookmarklets.length+'/'+MAX_BM;
-  if(DATA.bookmarklets.length===0){
-    list.innerHTML='<li class="empty">\uB4F1\uB85D\uB41C \uCD94\uAC00 \uBD81\uB9C8\uD074\uB9BF\uC774 \uC5C6\uC2B5\uB2C8\uB2E4.</li>';
-    return;
-  }
-  var html='';
-  DATA.bookmarklets.forEach(function(bm,i){
-    var label=esc(bm.label);
-    var preview=esc(bm.code.length>55?bm.code.substring(0,55)+'...':bm.code);
-    html+='<li class="bm-item"><div class="bm-item-info"><div class="bm-label">'+label+'</div><div class="bm-code-preview">'+preview+'</div></div><button class="bm-del" data-i="'+i+'">\uC0AD\uC81C</button></li>';
-  });
-  list.innerHTML=html;
-  list.querySelectorAll('.bm-del').forEach(function(btn){
-    btn.onclick=function(){deleteBm(parseInt(this.getAttribute('data-i'),10));};
-  });
-}
-
 
 
 function renderCircle(){
@@ -270,80 +214,11 @@ function toggleTranslate(){
 }
 
 
-function renderPresetList(){
-  var list=document.getElementById('presetList');
-  var countEl=document.getElementById('presetCount');
-  var enabled=DATA.presets.filter(function(p){return p.enabled;}).length;
-  countEl.textContent=enabled+'/'+DATA.presets.length;
-  if(DATA.presets.length===0){list.innerHTML='<li class="empty">사용 가능한 프리셋이 없습니다.</li>';return;}
-  var html='';
-  DATA.presets.forEach(function(p){
-    var code=esc(p.code.length>70?p.code.substring(0,70)+'...':p.code);
-    html+='<li class="bm-item"><div class="bm-item-info"><div class="bm-label">'+esc(p.label)+'</div><div class="toggle-desc">'+esc(p.description)+'</div><div class="bm-code-preview">'+code+'</div></div><label class="toggle"><input type="checkbox" data-preset="'+esc(p.id)+'" '+(p.enabled?'checked':'')+(p.required?' disabled':'')+'><span class="slider"></span></label></li>';
-  });
-  list.innerHTML=html;
-  list.querySelectorAll('input[data-preset]').forEach(function(input){
-    input.onchange=function(){togglePreset(this.getAttribute('data-preset'),this);};
-  });
-}
-
-function togglePreset(id,cb){
-  var enabled=cb.checked;
-  fetch('/api/settings/preset?code='+TOKEN,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({presetId:id,enabled:enabled})})
-  .then(function(r){if(!r.ok)throw new Error(r.status);return r.json();})
-  .then(function(){
-    var preset=DATA.presets.find(function(p){return p.id===id;});
-    if(preset)preset.enabled=enabled;
-    renderPresetList();
-    showStatus('presetStatus','ok','저장됨');
-  })
-  .catch(function(){cb.checked=!cb.checked;showStatus('presetStatus','err','저장 실패');});
-}
-
-function addBm(){
-  var nameEl=document.getElementById('bmName');
-  var codeEl=document.getElementById('bmCode');
-  var name=nameEl.value.trim();
-  var code=codeEl.value.trim();
-  if(!name||!code){showStatus('bmStatus','err','\uC774\uB984\uACFC \uCF54\uB4DC\uB97C \uBAA8\uB450 \uC785\uB825\uD574\uC8FC\uC138\uC694.');return;}
-  if(!code.startsWith('javascript:')){showStatus('bmStatus','err','\uCF54\uB4DC\uB294 javascript: \uB85C \uC2DC\uC791\uD574\uC57C \uD569\uB2C8\uB2E4.');return;}
-  var exists=DATA.bookmarklets.some(function(b){return b.label===name;});
-  if(!exists&&DATA.bookmarklets.length>=MAX_BM){showStatus('bmStatus','err','\uCD5C\uB300 '+MAX_BM+'\uAC1C\uAE4C\uC9C0 \uB4F1\uB85D\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4.');return;}
-  document.getElementById('addBtn').disabled=true;
-  fetch('/api/settings/bookmarklet?code='+TOKEN,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'add',label:name,code:code})})
-  .then(function(r){if(!r.ok)return r.text().then(function(t){throw new Error(t);});return r.text();})
-  .then(function(){
-    var idx=DATA.bookmarklets.findIndex(function(b){return b.label===name;});
-    if(idx>=0)DATA.bookmarklets[idx]={label:name,code:code};
-    else DATA.bookmarklets.push({label:name,code:code});
-    nameEl.value='';codeEl.value='';
-    renderBmList();
-    document.getElementById('addBtn').disabled=false;
-    showStatus('bmStatus','ok','\uCD94\uAC00\uB428');
-  })
-  .catch(function(e){document.getElementById('addBtn').disabled=false;showStatus('bmStatus','err',e.message||'\uCD94\uAC00 \uC2E4\uD328');});
-}
-
-function deleteBm(idx){
-  var bm=DATA.bookmarklets[idx];
-  if(!bm)return;
-  if(!confirm(bm.label+' \uBD81\uB9C8\uD074\uB9BF\uC744 \uC0AD\uC81C\uD558\uC2DC\uACA0\uC2B5\uB2C8\uAE4C?'))return;
-  fetch('/api/settings/bookmarklet?code='+TOKEN,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'delete',label:bm.label})})
-  .then(function(r){if(!r.ok)throw new Error(r.status);return r.text();})
-  .then(function(){
-    DATA.bookmarklets.splice(idx,1);
-    renderBmList();
-    showStatus('bmStatus','ok','\uC0AD\uC81C\uB428');
-  })
-  .catch(function(){showStatus('bmStatus','err','\uC0AD\uC81C \uC2E4\uD328');});
-}
-
 function showStatus(id,cls,txt){
   var el=document.getElementById(id);el.className='status '+cls;el.textContent=txt;
   setTimeout(function(){el.style.opacity='0';setTimeout(function(){el.textContent='';el.className='status';el.style.opacity='1';},200);},2500);
 }
 
-function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 </script>
 </body></html>`;
 }

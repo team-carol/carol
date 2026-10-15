@@ -4,12 +4,12 @@ import { createHash, timingSafeEqual } from "crypto";
 import { gunzip } from "zlib";
 import { promisify } from "util";
 import { parseFriendCode as parseFC, parseRecentRecords, parsePlaylogHistory, getMaimaiBaseUrl, parseMapAreas, parsePlaylogDetail, parseUserOptions, parseCircle } from "../scraper";
-import { saveSyncExtras, getMaishiftLink, saveUserSession, findUserBySyncToken, getAvatarBlob, getSongJacket, saveSongJacket, getExtraBookmarklets, addExtraBookmarklet, removeExtraBookmarklet, getEnabledBookmarkletPresetIds, setBookmarkletPresetEnabled, getUserDefaultServer, setUserDefaultServer, isMaimaiServer, getMapImage, saveMapImage, backfillEventRatingUp, getAllAliases, listNameTranslations, setNameTranslation, addAlias, deleteAlias, setAliasTranslation, setMessageOverride, deleteMessageOverride, getTranslateTitles, setTranslateTitles, getDxRankDecimal, setDxRankDecimal, saveProfileCircle, getCirclePublic, setCirclePublic, getRegisteredUserCount, getAchievementMinimum, setAchievementMinimum, getPolicyAck, setPolicyAck, getSimaiChart, saveSimaiChart, listRegistryCharts, auditRegistryCharts, listOptionPresets, saveOptionPreset, deleteOptionPreset, saveOptionSnapshot, getOptionSnapshots, listPatchNotes, savePatchNote, setPatchNotePublished, deletePatchNote } from "../storage";
+import { saveSyncExtras, getMaishiftLink, saveUserSession, findUserBySyncToken, getAvatarBlob, getSongJacket, saveSongJacket, getUserDefaultServer, setUserDefaultServer, isMaimaiServer, getMapImage, saveMapImage, backfillEventRatingUp, getAllAliases, listNameTranslations, setNameTranslation, addAlias, deleteAlias, setAliasTranslation, setMessageOverride, deleteMessageOverride, getTranslateTitles, setTranslateTitles, getDxRankDecimal, setDxRankDecimal, saveProfileCircle, getCirclePublic, setCirclePublic, getRegisteredUserCount, getAchievementMinimum, setAchievementMinimum, getPolicyAck, setPolicyAck, getSimaiChart, saveSimaiChart, listRegistryCharts, auditRegistryCharts, listOptionPresets, saveOptionPreset, deleteOptionPreset, saveOptionSnapshot, getOptionSnapshots, listPatchNotes, savePatchNote, setPatchNotePublished, deletePatchNote } from "../storage";
 import { POLICY_VERSION } from "../policy";
 import type { SongAliasRow } from "../storage/types";
 import { scheduleMaishiftCheck } from "../maishift";
 import { saveRankImages, knownRankImageFiles } from "../rankImages";
-import { buildBookmarkletJs, setBaseUrl, getBaseUrl, buildBookmarklet, BOOKMARKLET_PRESETS, getBookmarkletPresets } from "./bookmarklet";
+import { buildBookmarkletJs, setBaseUrl, getBaseUrl, buildBookmarklet, MAISHIFT_BOOKMARKLET } from "./bookmarklet";
 import { OPTION_CLIENT_JS, OPTION_PRESET_MAX, buildOptionBookmarklet, sanitizeOptionPreset } from "./optionPreset";
 import { optionsPage } from "./optionsPage";
 import { patchNotesAdminPage } from "./patchNotesAdminPage";
@@ -135,15 +135,7 @@ h1{font-size:clamp(36px,5vw,52px);font-weight:500;color:var(--ink);letter-spacin
 .step::before{content:counter(s);flex-shrink:0;width:26px;height:26px;margin-top:1px;background:var(--surface-2);color:var(--accent-soft);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:500}
 .tab{display:none}
 .tab.active{display:block}
-.extra{margin-top:48px;padding-top:40px;border-top:1px solid var(--border)}
-.extra h2{font-size:clamp(24px,3vw,30px);font-weight:500;color:var(--ink);line-height:1.2;margin-bottom:12px}
-.extraIntro{font-size:15.5px;color:var(--muted);margin-bottom:20px}
-.extraActions{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
-.extraCard{display:block;background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:20px;color:var(--ink-soft);transition:border-color .15s}
-a.extraCard:hover{border-color:#f2857f;color:var(--ink-soft)}
-.extraCard strong{display:block;color:var(--ink);font-size:17px;font-weight:500;margin-bottom:6px}
-.extraCard span{display:block;color:var(--muted);font-size:14px;line-height:1.55}
-@media(max-width:560px){.card{padding:22px}.extraActions{grid-template-columns:1fr}}
+@media(max-width:560px){.card{padding:22px}}
 </style></head><body>
 ${topbar(userNav(token, "sync"))}
 <main class="page">
@@ -163,7 +155,6 @@ ${topbar(userNav(token, "sync"))}
 <div class="card">
 <p class="eyebrow">Step 02</p>
 <p>maishift 북마클릿은 캐롤봇 추가 북마클릿을 실행할 때 자동으로 함께 실행됩니다.</p>
-<p class="hint">그 밖에 함께 실행할 사설 북마클릿은 <a href="/settings?code=${token}">설정</a> 페이지에서 등록할 수 있습니다.</p>
 </div>
 <div class="card">
 <p class="eyebrow">Step 03</p>
@@ -180,7 +171,6 @@ ${topbar(userNav(token, "sync"))}
 <div class="card">
 <p class="eyebrow">Step 02</p>
 <p>maishift 북마클릿은 캐롤봇 추가 북마클릿을 실행할 때 자동으로 함께 실행됩니다.</p>
-<p class="hint">그 밖에 함께 실행할 사설 북마클릿은 <a href="/settings?code=${token}">설정</a> 페이지에서 등록할 수 있습니다.</p>
 </div>
 <div class="card">
 <p class="eyebrow">Step 03</p>
@@ -190,16 +180,6 @@ ${topbar(userNav(token, "sync"))}
 <li class="step">URL 칸을 모두 지우고, 복사한 코드를 <strong>붙여넣기</strong></li>
 <li class="step"><a href="https://maimaidx-eng.com/maimai-mobile/" target="_blank">maimai DX NET</a> 또는 <a href="https://maimaidx.jp/maimai-mobile/" target="_blank">maimaiでらっくすNET</a>에서 해당 북마크 실행</li>
 </ol>
-</div>
-</div>
-<div class="extra">
-<p class="eyebrow">사설 북마클릿</p>
-<h2>사설 북마클릿 관리</h2>
-<p class="extraIntro">여러 계정이나 서버를 쓰는 경우, 설정 페이지에서 북마클릿을 최대 <strong>5개</strong>까지 추가로 등록할 수 있습니다.</p>
-<div class="extraActions">
-<a class="extraCard" href="/settings?code=${token}"><strong>추가</strong><span>이름과 코드를 입력해 새 북마클릿 등록</span></a>
-<a class="extraCard" href="/settings?code=${token}"><strong>삭제</strong><span>등록된 목록에서 필요 없는 북마클릿 제거</span></a>
-<div class="extraCard"><strong>사용</strong><span>기본 북마클릿처럼 maimai DX net에서 실행</span></div>
 </div>
 </div>
 </main>
@@ -485,13 +465,10 @@ export function startWebServer(port: number): void {
       res.writeHead(200, { "content-type": "application/javascript; charset=utf-8", "cache-control": "no-cache" });
       const code = url.searchParams.get("code") ?? "";
       const userId = code ? await findUserBySyncToken(code) : null;
-      const extras = userId ? await getExtraBookmarklets(userId) : [];
-      const presetIds = userId ? await getEnabledBookmarkletPresetIds(userId) : [];
-      const bookmarklets = [...getBookmarkletPresets(presetIds), ...extras];
       const policyNotice = userId ? ((await getPolicyAck(userId)) ?? POLICY_VERSION) < POLICY_VERSION : false;
       const canonicalHost = CONFIG.baseUrl ? new URL(CONFIG.baseUrl).host : "";
       const isLegacyHost = !!canonicalHost && req.headers.host !== canonicalHost;
-      res.end(buildBookmarkletJs(bookmarklets, { policyNotice, deprecationCutoff: isLegacyHost ? DOMAIN_MIGRATION_CUTOFF : undefined, knownRankImages: { intl: knownRankImageFiles("intl"), jp: knownRankImageFiles("jp") } }));
+      res.end(buildBookmarkletJs([MAISHIFT_BOOKMARKLET], { policyNotice, deprecationCutoff: isLegacyHost ? DOMAIN_MIGRATION_CUTOFF : undefined, knownRankImages: { intl: knownRankImageFiles("intl"), jp: knownRankImageFiles("jp") } }));
       return;
     }
 
@@ -569,14 +546,12 @@ ${siteFooter()}
       const token = url.searchParams.get("code") || "";
       const userId = await findUserBySyncToken(token);
       if (!userId && !isDev) { res.writeHead(403); res.end("expired"); return; }
-      const presetIds = userId ? await getEnabledBookmarkletPresetIds(userId) : [];
-      const bookmarklets = userId ? await getExtraBookmarklets(userId) : [];
       const defaultServer = userId ? await getUserDefaultServer(userId) : "intl";
       const translate = userId ? await getTranslateTitles(userId) : false;
       const circlePublic = userId ? await getCirclePublic(userId) : true;
       const dxDecimal = userId ? await getDxRankDecimal(userId) : false;
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-      res.end(settingsPage(token, presetIds, bookmarklets, defaultServer, translate, circlePublic, dxDecimal));
+      res.end(settingsPage(token, defaultServer, translate, circlePublic, dxDecimal));
       return;
     }
 
@@ -976,12 +951,10 @@ ${siteFooter()}
       const token = url.searchParams.get("code") || "";
       const userId = await findUserBySyncToken(token);
       if (!userId) { res.writeHead(403, { "content-type": "application/json" }); res.end(JSON.stringify({ error: "expired" })); return; }
-      const presets = await getEnabledBookmarkletPresetIds(userId);
-      const bookmarklets = await getExtraBookmarklets(userId);
       const defaultServer = await getUserDefaultServer(userId);
       const translate = await getTranslateTitles(userId);
       res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({ presets, bookmarklets, defaultServer, translate, circlePublic: await getCirclePublic(userId), minimumAchievement: await getAchievementMinimum(userId) }));
+      res.end(JSON.stringify({ defaultServer, translate, circlePublic: await getCirclePublic(userId), minimumAchievement: await getAchievementMinimum(userId) }));
       return;
     }
 
@@ -1058,82 +1031,6 @@ ${siteFooter()}
         await setUserDefaultServer(userId, server);
         res.writeHead(200, { "content-type": "application/json" });
         res.end(JSON.stringify({ defaultServer: server }));
-      } catch {
-        res.writeHead(400, { "content-type": "application/json" });
-        res.end(JSON.stringify({ error: "invalid_body" }));
-      }
-      return;
-    }
-
-    if (req.method === "POST" && url.pathname === "/api/settings/preset") {
-      const token = url.searchParams.get("code") || "";
-      const userId = await findUserBySyncToken(token);
-      if (!userId) { res.writeHead(403, { "content-type": "application/json" }); res.end(JSON.stringify({ error: "expired" })); return; }
-      try {
-        const body = JSON.parse(await readBody(req));
-        const presetId = (body.presetId || "").trim();
-        const target = BOOKMARKLET_PRESETS.find((preset) => preset.id === presetId);
-        // 항상 실행하는 프리셋(maishift)은 끌 수 없다.
-        if (!target || target.required) {
-          res.writeHead(400, { "content-type": "application/json" });
-          res.end(JSON.stringify({ error: "invalid_preset" }));
-          return;
-        }
-        const enabled = !!body.enabled;
-        await setBookmarkletPresetEnabled(userId, presetId, enabled);
-        const presets = await getEnabledBookmarkletPresetIds(userId);
-        res.writeHead(200, { "content-type": "application/json" });
-        res.end(JSON.stringify({ presets }));
-      } catch {
-        res.writeHead(400, { "content-type": "application/json" });
-        res.end(JSON.stringify({ error: "invalid_body" }));
-      }
-      return;
-    }
-
-    if (req.method === "POST" && url.pathname === "/api/settings/bookmarklet") {
-      const token = url.searchParams.get("code") || "";
-      const userId = await findUserBySyncToken(token);
-      if (!userId) { res.writeHead(403, { "content-type": "application/json" }); res.end(JSON.stringify({ error: "expired" })); return; }
-      try {
-        const body = JSON.parse(await readBody(req));
-        const action: string = body.action;
-        if (action === "add") {
-          const label = (body.label || "").trim();
-          const code = (body.code || "").trim();
-          if (!label || !code) {
-            res.writeHead(400, { "content-type": "application/json" });
-            res.end(JSON.stringify({ error: "missing_fields" }));
-            return;
-          }
-          const existing = await getExtraBookmarklets(userId);
-          if (existing.length >= 5) {
-            res.writeHead(400, { "content-type": "application/json" });
-            res.end(JSON.stringify({ error: "max_reached" }));
-            return;
-          }
-          if (existing.some((b: { label: string }) => b.label === label)) {
-            res.writeHead(400, { "content-type": "application/json" });
-            res.end(JSON.stringify({ error: "duplicate_label" }));
-            return;
-          }
-          await addExtraBookmarklet(userId, label, code);
-        } else if (action === "delete") {
-          const label = (body.label || "").trim();
-          if (!label) {
-            res.writeHead(400, { "content-type": "application/json" });
-            res.end(JSON.stringify({ error: "missing_fields" }));
-            return;
-          }
-          await removeExtraBookmarklet(userId, label);
-        } else {
-          res.writeHead(400, { "content-type": "application/json" });
-          res.end(JSON.stringify({ error: "invalid_action" }));
-          return;
-        }
-        const bookmarklets = await getExtraBookmarklets(userId);
-        res.writeHead(200, { "content-type": "application/json" });
-        res.end(JSON.stringify({ bookmarklets }));
       } catch {
         res.writeHead(400, { "content-type": "application/json" });
         res.end(JSON.stringify({ error: "invalid_body" }));

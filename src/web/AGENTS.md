@@ -24,11 +24,10 @@ src/web/
 | Task | Location | Notes |
 |---|---|---|
 | Add HTTP route | `index.ts` | Follow `if (req.method && url.pathname)` chains. |
-| Change install guide | `guidePage()` in `index.ts` | PC/mobile tabs plus settings link and extra bookmarklet guide. |
+| Change install guide | `guidePage()` in `index.ts` | PC/mobile tabs. |
 | Change settings UI | `settingsPage.ts` | Inline HTML/CSS/JS; no framework. |
 | Change settings API | `index.ts` settings API block | `/api/settings`, `/privacy`, `/preset`, `/bookmarklet`. |
 | Change bookmarklet payload | `bookmarklet.ts` | Huge embedded JS string plus injection marker. |
-| Add built-in bookmarklet | `BOOKMARKLET_PRESETS` in `bookmarklet.ts` | Add preset object; state stored as ID in DB. |
 | Web-only local preview | `dev.ts` | Starts server without Discord token/login. |
 | 채보 플레이어 껍데기 | `chartPlayer.ts` | HTML/CSS와 컨트롤. 그리기 코어는 `chartRenderer.ts` 를 인라인한다. |
 | 노트·슬라이드 그리기 | `chartRenderer.ts` | canvas 링 렌더러. **백틱과 `${` 를 쓰지 말 것** (템플릿 문자열로 보관). `/보면` 미리보기 GIF도 이 코드를 vm 에 올려 쓴다. |
@@ -41,12 +40,10 @@ src/web/
 |---|---|
 | `GET /sync?code=TOKEN` | Bookmarklet install guide; dev preview allowed when `baseUrl` is empty. |
 | `POST /sync?code=TOKEN` | Receives bookmarklet HTML payload and caches profile/session data. |
-| `GET /settings?code=TOKEN` | User settings page: profile privacy, presets, extra bookmarklets. |
+| `GET /settings?code=TOKEN` | User settings page: default server, circle privacy, translation, DX ✦ decimal, achievement filter. |
 | `GET /api/settings` | JSON `{ private, presets, bookmarklets }`. |
 | `POST /api/settings/privacy` | Toggle profile privacy. |
 | `POST /api/settings/circle` | 서클 공개 토글(`sessions.circle_public`, 기본 공개). |
-| `POST /api/settings/preset` | Toggle preset IDs such as `maishift`. |
-| `POST /api/settings/bookmarklet` | Add/delete extra bookmarklets, max 5. |
 | `GET /bookmarklet.js?code=TOKEN` | Serves generated sync JS with enabled presets/extras. |
 | `GET /avatar`, `GET /jacket` | Stored/fetched PNG assets. |
 | `GET /chart?id=TOKEN` | simai 채보 플레이어. 토큰을 아는 사람만 열 수 있고 로그인은 요구하지 않는다. |
@@ -70,9 +67,7 @@ src/web/
 - Web pages use inline CSS built on `theme.ts` (tokens copied from team-carol/carol-web `app/globals.css`): start every `<style>` with `BASE_CSS` (admin pages add `ADMIN_CSS`), use `pageHead()`/`topbar()`/`siteFooter()`, and reference `var(--…)` instead of hex colors. Injected overlays (`bookmarklet.ts`, `importClient.ts`) can't use the variables, so they hard-code the same values (`T` in `theme.ts`).
 - `/brand/avatar.png` serves the carolbot avatar embedded as base64 in `brandAvatar.ts` (Docker only ships compiled `src/` → `dist/`).
 - `settingsPage()` serializes data with `<`/`>` escaped before embedding in `<script>`.
-- Extra bookmarklets must start with `javascript:` and are capped at 5.
-- Preset bookmarklets execute before user extra bookmarklets in generated `/bookmarklet.js`.
-- Preset/extra bookmarklet tracking must not override `window.open`; popup bookmarklets such as `maishift` must receive native browser behavior.
+- The injected maishift bookmarklet must not have `window.open` overridden; it opens a popup and needs native browser behavior.
 - Bookmarklet execution is restricted to `maimaidx.jp` and `maimaidx-eng.com` before DOM work.
 - 옵션 프리셋은 서버가 DX NET 에 직접 적용하지 않는다(세션 비보관). 적용은 항상 사용자 브라우저의 `/option.js` 가 한다. 계정에 없는 option 값(미해금 SE 등)은 건너뛰고 현재 값을 유지한다.
 
@@ -89,7 +84,6 @@ src/web/
 ## ANTI-PATTERNS
 
 - Do not split web UI into React or templates unless explicitly requested; current surface is TS template strings.
-- Do not add a preset-specific DB column/API for each new built-in bookmarklet; use `BOOKMARKLET_PRESETS` + `preset_bookmarklets` IDs.
 - Do not move debug dumps into Docker data silently; docs expect repo-root files during dev.
 - Do not remove the domain guard from bookmarklet JS.
 - Do not let `baseUrl` drift from the public Cloudflare Tunnel URL in production.

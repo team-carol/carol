@@ -2,45 +2,14 @@ let baseUrl = "";
 export function setBaseUrl(url: string): void { baseUrl = url; }
 export function getBaseUrl(port: number): string { return baseUrl || `http://localhost:${port}`; }
 
-export interface BookmarkletPreset {
-  id: string;
-  label: string;
-  description: string;
-  code: string;
-  execution?: BookmarkletExecution;
-  /** true 면 설정과 상관없이 항상 함께 실행한다(끌 수 없음). */
-  required?: boolean;
-}
-
-interface BookmarkletExecution {
-  popupUrl?: string;
-  popupName?: string;
-  completionTopic?: string;
-  timeoutMs?: number;
-}
-
-export const BOOKMARKLET_PRESETS: BookmarkletPreset[] = [{
-  id: "maishift",
+/**
+ * maishift 북마클릿. 캐롤봇 추가 북마클릿을 실행하면 항상 함께 실행된다(캐롤봇 프로필·기록이 maishift 에서 오므로).
+ * 예전의 프리셋 북마클릿·사설 북마클릿 등록 기능은 없앴다.
+ */
+export const MAISHIFT_BOOKMARKLET = {
   label: "maishift",
-  description: "캐롤봇이 maishift 기록을 쓰므로 항상 함께 실행됩니다",
-  required: true,
   code: "javascript:(function(i){var t=i.createElement(\"script\");t.src=\"https://maimai.shiftpsh.com/bookmarklet.js?v=\"+Math.floor(Date.now()/1e5),i.body.append(t)})(document);",
-  execution: {
-    popupUrl: "https://maimai.shiftpsh.com/upload",
-    popupName: "maimai-record",
-    completionTopic: "complete",
-    timeoutMs: 30000,
-  },
-}];
-
-export function getBookmarkletPresets(ids: string[]): Array<{ label: string; code: string; execution?: BookmarkletExecution }> {
-  const enabled = new Set(ids);
-  return BOOKMARKLET_PRESETS.filter((preset) => preset.required || enabled.has(preset.id)).map((preset) => ({
-    label: preset.label,
-    code: preset.code,
-    execution: preset.execution,
-  }));
-}
+};
 
 export function buildBookmarklet(token: string, port: number): string {
   const server = getBaseUrl(port);
@@ -48,7 +17,7 @@ export function buildBookmarklet(token: string, port: number): string {
 }
 
 export function buildBookmarkletJs(
-  extras: Array<{ label: string; code: string; execution?: BookmarkletExecution }>,
+  extras: Array<{ label: string; code: string }>,
   opts: { policyNotice?: boolean; deprecationCutoff?: string; knownRankImages?: { intl: string[]; jp: string[] } } = {},
 ): string {
   const marker = "addSection('PROFILE');";
