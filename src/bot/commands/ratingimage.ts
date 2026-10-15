@@ -74,6 +74,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   let profile = cached;
   let records = getTopList(cached);
   let notice: string | undefined;
+  let futureVersion: string | undefined;
   if (dateOpt) {
     // 과거 날짜: 그날(오전 4시 기준 하루)이 끝나기 전 마지막 maishift 업로드의 레이팅표.
     const link = await getMaishiftLink(userId);
@@ -128,7 +129,8 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     records = result.top;
     // 헤더 레이팅은 profile.rating 을 쓰므로 미래시 레이팅으로 바꾼다.
     profile = { ...cached, rating: result.rating };
-    notice = msg("ratingImage.futureNotice", { version: versionName(result.versionId), rating: cached.rating });
+    futureVersion = versionName(result.versionId);
+    notice = msg("ratingImage.futureNotice", { version: futureVersion, rating: cached.rating });
   }
   // 치환 모드·S-레이팅은 레이팅 대상 50곡이 아니라 전체 기록에서 다시 뽑으므로
   // 레이팅 대상이 비어 있어도 clear 기록만 있으면 그릴 수 있다. S-레이팅은 DX 점수가 있는 기록이 있어야 한다.
@@ -149,6 +151,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       !dateOpt && !future,
       // JP 레이팅표는 곡 버전으로 신곡/구곡을 나누므로, 과거 날짜는 그날의 신곡 범위로.
       dateOpt || undefined,
+      futureVersion,
     );
     await interaction.editReply({
       content: notice,

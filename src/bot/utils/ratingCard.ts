@@ -717,6 +717,8 @@ export async function renderRatingCard(
   allowCache = true,
   // 과거 역산 렌더용. 주면 그 시점의 신곡 범위로 신곡/구곡을 나눈다.
   newSongDay?: string,
+  // 미래시 레이팅표면 그 버전 이름. 레이팅 옆에 "<버전> 미래시" 표시를 붙인다.
+  futureVersion?: string,
 ): Promise<Buffer> {
   // S-레이팅은 maimai 기록을 그대로 쓰고(난이도·마크 표기 동일) 곡 값과 고르는 규칙만 다르다.
   const sRating = type === "srating";
@@ -989,8 +991,10 @@ export async function renderRatingCard(
       ),
       el(
         "div",
-        { display: "flex", flex: 1, justifyContent: "flex-end" },
-        ratingBlock,
+        { display: "flex", flex: 1, justifyContent: "flex-end", alignItems: "center", gap: 10 },
+        futureVersion
+          ? [pill(msg("ratingCard.futureBadge", { version: futureVersion }), { background: ACCENT, color: BRAND.canvas, fontSize: 11, padding: "4px 10px" }), ratingBlock]
+          : ratingBlock,
       ),
     ],
   );
