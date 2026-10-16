@@ -116,7 +116,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 
   // 후보 = 상수 범위 · 국제판 수록 · 타입/장르/플레이여부 필터
   const candidates = getChartsInConstantRange(lo, hi).filter((c) => {
-    if (!isIntlAvailable(c.title)) return false;
+    if (!isIntlAvailable(c.title, c.kind)) return false;
     if (typeOpt && c.kind !== typeOpt) return false;
     if (diffOpt && c.diff !== diffOpt) return false;
     if (genreOpt && getSongGenre(c.title) !== genreOpt) return false;

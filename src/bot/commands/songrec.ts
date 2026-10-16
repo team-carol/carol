@@ -141,7 +141,7 @@ export function recommendCharts(
   };
   const candidates: Candidate[] = [];
   for (const chart of getChartsUnderConstant(upperBound)) {
-    if (!isIntlAvailable(chart.title)) continue; // 국제판 미수록 곡 제외
+    if (!isIntlAvailable(chart.title, chart.kind)) continue; // 국제판 미수록 곡 제외
     if (opts.kind && chart.kind !== opts.kind) continue; // ST/DX 필터
     if (opts.diff && chart.diff !== opts.diff) continue; // 난이도 필터
     const isNew = isNewTitle(chart.title, chart.kind);

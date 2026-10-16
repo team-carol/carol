@@ -614,7 +614,7 @@ export async function searchResultEmbeds(
       // 지역 라벨: 한 서버 전용 곡이면 곡의 실제 지역을, 양쪽 수록이면 현재 보는 서버를 표기.
       // (국제판 프로필에서도 JP 전용곡이 검색되므로 프로필 서버가 아니라 곡 기준으로 판정한다.)
       // 제목이 아닌 점수표 위 한 줄에 둔다.
-      const exclusive = getRegionExclusive(title);
+      const exclusive = getRegionExclusive(title, musicKind);
       const verLabel = p.server === "jp" ? "japan ver." : "intl ver.";
       // 장르(catcode)·수록 버전은 OTOGE DB 데이터. 있을 때만 리전 라벨 아래 들여써서 붙인다.
       const genre = getSongGenre(title);

@@ -17,8 +17,9 @@ let jacketUrlMap: Map<string, string> = new Map();
 let versionMap: Map<string, number> = new Map();
 // 곡 → 국제판 버전 코드. 국제판은 곡이 들어온 버전이 내수판과 다를 수 있어 따로 둔다.
 let intlVersionMap: Map<string, number> = new Map();
-// "곡|ST"·"곡|DX" → 버전 코드. 한 보면이 나중에 추가된 곡은 ST·DX 버전이 다르다(versionMap 은 이른 쪽).
-let kindVersionMap: Map<string, number> = new Map();
+// 지역별 "곡|ST"·"곡|DX" → 버전 코드. 한 보면이 나중에 추가된 곡은 ST·DX 의 버전과 수록 지역이 다르다
+// (예: 物凄い勢いでけーねが物凄いうた 는 ST 가 양쪽, DX 는 내수판 MAGiCAL 에만). versionMap 은 이른 쪽.
+let jpKindVersionMap: Map<string, number> = new Map();
 let intlKindVersionMap: Map<string, number> = new Map();
 // 국제판(intl="1") 수록 곡 제목 집합. 곡추천에서 미수록 곡을 제외하는 데 사용.
 let intlTitles: Set<string> = new Set();
@@ -213,7 +214,7 @@ interface ConstantsCache {
   jacketUrls?: [string, string][];
   versions?: [string, number][];
   intlVersions?: [string, number][];
-  kindVersions?: [string, number][];
+  jpKindVersions?: [string, number][];
   intlKindVersions?: [string, number][];
   intl?: string[];
   genres?: [string, string][];
@@ -236,7 +237,7 @@ function applyCache(data: string): { fresh: boolean } {
   jacketUrlMap = new Map(parsed.jacketUrls ?? []);
   versionMap = new Map(parsed.versions ?? []);
   intlVersionMap = new Map(parsed.intlVersions ?? []);
-  kindVersionMap = new Map(parsed.kindVersions ?? []);
+  jpKindVersionMap = new Map(parsed.jpKindVersions ?? []);
   intlKindVersionMap = new Map(parsed.intlKindVersions ?? []);
   intlTitles = new Set(parsed.intl ?? []);
   genreMap = new Map(parsed.genres ?? []);
@@ -249,7 +250,7 @@ function applyCache(data: string): { fresh: boolean } {
   setRegionVersions(parsed.versionsIntl ?? [], parsed.versionsJp ?? []);
   rebuildDailyFortuneSongs();
   // 보면 번호·버전 폴더 순서·버전 목록·보면 종류별 버전이 없는 옛 캐시면 새로 받는다.
-  return { fresh: parsed.source === "maishift" && !!parsed.trackIds && !!parsed.folderIntl && !!parsed.versionsIntl?.length && !!parsed.kindVersions };
+  return { fresh: parsed.source === "maishift" && !!parsed.trackIds && !!parsed.folderIntl && !!parsed.versionsIntl?.length && !!parsed.jpKindVersions };
 }
 
 export async function loadConstants(): Promise<void> {
@@ -288,7 +289,7 @@ export async function loadConstants(): Promise<void> {
     intlVersionMap = new Map(intl.map((s) => [s.title, s.version]));
     versionMap = new Map([...intlVersionMap, ...jp.map((s) => [s.title, s.version] as [string, number])]);
     intlKindVersionMap = kindVersionsOf(intl);
-    kindVersionMap = new Map([...intlKindVersionMap, ...kindVersionsOf(jp)]);
+    jpKindVersionMap = kindVersionsOf(jp);
     const koTitles = new Map<string, string>();
     for (const s of [...intl, ...jp]) if (s.korean && !koTitles.has(s.title)) koTitles.set(s.title, s.korean);
     setExternalTranslations(koTitles);
@@ -301,7 +302,7 @@ export async function loadConstants(): Promise<void> {
       jacketUrls: Array.from(jacketUrlMap.entries()),
       versions: Array.from(versionMap.entries()),
       intlVersions: Array.from(intlVersionMap.entries()),
-      kindVersions: Array.from(kindVersionMap.entries()),
+      jpKindVersions: Array.from(jpKindVersionMap.entries()),
       intlKindVersions: Array.from(intlKindVersionMap.entries()),
       intl: Array.from(intlTitles),
       genres: Array.from(genreMap.entries()),
@@ -364,10 +365,19 @@ export function getTitleByJacket(fileOrUrl: string): string | null {
 function versionOf(title: string, server: MaimaiServer, musicKind?: string): number | undefined {
   if (musicKind === "ST" || musicKind === "DX") {
     const key = `${title}|${musicKind}`;
-    const v = (server === "intl" ? intlKindVersionMap.get(key) : undefined) ?? kindVersionMap.get(key);
+    const v = server === "intl"
+      ? intlKindVersionMap.get(key) ?? jpKindVersionMap.get(key)
+      : jpKindVersionMap.get(key) ?? intlKindVersionMap.get(key);
     if (v !== undefined) return v;
   }
   return (server === "intl" ? intlVersionMap.get(title) : undefined) ?? versionMap.get(title);
+}
+
+/** 보면 종류별 수록 정보가 있는 musicKind 면 "ST"/"DX", 아니면 null(제목 기준으로 판정). */
+function knownKind(title: string, musicKind?: string): "ST" | "DX" | null {
+  if (musicKind !== "ST" && musicKind !== "DX") return null;
+  const key = `${title}|${musicKind}`;
+  return intlKindVersionMap.has(key) || jpKindVersionMap.has(key) ? musicKind : null;
 }
 
 function kindVersionsOf(songs: CatalogSong[]): Map<string, number> {
@@ -436,8 +446,11 @@ export function isSongPlus(title: string, server: MaimaiServer = "intl", musicKi
 }
 
 // 국제판 수록 여부. 데이터가 없으면(구버전 캐시) 제외하지 않도록 true 반환.
-export function isIntlAvailable(title: string): boolean {
-  return intlTitles.size === 0 || intlTitles.has(title);
+// musicKind(ST/DX)를 주면 그 보면이 국제판에 있는지 본다.
+export function isIntlAvailable(title: string, musicKind?: string): boolean {
+  if (intlTitles.size === 0) return true;
+  const kind = knownKind(title, musicKind);
+  return kind ? intlKindVersionMap.has(`${title}|${kind}`) : intlTitles.has(title);
 }
 
 // 내수판 수록 여부. 데이터 없으면 true 반환(오탐 방지).
@@ -447,10 +460,12 @@ export function isJpAvailable(title: string): boolean {
 
 // 지역 전용 곡 판정: "jp"(내수판 전용) / "intl"(국제판 전용) / null(양쪽 or 판정불가).
 // 두 집합 중 하나라도 비어있으면(구버전 캐시) null 반환해 오탐 방지.
-export function getRegionExclusive(title: string): "jp" | "intl" | null {
+// musicKind(ST/DX)를 주면 그 보면 기준이다(곡은 양쪽에 있어도 한 보면만 한쪽에 있을 수 있다).
+export function getRegionExclusive(title: string, musicKind?: string): "jp" | "intl" | null {
   if (intlTitles.size === 0 || jpTitles.size === 0) return null;
-  const inIntl = intlTitles.has(title);
-  const inJp = jpTitles.has(title);
+  const kind = knownKind(title, musicKind);
+  const inIntl = kind ? intlKindVersionMap.has(`${title}|${kind}`) : intlTitles.has(title);
+  const inJp = kind ? jpKindVersionMap.has(`${title}|${kind}`) : jpTitles.has(title);
   if (inIntl && !inJp) return "intl";
   if (inJp && !inIntl) return "jp";
   return null;
