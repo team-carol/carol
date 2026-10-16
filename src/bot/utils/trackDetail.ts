@@ -69,7 +69,7 @@ export async function handleTrackButton(i: ButtonInteraction): Promise<void> {
       (async () => { const f = getJacketFile(title); return f ? fetchJacketDataUrl(f) : null; })(),
       versionPositionText(title, musicKind, cached.server),
     ]);
-    const code = getSongVersion(title, cached.server);
+    const code = getSongVersion(title, cached.server, musicKind);
     const png = await renderTrackCard({
       title: displayTitle(title, translate),
       artist: getSongArtist(title),

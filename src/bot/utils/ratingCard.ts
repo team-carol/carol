@@ -152,7 +152,7 @@ function versionBadge(r: PlayRecord, server: MaimaiServer): CardVM["version"] {
     const color = songVersionColor(r.songVersion);
     return { label: versionName(r.songVersion), color, ink: inkOn(color) };
   }
-  const name = getSongVersionName(r.title, server);
+  const name = getSongVersionName(r.title, server, r.musicKind);
   return name ? { label: name, color: BRAND.surface2, ink: BRAND.ink } : undefined;
 }
 
@@ -188,7 +188,7 @@ function toVM(
       ? (allMarks.find((m) => MAI_COMBO_MARKS.includes(m)) ?? "")
       : (allMarks[1] ?? "");
 
-  const version = getSongVersion(r.title, server) ?? undefined;
+  const version = getSongVersion(r.title, server, r.musicKind) ?? undefined;
   const diffLabel = game === "maimai" ? r.diff : convertDiff(game, r.diff, version);
   const diffColor =
     game === "maimai"
@@ -701,8 +701,8 @@ export function ratingBreakdown(profile: CachedProfile): { newSum: number; newCo
   const markMap = buildMarkMap(clearRecords);
   const resolveKind = buildKindResolver(clearRecords);
   const rs = (r: PlayRecord) => toVM({ ...r, musicKind: resolveKind(r) }, markMap, profile.server).rs;
-  const news = profile.server === "jp" ? records.filter((r) => isNewSong(r.title, "jp")).slice(0, 15) : records.slice(0, 15);
-  const olds = profile.server === "jp" ? records.filter((r) => !isNewSong(r.title, "jp")).slice(0, 35) : records.slice(15, 50);
+  const news = profile.server === "jp" ? records.filter((r) => isNewSong(r.title, "jp", undefined, r.musicKind)).slice(0, 15) : records.slice(0, 15);
+  const olds = profile.server === "jp" ? records.filter((r) => !isNewSong(r.title, "jp", undefined, r.musicKind)).slice(0, 35) : records.slice(15, 50);
   const sum = (list: PlayRecord[]) => list.reduce((acc, r) => acc + rs(r), 0);
   return { newSum: sum(news), newCount: news.length, oldSum: sum(olds), oldCount: olds.length };
 }
@@ -800,11 +800,11 @@ export async function renderRatingCard(
     // JP: 전체 기록에서 직접 산출하므로 버전(isNewSong)으로 분류(15/35 미만 오분류 방지).
     const newRecords =
       profile.server === "jp"
-        ? records.filter((r) => isNewSong(r.title, "jp", newSongDay)).slice(0, 15)
+        ? records.filter((r) => isNewSong(r.title, "jp", newSongDay, r.musicKind)).slice(0, 15)
         : records.slice(0, 15);
     const otherRecords =
       profile.server === "jp"
-        ? records.filter((r) => !isNewSong(r.title, "jp", newSongDay)).slice(0, 35)
+        ? records.filter((r) => !isNewSong(r.title, "jp", newSongDay, r.musicKind)).slice(0, 35)
         : records.slice(15, 50);
     const newVms: CardVM[] = newRecords.map((r) => ({ ...vmOf(r), version: versionBadge(r, profile.server) }));
     const otherVms = otherRecords.map(vmOf);
@@ -826,12 +826,12 @@ export async function renderRatingCard(
 
     if (cfg.select === "newOld") {
       const news = rated
-        .filter((x) => isNewSong(x.r.title, profile.server))
+        .filter((x) => isNewSong(x.r.title, profile.server, undefined, x.r.musicKind))
         .sort(byRs)
         .slice(0, first.count)
         .map((x) => x.vm);
       const olds = rated
-        .filter((x) => !isNewSong(x.r.title, profile.server))
+        .filter((x) => !isNewSong(x.r.title, profile.server, undefined, x.r.musicKind))
         .sort(byRs)
         .slice(0, second.count)
         .map((x) => x.vm);

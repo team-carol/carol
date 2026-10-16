@@ -10,6 +10,8 @@ export interface CatalogSong {
   title: string;
   /** 캐롤봇 버전 코드(예: CiRCLE 26000, CiRCLE PLUS 26500). 같은 곡의 ST/DX 중 이른 쪽. */
   version: number;
+  /** ST/DX 보면별 버전 코드. 한쪽이 나중에 추가된 곡은 둘이 다르다(예: DX Splash, ST MAGiCAL). */
+  kindVersions: { ST?: number; DX?: number };
   /** 캐롤봇 장르명(예: "POPS＆アニメ"). 모르면 "". */
   genre: string;
   jacketUrl: string;
@@ -83,13 +85,17 @@ export function toCatalog(songs: MsSong[], tracks: MsTrack[]): CatalogSong[] {
     const title = song.title || "　"; // 곡 "　"(전각 공백)은 빈 제목으로 온다
     let e = byTitle.get(title);
     if (!e) {
-      e = { title, version: versionCode(song.songVersion), genre: GENRES[song.genre] ?? "", jacketUrl: song.jacketUrl, artist: song.artist, charts: [] };
+      e = { title, version: versionCode(song.songVersion), kindVersions: {}, genre: GENRES[song.genre] ?? "", jacketUrl: song.jacketUrl, artist: song.artist, charts: [] };
       const ko = song.titleTranslations?.find((t) => t.language === "KOREAN")?.title;
       if (ko && ko !== title) e.korean = ko;
       byTitle.set(title, e);
     } else {
       e.version = Math.min(e.version, versionCode(song.songVersion));
     }
+    // maishift 는 ST·DX 를 따로 된 곡으로 주므로 보면 종류별 버전은 여기서 받는다.
+    const kind = song.type === "DX" ? "DX" : "ST";
+    const code = versionCode(song.songVersion);
+    e.kindVersions[kind] = Math.min(e.kindVersions[kind] ?? code, code);
     return e;
   };
   songs.forEach((song) => {

@@ -17,6 +17,9 @@ let jacketUrlMap: Map<string, string> = new Map();
 let versionMap: Map<string, number> = new Map();
 // 곡 → 국제판 버전 코드. 국제판은 곡이 들어온 버전이 내수판과 다를 수 있어 따로 둔다.
 let intlVersionMap: Map<string, number> = new Map();
+// "곡|ST"·"곡|DX" → 버전 코드. 한 보면이 나중에 추가된 곡은 ST·DX 버전이 다르다(versionMap 은 이른 쪽).
+let kindVersionMap: Map<string, number> = new Map();
+let intlKindVersionMap: Map<string, number> = new Map();
 // 국제판(intl="1") 수록 곡 제목 집합. 곡추천에서 미수록 곡을 제외하는 데 사용.
 let intlTitles: Set<string> = new Set();
 // 내수판(JP) 수록 곡 제목 집합(music-ex.json 전곡). 지역 전용 곡 판정에 사용.
@@ -210,6 +213,8 @@ interface ConstantsCache {
   jacketUrls?: [string, string][];
   versions?: [string, number][];
   intlVersions?: [string, number][];
+  kindVersions?: [string, number][];
+  intlKindVersions?: [string, number][];
   intl?: string[];
   genres?: [string, string][];
   jpConstants?: [string, number][];
@@ -231,6 +236,8 @@ function applyCache(data: string): { fresh: boolean } {
   jacketUrlMap = new Map(parsed.jacketUrls ?? []);
   versionMap = new Map(parsed.versions ?? []);
   intlVersionMap = new Map(parsed.intlVersions ?? []);
+  kindVersionMap = new Map(parsed.kindVersions ?? []);
+  intlKindVersionMap = new Map(parsed.intlKindVersions ?? []);
   intlTitles = new Set(parsed.intl ?? []);
   genreMap = new Map(parsed.genres ?? []);
   jpConstantMap = new Map(parsed.jpConstants ?? []);
@@ -241,8 +248,8 @@ function applyCache(data: string): { fresh: boolean } {
   setFolders(parsed.folderIntl ?? null, parsed.folderJp ?? null);
   setRegionVersions(parsed.versionsIntl ?? [], parsed.versionsJp ?? []);
   rebuildDailyFortuneSongs();
-  // 보면 번호·버전 폴더 순서·버전 목록이 없는 옛 캐시면 새로 받는다.
-  return { fresh: parsed.source === "maishift" && !!parsed.trackIds && !!parsed.folderIntl && !!parsed.versionsIntl?.length };
+  // 보면 번호·버전 폴더 순서·버전 목록·보면 종류별 버전이 없는 옛 캐시면 새로 받는다.
+  return { fresh: parsed.source === "maishift" && !!parsed.trackIds && !!parsed.folderIntl && !!parsed.versionsIntl?.length && !!parsed.kindVersions };
 }
 
 export async function loadConstants(): Promise<void> {
@@ -280,6 +287,8 @@ export async function loadConstants(): Promise<void> {
     jpConstantMap = toConstantMap(jp); // JP 상수 맵 (JP 프로필 레이팅 계산용)
     intlVersionMap = new Map(intl.map((s) => [s.title, s.version]));
     versionMap = new Map([...intlVersionMap, ...jp.map((s) => [s.title, s.version] as [string, number])]);
+    intlKindVersionMap = kindVersionsOf(intl);
+    kindVersionMap = new Map([...intlKindVersionMap, ...kindVersionsOf(jp)]);
     const koTitles = new Map<string, string>();
     for (const s of [...intl, ...jp]) if (s.korean && !koTitles.has(s.title)) koTitles.set(s.title, s.korean);
     setExternalTranslations(koTitles);
@@ -292,6 +301,8 @@ export async function loadConstants(): Promise<void> {
       jacketUrls: Array.from(jacketUrlMap.entries()),
       versions: Array.from(versionMap.entries()),
       intlVersions: Array.from(intlVersionMap.entries()),
+      kindVersions: Array.from(kindVersionMap.entries()),
+      intlKindVersions: Array.from(intlKindVersionMap.entries()),
       intl: Array.from(intlTitles),
       genres: Array.from(genreMap.entries()),
       jpConstants: Array.from(jpConstantMap.entries()),
@@ -349,19 +360,31 @@ export function getTitleByJacket(fileOrUrl: string): string | null {
 // 곡 version 세대 코드 (없으면 null)
 // 곡 버전은 서버마다 다를 수 있다(예: Galaxy Blaster 는 국제판 CiRCLE, 내수판 CiRCLE PLUS).
 // versionMap 은 국제판 위에 내수판을 덮어쓴 맵이라 내수판 기준이고, 국제판은 intlVersionMap 을 먼저 본다.
-function versionOf(title: string, server: MaimaiServer): number | undefined {
+// musicKind(ST/DX)를 주면 그 보면의 버전을 먼저 본다(예: 居並ぶ穀物… DX 는 Splash, ST 는 MAGiCAL).
+function versionOf(title: string, server: MaimaiServer, musicKind?: string): number | undefined {
+  if (musicKind === "ST" || musicKind === "DX") {
+    const key = `${title}|${musicKind}`;
+    const v = (server === "intl" ? intlKindVersionMap.get(key) : undefined) ?? kindVersionMap.get(key);
+    if (v !== undefined) return v;
+  }
   return (server === "intl" ? intlVersionMap.get(title) : undefined) ?? versionMap.get(title);
 }
 
-export function getSongVersion(title: string, server: MaimaiServer = "intl"): number | null {
-  return versionOf(title, server) ?? null;
+function kindVersionsOf(songs: CatalogSong[]): Map<string, number> {
+  const map = new Map<string, number>();
+  for (const s of songs) for (const [kind, v] of Object.entries(s.kindVersions)) if (v !== undefined) map.set(`${s.title}|${kind}`, v);
+  return map;
+}
+
+export function getSongVersion(title: string, server: MaimaiServer = "intl", musicKind?: string): number | null {
+  return versionOf(title, server, musicKind) ?? null;
 }
 
 // 레이팅 신곡(현재+이전 버전) 여부. version 데이터가 없으면 구곡으로 취급.
 // 서버별 세대 진행이 달라(내수판=MAGiCAL, 국제판=CiRCLE PLUS) 신곡 범위도 서버별 이력을 쓴다.
 // playDay 를 주면 그 시점의 신곡 범위로 판정한다(과거 레이팅표 역산·히스토리 추정용).
-export function isNewSong(title: string, server: MaimaiServer = "intl", playDay?: string): boolean {
-  const v = versionOf(title, server);
+export function isNewSong(title: string, server: MaimaiServer = "intl", playDay?: string, musicKind?: string): boolean {
+  const v = versionOf(title, server, musicKind);
   if (v === undefined) return false;
   const w = newSongWindowAt(playDay, server);
   return v >= w.min && v < w.max;
@@ -398,15 +421,15 @@ function findGeneration(v: number): [number, number, string] | null {
 }
 
 // 곡의 수록 버전(세대명). version 데이터 없으면 null.
-export function getSongVersionName(title: string, server: MaimaiServer = "intl"): string | null {
-  const v = versionOf(title, server);
+export function getSongVersionName(title: string, server: MaimaiServer = "intl", musicKind?: string): string | null {
+  const v = versionOf(title, server, musicKind);
   if (v === undefined) return null;
   return findGeneration(v)?.[2] ?? null;
 }
 
 // 곡이 해당 세대의 PLUS 버전인지 여부.
-export function isSongPlus(title: string, server: MaimaiServer = "intl"): boolean {
-  const v = versionOf(title, server);
+export function isSongPlus(title: string, server: MaimaiServer = "intl", musicKind?: string): boolean {
+  const v = versionOf(title, server, musicKind);
   if (v === undefined) return false;
   const g = findGeneration(v);
   return g ? v >= g[1] : false;
@@ -664,7 +687,7 @@ export function computeRatingTarget(clearRecords: PlayRecord[], server: MaimaiSe
     .filter((r) => r.achievementVal > 0)
     .map((r) => {
       const c = getConstant(r.title, r.musicKind, r.diff, server) ?? levelToNumber(r.level);
-      return { rec: r, rs: calcSongRating(r.achievementVal, c, r.fc), isNew: isNewSong(r.title, server, playDay) };
+      return { rec: r, rs: calcSongRating(r.achievementVal, c, r.fc), isNew: isNewSong(r.title, server, playDay, r.musicKind) };
     });
   const byRs = (a: { rs: number }, b: { rs: number }) => b.rs - a.rs;
   const news = rated.filter((x) => x.isNew).sort(byRs).slice(0, 15).map((x) => x.rec);

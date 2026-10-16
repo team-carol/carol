@@ -100,7 +100,7 @@ export function recommendCharts(
   if (clearRecords.length === 0) return [];
 
   // 서버별 신곡 하한이 다르므로(내수판=CiRCLE PLUS) 신곡 판정에 server를 고정한다.
-  const isNewTitle = (title: string) => isNewSong(title, server);
+  const isNewTitle = (title: string, kind: string) => isNewSong(title, server, undefined, kind);
 
   const clearMap = new Map<string, PlayRecord>();
   const newRSs: number[] = [];
@@ -115,7 +115,7 @@ export function recommendCharts(
       topRS = rs;
       topC = C;
     }
-    if (isNewTitle(r.title)) newRSs.push(rs);
+    if (isNewTitle(r.title, r.musicKind)) newRSs.push(rs);
     else oldRSs.push(rs);
   }
   if (topC <= 0) return [];
@@ -144,7 +144,7 @@ export function recommendCharts(
     if (!isIntlAvailable(chart.title)) continue; // 국제판 미수록 곡 제외
     if (opts.kind && chart.kind !== opts.kind) continue; // ST/DX 필터
     if (opts.diff && chart.diff !== opts.diff) continue; // 난이도 필터
-    const isNew = isNewTitle(chart.title);
+    const isNew = isNewTitle(chart.title, chart.kind);
     if (opts.category === "new" && !isNew) continue; // 신곡/구곡 필터
     if (opts.category === "others" && isNew) continue;
     const rec = clearMap.get(`${chart.title}|${chart.kind}|${chart.diff}`);
@@ -202,7 +202,7 @@ export function recommendCharts(
     const target = pick.minTarget; // 최소 목표를 그대로 표시
     const targetRS = calcSongRating(target.ach, pick.level, pick.fc);
     // 실제 총 레이팅 변화: 이 채보가 이미 대상이면 현재RS를, 아니면 컷라인을 밀어냄
-    const floor = isNewTitle(pick.title) ? newFloor : oldFloor;
+    const floor = isNewTitle(pick.title, pick.kind) ? newFloor : oldFloor;
     const ratingDelta = targetRS - Math.max(pick.currentRS, floor);
     chosen.push({
       title: pick.title,
@@ -215,7 +215,7 @@ export function recommendCharts(
       targetAch: target.ach,
       targetRS,
       ratingDelta,
-      isNew: isNewTitle(pick.title),
+      isNew: isNewTitle(pick.title, pick.kind),
       jacketFile: getJacketFile(pick.title),
     });
   }

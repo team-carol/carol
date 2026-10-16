@@ -120,8 +120,8 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     if (typeOpt && c.kind !== typeOpt) return false;
     if (diffOpt && c.diff !== diffOpt) return false;
     if (genreOpt && getSongGenre(c.title) !== genreOpt) return false;
-    if (verOpt && getSongVersionName(c.title) !== verOpt) return false;
-    if (plusOpt && isSongPlus(c.title) !== (plusOpt === "plus")) return false;
+    if (verOpt && getSongVersionName(c.title, "intl", c.kind) !== verOpt) return false;
+    if (plusOpt && isSongPlus(c.title, "intl", c.kind) !== (plusOpt === "plus")) return false;
     if (playOpt) {
       // clearJson엔 미플레이(ach=0) 엔트리도 있으므로 달성률 > 0 을 플레이로 판정
       const rec = clearMap!.get(`${c.title}|${c.kind}|${c.diff}`);
@@ -163,9 +163,9 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     // 장르(catcode)·수록 버전은 OTOGE DB 데이터. 있을 때만 표시.
     const genre = getSongGenre(c.title);
     if (genre) emb.addFields({ name: msg("random.fieldGenre"), value: genre, inline: true });
-    const versionName = getSongVersionName(c.title);
+    const versionName = getSongVersionName(c.title, "intl", c.kind);
     if (versionName) {
-      const base = versionName + (isSongPlus(c.title) ? " PLUS" : "");
+      const base = versionName + (isSongPlus(c.title, "intl", c.kind) ? " PLUS" : "");
       // 버전 정렬로 곡을 찾을 때의 위치(예: 43/79). /랜덤 후보는 국제판 수록곡이다.
       const position = await versionPositionText(c.title, c.kind, "intl");
       emb.addFields({

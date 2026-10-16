@@ -618,8 +618,8 @@ export async function searchResultEmbeds(
       const verLabel = p.server === "jp" ? "japan ver." : "intl ver.";
       // 장르(catcode)·수록 버전은 OTOGE DB 데이터. 있을 때만 리전 라벨 아래 들여써서 붙인다.
       const genre = getSongGenre(title);
-      const versionName = getSongVersionName(title, p.server);
-      const versionBase = versionName ? versionName + (isSongPlus(title, p.server) ? " PLUS" : "") : null;
+      const versionName = getSongVersionName(title, p.server, musicKind);
+      const versionBase = versionName ? versionName + (isSongPlus(title, p.server, musicKind) ? " PLUS" : "") : null;
       // 버전 정렬로 곡을 찾을 때의 위치(예: 43/79)
       const position = versionBase ? await versionPositionText(title, musicKind, p.server) : null;
       const versionLabel = versionBase && position ? msg("searchResult.versionPosition", { version: versionBase, position }) : versionBase;
@@ -741,11 +741,11 @@ export function rtTableEmbed(
   //     오분류되므로 버전(isNewSong)으로 분류.
   const newRecords =
     p.server === "jp"
-      ? records.filter((r) => isNewSong(r.title, "jp")).slice(0, 15)
+      ? records.filter((r) => isNewSong(r.title, "jp", undefined, r.musicKind)).slice(0, 15)
       : records.slice(0, 15);
   const otherRecords =
     p.server === "jp"
-      ? records.filter((r) => !isNewSong(r.title, "jp")).slice(0, 35)
+      ? records.filter((r) => !isNewSong(r.title, "jp", undefined, r.musicKind)).slice(0, 35)
       : records.slice(15, 50);
 
   // 레이팅 대상 페이지엔 FC/AP 마크가 없고 ST/DX도 부정확할 수 있어 clear 기록으로 보정
