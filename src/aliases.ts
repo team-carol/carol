@@ -4,7 +4,7 @@ import { getAllAliases, getTranslationAliases } from "./storage";
 let aliasMap: Map<string, string[]> = new Map();
 // 곡명 → 한국어 번역 별명 (is_translation = 1로 지정된 것)
 let translationMap: Map<string, string> = new Map();
-// 곡명 → 외부(maishift) 한국어 번역. 캐롤봇 번역 별명이 없는 곡에만 쓴다.
+// 곡명 → 외부(maishift) 한국어 번역. 표시는 캐롤봇 번역 별명이 없는 곡에만 쓰고, 검색에는 별명처럼 늘 쓴다.
 let externalTranslationMap: Map<string, string> = new Map();
 export function setExternalTranslations(map: Map<string, string>): void { externalTranslationMap = map; }
 
@@ -26,8 +26,10 @@ export async function loadAliases(): Promise<void> {
   console.log(`[aliases] 별명 ${rows.length}개 (곡 ${map.size}개), 번역 ${translationMap.size}개 로드`);
 }
 
-// 해당 곡명의 별명이 정규화된 질의 q를 포함하는지
+// 해당 곡명의 별명이 정규화된 질의 q를 포함하는지. maishift 한국어 번역도 별명처럼 찾는다.
 export function aliasMatches(title: string, q: string): boolean {
+  const external = externalTranslationMap.get(title);
+  if (external && normalizeQuery(external).includes(q)) return true;
   const aliases = aliasMap.get(title);
   if (!aliases) return false;
   return aliases.some((a) => normalizeQuery(a).includes(q));
