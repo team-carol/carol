@@ -4,6 +4,10 @@ import {
   ButtonBuilder,
   ButtonStyle,
   ActionRowBuilder,
+  ContainerBuilder,
+  SectionBuilder,
+  TextDisplayBuilder,
+  MessageFlags,
   escapeMarkdown,
 } from "discord.js";
 import {
@@ -492,10 +496,11 @@ export async function searchResultEmbeds(
   typeFilter = "",
   token?: string,
 ): Promise<{
-  embeds: EmbedBuilder[];
-  components: ActionRowBuilder<ButtonBuilder>[];
+  components: (ContainerBuilder | TextDisplayBuilder | ActionRowBuilder<ButtonBuilder>)[];
   files: AttachmentBuilder[];
+  flags: MessageFlags.IsComponentsV2;
 }> {
+  // Components V2: 검색어 한 줄 → 곡마다 컨테이너(제목·재킷·지역/장르/버전, 코드 블록 점수표, 상세·외부 출력 버튼) → 페이지 버튼.
   const records = getClearList(p);
   const q = normalizeQuery(query);
   const translate = await getTranslateTitles(userId);
@@ -545,15 +550,15 @@ export async function searchResultEmbeds(
 
   if (keys.length === 0) {
     return {
-      embeds: [
-        new EmbedBuilder()
-          .setColor(0x2b2d31)
-          .setDescription(msg("searchResult.empty", { query, type: typeLabel })),
-      ],
-      components: [],
+      components: [new TextDisplayBuilder().setContent(msg("searchResult.empty", { query, type: typeLabel }))],
       files: [],
+      flags: MessageFlags.IsComponentsV2,
     };
   }
+  // 쿼리/필터는 토큰으로 대체 (customId 100자 제한 회피)
+  const ctxToken = token ?? putSearchCtx({ userId, query, typeFilter });
+  const ctx = getSearchCtx(ctxToken);
+  if (ctx) ctx.groups = keys.map((k) => { const g = byChart.get(k)!; return { title: g.title, musicKind: g.musicKind }; });
 
   const PAGE_SIZE = 2;
   const totalPages = Math.max(1, Math.ceil(keys.length / PAGE_SIZE));
@@ -563,7 +568,7 @@ export async function searchResultEmbeds(
 
   const DIFF_ORDER = ["BASIC", "ADVANCED", "EXPERT", "MASTER", "Re:MASTER"];
 
-  const embeds = await Promise.all(
+  const containers = await Promise.all(
     pageKeys.map(async (key, i) => {
       const group = byChart.get(key)!;
       const all = group.records;
@@ -623,39 +628,37 @@ export async function searchResultEmbeds(
         + (genre ? msg("searchResult.genreSuffix", { genre }) : "")
         + (versionLabel ? msg("searchResult.versionSuffix", { version: versionLabel }) : "")
         + "\n";
-      const emb = new EmbedBuilder()
-        .setColor(0x2b2d31)
-        .setTitle(displayTitle(title, translate) + kind)
-        .setAuthor({ name: msg("searchResult.author", { query, type: typeLabel }) })
-        .setDescription(
-          regionLine +
-            "```\n" +
-            lines.join("\n") +
-            "\n```" +
-            "\n" + msg("searchResult.externalLink", { url: ytUrl }),
-        );
+      const heading = msg("searchResult.title", { title: escapeMarkdown(displayTitle(title, translate)), kind }) + "\n" + regionLine.trimEnd();
+      const container = new ContainerBuilder().setAccentColor(musicKind === "DX" ? 0xf97316 : musicKind === "ST" ? 0x3b82f6 : 0x8a8087);
       if (buf) {
         const name = `sjacket${i}.png`;
         files.push(new AttachmentBuilder(buf, { name }));
-        emb.setThumbnail(`attachment://${name}`);
+        container.addSectionComponents(
+          new SectionBuilder()
+            .addTextDisplayComponents((t) => t.setContent(heading))
+            .setThumbnailAccessory((t) => t.setURL(`attachment://${name}`)),
+        );
+      } else {
+        container.addTextDisplayComponents((t) => t.setContent(heading));
       }
-      return emb;
+      return container
+        .addTextDisplayComponents((t) => t.setContent("```\n" + lines.join("\n") + "\n```"))
+        .addActionRowComponents(
+          new ActionRowBuilder<ButtonBuilder>().addComponents(
+            // maishift 곡 창과 같은 정보의 이미지(trk:<토큰>:<전체 결과 안 순서>).
+            new ButtonBuilder()
+              .setCustomId(`trk:${ctxToken}:${idx * PAGE_SIZE + i}`)
+              .setLabel(msg("searchResult.detailButton"))
+              .setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder()
+              .setURL(ytUrl)
+              .setLabel(msg("searchResult.externalButton"))
+              .setStyle(ButtonStyle.Link),
+          ),
+        );
     }),
   );
 
-  // 쿼리/필터는 토큰으로 대체 (customId 100자 제한 회피)
-  const ctxToken = token ?? putSearchCtx({ userId, query, typeFilter });
-  const ctx = getSearchCtx(ctxToken);
-  if (ctx) ctx.groups = keys.map((k) => { const g = byChart.get(k)!; return { title: g.title, musicKind: g.musicKind }; });
-  // 이 페이지 곡마다 "N번 상세"(maishift 곡 창과 같은 정보의 이미지).
-  const detailRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    pageKeys.map((_, i) =>
-      new ButtonBuilder()
-        .setCustomId(`trk:${ctxToken}:${idx * PAGE_SIZE + i}`)
-        .setLabel(msg("searchResult.detailButton", { n: i + 1 }))
-        .setStyle(ButtonStyle.Secondary),
-    ),
-  );
   const prevBtn = new ButtonBuilder()
     .setCustomId(`search:${ctxToken}:${idx - 1}`)
     .setLabel(msg("embed.prev"))
@@ -672,13 +675,15 @@ export async function searchResultEmbeds(
     .setStyle(ButtonStyle.Secondary)
     .setDisabled(idx === totalPages - 1);
 
-  const navRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    prevBtn,
-    countBtn,
-    nextBtn,
-  );
-
-  return { embeds, components: [navRow, detailRow], files };
+  return {
+    components: [
+      new TextDisplayBuilder().setContent(msg("searchResult.author", { query, type: typeLabel })),
+      ...containers,
+      new ActionRowBuilder<ButtonBuilder>().addComponents(prevBtn, countBtn, nextBtn),
+    ],
+    files,
+    flags: MessageFlags.IsComponentsV2,
+  };
 }
 
 const DIFF_ABBR: Record<string, string> = {

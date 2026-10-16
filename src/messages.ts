@@ -294,13 +294,14 @@ export const MESSAGES = {
 
   // ── 검색 결과 ───────────────────────────────────────────────────────────
   "searchResult.empty": "\"{query}\"{type} 검색 결과 없음",
-  "searchResult.author": "\"{query}\"{type} 에 대한 검색 결과",
+  "searchResult.author": "-# \"{query}\"{type} 에 대한 검색 결과",
+  "searchResult.title": "### {title}{kind}",
   "searchResult.regionExclusive": "{version} 전용",
-  "searchResult.externalLink": "[▶ 외부출력]({url})",
+  "searchResult.externalButton": "▶ 외부출력",
   "searchResult.genreSuffix": "\n    {genre}",
   "searchResult.versionSuffix": "\n    {version}",
   "searchResult.versionPosition": "{version} · {position}",
-  "searchResult.detailButton": "{n}번 상세",
+  "searchResult.detailButton": "상세 보기",
   "stamp.empty": "maishift에 스탬프 카드 정보가 없습니다.",
   "stamp.failed": "maishift에서 스탬프 카드를 불러오지 못했습니다. 잠시 뒤에 다시 시도해 주세요.",
   "trackDetail.expired": "검색이 만료되었습니다. 다시 검색해 주세요.",
