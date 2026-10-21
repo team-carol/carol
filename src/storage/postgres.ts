@@ -318,7 +318,7 @@ SELECT u.chart_key AS "chartKey",u.achievement_val AS "achievementVal",u.fc,u.sy
         // 잘못 잡히므로, 단일 채보가 물리적으로 줄 수 있는 최대 곡 레이팅
         // (상수 불명 시 이론상 최대치 338)을 넘는 파싱값은 버린다.
         const parsedRatingUp=Number.isFinite(e.ratingUp)?Math.max(0,Number(e.ratingUp)):null;const ratingUpCeiling=levelConstant!=null&&Number.isFinite(levelConstant)?calcSongRating(score,levelConstant,e.fc):338;const ratingGain=parsedRatingUp!=null&&parsedRatingUp<=ratingUpCeiling?parsedRatingUp:0;
-        await c.query(`INSERT INTO achievement_play_event_log(event_key,profile_key,source_play_id,chart_key,is_baseline,played_at,source_sequence,captured_at,source_kind,achievement_val,fc,sync,rating_up,title,diff,level,music_kind,achievement_text,record_json,payload_hash,score_gain,is_meaningful,level_constant,achievement_before,rating_gain) VALUES($1,$2,$3,$4,0,$5,$6,$7,'clear_diff',$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,1,$20,$21,$22)`,[key,profile,id,e.chartKey,e.playedAt,e.sourceSequence,e.capturedAt??capturedAt,score,e.fc,e.sync,e.ratingUp??null,e.title,e.diff,e.level,e.musicKind,e.achievementText,e.recordJson,payload,Number.isFinite(gain)?gain:0,levelConstant,before,Number.isFinite(ratingGain)?ratingGain:0]);
+        await c.query(`INSERT INTO achievement_play_event_log(event_key,profile_key,source_play_id,chart_key,is_baseline,played_at,source_sequence,captured_at,source_kind,achievement_val,fc,sync,rating_up,title,diff,level,music_kind,achievement_text,record_json,payload_hash,score_gain,is_meaningful,level_constant,achievement_before,rating_gain) VALUES($1,$2,$3,$4,0,$5,$6,$7,$23,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,1,$20,$21,$22)`,[key,profile,id,e.chartKey,e.playedAt,e.sourceSequence,e.capturedAt??capturedAt,score,e.fc,e.sync,e.ratingUp??null,e.title,e.diff,e.level,e.musicKind,e.achievementText,e.recordJson,payload,Number.isFinite(gain)?gain:0,levelConstant,before,Number.isFinite(ratingGain)?ratingGain:0,e.sourceKind||'clear_diff']);
       } return "ok";});
   }
   // 상세 페이지의 (+N) 은 이벤트가 만들어지는 동기화에서 늘 함께 오지는 않는다.
@@ -555,6 +555,35 @@ SELECT u.chart_key AS "chartKey",u.achievement_val AS "achievementVal",u.fc,u.sy
   async saveSyncExtras(fc:string,server:Db.MaimaiServer,recentJson:string,mapJson:string){const key=`${server}:${fc}`,now=Date.now();await this.q("INSERT INTO profiles(friend_code,display_friend_code,server_region,player_name,recent_json,map_json,last_synced_at,created_at) VALUES($1,$2,$3,'',$4,$5,$6,$6) ON CONFLICT(friend_code) DO UPDATE SET display_friend_code=excluded.display_friend_code,server_region=excluded.server_region,recent_json=excluded.recent_json,map_json=excluded.map_json,last_synced_at=excluded.last_synced_at",[key,fc,server,recentJson,mapJson,now]);return key;}
   async getMaishiftLink(id:string){const r=await this.q<any>("SELECT maishift_handle,COALESCE(default_server,'intl') AS server FROM sessions WHERE discord_user_id=$1",[id]);const h=r[0]?.maishift_handle||"";return h?{handle:h as string,server:(r[0].server==='jp'?'jp':'intl') as Db.MaimaiServer}:null;} async setMaishiftHandle(id:string,handle:string){await this.q("INSERT INTO sessions(discord_user_id,maishift_handle) VALUES($1,$2) ON CONFLICT(discord_user_id) DO UPDATE SET maishift_handle=excluded.maishift_handle",[id,handle]);}
   /** 캐롤봇 프로필 키(intl:친구코드)에 연동된 maishift 아이디. */
+  /**
+   * maishift 연동 해제: 아이디를 지우고, maishift 에서 받아 저장한 데이터를 지운다(maishift 개발자 약관).
+   * - maishift 키(ms:<서버>:<아이디>)는 같은 아이디를 연동한 사람이 함께 쓰므로, 해제 뒤 그 아이디·서버를 연동한 사람이 없을 때만 지운다.
+   * - 캐롤봇 친구 코드 키는 이 사용자 것이므로 maishift 로 만든 성과(source_kind='maishift')·비교 기준·레이팅표 캐시를 지운다.
+   *   캐롤봇 북마클릿으로 만든 예전 성과와 북마클릿 데이터(최근 플레이·서클 등)는 maishift 데이터가 아니라 남긴다.
+   * - 목표는 사용자가 만든 것이라 남기고, maishift 기록으로 계산한 진행률만 비운다.
+   */
+  async unlinkMaishift(id:string, link:{handle:string;server:Db.MaimaiServer}):Promise<void>{
+    await this.tx(async c=>{
+      const s=await c.query<any>("SELECT COALESCE(friend_code_intl,'') AS intl,COALESCE(friend_code_jp,'') AS jp FROM sessions WHERE discord_user_id=$1",[id]);
+      await c.query("UPDATE sessions SET maishift_handle='' WHERE discord_user_id=$1",[id]);
+      for(const server of ["intl","jp"] as const){
+        const left=await c.query("SELECT 1 FROM sessions WHERE lower(maishift_handle)=lower($1) AND COALESCE(default_server,'intl')=$2 LIMIT 1",[link.handle,server]);
+        if(left.rowCount)continue;
+        const ms=`ms:${server}:${link.handle}`;
+        await c.query("DELETE FROM chart_clears WHERE profile_key=$1",[ms]);
+        await c.query("DELETE FROM achievement_play_event_log WHERE profile_key=$1",[ms]);
+        await c.query("DELETE FROM achievement_play_event_log_state WHERE profile_key=$1",[ms]);
+      }
+      const carolKeys=[s.rows[0]?.intl,s.rows[0]?.jp].filter((k:string)=>!!k);
+      for(const key of carolKeys) await c.query("DELETE FROM achievement_play_event_log WHERE profile_key=$1 AND source_kind='maishift'",[key]);
+      const current=link.server==="jp"?s.rows[0]?.jp:s.rows[0]?.intl;
+      if(current){
+        await c.query("DELETE FROM chart_clears WHERE profile_key=$1",[current]);
+        await c.query("UPDATE profiles SET rating_card_blob=NULL,rating_card_synced_at=0 WHERE friend_code=$1",[current]);
+      }
+      await c.query("UPDATE user_goals SET progress=0,current_json='{}',completed_at=0,updated_at=$2 WHERE discord_user_id=$1",[id,Date.now()]);
+    });
+  }
   async getMaishiftHandleByProfileKey(key:string){const r=await this.q<any>("SELECT maishift_handle FROM sessions WHERE (friend_code=$1 OR friend_code_intl=$1 OR friend_code_jp=$1) AND maishift_handle<>'' LIMIT 1",[key]);return (r[0]?.maishift_handle as string|undefined)||null;}
   async getKvCache(key:string){const r=await this.q<any>("SELECT data,updated_at AS \"updatedAt\" FROM constants_cache WHERE key=$1",[key]);return r[0]?{data:r[0].data as string,updatedAt:Number(r[0].updatedAt)}:null;} async saveKvCache(key:string,d:string){await this.q("INSERT INTO constants_cache VALUES($1,$2,$3) ON CONFLICT(key) DO UPDATE SET data=excluded.data,updated_at=excluded.updated_at",[key,d,Date.now()]);}
   async getConstantsCache(){const r=await this.q<any>("SELECT data,updated_at AS \"updatedAt\" FROM constants_cache WHERE key='main'");return r[0]??null;} async saveConstantsCache(d:string){await this.q("INSERT INTO constants_cache VALUES('main',$1,$2) ON CONFLICT(key) DO UPDATE SET data=excluded.data,updated_at=excluded.updated_at",[d,Date.now()]);}

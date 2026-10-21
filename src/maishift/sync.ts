@@ -70,6 +70,7 @@ async function applyForUser(u: MaishiftUpdate, discordUserId: string, profileKey
         fc: d.fcImproved ? d.fc : "", sync: d.syncImproved ? d.sync : "", ratingUp: match?.ratingUp,
         title: source.title, diff: source.diff, level: source.level, musicKind: source.musicKind,
         achievementText: match?.achievement ?? `${d.achievementVal.toFixed(4)}%`,
+        sourceKind: "maishift",
       };
     });
     await saveAchievementPlayEventLogBatch(events, now);

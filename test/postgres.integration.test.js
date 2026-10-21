@@ -325,3 +325,49 @@ test("patch_notes 게시·미확인 조회·ack", async () => {
     } finally { await db.close(); }
   } finally { try { await client.end(); } catch {} await pg.stop(); }
 });
+
+// maishift 연동 해제: maishift 에서 받아 만든 데이터만 지운다(maishift 개발자 약관).
+// maishift 키는 같은 아이디를 연동한 사람이 남아 있으면 남기고, 캐롤봇 북마클릿으로 만든 성과는 지우지 않는다.
+test("unlinkMaishift: maishift 파생 데이터만, 공유 키는 마지막 연동자가 해제할 때", async () => {
+  const pg = await temporaryPostgres();
+  const client = new Client({ connectionString: pg.url });
+  try {
+    const { PostgresStorage } = require("../dist/storage/postgres");
+    const db = new PostgresStorage(pg.url);
+    try {
+      await db.initialize();
+      await client.connect();
+      const MS = "ms:intl:Alice", FC = "intl:111";
+      await client.query("INSERT INTO sessions(discord_user_id,friend_code_intl) VALUES('u1',$1)", [FC]);
+      await db.setMaishiftHandle("u1", "Alice");
+      await db.setMaishiftHandle("u2", "Alice");
+      const cc = (chartKey) => ({ chartKey, achievementVal: 99, fc: "", sync: "" });
+      await db.upsertChartClears(MS, [cc("A|DX|MASTER")]);
+      await db.upsertChartClears(FC, [cc("A|DX|MASTER")]);
+      const ev = (profileKey, id, sourceKind) => ({
+        profileKey, sourcePlayId: id, chartKey: "A|DX|MASTER", playedAt: Date.now(), sourceSequence: 1, recordJson: "{}",
+        achievementVal: 99, achievementBefore: 98, fc: "", sync: "", title: "A", diff: "MASTER", level: "13", musicKind: "DX", achievementText: "99%", sourceKind,
+      });
+      await db.saveAchievementPlayEventLogBatch([ev(MS, "m1", "maishift")]);
+      await db.saveAchievementPlayEventLogBatch([ev(FC, "f1", "maishift"), ev(FC, "f2")]);
+      const goal = await db.addGoal("u1", "rating", "{}", "goal");
+      await db.updateGoalProgress(goal, 0.5, "{\"x\":1}", 123);
+
+      const count = async (table, key) => Number((await client.query(`SELECT count(*) n FROM ${table} WHERE profile_key=$1`, [key])).rows[0].n);
+      await db.unlinkMaishift("u1", { handle: "Alice", server: "intl" });
+      assert.equal(await db.getMaishiftLink("u1"), null);
+      // u2 가 같은 아이디를 아직 연동하고 있으므로 maishift 키는 남는다.
+      assert.equal(await count("chart_clears", MS), 1);
+      assert.equal(await count("achievement_play_event_log", MS), 1);
+      // 친구 코드 키: maishift 로 만든 성과·비교 기준만 지운다.
+      assert.equal(await count("chart_clears", FC), 0);
+      assert.deepEqual((await client.query("SELECT source_play_id FROM achievement_play_event_log WHERE profile_key=$1", [FC])).rows.map((r) => r.source_play_id), ["f2"]);
+      const g = (await client.query("SELECT progress,current_json,completed_at FROM user_goals WHERE id=$1", [goal])).rows[0];
+      assert.deepEqual([g.progress, g.current_json, Number(g.completed_at)], [0, "{}", 0]);
+
+      await db.unlinkMaishift("u2", { handle: "Alice", server: "intl" });
+      assert.equal(await count("chart_clears", MS), 0);
+      assert.equal(await count("achievement_play_event_log", MS), 0);
+    } finally { await db.close(); }
+  } finally { try { await client.end(); } catch {} await pg.stop(); }
+});

@@ -260,6 +260,20 @@ function forgetUser(link: MaishiftLink): void {
   forgetTrackScores(link.handle);
 }
 
+/** 연동 해제: 메모리에 받아 둔 그 아이디의 maishift 데이터를 지운다(비공개 표시는 하지 않는다). */
+export function dropMaishiftCache(link: MaishiftLink): void {
+  const handle = link.handle.toLowerCase();
+  for (const server of ["intl", "jp"] as const) {
+    const key = keyOf({ handle: link.handle, server });
+    cache.delete(key);
+    uploadsCache.delete(key);
+    for (const k of [...futureCache.keys()]) if (k.startsWith(`${key}:`)) futureCache.delete(k);
+  }
+  for (const k of [...snapshotCache.keys()]) if (k.split("~")[0].endsWith(`:${handle}`)) snapshotCache.delete(k);
+  forgetStampCards(link.handle);
+  forgetTrackScores(link.handle);
+}
+
 /** 사용자가 maishift 에서 프로필을 비공개로 했다고 확인됐는지. 명령의 "미등록" 안내를 바꾸는 데 쓴다. */
 export function isProfilePrivate(link: MaishiftLink): boolean {
   return privateProfiles.has(keyOf(link));
