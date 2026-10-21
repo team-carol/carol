@@ -1,7 +1,8 @@
-// 개인정보처리방침(/privacy)·이용약관(/terms). 내용을 실질적으로 바꾸면 src/policy.ts 의 POLICY_VERSION 을 올린다.
+// 개인정보처리방침(/privacy)·이용약관(/terms). 내용을 실질적으로 바꾸면 src/policy.ts 의 POLICY_VERSION 을 올린다(최종 수정일도 그 값).
 // 디자인 토큰은 theme.ts(캐롤봇 랜딩 디자인 시스템)를 따른다.
 
 import { BASE_CSS, pageHead, topbar, siteFooter } from "./theme";
+import { policyDateText } from "../policy";
 
 const LEGAL_CSS = `${BASE_CSS}
 .page{max-width:760px}
@@ -15,15 +16,13 @@ ul{margin:6px 0 10px;padding-left:22px}
 li{margin:3px 0}
 a{color:var(--accent-soft)}`;
 
-const UPDATED = "2026년 10월 21일";
-
 function legalPage(title: string, body: string): string {
   return `<!DOCTYPE html><html lang="ko"><head>${pageHead(`${title} · 캐롤봇`)}
 <style>${LEGAL_CSS}</style></head><body>
 ${topbar()}
 <main class="page">
 <h1>${title}</h1>
-<p>최종 수정일: ${UPDATED}</p>
+<p>최종 수정일: ${policyDateText()}</p>
 ${body}
 </main>
 ${siteFooter()}
