@@ -104,10 +104,19 @@ function windowsFor(server: MaimaiServer): NewSongWindowEntry[] {
   return server === "jp" ? NEW_SONG_WINDOWS_JP : NEW_SONG_WINDOWS;
 }
 
+let regionVersionsIntl: RegionVersion[] = [];
+let regionVersionsJp: RegionVersion[] = [];
 function setRegionVersions(intl: RegionVersion[], jp: RegionVersion[]): void {
+  regionVersionsIntl = intl;
+  regionVersionsJp = jp;
   setMaishiftVersionNames([...intl, ...jp]);
   windowsIntl = windowsFromVersions(intl);
   windowsJp = windowsFromVersions(jp);
+}
+
+/** 그 지역 버전 목록(세대 번호·이름·출시 시각 ms, 오래된 순). 곡 목록을 받기 전이면 빈 배열. */
+export function getRegionVersions(server: MaimaiServer): RegionVersion[] {
+  return server === "jp" ? regionVersionsJp : regionVersionsIntl;
 }
 
 export interface NewSongWindow { min: number; max: number }
@@ -207,7 +216,7 @@ function rebuildDailyFortuneSongs(): void {
 }
 
 interface ConstantsCache {
-  /** "maishift" 가 아니면(otoge-db 시절 캐시) 새로 받는다. */
+  /** "maishift-api" 가 아니면(otoge-db·서버 함수 시절 캐시) 새로 받는다. */
   source?: string;
   constants: [string, number][];
   jackets: [string, string][];
@@ -250,7 +259,7 @@ function applyCache(data: string): { fresh: boolean } {
   setRegionVersions(parsed.versionsIntl ?? [], parsed.versionsJp ?? []);
   rebuildDailyFortuneSongs();
   // 보면 번호·버전 폴더 순서·버전 목록·보면 종류별 버전이 없는 옛 캐시면 새로 받는다.
-  return { fresh: parsed.source === "maishift" && !!parsed.trackIds && !!parsed.folderIntl && !!parsed.versionsIntl?.length && !!parsed.jpKindVersions };
+  return { fresh: parsed.source === "maishift-api" && !!parsed.trackIds && !!parsed.folderIntl && !!parsed.versionsIntl?.length && !!parsed.jpKindVersions };
 }
 
 export async function loadConstants(): Promise<void> {
@@ -268,8 +277,8 @@ export async function loadConstants(): Promise<void> {
   }
 
   try {
-    const intlRes = await fetchCatalog("ASIA");
-    const jpRes = await fetchCatalog("JAPAN");
+    const intlRes = await fetchCatalog("intl");
+    const jpRes = await fetchCatalog("jp");
     const intl = intlRes.songs, jp = jpRes.songs;
     const fIntl = folderDataOf(intlRes.songs, intlRes.latestVersion), fJp = folderDataOf(jpRes.songs, jpRes.latestVersion);
     setFolders(fIntl, fJp);
@@ -296,7 +305,7 @@ export async function loadConstants(): Promise<void> {
 
     console.log(`[constants] maishift 국제판 ${intl.length}곡 (상수 ${intlCount}개) + JP 보충 ${constantMap.size - intlCount}개, JP상수 ${jpConstantMap.size}개, 자켓 ${jacketMap.size}개, 번역 ${koTitles.size}개`);
     await saveConstantsCache(JSON.stringify({
-      source: "maishift",
+      source: "maishift-api",
       constants: Array.from(constantMap.entries()),
       jackets: Array.from(jacketMap.entries()),
       jacketUrls: Array.from(jacketUrlMap.entries()),
@@ -333,6 +342,12 @@ export async function loadConstants(): Promise<void> {
 // 재킷 이미지 파일명 (예: "c7cfd8a91e0436ac.png")
 export function getJacketFile(title: string): string | null {
   return jacketMap.get(title) ?? null;
+}
+
+/** 곡의 재킷 원래 주소(maishift 가 준 DX NET 주소). 없으면 null. */
+export function getJacketUrl(title: string): string | null {
+  const file = jacketMap.get(title);
+  return file ? jacketUrlMap.get(file) ?? null : null;
 }
 
 // 재킷 파일명 → 재킷 이미지 주소. 국제판 곡은 DX NET(공개 이미지), 카탈로그에 없으면 국제판 경로로 짐작한다.

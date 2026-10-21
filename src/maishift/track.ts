@@ -1,8 +1,23 @@
 /**
  * maishift 곡 상세(곡 카드를 누르면 나오는 창과 같은 정보). /검색 의 "상세" 버튼이 쓴다.
  * 보면 하나에 요청 네 개(내 기록 변화·버전별 상수·분포·버전 안 순서)라, 보면 정보는 하루, 기록 변화는 5분 둔다.
+ * 분포는 공식 API(GET /charts/{id}/distribution), 나머지는 API 에 없어 서버 함수로 받는다.
  */
 import { callServerFn, FN } from "./serverFn";
+import { callApi } from "./api";
+
+interface ApiDistBand { from: number; to: number; players: number; suppressed: boolean; counts: Record<string, number> | null }
+
+/** API 분포 구간 → 카드 형식. 카드의 SSS+ 는 AP 를 포함한 SSS+ 전체(API 는 AP+·AP·나머지로 나눠 준다). */
+function distBucket(b: ApiDistBand): TrackDistBucket {
+  const c = b.counts ?? {};
+  return {
+    min: b.from,
+    max: b.to,
+    total: b.players ?? 0,
+    counts: { ...c, SSS_PLUS: (c.SSS_PLUS_WITHOUT_AP ?? 0) + (c.ALL_PERFECT ?? 0) + (c.ALL_PERFECT_PLUS ?? 0) },
+  };
+}
 
 export interface TrackScore { at: number; achievement: number; dxScore: number; dxMax: number; combo: string; sync: string }
 export interface TrackLevel { versionId: number; constant: number }
@@ -49,11 +64,11 @@ export async function getTrackInfo(trackId: number): Promise<TrackInfo> {
   });
   const [levels, dist] = await Promise.all([
     soft(callServerFn<{ versionId: number; internalLevel: number }[]>(FN.trackLevels, { trackId }), "상수"),
-    soft(callServerFn<{ buckets: { coarse: TrackDistBucket[] }; computedAt?: string }>(FN.trackDist, { trackId }), "분포"),
+    soft(callApi<{ coarse: ApiDistBand[]; computedAt?: string }>(`/charts/${trackId}/distribution`), "분포"),
   ]);
   const info: TrackInfo = {
     levels: (levels ?? []).map((l) => ({ versionId: l.versionId, constant: l.internalLevel / 10 })).sort((a, b) => a.versionId - b.versionId),
-    dist: dist?.buckets?.coarse ?? [],
+    dist: (dist?.coarse ?? []).map(distBucket),
     distAt: dist?.computedAt ? Date.parse(dist.computedAt) || null : null,
   };
   // 전부 실패했으면 캐시하지 않는다(다음에 다시 시도).

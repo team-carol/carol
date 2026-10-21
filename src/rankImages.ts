@@ -29,7 +29,7 @@ export async function loadRankImages(): Promise<void> {
 
 /** 프로필 카드용 data URL. 아직 아무도 모으지 않은 번호면 "". */
 export function rankImage(server: MaimaiServer, kind: RankKind, rank: number | undefined): string {
-  if (!rank) return "";
+  if (rank === undefined) return "";
   return images.get(keyOf(server, kind, rank))?.data ?? "";
 }
 

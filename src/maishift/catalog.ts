@@ -1,9 +1,11 @@
 /**
- * maishift 곡 목록(/songs 페이지와 같은 데이터) → 캐롤봇 곡·상수 카탈로그.
+ * maishift 곡 목록(공식 API GET /songs, /versions) → 캐롤봇 곡·상수 카탈로그.
  * 예전 otoge-db music-ex(-intl).json 자리를 대신한다. 지역별로 한 번씩, 하루 한 번만 받는다(src/constants.ts).
+ * 버전 폴더 안 순서는 API 에 없어 서버 함수 곡 목록에서 받는다(못 받아도 카탈로그는 만든다).
  */
-import { callServerFn, FN, type MaishiftRegion } from "./serverFn";
-import type { MsSong, MsTrack } from "./convert";
+import { callServerFn, FN } from "./serverFn";
+import { callApi, type ApiRegion } from "./api";
+import type { ApiSong, ApiSongsResult, ApiVersionsResult, MsSong } from "./convert";
 
 export interface CatalogChart { kind: "ST" | "DX"; diff: string; constant: number; /** maishift 보면 번호(곡 상세 조회용) */ trackId?: number }
 export interface CatalogSong {
@@ -32,11 +34,6 @@ export interface RegionCatalog {
   versions: RegionVersion[];
 }
 
-interface SongsResult {
-  regionLatestVersion: number;
-  availableVersions?: { value: number; name: string; releasedAt: string }[];
-  tracks: { songs: MsSong[]; tracks: MsTrack[] };
-}
 
 // maishift 세대 번호 → 캐롤봇(옛 otoge-db) 버전 코드. でらっくす(13)부터는 세대·PLUS 가 500 단위로 이어진다.
 const OLD_VERSION_CODES = [10000, 11000, 12000, 13000, 14000, 15000, 16000, 17000, 18000, 18500, 19000, 19500, 19900];
@@ -78,47 +75,67 @@ const GENRES: Record<string, string> = {
 
 const DIFF: Record<string, string> = { BASIC: "BASIC", ADVANCED: "ADVANCED", EXPERT: "EXPERT", MASTER: "MASTER", RE_MASTER: "Re:MASTER" };
 
+/** "곡|ST"·"곡|DX" → 그 지역 버전 폴더 안 순서(0부터). */
+export type FolderOrders = Map<string, number>;
+
 /** 곡 목록 응답 → 곡 제목별 카탈로그. 같은 제목의 ST/DX 는 한 곡으로 묶는다. */
-export function toCatalog(songs: MsSong[], tracks: MsTrack[]): CatalogSong[] {
+export function toCatalog(songs: ApiSong[], folderOrders: FolderOrders = new Map()): CatalogSong[] {
   const byTitle = new Map<string, CatalogSong>();
-  const entryOf = (song: MsSong): CatalogSong => {
+  for (const song of songs) {
     const title = song.title || "　"; // 곡 "　"(전각 공백)은 빈 제목으로 온다
+    const code = versionCode(song.version);
     let e = byTitle.get(title);
     if (!e) {
-      e = { title, version: versionCode(song.songVersion), kindVersions: {}, genre: GENRES[song.genre] ?? "", jacketUrl: song.jacketUrl, artist: song.artist, charts: [] };
-      const ko = song.titleTranslations?.find((t) => t.language === "KOREAN")?.title;
+      e = { title, version: code, kindVersions: {}, genre: GENRES[song.genre] ?? "", jacketUrl: song.jacketUrl ?? "", artist: song.artist ?? undefined, charts: [] };
+      const ko = song.titleTranslations?.ko;
       if (ko && ko !== title) e.korean = ko;
       byTitle.set(title, e);
     } else {
-      e.version = Math.min(e.version, versionCode(song.songVersion));
+      e.version = Math.min(e.version, code);
+      if (!e.jacketUrl && song.jacketUrl) e.jacketUrl = song.jacketUrl;
     }
     // maishift 는 ST·DX 를 따로 된 곡으로 주므로 보면 종류별 버전은 여기서 받는다.
     const kind = song.type === "DX" ? "DX" : "ST";
-    const code = versionCode(song.songVersion);
     e.kindVersions[kind] = Math.min(e.kindVersions[kind] ?? code, code);
-    return e;
-  };
-  songs.forEach((song) => {
-    const e = entryOf(song);
-    if (typeof song.versionFolderOrder === "number") {
-      (e.folders ??= []).push({ kind: song.type === "DX" ? "DX" : "ST", order: song.versionFolderOrder, version: song.songVersion });
+    const order = folderOrders.get(`${title}|${kind}`);
+    if (order !== undefined) (e.folders ??= []).push({ kind, order, version: song.version });
+    for (const c of song.charts) {
+      const diff = DIFF[c.difficulty];
+      if (!diff || !(c.internalLevel > 0)) continue;
+      e.charts.push({ kind, diff, constant: c.internalLevel / 10, trackId: c.id });
     }
-  });
-  for (const t of tracks) {
-    const song = songs[t.s];
-    const diff = DIFF[t.d];
-    if (!song || !diff || !(t.l > 0)) continue;
-    entryOf(song).charts.push({ kind: song.type === "DX" ? "DX" : "ST", diff, constant: t.l / 10, trackId: t.i });
   }
   return [...byTitle.values()];
 }
 
-export async function fetchCatalog(region: MaishiftRegion): Promise<RegionCatalog> {
-  const res = await callServerFn<SongsResult>(FN.songs, { region });
-  if (!res?.tracks?.songs?.length) throw new Error(`maishift ${region} 곡 목록이 비어 있음`);
-  const versions = (res.availableVersions ?? [])
-    .map((v) => ({ index: v.value, name: v.name, releasedAt: Date.parse(v.releasedAt) }))
-    .filter((v) => Number.isFinite(v.releasedAt))
-    .sort((a, b) => a.index - b.index);
-  return { songs: toCatalog(res.tracks.songs, res.tracks.tracks), latestVersion: res.regionLatestVersion, versions };
+/** 버전 폴더 안 순서. 공식 API 에 없어 서버 함수 곡 목록에서 받는다. 실패하면 빈 맵(순서 표시만 빠진다). */
+async function fetchFolderOrders(region: ApiRegion): Promise<FolderOrders> {
+  const map: FolderOrders = new Map();
+  try {
+    const res = await callServerFn<{ tracks: { songs: MsSong[] } }>(FN.songs, { region: region === "jp" ? "JAPAN" : "ASIA" });
+    for (const song of res?.tracks?.songs ?? []) {
+      if (typeof song.versionFolderOrder !== "number") continue;
+      map.set(`${song.title || "　"}|${song.type === "DX" ? "DX" : "ST"}`, song.versionFolderOrder);
+    }
+  } catch (e) {
+    console.error(`[maishift] ${region} 버전 폴더 순서:`, (e as Error).message);
+  }
+  return map;
+}
+
+export async function fetchCatalog(region: ApiRegion): Promise<RegionCatalog> {
+  const [songs, versions, folders] = await Promise.all([
+    callApi<ApiSongsResult>("/songs", { region }),
+    callApi<ApiVersionsResult>("/versions", { region }),
+    fetchFolderOrders(region),
+  ]);
+  if (!songs?.songs?.length) throw new Error(`maishift ${region} 곡 목록이 비어 있음`);
+  return {
+    songs: toCatalog(songs.songs, folders),
+    latestVersion: versions.latestVersion,
+    versions: versions.versions
+      .map((v) => ({ index: v.id, name: v.name, releasedAt: v.releasedAt ? Date.parse(v.releasedAt) : NaN }))
+      .filter((v) => Number.isFinite(v.releasedAt))
+      .sort((a, b) => a.index - b.index),
+  };
 }

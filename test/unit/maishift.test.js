@@ -54,8 +54,34 @@ test("toPlayRecord: 빈 제목 곡은 전각 공백 제목으로", () => {
   assert.equal(conv.toPlayRecord({ ...songs[0], title: "" }, tracks[0]).title, "\u3000");
 });
 
-test("allRecords: 플레이한 보면만", () => {
-  assert.deepEqual(conv.allRecords({ songs, tracks }).map((r) => r.title), ["Customized Justice", "アイドル"]);
+// 공식 API 기록 응답
+const apiRecords = {
+  handle: "x", region: "intl", version: 26, syncedAt: "2026-10-18T05:29:00.000Z",
+  records: [
+    { chartId: 1, title: "Customized Justice", type: "DX", difficulty: "MASTER", level: "14+", internalLevel: 148, achievement: 1006147, combo: "FULL_COMBO", sync: "SYNC_PLAY", dxScore: 2885, dxScoreMax: 3228, rating: 333, ratingAccurate: true },
+    { chartId: 2, title: "", type: "STANDARD", difficulty: "RE_MASTER", level: "13", internalLevel: 131, achievement: 1007878, combo: "ALL_PERFECT_PLUS", sync: "FULL_SYNC_DX_PLUS", dxScore: 2260, dxScoreMax: 2391, rating: 294, ratingAccurate: false },
+  ],
+  best: { new: [2], old: [1, 99] },
+};
+
+test("apiAllRecords: API 기록 → 캐롤봇 표기", () => {
+  const [a, b] = conv.apiAllRecords(apiRecords, "intl");
+  assert.deepEqual([a.diff, a.level, a.achievement, a.musicKind, a.fc, a.sync, a.constant, a.constantEstimated], ["MASTER", "14+", "100.6147%", "DX", "FC", "SYNC", 14.8, undefined]);
+  assert.deepEqual([b.title, b.diff, b.musicKind, b.fc, b.sync, b.constantEstimated], ["\u3000", "Re:MASTER", "ST", "AP+", "FDX+", true]);
+});
+
+test("apiRatingTargets: best 의 신곡 → 구곡 순서, 없는 chartId 는 건너뛴다", () => {
+  assert.deepEqual(conv.apiRatingTargets(apiRecords, "intl").map((r) => r.diff), ["Re:MASTER", "MASTER"]);
+});
+
+test("classRankNumber·courseRankNumber: DX NET 이미지 번호", () => {
+  assert.equal(conv.classRankNumber("B5"), 0);
+  assert.equal(conv.classRankNumber("SSS5"), 20);
+  assert.equal(conv.classRankNumber("LEGEND"), 25);
+  assert.equal(conv.courseRankNumber("DAN_3"), 3);
+  assert.equal(conv.courseRankNumber("SHIN_DAN_4"), 15);
+  assert.equal(conv.courseRankNumber("URA_KAIDEN"), 23);
+  assert.equal(conv.courseRankNumber(null), undefined);
 });
 
 test("ratingTargets: 신곡 → 구곡 순서, 인덱스로 찾는다", () => {
@@ -78,16 +104,20 @@ test("versionCode: maishift 세대 번호 → 캐롤봇 버전 코드", () => {
   assert.equal(catalog.versionCode(27), 27000); // MAGiCAL
 });
 
-test("toCatalog: 제목별로 묶고 상수·장르·번역·이른 버전", () => {
-  const list = catalog.toCatalog(
-    [...songs, { ...songs[1], type: "DX", songVersion: 25 }],
-    [...tracks, { s: 2, i: 9, d: "MASTER", l: 135 }],
-  );
+test("toCatalog: 제목별로 묶고 상수·장르·번역·이른 버전·보면 종류별 버전·폴더 순서", () => {
+  const apiSongs = [
+    { id: 1, title: "Customized Justice", artist: "Kobaryo", genre: "MAIMAI", type: "DX", version: 25, jacketUrl: "https://x/Music/a.png", titleTranslations: {}, charts: [{ id: 1, difficulty: "MASTER", level: "14+", internalLevel: 148 }] },
+    { id: 2, title: "アイドル", artist: "YOASOBI", genre: "POPS_AND_ANIME", type: "STANDARD", version: 22, jacketUrl: "https://x/Music/b.png", titleTranslations: { ko: "아이돌", en: "Idol" }, charts: [{ id: 2, difficulty: "RE_MASTER", level: "13", internalLevel: 131 }, { id: 3, difficulty: "BASIC", level: "3", internalLevel: 30 }] },
+    { id: 3, title: "アイドル", artist: "YOASOBI", genre: "POPS_AND_ANIME", type: "DX", version: 25, jacketUrl: "https://x/Music/b.png", titleTranslations: { ko: "아이돌" }, charts: [{ id: 9, difficulty: "MASTER", level: "13+", internalLevel: 135 }] },
+  ];
+  const list = catalog.toCatalog(apiSongs, new Map([["アイドル|DX", 4]]));
   const idol = list.find((s) => s.title === "アイドル");
   assert.equal(idol.version, 24500); // ST(BUDDiES PLUS)와 DX(CiRCLE) 중 이른 쪽
+  assert.deepEqual(idol.kindVersions, { ST: 24500, DX: 26000 });
   assert.equal(idol.genre, "POPS＆アニメ");
   assert.equal(idol.korean, "아이돌");
-  assert.deepEqual(idol.charts.map((c) => [c.kind, c.diff, c.constant]), [["ST", "Re:MASTER", 13.1], ["ST", "BASIC", 3], ["DX", "MASTER", 13.5]]);
+  assert.deepEqual(idol.charts.map((c) => [c.kind, c.diff, c.constant, c.trackId]), [["ST", "Re:MASTER", 13.1, 2], ["ST", "BASIC", 3, 3], ["DX", "MASTER", 13.5, 9]]);
+  assert.deepEqual(idol.folders, [{ kind: "DX", order: 4, version: 25 }]);
   assert.equal(list.find((s) => s.title === "Customized Justice").korean, undefined);
 });
 
@@ -127,12 +157,6 @@ test("versionWeek: 출시 뒤 경과 주(내림)", () => {
   const versions = [{ id: 26, name: "CiRCLE PLUS", releasedAt: Date.parse("2026-07-22T22:00:00Z") }];
   assert.deepEqual(hs.versionWeek(Date.parse("2026-10-11T09:28:00Z"), 26, versions), { name: "CiRCLE PLUS", week: 11 });
   assert.equal(hs.versionWeek(0, 99, versions), null);
-});
-
-test("uploadList: maishift 업로드 목록 문자열 → 시간순 {id, at, rating}", () => {
-  const { uploadList } = require("../../dist/maishift/convert.js");
-  const raw = JSON.stringify({ n: ["A"], r: [[1184, 1726473887182, 12171, 0, 22], [964, 1726142498625, 11963, 0, 22]] });
-  assert.deepEqual(uploadList(raw), [{ id: 964, at: 1726142498625, rating: 11963 }, { id: 1184, at: 1726473887182, rating: 12171 }]);
 });
 
 test("S-레이팅: 상수² × DX 별 ÷ 50, 평균으로 등급, 보면 값은 maishift 처럼 그대로 내림", () => {

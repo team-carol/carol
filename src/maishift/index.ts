@@ -1,17 +1,19 @@
 /**
- * maishift 연동(임시 — 공식 API 전까지, 배포하지 않음).
+ * maishift 연동. 프로필·기록·이전 기록은 공식 API(api.ts), API 에 없는 것(히스토리·미래시)은 서버 함수(serverFn.ts).
  *
- * 프로필·기록은 캐롤봇 DB에 저장하지 않고 메모리에만 잠깐 둔다. 부하를 줄이려고:
- * - 프로필(작음)은 아이디마다 PROFILE_TTL_MS 에 한 번만 확인한다.
- * - 전체 기록(큼)과 레이팅 히스토리는 프로필의 updatedAt(maishift 업로드 시각)이 바뀌었을 때만 다시 받는다.
- * - 모든 요청은 serverFn.ts 에서 한 줄로 세워 간격을 둔다.
+ * 프로필·기록은 캐롤봇 DB에 저장하지 않고 메모리에만 잠깐 둔다. 이용 한도(앱마다 분당 120단위)를 아끼려고:
+ * - 프로필(5단위)은 아이디마다 PROFILE_TTL_MS 에 한 번만 확인한다.
+ * - 전체 기록(10)·업로드 목록(2)·레이팅 히스토리는 프로필의 syncedAt(maishift 업로드 시각)이 바뀌었을 때만 다시 받는다.
+ * - 모든 요청은 api.ts / serverFn.ts 에서 한 줄로 세워 간격을 둔다.
  */
 import { registerProfileOverlay, type MaishiftLink } from "../storage";
-import type { CachedProfile, MaishiftHistoryPoint, MaishiftVersion } from "../storage/types";
+import type { CachedProfile, MaishiftHistoryPoint } from "../storage/types";
 import { applyMaishiftUpdate } from "./sync";
 import { rankImage } from "../rankImages";
 import { callServerFn, FN, MaishiftError, type MaishiftRegion } from "./serverFn";
-import { ratingTargets, ratingTargetSum, sRatingTargets, allRecords, trophyClassOf, historyPoints, versionList, uploadList, type MsProfileResult, type MsRecordsResult, type MsHistoryPoint, type MsUpload } from "./convert";
+import { callApi } from "./api";
+import { ratingTargets, ratingTargetSum, trophyClassOf, historyPoints, apiAllRecords, apiRatingTargets, classRankNumber, courseRankNumber, type MsProfileResult, type MsHistoryPoint, type MsUpload, type ApiProfileResult, type ApiRecordsResult, type ApiSnapshotsResult } from "./convert";
+import { getRegionVersions, regionLatestVersion } from "../constants";
 import type { PlayRecord } from "../scraper";
 import { forgetStampCards } from "./stamps";
 import { forgetTrackScores } from "./track";
@@ -35,16 +37,15 @@ interface Entry {
   trophy: string;
   trophyClass: string;
   stars: number;
-  courseRank: number;
-  classRank: number;
+  courseRank: number | undefined;
+  classRank: number | undefined;
   playCount: number;
   totalPlayCount: number;
   friendCode: string;
   topJson: string;
   clearJson: string;
   history: MaishiftHistoryPoint[];
-  versions: MaishiftVersion[];
-  /** maishift "이전 기록 공개" 설정 */
+  /** maishift "이전 기록 공개" 설정(업로드 목록이 403 not_public 이면 false) */
   pastRecordsVisible: boolean;
   /** 미래시로 볼 세대(내수판이 앞서 있을 때). 없으면 null. */
   futureVersion: number | null;
@@ -68,72 +69,89 @@ function remember(key: string, e: Entry): void {
   while (cache.size > MAX_ENTRIES) cache.delete(cache.keys().next().value!);
 }
 
+const apiPath = (link: MaishiftLink, rest = "") => `/profiles/${encodeURIComponent(link.handle)}${rest}`;
+
+/** 미래시로 볼 세대: 국제판 연동이고 내수판 최신 세대가 더 앞서 있으면 그 세대. */
+function futureVersionOf(link: MaishiftLink): number | null {
+  if (link.server !== "intl") return null;
+  const jp = regionLatestVersion("jp"), intl = regionLatestVersion("intl");
+  return jp !== null && intl !== null && jp > intl ? jp : null;
+}
+
 async function refresh(link: MaishiftLink): Promise<Entry> {
   const key = keyOf(link);
-  const args = { handle: link.handle, region: regionOf(link) };
+  const region = link.server;
   const prev = cache.get(key);
-  const fetchRecords = () => callServerFn<MsRecordsResult>(FN.records, args);
+  const fetchRecords = () => callApi<ApiRecordsResult>(apiPath(link, "/records"), { region });
   // 히스토리는 그래프용 부가 데이터라 못 받아도 프로필은 보여 준다(다음 업로드 때 다시 시도).
-  const fetchHistory = () => callServerFn<MsHistoryPoint[]>(FN.history, args).then(historyPoints).catch((e) => {
+  // 플레이 횟수가 API 업로드 목록에 없어 아직 서버 함수로 받는다.
+  const fetchHistory = () => callServerFn<MsHistoryPoint[]>(FN.history, { handle: link.handle, region: regionOf(link) }).then(historyPoints).catch((e) => {
     console.error(`[maishift] ${link.handle} 히스토리:`, (e as Error).message);
     return [] as MaishiftHistoryPoint[];
   });
-  // 캐시가 없으면(재시작 직후·첫 조회) 세 가지를 한꺼번에 요청해 기다리는 시간을 줄인다.
-  // 캐시가 있으면 프로필(작음)만 먼저 보고, 업로드 시각이 바뀌었을 때만 나머지를 받는다.
-  // 프로필이 제일 느려서(약 2초) 먼저 줄 세운다.
-  const profileReq = callServerFn<MsProfileResult>(FN.profile, args).catch((e) => {
-    // 비공개로 바뀌었으면 메모리에 남은 기록도 지운다(다시 공개할 때까지 보여 주지 않음).
-    if (e instanceof MaishiftError && e.kind === "private") forgetUser(link);
+  // 업로드 목록 첫 쪽: 이전 기록 공개 여부를 알려 주고, 과거 레이팅표·/사진관 날짜 목록이 그대로 쓴다.
+  const fetchUploads = () => loadUploadsPage(link, null).then(() => true).catch((e) => {
+    if (e instanceof MaishiftError && e.kind === "private") return false;
+    console.error(`[maishift] ${link.handle} 업로드 목록:`, (e as Error).message);
+    return prev?.pastRecordsVisible ?? false;
+  });
+  const profileReq = callApi<ApiProfileResult>(apiPath(link), { region }).catch((e) => {
+    if (e instanceof MaishiftError) {
+      // 비공개로 바뀌었으면 메모리에 남은 기록도 지운다(다시 공개할 때까지 보여 주지 않음).
+      if (e.kind === "private") forgetUser(link);
+      // 요청한 지역에 기록이 없음. 다른 지역 기록을 보여 주지 않는다.
+      if (e.kind === "region_missing") { regionMissing.add(key); cache.delete(key); }
+    }
     throw e;
   });
-  const cold = prev ? null : { records: fetchRecords(), history: fetchHistory() };
+  // 캐시가 없으면(재시작 직후·첫 조회) 한꺼번에 요청해 기다리는 시간을 줄인다.
+  // 캐시가 있으면 프로필(작음)만 먼저 보고, 업로드 시각이 바뀌었을 때만 나머지를 받는다.
+  const cold = prev ? null : { records: fetchRecords(), history: fetchHistory(), uploads: fetchUploads() };
   cold?.records.catch(() => {});
   const res = await profileReq;
-  // maishift 는 요청한 지역에 기록이 없으면 대표 지역 기록을 준다. 다른 지역 기록을 보여 주지 않는다.
-  if (res.region && res.region !== args.region) {
-    regionMissing.add(key);
-    cache.delete(key);
-    throw new MaishiftError(`no ${args.region} record (got ${res.region})`, "region_missing");
-  }
   regionMissing.delete(key);
   privateProfiles.delete(key);
-  const rec = res.userRecord;
-  if (!rec?.profile) throw new MaishiftError("no record for region", "not_found");
-  const p = rec.profile;
-  const same = prev && prev.updatedAt === p.updatedAt ? prev : null;
-  const top = ratingTargets(rec);
+  const p = res.profile;
+  if (!p) throw new MaishiftError("no record for region", "not_found");
+  const same = prev && prev.updatedAt === p.syncedAt ? prev : null;
+  let topJson = same?.topJson ?? "";
   let clearJson = same?.clearJson ?? "";
-  if (!clearJson) {
-    const records = allRecords(await (cold?.records ?? fetchRecords()));
+  let history = same?.history;
+  let pastRecordsVisible = same?.pastRecordsVisible;
+  if (!same) {
+    const [recordsRes, hist, visible] = await Promise.all([cold?.records ?? fetchRecords(), cold?.history ?? fetchHistory(), cold?.uploads ?? fetchUploads()]);
+    const records = apiAllRecords(recordsRes, region);
+    const top = apiRatingTargets(recordsRes, region);
+    topJson = JSON.stringify(top);
     clearJson = JSON.stringify(records);
+    history = hist;
+    pastRecordsVisible = visible;
     // 새 기록이 올라왔으면 성과·스냅샷·목표를 갱신한다. 조회는 기다리게 하지 않는다.
-    const job: Promise<void> = applyMaishiftUpdate({ link, records, top, rating: p.rating, uploadedAt: Date.parse(p.updatedAt) || Date.now() })
+    const job: Promise<void> = applyMaishiftUpdate({ link, records, top, rating: p.rating, uploadedAt: Date.parse(p.syncedAt) || Date.now() })
       .catch((e) => console.error(`[maishift] ${link.handle} 기록 반영:`, e))
       .finally(() => { if (applying.get(key) === job) applying.delete(key); });
     applying.set(key, job);
   }
-  const history = same?.history ?? await (cold?.history ?? fetchHistory());
   const entry: Entry = {
     checkedAt: Date.now(),
-    updatedAt: p.updatedAt,
+    updatedAt: p.syncedAt,
     handle: res.handle || link.handle,
     name: p.name,
     rating: p.rating,
-    avatar: p.profileImageSrc,
-    trophy: p.trophy?.title ?? "",
-    trophyClass: trophyClassOf(p.trophy?.tier),
+    avatar: p.iconUrl,
+    trophy: p.title?.text ?? "",
+    trophyClass: trophyClassOf(p.title?.tier),
     stars: p.stars,
-    courseRank: p.courseRank,
-    classRank: p.classRank,
+    courseRank: courseRankNumber(p.courseRank),
+    classRank: classRankNumber(p.classRank),
     playCount: p.playCount?.current ?? 0,
     totalPlayCount: p.playCount?.total ?? 0,
     friendCode: p.friendCode ?? "",
-    topJson: JSON.stringify(top),
+    topJson,
     clearJson,
-    history,
-    versions: versionList(rec.availableVersions),
-    pastRecordsVisible: res.pastRecordsVisible === true,
-    futureVersion: rec.futureVersion != null && rec.futureVersion > (rec.regionLatestVersion ?? Infinity) ? rec.futureVersion : null,
+    history: history ?? [],
+    pastRecordsVisible: pastRecordsVisible === true,
+    futureVersion: futureVersionOf(link),
   };
   remember(key, entry);
   return entry;
@@ -207,7 +225,7 @@ function toProfile(profileKey: string, link: MaishiftLink, e: Entry, extras: Cac
     clearJson: e.clearJson,
     mapJson: extras?.mapJson ?? "[]",
     maishiftHistory: e.history,
-    maishiftVersions: e.versions,
+    maishiftVersions: getRegionVersions(link.server).map((v) => ({ id: v.index, name: v.name, releasedAt: v.releasedAt })),
     maishiftFriendCode: e.friendCode,
     maishiftPastPublic: e.pastRecordsVisible,
     source: "maishift",
@@ -282,24 +300,29 @@ export function scheduleMaishiftCheck(link: MaishiftLink): void {
 }
 
 // ─── 이전 기록(업로드별 스냅샷) ────────────────────────────────────────────────
-// 과거 레이팅표는 캐롤봇이 저장하지 않고 maishift 의 이전 기록을 받는다. 지난 업로드는 바뀌지 않으므로
-// 업로드 목록은 PROFILE_TTL_MS 동안, 받은 스냅샷은 작은 LRU 에 둔다.
+// 과거 레이팅표는 캐롤봇이 저장하지 않고 maishift 의 이전 기록(API snapshots)을 받는다.
+// 업로드 목록은 최근 순 쪽(200개, 2단위)으로 오므로 필요한 만큼만 넘겨 받아 PROFILE_TTL_MS 동안 둔다.
+// 지난 업로드는 바뀌지 않으므로 받은 스냅샷은 작은 LRU 에 둔다.
 const UPLOADS_TTL_MS = PROFILE_TTL_MS;
+const UPLOADS_PAGE = 200;
 const SNAPSHOT_CACHE_MAX = 50;
-const uploadsCache = new Map<string, { at: number; list: MsUpload[] }>();
+/** list: 최근 순. cursor: 다음 쪽(없으면 다 받음). */
+interface Uploads { at: number; list: MsUpload[]; cursor: number | null }
+const uploadsCache = new Map<string, Uploads>();
 const snapshotCache = new Map<string, MaishiftSnapshot>();
 
 export interface MaishiftSnapshot {
   uploadId: number;
   uploadedAt: number;
   rating: number;
+  /** API 이전 기록에는 그때의 이름·칭호·아이콘이 없어 지금 값을 쓴다. */
   name: string;
   trophy: string;
   trophyClass: string;
   avatar: string;
   /** 레이팅 대상(신곡 15 → 구곡 35) */
   top: PlayRecord[];
-  /** S-레이팅 대상 50 */
+  /** 그때의 전체 기록. S-레이팅표가 여기서 50개를 고른다. */
   sTop: PlayRecord[];
 }
 
@@ -310,55 +333,79 @@ export type MaishiftSnapshotResult =
   /** 그 시각 이전 업로드가 없음. first/last: 볼 수 있는 업로드 범위(없으면 null) */
   | { kind: "none"; first: number | null; last: number | null };
 
-async function uploadsOf(link: MaishiftLink): Promise<MsUpload[]> {
+/** 업로드 목록 한 쪽을 받아 캐시에 이어 붙인다. cursor 가 null 이면 첫 쪽부터 새로. 비공개면 MaishiftError(private). */
+async function loadUploadsPage(link: MaishiftLink, cursor: number | null): Promise<Uploads> {
   const key = keyOf(link);
-  const have = uploadsCache.get(key);
-  if (have && Date.now() - have.at < UPLOADS_TTL_MS) return have.list;
-  const list = uploadList(await callServerFn<string>(FN.uploads, { handle: link.handle, region: regionOf(link) }));
-  uploadsCache.set(key, { at: Date.now(), list });
+  const res = await callApi<ApiSnapshotsResult>(apiPath(link, "/snapshots"), { region: link.server, limit: UPLOADS_PAGE, cursor: cursor ?? undefined });
+  const page = res.snapshots
+    .map((u) => ({ id: u.id, at: Date.parse(u.syncedAt), rating: u.rating }))
+    .filter((u) => Number.isFinite(u.at));
+  const have = cursor !== null ? uploadsCache.get(key) : undefined;
+  const next: Uploads = { at: have?.at ?? Date.now(), list: [...(have?.list ?? []), ...page], cursor: res.nextCursor };
+  uploadsCache.delete(key);
+  uploadsCache.set(key, next);
   while (uploadsCache.size > MAX_ENTRIES) uploadsCache.delete(uploadsCache.keys().next().value!);
-  return list;
+  return next;
 }
+
+/** enough(list) 가 참이 되거나 끝까지 받을 때까지 업로드 목록을 넘겨 받는다. */
+async function uploadsUntil(link: MaishiftLink, enough: (list: MsUpload[]) => boolean): Promise<Uploads> {
+  let up = uploadsCache.get(keyOf(link));
+  if (!up || Date.now() - up.at >= UPLOADS_TTL_MS) up = await loadUploadsPage(link, null);
+  while (up.cursor !== null && !enough(up.list)) up = await loadUploadsPage(link, up.cursor);
+  return up;
+}
+
+/** /사진관 날짜 목록에 보이는 만큼(최근 22일 + 여유). */
+const UPLOAD_DAYS_WANTED = 25;
 
 /** maishift 에 업로드한 날(오전 4시 기준 하루, 최근 순). 이전 기록을 공개하지 않았으면 null. /사진관 과거 레이팅표 날짜 목록용. */
 export async function getMaishiftUploadDays(link: MaishiftLink): Promise<string[] | null> {
   const entry = await getEntry(link);
   if (!entry.pastRecordsVisible) return null;
-  const list = await uploadsOf(link);
-  return [...new Set([...list].reverse().map((u) => koreaPlayDayKey(new Date(u.at))))];
+  const daysOf = (list: MsUpload[]) => [...new Set(list.map((u) => koreaPlayDayKey(new Date(u.at))))];
+  try {
+    return daysOf((await uploadsUntil(link, (list) => daysOf(list).length >= UPLOAD_DAYS_WANTED)).list);
+  } catch (e) {
+    if (e instanceof MaishiftError && e.kind === "private") return null;
+    throw e;
+  }
 }
 
-/** before(ms) 보다 앞선 마지막 업로드의 프로필. */
+/** before(ms) 보다 앞선 마지막 업로드의 기록. */
 export async function getMaishiftSnapshot(link: MaishiftLink, before: number): Promise<MaishiftSnapshotResult> {
   const entry = await getEntry(link);
   if (!entry.pastRecordsVisible) return { kind: "private" };
-  const list = await uploadsOf(link);
-  const pick = [...list].reverse().find((u) => u.at < before);
-  if (!pick) return { kind: "none", first: list[0]?.at ?? null, last: list[list.length - 1]?.at ?? null };
-  const cacheKey = `${keyOf(link)}~${pick.id}`;
-  const memo = snapshotCache.get(cacheKey);
-  if (memo) return { kind: "ok", snapshot: memo };
-  const res = await callServerFn<MsProfileResult>(FN.profile, { handle: `${link.handle}~${pick.id}`, region: regionOf(link) });
-  const rec = res.userRecord;
-  if (!rec?.profile) throw new MaishiftError("no snapshot record", "not_found");
-  const p = rec.profile;
-  const snapshot: MaishiftSnapshot = {
-    uploadId: pick.id,
-    uploadedAt: pick.at,
-    rating: p.rating,
-    name: p.name,
-    trophy: p.trophy?.title ?? "",
-    trophyClass: trophyClassOf(p.trophy?.tier),
-    avatar: p.profileImageSrc,
-    top: ratingTargets(rec),
-    sTop: sRatingTargets(rec),
-  };
-  snapshotCache.set(cacheKey, snapshot);
-  while (snapshotCache.size > SNAPSHOT_CACHE_MAX) snapshotCache.delete(snapshotCache.keys().next().value!);
-  return { kind: "ok", snapshot };
+  try {
+    const up = await uploadsUntil(link, (list) => list.some((u) => u.at < before));
+    const pick = up.list.find((u) => u.at < before);
+    if (!pick) return { kind: "none", first: up.list[up.list.length - 1]?.at ?? null, last: up.list[0]?.at ?? null };
+    const cacheKey = `${keyOf(link)}~${pick.id}`;
+    const memo = snapshotCache.get(cacheKey);
+    if (memo) return { kind: "ok", snapshot: memo };
+    const res = await callApi<ApiRecordsResult>(apiPath(link, `/snapshots/${pick.id}`), { region: link.server });
+    const snapshot: MaishiftSnapshot = {
+      uploadId: pick.id,
+      uploadedAt: pick.at,
+      rating: pick.rating,
+      name: entry.name,
+      trophy: entry.trophy,
+      trophyClass: entry.trophyClass,
+      avatar: entry.avatar,
+      top: apiRatingTargets(res, link.server),
+      sTop: apiAllRecords(res, link.server),
+    };
+    snapshotCache.set(cacheKey, snapshot);
+    while (snapshotCache.size > SNAPSHOT_CACHE_MAX) snapshotCache.delete(snapshotCache.keys().next().value!);
+    return { kind: "ok", snapshot };
+  } catch (e) {
+    if (e instanceof MaishiftError && e.kind === "private") return { kind: "private" };
+    throw e;
+  }
 }
 
 // 미래시: 내수판에 먼저 나온 세대의 상수·신곡 범위로 다시 계산한 레이팅 대상. maishift 프로필 화면의 "미래시 보기".
+// 공식 API 에 없어 서버 함수(profile 에 handle `<handle>:<세대>`)로 받는다.
 // 그 세대 상수는 바뀔 수 있으므로 업로드 시각이 같아도 PROFILE_TTL_MS 가 지나면 다시 받는다.
 const futureCache = new Map<string, { at: number; future: MaishiftFuture }>();
 
