@@ -1,7 +1,7 @@
 /**
  * maishift(maimai.shiftpsh.com) 서버 함수 호출. 공식 API(api.ts)에 없는 데이터만 아직 여기로 받는다:
- * 미래시(profile `<handle>:<세대>`), 레이팅 히스토리의 플레이 횟수, 스탬프 카드, 버전 폴더 안 순서,
- * 보면의 버전별 상수·업로드별 기록 변화. 운영자 허락을 받기 전까지의 임시 경로다.
+ * 미래시(profile `<handle>:<세대>`), 레이팅 히스토리의 플레이 횟수, 스탬프 카드, 보면의 버전별 상수·업로드별 기록 변화.
+ * 운영자가 이 데이터의 엔드포인트를 곧 만들어 주기로 했다(2026-10-21). 나오면 api.ts 로 옮기고 이 파일을 지운다.
  *
  * maishift 는 TanStack Start 로 만들어져 있어, 페이지가 데이터를 `GET /_serverFn/<해시>?payload=...` 로 받는다.
  * 해시는 maishift 빌드에 묶여 있어 maishift 가 배포하면 바뀔 수 있다 — 그때는 아래 FN 값을 새로 찾아 바꾼다
@@ -18,8 +18,6 @@ const MIN_INTERVAL_MS = 250;
 export const FN = {
   /** {handle, region} → 프로필 요약 + 레이팅 대상곡 + 상위 기록 100개. 미래시(`<handle>:<세대>`)만 쓴다. */
   profile: "8cc17f2a26e01e823beaeca45b578af6db3bd0bc627a603a0add3b0772a33301",
-  /** {region} → 지역 곡 목록. 버전 폴더 안 순서(versionFolderOrder)만 쓴다. */
-  songs: "5c9650151df3f336ab6e8278251a186ce9b3e587a66c4100c738cc0e91398756",
   /** {handle, region} → 업로드마다 한 점씩 쌓인 레이팅·플레이 횟수 히스토리. 프로필 홈 그래프 */
   history: "086876d75e2fef4bee772eae80535e80dcbc84fa6e64fc0db1f0f2737222bc4f",
   /** {handle, region} → 스탬프 카드 목록(/profile/<id>/stamp 페이지) */
@@ -29,8 +27,6 @@ export const FN = {
   trackScores: "889a9e2084ba419653983b577d7991d39d7ee1a78ab2cbf0f666933c347e6acc",
   /** {trackId} → 버전별 상수 [{versionId, internalLevel}] */
   trackLevels: "01fd4ff066633d4bb53aa015e4bb81123eacabb135c4accb1c7689d1f3db58dd",
-  /** {trackId} → 버전 안 순서 {order, total} */
-  trackPosition: "e2b0bdcb4cea152b04517824c971fed10afef3f7be8ff554153ca41d6a3ae9f9",
 } as const;
 
 export type MaishiftRegion = "ASIA" | "JAPAN";

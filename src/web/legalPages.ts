@@ -31,7 +31,7 @@ ${siteFooter()}
 
 export function privacyPage(): string {
   return legalPage("개인정보처리방침", `
-<p>캐롤봇은 maimai DX 플레이 기록을 Discord에서 보여 주는 비공식 팬 프로젝트입니다. 이 방침은 캐롤봇이 어떤 정보를 어디에서 받는지, 그 정보를 무엇에 쓰는지, 언제 지우는지 설명합니다.</p>
+<p>캐롤봇은 maimai DX 플레이 기록을 Discord에서 보여 주는 비공식 팬 프로젝트이며, 영리 목적 없이 운영합니다. 이 방침은 캐롤봇이 어떤 정보를 어디에서 받는지, 그 정보를 무엇에 쓰는지, 언제 지우는지 설명합니다.</p>
 
 <h2>1. 수집하는 정보</h2>
 <h3>Discord에서 받는 정보</h3>
@@ -114,10 +114,11 @@ export function privacyPage(): string {
 export function termsPage(): string {
   return legalPage("이용약관", `
 <h2>1. 서비스 설명</h2>
-<p>캐롤봇은 SEGA의 아케이드 리듬 게임 「maimai DX」의 플레이 기록을 Discord에서 조회할 수 있게 하는 비공식 팬 메이드 봇입니다. 플레이 기록은 maishift(maimai.shiftpsh.com)의 공식 API에서 받습니다. 캐롤봇은 maishift가 운영하는 서비스가 아닙니다.</p>
+<p>캐롤봇은 SEGA의 아케이드 리듬 게임 「maimai DX」의 플레이 기록을 Discord에서 조회할 수 있게 하는 비공식 팬 메이드 봇입니다. 캐롤봇은 영리 목적 없이 운영하며, 이용료를 받거나 광고를 싣지 않습니다. 플레이 기록은 maishift(maimai.shiftpsh.com)의 공식 API에서 받습니다. 캐롤봇은 maishift가 운영하는 서비스가 아닙니다.</p>
 
 <h2>2. 저작권</h2>
 <p>캐롤봇은 SEGA와 관계가 없으며, SEGA가 제휴하거나 후원하거나 승인한 서비스가 아닙니다. maimai DX, maimai DX net과 관련된 모든 게임 자산, 캐릭터, 음악, 이미지, 상표에 대한 저작권과 모든 권리는 <strong>SEGA Corporation</strong>과 각 소유자에게 있습니다. 플레이 기록과 보면 상수는 maishift에서 제공받으며, 그 데이터에 대한 권리는 maishift와 각 출처에 있습니다.</p>
+<p>캐롤봇이 보여 주는 재킷 등 게임 이미지는 플레이 기록을 보여 주기 위해 비영리 팬 프로젝트로서 사용하며, 이미지만 따로 배포하지 않습니다.</p>
 
 <h2>3. maishift 연동</h2>
 <ul>

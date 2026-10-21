@@ -1,11 +1,10 @@
 /**
  * maishift 곡 목록(공식 API GET /songs, /versions) → 캐롤봇 곡·상수 카탈로그.
  * 예전 otoge-db music-ex(-intl).json 자리를 대신한다. 지역별로 한 번씩, 하루 한 번만 받는다(src/constants.ts).
- * 버전 폴더 안 순서는 API 에 없어 서버 함수 곡 목록에서 받는다(못 받아도 카탈로그는 만든다).
+ * 버전 폴더 안 순서는 API 에 아직 없다(maishift 데이터가 어긋나 운영자가 고친 뒤 넣어 주기로 함). 그때 toCatalog 에 넘긴다.
  */
-import { callServerFn, FN } from "./serverFn";
 import { callApi, type ApiRegion } from "./api";
-import type { ApiSong, ApiSongsResult, ApiVersionsResult, MsSong } from "./convert";
+import type { ApiSong, ApiSongsResult, ApiVersionsResult } from "./convert";
 
 export interface CatalogChart { kind: "ST" | "DX"; diff: string; constant: number; /** maishift 보면 번호(곡 상세 조회용) */ trackId?: number }
 export interface CatalogSong {
@@ -108,30 +107,14 @@ export function toCatalog(songs: ApiSong[], folderOrders: FolderOrders = new Map
   return [...byTitle.values()];
 }
 
-/** 버전 폴더 안 순서. 공식 API 에 없어 서버 함수 곡 목록에서 받는다. 실패하면 빈 맵(순서 표시만 빠진다). */
-async function fetchFolderOrders(region: ApiRegion): Promise<FolderOrders> {
-  const map: FolderOrders = new Map();
-  try {
-    const res = await callServerFn<{ tracks: { songs: MsSong[] } }>(FN.songs, { region: region === "jp" ? "JAPAN" : "ASIA" });
-    for (const song of res?.tracks?.songs ?? []) {
-      if (typeof song.versionFolderOrder !== "number") continue;
-      map.set(`${song.title || "　"}|${song.type === "DX" ? "DX" : "ST"}`, song.versionFolderOrder);
-    }
-  } catch (e) {
-    console.error(`[maishift] ${region} 버전 폴더 순서:`, (e as Error).message);
-  }
-  return map;
-}
-
 export async function fetchCatalog(region: ApiRegion): Promise<RegionCatalog> {
-  const [songs, versions, folders] = await Promise.all([
+  const [songs, versions] = await Promise.all([
     callApi<ApiSongsResult>("/songs", { region }),
     callApi<ApiVersionsResult>("/versions", { region }),
-    fetchFolderOrders(region),
   ]);
   if (!songs?.songs?.length) throw new Error(`maishift ${region} 곡 목록이 비어 있음`);
   return {
-    songs: toCatalog(songs.songs, folders),
+    songs: toCatalog(songs.songs),
     latestVersion: versions.latestVersion,
     versions: versions.versions
       .map((v) => ({ index: v.id, name: v.name, releasedAt: v.releasedAt ? Date.parse(v.releasedAt) : NaN }))
