@@ -29,6 +29,7 @@ import { getReadyVideo } from "../bot/utils/chartVideoQueue";
 import type { Chart } from "../simai/types";
 import { messagesAdminPage, type MessageRowVM } from "./messagesAdminPage";
 import { BASE_CSS, pageHead, topbar, siteFooter, BRAND_AVATAR_PATH, userNav } from "./theme";
+import { privacyPage, termsPage } from "./legalPages";
 import { BRAND_AVATAR_PNG } from "./brandAvatar";
 import {
   MESSAGE_KEYS, defaultOf, getOverride, rawText, placeholdersOf,
@@ -102,13 +103,6 @@ async function cacheMapImages(areas: readonly { imageUrl: string }[], server: st
   }
   return saved;
 }
-
-const LEGAL_CSS = `${BASE_CSS}
-.page{max-width:760px}
-h1{font-size:clamp(32px,4.4vw,44px);font-weight:500;color:var(--ink);line-height:1.2;letter-spacing:-.01em;padding-bottom:18px;margin-bottom:8px;border-bottom:1px solid var(--border)}
-h1+p{font-size:13.5px;color:var(--dim);margin-bottom:12px}
-h2{font-size:20px;font-weight:500;color:var(--ink);margin:36px 0 10px}
-p{margin:8px 0;font-size:15.5px;line-height:1.75;color:var(--ink-soft)}`;
 
 function guidePage(token: string, bookmarklet: string): string {
   const bmEscaped = bookmarklet.replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/`/g, "\\`");
@@ -480,56 +474,13 @@ export function startWebServer(port: number): void {
 
     if (req.method === "GET" && url.pathname === "/privacy") {
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-      res.end(`<!DOCTYPE html><html lang="ko"><head>${pageHead("개인정보처리방침 · 캐롤봇")}
-<style>${LEGAL_CSS}</style></head><body>
-${topbar()}
-<main class="page">
-<h1>개인정보처리방침</h1>
-<p>최종 수정일: 2026년 10월 12일</p>
-<h2>1. 수집하는 정보</h2>
-<p>본 봇은 Discord 사용자 ID, maimai DX net 프로필 데이터(플레이어명, 친구 코드, 레이팅, 칭호, 클래스, 아바타 이미지, 최근 플레이 기록, 재킷 이미지)를 수집합니다. 북마클릿으로 동기화할 때는 maimai DX net의 게임 옵션 설정값(노트 속도, 판정 표시, 효과음 등)도 함께 수집하며, 사용자가 옵션 프리셋을 저장하면 그 설정값을 저장합니다. 사용자가 maimai DX net 서클에 가입되어 있다면 서클 정보(서클 이름·서클 코드·소개 문구·서클 색상, 서클 포인트와 순위, 이번 달 서클 진행도와 본인의 서클 포인트, 서클 챌린지 과제곡과 달성률, 멤버의 플레이어명·아이콘·칭호·레이팅·서클 포인트)도 함께 수집합니다.</p>
-<h2>2. 수집 방법</h2>
-<p>사용자가 maimai DX net에 로그인된 브라우저에서 <strong>북마클릿</strong> 또는 <strong>캐롤익스텐션(비공식 크롬 확장)</strong>을 실행하여, 해당 페이지의 HTML을 사용자 브라우저에서 직접 서버로 전송합니다. SEGA ID, 비밀번호 등 계정 정보는 절대 수집하지 않습니다.</p>
-<p>캐롤익스텐션을 쓰는 경우, 사용자가 확장 설정에서 동기화를 명시적으로 켜고 동기화 토큰을 등록해야 합니다. 동기화는 (1) maimai DX net 화면의 버튼을 눌렀을 때, 또는 (2) 사용자가 "자동" 모드를 켠 경우 홈 화면에 접속했고 플레이 횟수가 지난 동기화 이후 변한 것이 확인됐을 때에만 실행됩니다. 백그라운드 상시 수집은 하지 않으며, 전송되는 데이터의 종류와 목적은 북마클릿과 동일합니다.</p>
-<h2>3. 데이터 저장</h2>
-<p>프로필 데이터는 PostgreSQL 데이터베이스에 저장됩니다. 세션 정보는 암호화하여 저장하며, 아바타 및 재킷 이미지는 base64 인코딩하여 저장합니다. base64 인코딩은 암호화가 아닙니다.</p>
-<h2>4. 데이터 사용 목적</h2>
-<p>Discord에서 maimai DX 프로필과 서클 정보를 표시하고, 게임 설정 페이지에서 현재 게임 옵션을 보여 주거나 옵션 프리셋을 편집·적용하는 용도로만 사용됩니다.</p>
-<p>친구 코드는 사용자의 maimai DX 프로필을 구분하고 Discord 계정과 연결하는 데 사용합니다. 친구 코드는 기본으로 다른 사람에게 표시하지 않으며, 사용자가 설정 페이지에서 친구 코드 공개를 켠 경우에만 /프로필 명령어 결과에 표시합니다.</p>
-<p>서클 정보는 /프로필의 서클 이름과 /서클 명령어에 사용합니다. 서클 정보는 기본으로 공개되며, 사용자가 설정 페이지에서 서클 공개를 끄면 /프로필에 서클 이름을 표시하지 않고 /서클 결과도 본인에게만 보여 줍니다. 서클 멤버의 정보는 해당 서클을 보여 주는 용도로만 사용합니다.</p>
-<h2>5. 제3자 제공</h2>
-<p>수집된 데이터를 제3자에게 제공하지 않습니다.</p>
-<h2>6. 데이터 삭제</h2>
-<p>/프로필 데이터는 북마클릿 또는 캐롤익스텐션으로 동기화할 때마다 덮어쓰기됩니다. 옵션 프리셋은 게임 설정 페이지에서 언제든 직접 삭제할 수 있습니다. 완전한 삭제를 원하시면 봇 관리자에게 요청해 주세요.</p>
-</main>
-${siteFooter()}
-</body></html>`);
+      res.end(privacyPage());
       return;
     }
 
     if (req.method === "GET" && url.pathname === "/terms") {
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-      res.end(`<!DOCTYPE html><html lang="ko"><head>${pageHead("이용약관 · 캐롤봇")}
-<style>${LEGAL_CSS}</style></head><body>
-${topbar()}
-<main class="page">
-<h1>이용약관</h1>
-<p>최종 수정일: 2026년 9월</p>
-<h2>1. 서비스 설명</h2>
-<p>캐롤봇은 Discord에서 SEGA의 아케이드 리듬 게임 「maimai DX」의 공식 웹사이트(maimai DX net) 프로필을 조회할 수 있는 비공식 팬 메이드 봇입니다.</p>
-<h2>2. 저작권</h2>
-<p>본 서비스는 SEGA와 공식적으로 제휴, 후원 또는 승인되지 않았습니다. maimai DX, maimai DX net 및 관련된 모든 게임 자산, 캐릭터, 음악, 이미지, 상표의 저작권 및 모든 권리는 <strong>SEGA Corporation</strong>에 있습니다. 본 봇은 팬 목적으로만 운영됩니다.</p>
-	<h2>3. 사용자 책임</h2>
-	<p>사용자는 maimai DX net에 로그인된 상태에서 북마클릿 또는 캐롤익스텐션(비공식 크롬 확장)을 실행하여 데이터를 전송합니다. 이 과정에서 발생하는 모든 책임은 사용자에게 있습니다. 캐롤익스텐션은 캐롤봇과 별개로 배포되는 비공식 소프트웨어이며, 사용자가 직접 설치하고 동기화를 활성화한 경우에만 동작합니다.</p>
-	<h2>4. 추가 북마클릿 사용 책임</h2>
-	<p>사용자가 직접 추가하거나 활성화한 외부 북마클릿, 프리셋 외 스크립트, 제3자 제공 코드의 실행 여부와 결과는 전적으로 사용자 본인의 판단과 책임에 따릅니다. 캐롤봇은 해당 스크립트를 작성, 검증, 통제하지 않으며, 그로 인해 발생하는 데이터 손실, 계정 문제, 보안 사고, 서비스 이용 제한, 기타 손해에 대해 책임을 지지 않습니다.</p>
-	<h2>5. 서비스 중단</h2>
-	<p>본 서비스는 언제든지 사전 통지 없이 중단될 수 있습니다. 서비스 제공자는 서비스 중단으로 인한 손해에 대해 책임을 지지 않습니다.</p>
-	<h2>6. 면책 조항</h2>
-	<p>본 서비스는 "있는 그대로" 제공되며, 어떠한 종류의 명시적 또는 묵시적 보증 없이 제공됩니다.</p>
-	</main>
-${siteFooter()}
-</body></html>`);
+      res.end(termsPage());
       return;
     }
 
