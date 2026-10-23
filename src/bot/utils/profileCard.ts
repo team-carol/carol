@@ -1,7 +1,7 @@
 import { BRAND } from "../../brand";
 import {
   ACCENT, SURFACE, SURFACE2, BORDER, TEXT, MUTED, CANVAS, INK, SOFT, FAINT, NUM_FONT, TROPHY_STYLE,
-  type El, el, image, pill, remoteDataUrl, kstStamp, wordmark, statsPanel, panel,
+  type El, el, image, pill, remoteDataUrl, kstStamp, wordmark, creditOf, statsPanel, panel,
 } from "./cardKit";
 import { renderInWorker } from "./renderPool";
 import type { CachedProfile } from "../../storage/types";
@@ -12,7 +12,9 @@ import { getScoreRank, MAI_CM_COLOR } from "../../games";
 import { fetchJacketDataUrl, ratingBreakdown, ratingPlate } from "./ratingCard";
 import { musicKindIcons, KIND_ICON_RATIO } from "./dxnetAssets";
 import { alignLeftMargin } from "./textMetrics";
-import type { RatingPoint } from "../../ratingHistory";
+import type { RatingPoint, PlayCountPoint } from "../../ratingHistory";
+import { lineChart, lineSwatch, dashedSwatch } from "./historyChart";
+import { hasCarolSync } from "./syncExtras";
 import { msg, cardTextSignature } from "../../messages";
 
 // /프로필 이미지 카드. 레이아웃·색은 /성과 카드와 같은 랜딩(carol-web) 토큰(src/brand.ts)을 따른다.
@@ -44,7 +46,7 @@ const MARK_COLOR: Record<string, string> = {
   "FDX+": "#10b981", FDX: "#34d399", "FS+": "#22c55e", FS: "#4ade80",
 };
 
-const PROFILE_CARD_VERSION = 13;
+const PROFILE_CARD_VERSION = 19;
 const PROFILE_CARD_CACHE_MAX = 64;
 const profileCardCache = new Map<string, Buffer>();
 
@@ -161,107 +163,35 @@ function recentRow(record: PlayRecord, profile: CachedProfile, jacket: string | 
   ]);
 }
 
-// ─── 레이팅 추이 그래프 ─────────────────────────────────────────────────────
-// 선·격자는 SVG 이미지로 그리고(resvg 가 벡터로 렌더), 축 라벨·값은 satori 텍스트로 올린다
-// (중첩 SVG 안의 text 는 글꼴을 못 찾을 수 있어서). 실측끼리 잇는 구간은 실선, 추정이 끼면 점선.
-const CHART_W = 840;          // 패널 안쪽 폭
-const CHART_Y_LABEL_W = 40;   // 왼쪽 눈금 라벨 칸
+// ─── 히스토리 그래프 ─────────────────────────────────────────────────────
+// 그리는 코드는 /히스토리 카드와 같이 쓴다(historyChart.ts).
 const CHART_H = 150;
-const CHART_PAD_X = 10;
-const CHART_PAD_Y = 16;
+const PLAYS_H = 120;
+export const PLAY_CURRENT_COLOR = "#60a5fa";
 
-function niceStep(range: number): number {
-  const steps = [1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000];
-  return steps.find((s) => range / s <= 4) ?? 5000;
+/** 날짜 라벨. 기간이 해를 넘기면 연도(두 자리)를 붙인다. */
+function dayLabel(day: string, withYear: boolean): string {
+  return withYear ? day.slice(2).replace(/-/g, ".") : day.slice(5).replace("-", ".");
 }
 
-function shortDay(day: string): string {
-  return day.slice(5).replace("-", ".");
-}
-
-function dashedSwatch(): El {
-  return el("div", { display: "flex", gap: 3 }, [0, 1, 2].map(() => el("div", { width: 5, height: 2, background: ACCENT, opacity: 0.8 })));
-}
+/** 레이팅 축: 왼쪽은 곡 평균(레이팅 ÷ 50), 오른쪽은 레이팅. */
+export const RATING_AXES = {
+  left: (v: number) => String(+(v / 50).toFixed(1)),
+  right: (v: number) => String(v),
+};
 
 function ratingChartPanel(points: RatingPoint[], days: string[], updates: { day: string; label: string }[] = []): El {
   if (!points.length) {
     return panel(msg("profileCard.ratingTitle"), "", [el("span", { color: MUTED, fontSize: 12, padding: "10px 0" }, msg("profileCard.ratingEmpty"))]);
   }
-  const plotW = CHART_W - CHART_Y_LABEL_W - 8;
-  const index = new Map(days.map((d, i) => [d, i]));
-  const firstI = index.get(points[0].day) ?? 0;
-  const lastI = index.get(points[points.length - 1].day) ?? firstI;
-  const span = Math.max(1, lastI - firstI);
-  const xOf = (day: string) => points.length === 1
-    ? plotW / 2
-    : CHART_PAD_X + (((index.get(day) ?? firstI) - firstI) / span) * (plotW - 2 * CHART_PAD_X);
-
-  const values = points.map((p) => p.rating);
-  const lo = Math.min(...values), hi = Math.max(...values);
-  const step = niceStep(Math.max(hi - lo, 8) * 1.3);
-  const yMin = Math.floor((lo - step * 0.3) / step) * step;
-  const yMax = Math.max(yMin + step, Math.ceil((hi + step * 0.3) / step) * step);
-  const yOf = (v: number) => CHART_PAD_Y + (1 - (v - yMin) / (yMax - yMin)) * (CHART_H - 2 * CHART_PAD_Y);
-  const ticks: number[] = [];
-  for (let t = yMin; t <= yMax + 1e-9; t += step) ticks.push(t);
-
-  const pts = points.map((p) => ({ ...p, x: +xOf(p.day).toFixed(1), y: +yOf(p.rating).toFixed(1) }));
-  const bottom = yOf(yMin).toFixed(1);
-  const svg: string[] = [
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${plotW}" height="${CHART_H}" viewBox="0 0 ${plotW} ${CHART_H}">`,
-    `<defs><linearGradient id="fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${ACCENT}" stop-opacity="0.22"/><stop offset="1" stop-color="${ACCENT}" stop-opacity="0"/></linearGradient></defs>`,
-    ...ticks.map((t) => `<line x1="0" x2="${plotW}" y1="${yOf(t).toFixed(1)}" y2="${yOf(t).toFixed(1)}" stroke="${BORDER}" stroke-width="1"/>`),
-  ];
-  if (pts.length > 1) {
-    svg.push(`<path d="M${pts[0].x},${bottom} ${pts.map((p) => `L${p.x},${p.y}`).join(" ")} L${pts[pts.length - 1].x},${bottom} Z" fill="url(#fill)"/>`);
-    for (let i = 1; i < pts.length; i++) {
-      const a = pts[i - 1], b = pts[i];
-      const dashed = a.estimated || b.estimated;
-      svg.push(`<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="${ACCENT}" stroke-width="2.5" ${dashed ? `stroke-dasharray="6 5" stroke-opacity="0.75"` : `stroke-linecap="round"`}/>`);
-    }
-  }
-  // 버전 업데이트 날: 세로 실선(그래프에 보이는 기간 안에 있을 때만). 라벨은 satori 텍스트로 올린다.
-  const firstDay = points[0].day, lastDay = points[points.length - 1].day;
-  const marks = points.length > 1 ? updates.filter((u) => u.day > firstDay && u.day <= lastDay).map((u) => ({ ...u, x: +xOf(u.day).toFixed(1) })) : [];
-  for (const m of marks) svg.push(`<line x1="${m.x}" x2="${m.x}" y1="0" y2="${CHART_H}" stroke="${BRAND.muted}" stroke-width="1.5" stroke-opacity="0.7"/>`);
-  for (const p of pts.slice(0, -1)) {
-    if (!p.estimated) svg.push(`<circle cx="${p.x}" cy="${p.y}" r="3.5" fill="${SURFACE}" stroke="${ACCENT}" stroke-width="2"/>`);
-  }
-  const last = pts[pts.length - 1];
-  svg.push(`<circle cx="${last.x}" cy="${last.y}" r="5" fill="${ACCENT}"/>`, "</svg>");
-  const svgUrl = `data:image/svg+xml;base64,${Buffer.from(svg.join("")).toString("base64")}`;
-
-  const first = points[0];
+  const first = points[0], last = points[points.length - 1];
+  const withYear = first.day.slice(0, 4) !== last.day.slice(0, 4);
   const delta = last.rating - first.rating;
   const meta = points.length > 1
-    ? `${shortDay(first.day)} ${first.rating} → ${shortDay(last.day)} ${last.rating} (${delta >= 0 ? "+" : ""}${delta})`
-    : `${shortDay(last.day)} ${last.rating}`;
-  const midDay = days[firstI + Math.round(span / 2)] ?? last.day;
-  const valueTop = Math.max(0, last.y - 24);
-
+    ? `${dayLabel(first.day, withYear)} ${first.rating} → ${dayLabel(last.day, withYear)} ${last.rating} (${delta >= 0 ? "+" : ""}${delta})`
+    : `${dayLabel(last.day, false)} ${last.rating}`;
   return panel(msg("profileCard.ratingTitle"), meta, [
-    el("div", { display: "flex", gap: 8 }, [
-      // 왼쪽 눈금 라벨
-      el("div", { display: "flex", position: "relative", width: CHART_Y_LABEL_W, height: CHART_H }, ticks.map((t) =>
-        el("span", { position: "absolute", right: 0, top: yOf(t) - 7, color: FAINT, fontFamily: NUM_FONT, fontSize: 10, lineHeight: 1 }, String(t)))),
-      // 그래프 + 마지막 값
-      el("div", { display: "flex", position: "relative", width: plotW, height: CHART_H }, [
-        image(svgUrl, { width: plotW, height: CHART_H }),
-        ...marks.map((m) => el("span", {
-          position: "absolute", top: 0, left: Math.min(plotW - 80, m.x + 5),
-          color: BRAND.muted, fontSize: 10, fontWeight: 700, lineHeight: 1, whiteSpace: "nowrap",
-        }, m.label)),
-        el("span", {
-          position: "absolute", top: valueTop, left: Math.max(0, Math.min(plotW - 52, last.x - 26)), width: 52, textAlign: "center",
-          color: ACCENT, fontFamily: NUM_FONT, fontSize: 13, fontWeight: 700, lineHeight: 1,
-        }, String(last.rating)),
-      ]),
-    ]),
-    // 아래 날짜 라벨 + 범례
-    el("div", { display: "flex", alignItems: "center", marginTop: 6, paddingLeft: CHART_Y_LABEL_W + 8 }, [
-      el("div", { display: "flex", justifyContent: points.length > 1 ? "space-between" : "center", flex: 1, color: FAINT, fontSize: 10 },
-        points.length > 1 ? [shortDay(first.day), shortDay(midDay), shortDay(last.day)].map((t) => el("span", {}, t)) : [el("span", {}, shortDay(last.day))]),
-    ]),
+    lineChart(days, [{ values: points.map((p) => ({ day: p.day, value: p.rating, estimated: p.estimated })), color: ACCENT, fill: true }], { height: CHART_H, updates, lastLabel: true, extendTo: days[days.length - 1], mirror: RATING_AXES }),
     // 범례는 점선(추정)만 설명한다. 추정 구간이 없으면 범례를 두지 않는다.
     ...(points.some((p) => p.estimated)
       ? [el("div", { display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 6, marginTop: 8, color: MUTED, fontSize: 10 }, [
@@ -271,21 +201,37 @@ function ratingChartPanel(points: RatingPoint[], days: string[], updates: { day:
   ]);
 }
 
+// 플레이 횟수: maishift 처럼 누적·현재 버전 두 선. 히스토리와 같은 가로축이라 날짜가 위아래로 맞는다.
+function playCountPanel(plays: PlayCountPoint[], days: string[], updates: { day: string; label: string }[] = []): El {
+  const last = plays[plays.length - 1];
+  return panel(msg("profileCard.playsTitle"), msg("profileCard.playsMeta", { total: last.total.toLocaleString("en-US"), current: last.current.toLocaleString("en-US") }), [
+    lineChart(days, [
+      { values: plays.map((p) => ({ day: p.day, value: p.total })), color: ACCENT },
+      { values: plays.map((p) => ({ day: p.day, value: p.current })), color: PLAY_CURRENT_COLOR, axis: "right" },
+    ], { height: PLAYS_H, fromZero: true, updates, extendTo: days[days.length - 1] }),
+    el("div", { display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 14, marginTop: 8, color: MUTED, fontSize: 10 }, [
+      lineSwatch(ACCENT, msg("profileCard.playsTotal")),
+      lineSwatch(PLAY_CURRENT_COLOR, msg("profileCard.playsCurrent")),
+    ]),
+  ]);
+}
+
 export async function renderProfileCard(
   profile: CachedProfile,
   avatarBuf: Buffer | null,
-  opts: { translate?: boolean; friendCode?: string | null; circleName?: string | null; ratingHistory?: { points: RatingPoint[]; days: string[]; updates?: { day: string; label: string }[] } } = {},
+  opts: { translate?: boolean; friendCode?: string | null; circleName?: string | null; ratingHistory?: { points: RatingPoint[]; days: string[]; updates?: { day: string; label: string }[]; plays?: PlayCountPoint[] } } = {},
 ): Promise<Buffer> {
   const translate = !!opts.translate;
   const friendCode = opts.friendCode ?? null;
   const circleName = opts.circleName ?? null;
   const history = opts.ratingHistory;
   // 그래프 기간은 오늘을 끝으로 움직이므로 마지막 날짜도 키에 넣는다.
-  const cacheKey = [profile.profileKey, profile.lastSyncedAt, translate ? 1 : 0, friendCode ?? "", circleName ?? "", avatarBuf?.length ?? 0, history ? history.days[history.days.length - 1] : "-", PROFILE_CARD_VERSION, cardTextSignature()].join("|");
+  const cacheKey = [profile.profileKey, profile.lastSyncedAt, translate ? 1 : 0, friendCode ?? "", circleName ?? "", avatarBuf?.length ?? 0, history ? history.days[history.days.length - 1] : "-", PROFILE_CARD_VERSION, profile.source ?? "", cardTextSignature()].join("|");
   const memo = profileCardCache.get(cacheKey);
   if (memo) return memo;
 
-  const recent = parseList(profile.recentJson).slice(0, RECENT_COUNT);
+  const synced = hasCarolSync(profile);
+  const recent = synced ? parseList(profile.recentJson).slice(0, RECENT_COUNT) : [];
   const clears = parseList(profile.clearJson);
   const breakdown = ratingBreakdown(profile);
   const [avatarUrl, courseUrl, gradeUrl, jackets, kindIcons] = await Promise.all([
@@ -337,7 +283,7 @@ export async function renderProfileCard(
         ]),
       ]),
       el("div", { display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 16, flexShrink: 0 }, [
-        wordmark(),
+        wordmark(creditOf(profile)),
         ratingPlate(profile.rating || 0),
       ]),
     ]),
@@ -350,9 +296,11 @@ export async function renderProfileCard(
     ]),
     clearPanel(clears),
     ...(history ? [ratingChartPanel(history.points, history.days, history.updates)] : []),
-    panel(msg("profileCard.recentTitle"), msg("profileCard.recentMeta", { count: recent.length }), recent.length
+    ...(history?.plays && history.plays.length > 1 ? [playCountPanel(history.plays, history.days, history.updates)] : []),
+    // 최근 플레이는 캐롤봇 추가 북마클릿 데이터라, 그 북마클릿을 실행한 사용자에게만 보인다.
+    ...(synced ? [panel(msg("profileCard.recentTitle"), msg("profileCard.recentMeta", { count: recent.length }), recent.length
       ? recent.map((r, i) => recentRow(r, profile, jackets[i], translate, kindIcons))
-      : [el("span", { color: MUTED, fontSize: 12, padding: "12px 0" }, msg("profileCard.recentEmpty"))]),
+      : [el("span", { color: MUTED, fontSize: 12, padding: "12px 0" }, msg("profileCard.recentEmpty"))])] : []),
     // 푸터
     el("div", { display: "flex", justifyContent: "space-between", marginTop: 14, color: MUTED, fontSize: 11 }, [
       el("span", {}, friendCode ? msg("profileCard.friendCode", { code: friendCode }) : " "),

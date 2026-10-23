@@ -1,15 +1,17 @@
 import {
   SlashCommandBuilder, ChatInputCommandInteraction, EmbedBuilder, MessageFlags,
 } from "discord.js";
-import { getCachedProfile, getUserFriendCode, getProfilePrivate, getTranslateTitles } from "../../storage";
+import { getCachedProfile, getUserFriendCode, getTranslateTitles } from "../../storage";
 import { getClearList } from "../utils/embeds";
 import { displayTitle } from "../../aliases";
 import {
   getChartsInConstantRange, getJacketFile, isIntlAvailable,
   getSongGenre, GENRES, getSongVersionName, VERSION_NAMES, isSongPlus,
+  jacketFileUrl,
 } from "../../constants";
 import { chartKey } from "../../scraper";
 import { msg } from "../../messages";
+import { versionPositionText } from "../utils/versionPosition";
 
 const MAI_DIFF_COLOR: Record<string, number> = {
   BASIC: 0x16a34a, ADVANCED: 0xea580c, EXPERT: 0xdc2626,
@@ -100,10 +102,6 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   let clearMap: Map<string, ReturnType<typeof getClearList>[number]> | null = null;
   if (playOpt) {
     const target = interaction.options.getUser("user") ?? interaction.user;
-    if (target.id !== interaction.user.id && await getProfilePrivate(target.id)) {
-      await interaction.reply({ content: msg("common.profilePrivate", { user: `<@${target.id}>` }), flags: MessageFlags.Ephemeral });
-      return;
-    }
     const fc = await getUserFriendCode(target.id);
     const cached = fc ? await getCachedProfile(fc) : null;
     if (!cached) {
@@ -118,12 +116,12 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 
   // 후보 = 상수 범위 · 국제판 수록 · 타입/장르/플레이여부 필터
   const candidates = getChartsInConstantRange(lo, hi).filter((c) => {
-    if (!isIntlAvailable(c.title)) return false;
+    if (!isIntlAvailable(c.title, c.kind)) return false;
     if (typeOpt && c.kind !== typeOpt) return false;
     if (diffOpt && c.diff !== diffOpt) return false;
     if (genreOpt && getSongGenre(c.title) !== genreOpt) return false;
-    if (verOpt && getSongVersionName(c.title) !== verOpt) return false;
-    if (plusOpt && isSongPlus(c.title) !== (plusOpt === "plus")) return false;
+    if (verOpt && getSongVersionName(c.title, "intl", c.kind) !== verOpt) return false;
+    if (plusOpt && isSongPlus(c.title, "intl", c.kind) !== (plusOpt === "plus")) return false;
     if (playOpt) {
       // clearJson엔 미플레이(ach=0) 엔트리도 있으므로 달성률 > 0 을 플레이로 판정
       const rec = clearMap!.get(`${c.title}|${c.kind}|${c.diff}`);
@@ -149,7 +147,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     verOpt ? verOpt + (plusOpt === "plus" ? " PLUS" : plusOpt === "base" ? " (무인)" : "") : undefined,
   ].filter(Boolean).join("  ·  ");
   const translate = await getTranslateTitles(interaction.user.id);
-  const embeds = picks.map((c, i) => {
+  const embeds = await Promise.all(picks.map(async (c, i) => {
     const rec = clearMap?.get(`${c.title}|${c.kind}|${c.diff}`);
     const ytQuery = encodeURIComponent(
       `maimai ${c.title} ${c.kind} ${c.diff} 外部出力`.replace(/\s+/g, " ").trim(),
@@ -165,11 +163,14 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     // 장르(catcode)·수록 버전은 OTOGE DB 데이터. 있을 때만 표시.
     const genre = getSongGenre(c.title);
     if (genre) emb.addFields({ name: msg("random.fieldGenre"), value: genre, inline: true });
-    const versionName = getSongVersionName(c.title);
+    const versionName = getSongVersionName(c.title, "intl", c.kind);
     if (versionName) {
+      const base = versionName + (isSongPlus(c.title, "intl", c.kind) ? " PLUS" : "");
+      // 버전 정렬로 곡을 찾을 때의 위치(예: 43/79). /랜덤 후보는 국제판 수록곡이다.
+      const position = await versionPositionText(c.title, c.kind, "intl");
       emb.addFields({
         name: msg("random.fieldVersion"),
-        value: versionName + (isSongPlus(c.title) ? " PLUS" : ""),
+        value: position ? msg("searchResult.versionPosition", { version: base, position }) : base,
         inline: true,
       });
     }
@@ -179,9 +180,9 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     }
     if (i === 0) emb.setAuthor({ name: header });
     const jacket = getJacketFile(c.title);
-    if (jacket) emb.setThumbnail(`https://otoge-db.net/maimai/jacket/${jacket}`);
+    if (jacket) emb.setThumbnail(jacketFileUrl(jacket));
     return emb;
-  });
+  }));
 
   await interaction.reply({ embeds });
 }

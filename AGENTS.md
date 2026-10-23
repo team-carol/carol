@@ -50,7 +50,7 @@ carol/
 | 미리보기 GIF | `src/bot/utils/chartGif.ts` | 같은 렌더러를 vm+napi-canvas 로 돌려 프레임을 뽑는다. |
 | DB schema/storage | `src/storage/postgres.ts` | PostgreSQL storage and numbered migrations. |
 | maimai parsing | `src/scraper.ts` | Cheerio selectors tied to DX NET markup. |
-| Song constants/jackets | `src/constants.ts` | otoge-db cache; startup network failure is non-fatal. |
+| Song constants/jackets | `src/constants.ts` | maishift song catalog (ASIA + JAPAN) cached daily in `constants_cache`; startup network failure is non-fatal. JP-only jacket images come from the otoge-db image mirror (maimaidx.jp TLS chain breaks Node fetch). |
 | Visual tokens | `src/brand.ts`, `src/web/theme.ts` | carol-web landing palette shared by web pages and PNG cards. Bump `CARD_VERSION`/`ACH_CARD_VERSION` when card colors change. |
 | Deploy/runbook | `docs/DEPLOY.md`, `docs/SETUP.md` | Cloudflare tunnel + GCP VM workflow. |
 
@@ -64,10 +64,10 @@ TypeScript LSP was unavailable in this workspace, and codegraph is not indexed. 
 | `client.on(Events.InteractionCreate)` | router | `src/bot/index.ts` | Dispatches commands plus `serverset:`, `recent:`, `page:`, `share:`, `rt:`, `search:`, `goal:` buttons. |
 | `startWebServer` | entry | `src/web/index.ts` | Owns all HTTP routes and `/sync` parse/cache pipeline. |
 | `guidePage` | HTML generator | `src/web/index.ts` | `/sync` install UI for PC/mobile plus settings link. |
-| `settingsPage` | HTML generator | `src/web/settingsPage.ts` | Privacy, preset bookmarklets, extra bookmarklet CRUD. |
+| `settingsPage` | HTML generator | `src/web/settingsPage.ts` | Default server, circle privacy, translation, DX ✦ decimal, achievement filter. |
 | `buildBookmarkletJs` | generator | `src/web/bookmarklet.ts` | Wraps embedded sync JS and evaluates enabled extra scripts. |
-| `BOOKMARKLET_PRESETS` | config list | `src/web/bookmarklet.ts` | Built-in bookmarklets; first preset is `maishift`. |
-| `cacheProfile` / `saveUserSession` | persistence | `src/storage/postgres.ts` | Main write path after `/sync`. |
+| `MAISHIFT_BOOKMARKLET` | constant | `src/web/bookmarklet.ts` | maishift bookmarklet, always run with carol's bookmarklet. |
+| `saveSyncExtras` / `saveUserSession` | persistence | `src/storage/postgres.ts` | Main write path after `/sync` (feat/maishift: 부가 데이터만; 프로필은 maishift). |
 | `getUserSyncToken` / `findUserBySyncToken` | auth link | `src/storage/postgres.ts` | Token-based web access for `/sync` and `/settings`. |
 | `parseHome` / `parseMusicScore` | scraper | `src/scraper.ts` | CSS-selector parsing of DX NET HTML. |
 | `renderRatingCard` | PNG render | `src/bot/utils/ratingCard.ts` | Rating image generation and cache population. |

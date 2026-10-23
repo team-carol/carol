@@ -1,11 +1,12 @@
-import { SlashCommandBuilder, ChatInputCommandInteraction, ButtonInteraction, MessageFlags, AttachmentBuilder } from "discord.js";
-import { getCachedProfile, getUserFriendCode, getProfilePrivate, getCirclePublic, getTranslateTitles } from "../../storage";
+import { SlashCommandBuilder, ChatInputCommandInteraction, ButtonInteraction, MessageFlags, AttachmentBuilder, type RepliableInteraction } from "discord.js";
+import { getCachedProfile, getUserFriendCode, getCirclePublic, getTranslateTitles } from "../../storage";
 import { circleOf, circleEmbed, circleMembersEmbed, circleButtonsRow } from "../utils/circle";
 import { searchResultEmbeds } from "../utils/embeds";
 import { renderCircleCard } from "../utils/circleCard";
 import type { CircleInfo } from "../../scraper";
 import type { CachedProfile } from "../../storage/types";
 import { msg } from "../../messages";
+import { notRegisteredNotice } from "../utils/notRegistered";
 
 // /서클: 마지막 동기화 때 가져온 DX NET 서클 정보. 서클 공개(/설정, 기본 공개)가 꺼져 있으면 본인만 본다.
 // 멤버 포인트는 최대 20명이라 길어서 버튼(circle:members:<userId>)으로 따로 띄운다.
@@ -26,13 +27,12 @@ type Loaded = { error: string } | { circle: CircleInfo; cached: CachedProfile; c
 async function loadCircle(targetId: string, viewerId: string): Promise<Loaded> {
   const self = targetId === viewerId;
   const mention = `<@${targetId}>`;
-  if (!self && await getProfilePrivate(targetId)) return { error: msg("common.profilePrivate", { user: mention }) };
   const circlePublic = await getCirclePublic(targetId);
   if (!self && !circlePublic) return { error: msg("circle.private", { user: mention }) };
 
   const friendCode = await getUserFriendCode(targetId);
   const cached = friendCode ? await getCachedProfile(friendCode) : null;
-  if (!cached) return { error: self ? msg("common.selfNotRegistered") : msg("common.otherNotRegistered", { user: mention }) };
+  if (!cached) return { error: await notRegisteredNotice(targetId, self) };
 
   const circle = circleOf(cached);
   if (circle === undefined) return { error: self ? msg("circle.notCollected") : msg("circle.otherNotCollected", { user: mention }) };
@@ -42,13 +42,18 @@ async function loadCircle(targetId: string, viewerId: string): Promise<Loaded> {
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   const target = interaction.options.getUser("user") ?? interaction.user;
+  await show(interaction, target.id, interaction.options.getString("형식") === "embed" ? "embed" : "image");
+}
+
+/** /서클 과 /사진관 버튼이 같이 쓴다. */
+export async function show(interaction: RepliableInteraction, targetId: string, format: "image" | "embed"): Promise<void> {
+  const target = { id: targetId };
   const loaded = await loadCircle(target.id, interaction.user.id);
   if ("error" in loaded) {
     await interaction.reply({ content: loaded.error, flags: MessageFlags.Ephemeral });
     return;
   }
   const { circle, cached, circlePublic } = loaded;
-  const format = interaction.options.getString("형식") === "embed" ? "embed" : "image";
   // 과제곡 제목 번역은 보는 사람의 설정을 따른다.
   const translate = await getTranslateTitles(interaction.user.id);
   // 비공개인데 본인이 보는 경우엔 채널에 남기지 않는다.
@@ -87,7 +92,7 @@ export async function handleButton(interaction: ButtonInteraction): Promise<void
     const friendCode = await getUserFriendCode(interaction.user.id);
     const viewer = friendCode ? await getCachedProfile(friendCode) : null;
     if (!viewer) {
-      await interaction.reply({ content: msg("common.selfNotRegistered"), flags: MessageFlags.Ephemeral });
+      await interaction.reply({ content: await notRegisteredNotice(interaction.user.id, true), flags: MessageFlags.Ephemeral });
       return;
     }
     await interaction.deferReply({ flags });

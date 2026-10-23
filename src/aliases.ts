@@ -4,6 +4,9 @@ import { getAllAliases, getTranslationAliases } from "./storage";
 let aliasMap: Map<string, string[]> = new Map();
 // 곡명 → 한국어 번역 별명 (is_translation = 1로 지정된 것)
 let translationMap: Map<string, string> = new Map();
+// 곡명 → 외부(maishift) 한국어 번역. 표시는 캐롤봇 번역 별명이 없는 곡에만 쓰고, 검색에는 별명처럼 늘 쓴다.
+let externalTranslationMap: Map<string, string> = new Map();
+export function setExternalTranslations(map: Map<string, string>): void { externalTranslationMap = map; }
 
 // 공백 제거 + 소문자 정규화 (mailog 검색과 동일한 매칭 규칙)
 export function normalizeQuery(s: string): string {
@@ -23,16 +26,18 @@ export async function loadAliases(): Promise<void> {
   console.log(`[aliases] 별명 ${rows.length}개 (곡 ${map.size}개), 번역 ${translationMap.size}개 로드`);
 }
 
-// 해당 곡명의 별명이 정규화된 질의 q를 포함하는지
+// 해당 곡명의 별명이 정규화된 질의 q를 포함하는지. maishift 한국어 번역도 별명처럼 찾는다.
 export function aliasMatches(title: string, q: string): boolean {
+  const external = externalTranslationMap.get(title);
+  if (external && normalizeQuery(external).includes(q)) return true;
   const aliases = aliasMap.get(title);
   if (!aliases) return false;
   return aliases.some((a) => normalizeQuery(a).includes(q));
 }
 
-// 곡의 한국어 번역(지정된 것). 없으면 null.
+// 곡의 한국어 번역. 캐롤봇 번역 별명이 우선이고, 없으면 maishift 번역. 둘 다 없으면 null.
 export function getTranslation(title: string): string | null {
-  return translationMap.get(title) ?? null;
+  return translationMap.get(title) ?? externalTranslationMap.get(title) ?? null;
 }
 
 // 제목이 일본어/한자로만 이뤄졌는지 (한글·라틴 문자가 없고, 가나 또는 한자를 포함).
@@ -44,8 +49,8 @@ export function isTranslatableTitle(title: string): boolean {
   return KANA_KANJI.test(title) && !HANGUL.test(title) && !LATIN.test(title);
 }
 
-// 번역 표시 설정이 켜져 있고 번역이 지정돼 있으면 번역으로 치환, 아니면 원제.
+// 번역 표시 설정이 켜져 있고 번역이 있으면 번역으로 치환, 아니면 원제.
 export function displayTitle(title: string, translate: boolean): string {
   if (!translate) return title;
-  return translationMap.get(title) ?? title;
+  return getTranslation(title) ?? title;
 }

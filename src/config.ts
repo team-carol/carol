@@ -14,6 +14,8 @@ export const CONFIG = require("../config.json") as {
   geminiModel?: string;
   // mai-notes 채보 본문을 실제로 받아올지. 기본 꺼짐(현재 mai-notes 소스는 미사용).
   mainotesFetchCharts?: boolean;
+  /** maishift 공식 API 키(X-API-Key). 설정 › 개발자에서 발급. */
+  maishiftApiKey?: string;
   /** 공지 번역 백필 사용 여부. 미설정(undefined)이면 릴리스 빌드에서만 켜진다
    *  (RELEASE_VERSION 유무로 판단). dev 는 공유 할당량을 아끼려고 기본 꺼짐.
    *  true/false 로 명시하면 그 값이 우선. → src/bot/newsPoller.ts backfillEnabled() */

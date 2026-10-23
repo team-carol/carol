@@ -2,7 +2,7 @@ import {
   SlashCommandBuilder, ChatInputCommandInteraction, EmbedBuilder,
   MessageFlags, ActionRowBuilder, ButtonBuilder, ButtonStyle,
 } from "discord.js";
-import { getUserFriendCode, getUserSyncToken, getUserDefaultServer } from "../../storage";
+import { getUserFriendCode, getStoredFriendCode, getUserSyncToken, getUserDefaultServer } from "../../storage";
 import { getBaseUrl } from "../../web";
 import { PORT } from "../../config";
 import { msg } from "../../messages";
@@ -51,7 +51,8 @@ async function buildSettingsContent(userId: string) {
 }
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
-  if (!await getUserFriendCode(interaction.user.id)) {
+  // 설정 페이지는 maishift 를 연동했거나 캐롤봇 북마클릿을 쓴 적이 있으면 연다.
+  if (!await getUserFriendCode(interaction.user.id) && !await getStoredFriendCode(interaction.user.id)) {
     await interaction.reply({
       content: msg("common.selfNotRegistered"),
       flags: MessageFlags.Ephemeral,

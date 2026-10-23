@@ -4,6 +4,10 @@ import {
   ButtonBuilder,
   ButtonStyle,
   ActionRowBuilder,
+  ContainerBuilder,
+  SectionBuilder,
+  TextDisplayBuilder,
+  MessageFlags,
   escapeMarkdown,
 } from "discord.js";
 import {
@@ -13,13 +17,11 @@ import {
   getMapImage,
   saveSongJacket,
   getTranslateTitles,
-  getFriendCodePublic,
   getCirclePublic,
-  listRatingSnapshots,
-  getAchievementLogRange,
-  getAchievementPlayEventLog,
 } from "../../storage";
 import { getMaimaiBaseUrl } from "../../scraper";
+import type { CachedProfile } from "../../storage/types";
+import { hasCarolSync } from "./syncExtras";
 import {
   getConstant,
   getJacketFile,
@@ -31,19 +33,22 @@ import {
   getSongGenre,
   getSongVersionName,
   isSongPlus,
+  jacketFileUrl,
 } from "../../constants";
 import { aliasMatches, normalizeQuery, displayTitle } from "../../aliases";
+import { areaDisplayName } from "../../nameTranslations";
 import { ratingColor } from "./roles";
 import { renderProfileCard } from "./profileCard";
 import { circleOf } from "./circle";
-import { buildRatingSeries, recentPlayDays, RATING_HISTORY_DAYS } from "../../ratingHistory";
-import { versionUpdatesBetween } from "../../constants";
-import { koreaPlayDayKey, koreaPlayDayRange } from "../../achievements";
+import { versionName } from "../../maishift/catalog";
+import { maishiftDays, maishiftSeries } from "../../ratingHistory";
+import { koreaPlayDayKey } from "../../achievements";
 import { buildMarkMap, buildKindResolver, chartKey } from "../../scraper";
 import type { PlayRecord, ChartMarks, MaimaiServer, MapArea } from "../../scraper";
 import { msg } from "../../messages";
+import { versionPositionText } from "./versionPosition";
 
-// 곡 자켓 버퍼: DB 캐시 → maimai net(musicId) → otoge-db(title) 순으로 확보하고 캐시
+// 곡 자켓 버퍼: DB 캐시 → maimai net(musicId) → 카탈로그 재킷(title) 순으로 확보하고 캐시
 export async function jacketBuffer(r: PlayRecord): Promise<Buffer | null> {
   const m = r.jacketUrl?.match(/\/img\/Music\/([^.]+)\.png/);
   const musicId = m ? m[1] : null;
@@ -68,7 +73,7 @@ export async function jacketBuffer(r: PlayRecord): Promise<Buffer | null> {
     const cached = await getSongJacket(key);
     if (cached) return cached;
     try {
-      const res = await fetch(`https://otoge-db.net/maimai/jacket/${file}`);
+      const res = await fetch(jacketFileUrl(file));
       if (res.ok) {
         const b = Buffer.from(await res.arrayBuffer());
         await saveSongJacket(key, b);
@@ -135,11 +140,37 @@ function songRating(r: PlayRecord, fc?: string, server: MaimaiServer = "intl"): 
   return calcSongRating(r.achievementVal, lvNum, fc ?? r.fc);
 }
 
+// maishift 프로필의 아이콘(DX NET 공개 이미지) 메모리 캐시. 아이콘 주소는 아이콘이 바뀌면 같이 바뀐다.
+const remoteAvatarCache = new Map<string, Buffer>();
+async function fetchRemoteAvatar(url: string): Promise<Buffer | null> {
+  const hit = remoteAvatarCache.get(url);
+  if (hit) return hit;
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    if (!res.ok) return null;
+    const buf = Buffer.from(await res.arrayBuffer());
+    remoteAvatarCache.set(url, buf);
+    if (remoteAvatarCache.size > 300) remoteAvatarCache.delete(remoteAvatarCache.keys().next().value!);
+    return buf;
+  } catch {
+    return null;
+  }
+}
+
+/** 프로필 아바타. maishift 데이터면 maishift 가 알려 준 아이콘, 아니면(또는 못 받으면) 북마클릿이 저장한 이미지. */
+export async function loadAvatar(userId: string, profile: Pick<CachedProfile, "server" | "source" | "avatar">): Promise<Buffer | null> {
+  if (profile.source === "maishift" && profile.avatar) {
+    const remote = await fetchRemoteAvatar(profile.avatar);
+    if (remote) return remote;
+  }
+  return getAvatarBlob(userId, profile.server);
+}
+
 export async function buildAvatarAttachment(
   userId: string,
-  server: MaimaiServer,
+  profile: Pick<CachedProfile, "server" | "source" | "avatar">,
 ): Promise<AttachmentBuilder | null> {
-  const buf = await getAvatarBlob(userId, server);
+  const buf = await loadAvatar(userId, profile);
   if (!buf) return null;
   return new AttachmentBuilder(buf, { name: "avatar.png" });
 }
@@ -147,7 +178,6 @@ export async function buildAvatarAttachment(
 export function profileEmb(
   p: NonNullable<Awaited<ReturnType<typeof getCachedProfile>>>,
   hasAvatar: boolean,
-  showFriendCode = false,
   circleName: string | null = null,
 ) {
   const stars = p.stars && p.stars !== "0" ? " · ★×" + p.stars : "";
@@ -165,11 +195,11 @@ export function profileEmb(
       }),
     )
     .setFooter({
-      text: msg("embed.profileFooter", { server: serverLabel, synced: new Date(p.lastSyncedAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }) }),
+      text: msg("embed.profileFooter", { server: serverLabel, synced: new Date(p.lastSyncedAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }) })
+        + (p.source === "maishift" ? `  ·  ${msg("maishift.credit")}` : ""),
     });
   if (hasAvatar) emb.setThumbnail("attachment://avatar.png");
-  // 친구 코드는 본인이 /설정 에서 공개로 바꾼 경우에만 보인다(기본 비공개).
-  const friendCode = showFriendCode ? (p.friendCode ?? "").match(/\d{13}/)?.[0] : undefined;
+  const friendCode = publicFriendCode(p) ?? undefined;
   if (friendCode) emb.addFields({ name: msg("embed.friendCodeField"), value: `\`${friendCode}\``, inline: true });
   // 서클 이름은 /설정 의 서클 공개(기본 공개)가 켜져 있을 때만.
   if (circleName) emb.addFields({ name: msg("embed.circleField"), value: escapeMarkdown(circleName), inline: true });
@@ -355,10 +385,11 @@ function buildMapAreaCard(
   absoluteIdx: number,
   totalAreas: number,
   imageRef: string,
+  translate: boolean,
 ): EmbedBuilder {
   const emb = new EmbedBuilder()
     .setColor(area.kind === "event" ? 0x9333ea : 0x2b2d31)
-    .setTitle(truncateVisual(area.name || msg("map.unnamedArea"), 32))
+    .setTitle(truncateVisual(areaDisplayName(area.name, translate) || msg("map.unnamedArea"), 32))
     .setAuthor({ name: areaKindLabel(area.kind) })
     .setDescription(mapAreaDescription(area))
     .setFooter({
@@ -390,13 +421,14 @@ export async function mapAreaEmbed(
   const idx = Math.max(0, Math.min(pageIdx, totalPages - 1));
   const start = idx * MAP_PAGE_SIZE;
   const pageAreas = areas.slice(start, start + MAP_PAGE_SIZE);
+  const translate = await getTranslateTitles(userId);
   const files: AttachmentBuilder[] = [];
   const embeds = await Promise.all(pageAreas.map(async (area, offset) => {
     const buf = area.imageUrl ? await getMapImage(area.imageUrl) : null;
     const fileName = buf ? `map${start + offset}.png` : "";
     if (buf) files.push(new AttachmentBuilder(buf, { name: fileName }));
     const imageRef = buf ? `attachment://${fileName}` : "";
-    return buildMapAreaCard(p, area, start + offset, areas.length, imageRef);
+    return buildMapAreaCard(p, area, start + offset, areas.length, imageRef, translate);
   }));
 
   const prevBtn = new ButtonBuilder()
@@ -417,7 +449,7 @@ export async function mapAreaEmbed(
   const shareButtons = pageAreas.map((area, offset) =>
     new ButtonBuilder()
       .setCustomId(`mapshare:${userId}:${start + offset}`)
-      .setLabel(msg("map.shareButton", { area: truncateVisual(area.name || msg("map.areaFallback"), 10) }))
+      .setLabel(msg("map.shareButton", { area: truncateVisual(areaDisplayName(area.name, translate) || msg("map.areaFallback"), 10) }))
       .setStyle(ButtonStyle.Success),
   );
 
@@ -438,6 +470,8 @@ export interface SearchCtx {
   userId: string;
   query: string;
   typeFilter: string;
+  /** 검색 결과 곡(채보 종류별) 순서. 상세 버튼이 몇 번째 곡인지로 찾는다. */
+  groups?: { title: string; musicKind: string }[];
 }
 const searchCtx = new Map<string, SearchCtx>();
 const SEARCH_CTX_MAX = 1000;
@@ -462,10 +496,11 @@ export async function searchResultEmbeds(
   typeFilter = "",
   token?: string,
 ): Promise<{
-  embeds: EmbedBuilder[];
-  components: ActionRowBuilder<ButtonBuilder>[];
+  components: (ContainerBuilder | TextDisplayBuilder | ActionRowBuilder<ButtonBuilder>)[];
   files: AttachmentBuilder[];
+  flags: MessageFlags.IsComponentsV2;
 }> {
+  // Components V2: 검색어 한 줄 → 곡마다 컨테이너(제목·재킷·지역/장르/버전, 코드 블록 점수표, 상세·외부 출력 버튼) → 페이지 버튼.
   const records = getClearList(p);
   const q = normalizeQuery(query);
   const translate = await getTranslateTitles(userId);
@@ -515,15 +550,15 @@ export async function searchResultEmbeds(
 
   if (keys.length === 0) {
     return {
-      embeds: [
-        new EmbedBuilder()
-          .setColor(0x2b2d31)
-          .setDescription(msg("searchResult.empty", { query, type: typeLabel })),
-      ],
-      components: [],
+      components: [new TextDisplayBuilder().setContent(msg("searchResult.empty", { query, type: typeLabel }))],
       files: [],
+      flags: MessageFlags.IsComponentsV2,
     };
   }
+  // 쿼리/필터는 토큰으로 대체 (customId 100자 제한 회피)
+  const ctxToken = token ?? putSearchCtx({ userId, query, typeFilter });
+  const ctx = getSearchCtx(ctxToken);
+  if (ctx) ctx.groups = keys.map((k) => { const g = byChart.get(k)!; return { title: g.title, musicKind: g.musicKind }; });
 
   const PAGE_SIZE = 2;
   const totalPages = Math.max(1, Math.ceil(keys.length / PAGE_SIZE));
@@ -533,7 +568,7 @@ export async function searchResultEmbeds(
 
   const DIFF_ORDER = ["BASIC", "ADVANCED", "EXPERT", "MASTER", "Re:MASTER"];
 
-  const embeds = await Promise.all(
+  const containers = await Promise.all(
     pageKeys.map(async (key, i) => {
       const group = byChart.get(key)!;
       const all = group.records;
@@ -579,39 +614,51 @@ export async function searchResultEmbeds(
       // 지역 라벨: 한 서버 전용 곡이면 곡의 실제 지역을, 양쪽 수록이면 현재 보는 서버를 표기.
       // (국제판 프로필에서도 JP 전용곡이 검색되므로 프로필 서버가 아니라 곡 기준으로 판정한다.)
       // 제목이 아닌 점수표 위 한 줄에 둔다.
-      const exclusive = getRegionExclusive(title);
+      const exclusive = getRegionExclusive(title, musicKind);
       const verLabel = p.server === "jp" ? "japan ver." : "intl ver.";
       // 장르(catcode)·수록 버전은 OTOGE DB 데이터. 있을 때만 리전 라벨 아래 들여써서 붙인다.
       const genre = getSongGenre(title);
-      const versionName = getSongVersionName(title);
-      const versionLabel = versionName ? versionName + (isSongPlus(title) ? " PLUS" : "") : null;
+      const versionName = getSongVersionName(title, p.server, musicKind);
+      const versionBase = versionName ? versionName + (isSongPlus(title, p.server, musicKind) ? " PLUS" : "") : null;
+      // 버전 정렬로 곡을 찾을 때의 위치(예: 43/79)
+      const position = versionBase ? await versionPositionText(title, musicKind, p.server) : null;
+      const versionLabel = versionBase && position ? msg("searchResult.versionPosition", { version: versionBase, position }) : versionBase;
       const regionLine =
         (exclusive ? msg("searchResult.regionExclusive", { version: exclusive === "jp" ? "japan ver." : "intl ver." }) : verLabel)
         + (genre ? msg("searchResult.genreSuffix", { genre }) : "")
         + (versionLabel ? msg("searchResult.versionSuffix", { version: versionLabel }) : "")
         + "\n";
-      const emb = new EmbedBuilder()
-        .setColor(0x2b2d31)
-        .setTitle(displayTitle(title, translate) + kind)
-        .setAuthor({ name: msg("searchResult.author", { query, type: typeLabel }) })
-        .setDescription(
-          regionLine +
-            "```\n" +
-            lines.join("\n") +
-            "\n```" +
-            "\n" + msg("searchResult.externalLink", { url: ytUrl }),
-        );
+      const heading = msg("searchResult.title", { title: escapeMarkdown(displayTitle(title, translate)), kind }) + "\n" + regionLine.trimEnd();
+      const container = new ContainerBuilder().setAccentColor(musicKind === "DX" ? 0xf97316 : musicKind === "ST" ? 0x3b82f6 : 0x8a8087);
       if (buf) {
         const name = `sjacket${i}.png`;
         files.push(new AttachmentBuilder(buf, { name }));
-        emb.setThumbnail(`attachment://${name}`);
+        container.addSectionComponents(
+          new SectionBuilder()
+            .addTextDisplayComponents((t) => t.setContent(heading))
+            .setThumbnailAccessory((t) => t.setURL(`attachment://${name}`)),
+        );
+      } else {
+        container.addTextDisplayComponents((t) => t.setContent(heading));
       }
-      return emb;
+      return container
+        .addTextDisplayComponents((t) => t.setContent("```\n" + lines.join("\n") + "\n```"))
+        .addActionRowComponents(
+          new ActionRowBuilder<ButtonBuilder>().addComponents(
+            // maishift 곡 창과 같은 정보의 이미지(trk:<토큰>:<전체 결과 안 순서>).
+            new ButtonBuilder()
+              .setCustomId(`trk:${ctxToken}:${idx * PAGE_SIZE + i}`)
+              .setLabel(msg("searchResult.detailButton"))
+              .setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder()
+              .setURL(ytUrl)
+              .setLabel(msg("searchResult.externalButton"))
+              .setStyle(ButtonStyle.Link),
+          ),
+        );
     }),
   );
 
-  // 쿼리/필터는 토큰으로 대체 (customId 100자 제한 회피)
-  const ctxToken = token ?? putSearchCtx({ userId, query, typeFilter });
   const prevBtn = new ButtonBuilder()
     .setCustomId(`search:${ctxToken}:${idx - 1}`)
     .setLabel(msg("embed.prev"))
@@ -628,13 +675,15 @@ export async function searchResultEmbeds(
     .setStyle(ButtonStyle.Secondary)
     .setDisabled(idx === totalPages - 1);
 
-  const navRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    prevBtn,
-    countBtn,
-    nextBtn,
-  );
-
-  return { embeds, components: [navRow], files };
+  return {
+    components: [
+      new TextDisplayBuilder().setContent(msg("searchResult.author", { query, type: typeLabel })),
+      ...containers,
+      new ActionRowBuilder<ButtonBuilder>().addComponents(prevBtn, countBtn, nextBtn),
+    ],
+    files,
+    flags: MessageFlags.IsComponentsV2,
+  };
 }
 
 const DIFF_ABBR: Record<string, string> = {
@@ -692,11 +741,11 @@ export function rtTableEmbed(
   //     오분류되므로 버전(isNewSong)으로 분류.
   const newRecords =
     p.server === "jp"
-      ? records.filter((r) => isNewSong(r.title, "jp")).slice(0, 15)
+      ? records.filter((r) => isNewSong(r.title, "jp", undefined, r.musicKind)).slice(0, 15)
       : records.slice(0, 15);
   const otherRecords =
     p.server === "jp"
-      ? records.filter((r) => !isNewSong(r.title, "jp")).slice(0, 35)
+      ? records.filter((r) => !isNewSong(r.title, "jp", undefined, r.musicKind)).slice(0, 35)
       : records.slice(15, 50);
 
   // 레이팅 대상 페이지엔 FC/AP 마크가 없고 ST/DX도 부정확할 수 있어 clear 기록으로 보정
@@ -738,25 +787,17 @@ export function rtTableEmbed(
   };
 }
 
-// 프로필 카드 레이팅 추이: 최근 RATING_HISTORY_DAYS 일의 실측(스냅샷) + 성과 로그 기반 추정.
-async function loadRatingHistory(cached: NonNullable<Awaited<ReturnType<typeof getCachedProfile>>>) {
-  const days = recentPlayDays(koreaPlayDayKey(new Date()), RATING_HISTORY_DAYS);
-  const [snapshots, logRange, events] = await Promise.all([
-    listRatingSnapshots(cached.profileKey, days[0]),
-    getAchievementLogRange(cached.profileKey),
-    getAchievementPlayEventLog(cached.profileKey, koreaPlayDayRange(days[0]).from),
-  ]);
-  const points = buildRatingSeries({
-    days,
-    snapshots,
-    clearNow: getClearList(cached),
-    events,
-    server: cached.server,
-    logFirstDay: logRange ? koreaPlayDayKey(new Date(logRange.first)) : null,
-  });
-  // 버전 업데이트 날짜는 서버별 이력(국제판·내수판 일정이 다르다).
-  const updates = versionUpdatesBetween(days[0], days[days.length - 1], cached.server);
-  return { points, days, updates };
+// 프로필 카드 히스토리: maishift 히스토리(업로드마다의 실제 레이팅·플레이 횟수) 전체 기간. 없으면 그래프를 그리지 않는다.
+function loadRatingHistory(cached: NonNullable<Awaited<ReturnType<typeof getCachedProfile>>>) {
+  if (!cached.maishiftHistory?.length) return undefined;
+  const days = maishiftDays(cached.maishiftHistory, koreaPlayDayKey(new Date()));
+  const { points, plays, updates } = maishiftSeries(cached.maishiftHistory, days, versionName);
+  return { points, days, updates, plays };
+}
+
+/** 친구 코드는 maishift 에서 공개한 사용자만(maishift 가 공개한 값이 있을 때) 보인다. */
+function publicFriendCode(p: { maishiftFriendCode?: string }): string | null {
+  return (p.maishiftFriendCode ?? "").match(/\d{13}/)?.[0] ?? null;
 }
 
 export async function buildProfileReply(
@@ -765,8 +806,10 @@ export async function buildProfileReply(
   format: "image" | "embed" = "embed",
   viewerId?: string,
 ) {
-  const [avatar, showFriendCode, circlePublic] = await Promise.all([buildAvatarAttachment(userId, cached.server), getFriendCodePublic(userId), getCirclePublic(userId)]);
-  const circleName = circlePublic ? circleOf(cached)?.name ?? null : null;
+  const [avatar, circlePublic] = await Promise.all([buildAvatarAttachment(userId, cached), getCirclePublic(userId)]);
+  // 서클·최근 플레이·지방은 캐롤봇 추가 북마클릿 데이터라, 그 북마클릿을 실행한 사용자에게만 보인다.
+  const synced = hasCarolSync(cached);
+  const circleName = synced && circlePublic ? circleOf(cached)?.name ?? null : null;
   const recentBtn = new ButtonBuilder()
     .setCustomId(`recent:${userId}`)
     .setLabel(msg("profileButton.recent"))
@@ -780,19 +823,17 @@ export async function buildProfileReply(
     .setLabel(msg("profileButton.map"))
     .setStyle(ButtonStyle.Secondary);
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    recentBtn,
-    topBtn,
-    mapBtn,
+    ...(synced ? [recentBtn, topBtn, mapBtn] : [topBtn]),
   );
   if (format === "image") {
-    const [avatarBuf, translate] = await Promise.all([getAvatarBlob(userId, cached.server), getTranslateTitles(viewerId ?? userId)]);
-    const friendCode = showFriendCode ? (cached.friendCode ?? "").match(/\d{13}/)?.[0] ?? null : null;
-    const ratingHistory = await loadRatingHistory(cached);
+    const [avatarBuf, translate] = await Promise.all([loadAvatar(userId, cached), getTranslateTitles(viewerId ?? userId)]);
+    const friendCode = publicFriendCode(cached);
+    const ratingHistory = loadRatingHistory(cached);
     const png = await renderProfileCard(cached, avatarBuf, { translate, friendCode, circleName, ratingHistory });
     return { embeds: [], files: [new AttachmentBuilder(png, { name: "profile.png" })], components: [row] };
   }
   return {
-    embeds: [profileEmb(cached, !!avatar, showFriendCode, circleName)],
+    embeds: [profileEmb(cached, !!avatar, circleName)],
     files: avatar ? [avatar] : [],
     components: [row],
   };

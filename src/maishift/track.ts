@@ -1,0 +1,85 @@
+/**
+ * maishift 곡 상세(곡 카드를 누르면 나오는 창과 같은 정보). /검색 의 "상세" 버튼이 쓴다.
+ * 보면 하나에 요청 세 개(내 기록 변화·버전별 상수·분포)라, 보면 정보는 하루, 기록 변화는 5분 둔다.
+ * 분포는 공식 API(GET /charts/{id}/distribution), 나머지는 API 에 없어 서버 함수로 받는다.
+ */
+import { callServerFn, FN } from "./serverFn";
+import { callApi } from "./api";
+import { PENDING_FEATURES } from "./features";
+
+interface ApiDistBand { from: number; to: number; players: number; suppressed: boolean; counts: Record<string, number> | null }
+
+/** API 분포 구간 → 카드 형식. 카드의 SSS+ 는 AP 를 포함한 SSS+ 전체(API 는 AP+·AP·나머지로 나눠 준다). */
+function distBucket(b: ApiDistBand): TrackDistBucket {
+  const c = b.counts ?? {};
+  return {
+    min: b.from,
+    max: b.to,
+    total: b.players ?? 0,
+    counts: { ...c, SSS_PLUS: (c.SSS_PLUS_WITHOUT_AP ?? 0) + (c.ALL_PERFECT ?? 0) + (c.ALL_PERFECT_PLUS ?? 0) },
+  };
+}
+
+export interface TrackScore { at: number; achievement: number; dxScore: number; dxMax: number; combo: string; sync: string }
+export interface TrackLevel { versionId: number; constant: number }
+/** 레이팅 구간 하나. counts 는 랭크별 인원(AAA 미만 … SSS+, 서로 겹치지 않음). */
+export interface TrackDistBucket { min: number; max: number; total: number; counts: Record<string, number> }
+export interface TrackInfo { levels: TrackLevel[]; dist: TrackDistBucket[]; distAt: number | null }
+
+const INFO_TTL_MS = 24 * 60 * 60 * 1000;
+const SCORES_TTL_MS = 5 * 60 * 1000;
+const MAX_ENTRIES = 300;
+const infoCache = new Map<number, { at: number; info: TrackInfo }>();
+const scoresCache = new Map<string, { at: number; scores: TrackScore[] | null }>();
+
+function remember<K, V>(m: Map<K, V>, k: K, v: V): void {
+  m.delete(k);
+  m.set(k, v);
+  while (m.size > MAX_ENTRIES) m.delete(m.keys().next().value!);
+}
+
+/** 버전별 상수·분포. 하나가 실패해도 나머지는 보여 준다. */
+export async function getTrackInfo(trackId: number): Promise<TrackInfo> {
+  const have = infoCache.get(trackId);
+  if (have && Date.now() - have.at < INFO_TTL_MS) return have.info;
+  const soft = <T>(p: Promise<T>, label: string): Promise<T | null> => p.catch((e) => {
+    console.error(`[maishift] track ${trackId} ${label}:`, (e as Error).message);
+    return null;
+  });
+  const [levels, dist] = await Promise.all([
+    PENDING_FEATURES.trackHistory ? soft(callServerFn<{ versionId: number; internalLevel: number }[]>(FN.trackLevels, { trackId }), "상수") : Promise.resolve(null),
+    soft(callApi<{ coarse: ApiDistBand[]; computedAt?: string }>(`/charts/${trackId}/distribution`), "분포"),
+  ]);
+  const info: TrackInfo = {
+    levels: (levels ?? []).map((l) => ({ versionId: l.versionId, constant: l.internalLevel / 10 })).sort((a, b) => a.versionId - b.versionId),
+    dist: (dist?.coarse ?? []).map(distBucket),
+    distAt: dist?.computedAt ? Date.parse(dist.computedAt) || null : null,
+  };
+  // 전부 실패했으면 캐시하지 않는다(다음에 다시 시도).
+  if (levels || dist) remember(infoCache, trackId, { at: Date.now(), info });
+  return info;
+}
+
+/** 그 아이디의 보면 기록 변화 캐시를 지운다(프로필이 비공개로 바뀌었을 때). */
+export function forgetTrackScores(handle: string): void {
+  for (const k of [...scoresCache.keys()]) if (k.startsWith(`${handle.toLowerCase()}#`)) scoresCache.delete(k);
+}
+
+/** 그 사용자의 보면 기록 변화(업로드마다 한 점, 시간순). 이전 기록 비공개 등으로 못 받으면 null. */
+export async function getTrackScores(trackId: number, handle: string): Promise<TrackScore[] | null> {
+  const key = `${handle.toLowerCase()}#${trackId}`;
+  const have = scoresCache.get(key);
+  if (have && Date.now() - have.at < SCORES_TTL_MS) return have.scores;
+  let scores: TrackScore[] | null = null;
+  try {
+    const list = await callServerFn<{ recordedAt: string; achievement: number; dxScore: number; dxMax: number; combo: string; sync: string }[]>(FN.trackScores, { trackId, handle });
+    scores = (Array.isArray(list) ? list : [])
+      .map((s) => ({ at: Date.parse(s.recordedAt), achievement: s.achievement / 10000, dxScore: s.dxScore, dxMax: s.dxMax, combo: s.combo, sync: s.sync }))
+      .filter((s) => Number.isFinite(s.at))
+      .sort((a, b) => a.at - b.at);
+  } catch (e) {
+    console.error(`[maishift] track ${trackId} 기록 변화:`, (e as Error).message);
+  }
+  remember(scoresCache, key, { at: Date.now(), scores });
+  return scores;
+}

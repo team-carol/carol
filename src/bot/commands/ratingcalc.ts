@@ -59,7 +59,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     .filter((r) => r.achievementVal > 0)
     .map((r) => {
       const c = getConstant(r.title, r.musicKind, r.diff, server) ?? levelToNumber(r.level);
-      return { rs: calcSongRating(r.achievementVal, c, r.fc), isNew: isNewSong(r.title, server) };
+      return { rs: calcSongRating(r.achievementVal, c, r.fc), isNew: isNewSong(r.title, server, undefined, r.musicKind) };
     });
   const newRs = rated.filter((x) => x.isNew).map((x) => x.rs).sort((a, b) => b - a);
   const oldRs = rated.filter((x) => !x.isNew).map((x) => x.rs).sort((a, b) => b - a);

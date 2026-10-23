@@ -13,6 +13,7 @@ import { recentEmbeds, rtTableEmbed, searchResultEmbeds, getSearchCtx, mapAreaEm
 
 import { loadConstants } from "../constants";
 import { loadAliases } from "../aliases";
+import { loadNameTranslations, backfillAreaNames } from "../nameTranslations";
 import { loadRegistryIndex } from "../simai/registryIndex";
 import { loadMessages, msg, onMessagesReloaded } from "../messages";
 import { appVersion } from "../version";
@@ -27,7 +28,6 @@ import * as fortune      from "./commands/fortune";
 import * as settings     from "./commands/settings";
 import * as gameOptions  from "./commands/gameOptions";
 import * as circle       from "./commands/circle";
-import * as serverSettings from "./commands/serverSettings";
 import * as newsSettings from "./commands/newsSettings";
 import { startNewsPoller, handleNewsButton } from "./newsPoller";
 import * as search       from "./commands/search";
@@ -40,10 +40,20 @@ import * as admin        from "./commands/admin";
 import * as goal         from "./commands/goal";
 import * as chart        from "./commands/chart";
 import * as ratingcalc   from "./commands/ratingcalc";
+import * as maishift     from "./commands/maishift";
+import * as history      from "./commands/history";
+import * as stamp        from "./commands/stamp";
+import { PENDING_FEATURES } from "../maishift/features";
+import * as photo        from "./commands/photo";
+import { initMaishift } from "../maishift";
+import { guardSlowAck } from "./utils/slowAck";
+import { handleTrackButton } from "./utils/trackDetail";
+import { loadRankImages } from "../rankImages";
 
 type Command = { data: { toJSON(): object; name: string }; execute: (i: ChatInputCommandInteraction) => Promise<void>; autocomplete?: (i: AutocompleteInteraction) => Promise<void> };
 
-const COMMANDS: Command[] = [profile, circle, bookmarklet, ratingtable, ratingimage, achievement, fortune, settings, gameOptions, serverSettings, newsSettings, search, status, songrec, random, areaMap, report, admin, goal, chart, ratingcalc];
+// 스탬프는 maishift 공식 API 엔드포인트가 나올 때까지 등록하지 않는다(src/maishift/features.ts).
+const COMMANDS: Command[] = [profile, circle, bookmarklet, ratingtable, ratingimage, achievement, fortune, settings, gameOptions, newsSettings, search, status, songrec, random, areaMap, report, admin, goal, chart, ratingcalc, maishift, history, ...(PENDING_FEATURES.stamps ? [stamp] : []), photo];
 const EPHEMERAL_REPLY = { flags: MessageFlags.Ephemeral } as const;
 
 const RATING_CARD_GC_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000;
@@ -87,6 +97,16 @@ client.once(Events.ClientReady, async (c) => {
     console.error("[aliases] 로드 실패:", e);
   }
   try {
+    await loadNameTranslations();
+    // 이름 번역 이전에 동기화한 지방 이름도 관리 화면에 보이게. 응답을 막지 않도록 기다리지 않는다.
+    backfillAreaNames().catch((e) => console.error("[names] 지방 이름 수집 실패:", e));
+  } catch (e) {
+    console.error("[names] 로드 실패:", e);
+  }
+  // maishift 연동(임시, 공식 API 전까지). 프로필 조회에 maishift 데이터를 덧씌운다.
+  initMaishift();
+  await loadRankImages();
+  try {
     await loadMessages();
   } catch (e) {
     console.error("[messages] 로드 실패:", e);
@@ -107,7 +127,7 @@ client.once(Events.ClientReady, async (c) => {
   console.log("[maimai] 준비 완료");
 });
 
-// 봇 프로필 아래 상태 메시지("v1.13.3 ✦ /북마클릿"). 문구는 /관리 봇 문구(status.presence)에서 바꾸면 바로 반영된다.
+// 봇 프로필 아래 상태 메시지("v2.0.0 ✦ /마이시프트 연동"). 문구는 /관리 봇 문구(status.presence)에서 바꾸면 바로 반영된다.
 const PRESENCE_INTERVAL_MS = 30 * 60 * 1000;
 let presenceTimer: NodeJS.Timeout | undefined;
 function updatePresence(): void {
@@ -251,6 +271,8 @@ client.on(Events.InteractionCreate, async (i) => {
   if (i.isChatInputCommand()) {
     const cmd = COMMANDS.find((c) => c.data.name === i.commandName);
     if (!cmd) return;
+    // maishift 프로필을 처음 받을 때처럼 늦어지면 3초 한도 전에 대신 defer 한다. /문의 는 모달을 띄워야 해서 제외.
+    if (cmd !== report) guardSlowAck(i);
     try {
       await cmd.execute(i);
     } catch (e) {
@@ -267,9 +289,18 @@ client.on(Events.InteractionCreate, async (i) => {
     return;
   }
   if (i.isModalSubmit()) {
+    if (i.customId.startsWith("photo:")) {
+      try { await photo.handleModal(i); } catch (e) { console.error("[photo-modal]", e); }
+      return;
+    }
     if (i.customId.startsWith("report:modal:")) {
       try { await report.handleModal(i); } catch (e) { console.error("[report-modal]", e); }
     }
+    return;
+  }
+  // /사진관 사진 종류·이용자 선택(핸들러가 바로 defer 한다)
+  if ((i.isStringSelectMenu() || i.isUserSelectMenu()) && i.customId.startsWith("photo:")) {
+    try { await photo.handleComponent(i); } catch (e) { console.error("[photo-select]", e); }
     return;
   }
   if (i.isButton()) {
@@ -277,16 +308,18 @@ client.on(Events.InteractionCreate, async (i) => {
       try { await report.handleButton(i); } catch (e) { console.error("[report-btn]", e); }
       return;
     }
-    if (i.customId.startsWith("serverset:")) {
-      try { await serverSettings.handleButton(i); } catch (e) { console.error("[serverset-btn]", e); }
-      return;
-    }
+    // 프로필을 읽는 버튼도 늦어지면 대신 defer 한다. 원래 메시지를 고치는 버튼은 deferUpdate.
+    guardSlowAck(i, ["page:", "search:", "map:", "goal:", "trkd:"].some((p) => i.customId.startsWith(p)) ? "update" : "reply");
     if (i.customId.startsWith("news:")) {
       try { await handleNewsButton(i); } catch (e) { console.error("[news-btn]", e); }
       return;
     }
     if (i.customId.startsWith("chartvid:")) {
       try { await handleChartVideoButton(i); } catch (e) { console.error("[chartvid-btn]", e); }
+      return;
+    }
+    if (i.customId.startsWith("photo:")) {
+      try { await photo.handleComponent(i); } catch (e) { console.error("[photo-btn]", e); }
       return;
     }
     if (i.customId.startsWith("circle:")) {
@@ -405,6 +438,11 @@ client.on(Events.InteractionCreate, async (i) => {
       } catch (e) {
         console.error("[mapshare-btn]", e);
       }
+      return;
+    }
+    // /검색 "N번 상세"·상세 카드의 난이도 바꾸기
+    if (i.customId.startsWith("trk:") || i.customId.startsWith("trkd:")) {
+      try { await handleTrackButton(i as ButtonInteraction); } catch (e) { console.error("[track-btn]", e); }
       return;
     }
     if (i.customId.startsWith("search:")) {
