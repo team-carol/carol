@@ -10,7 +10,7 @@ import { msg } from "./messages";
  *  - 다음 북마클릿/확장 동기화 시 오버레이 상단 안내 (`src/web/bookmarklet.ts`)
  * 두 경로 중 먼저 닿는 쪽에서 `sessions.policy_ack` 를 이 값으로 올리고, 이후엔 안 뜬다.
  */
-export const POLICY_VERSION = 20261021;
+export const POLICY_VERSION = 20261023;
 
 /** POLICY_VERSION → "2026년 10월 21일" */
 export function policyDateText(): string {
