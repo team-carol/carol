@@ -127,7 +127,7 @@ client.once(Events.ClientReady, async (c) => {
   console.log("[maimai] 준비 완료");
 });
 
-// 봇 프로필 아래 상태 메시지("v1.13.2 ✦ /마이시프트 연동"). 문구는 /관리 봇 문구(status.presence)에서 바꾸면 바로 반영된다.
+// 봇 프로필 아래 상태 메시지("v2.0.0 ✦ /마이시프트 연동"). 문구는 /관리 봇 문구(status.presence)에서 바꾸면 바로 반영된다.
 const PRESENCE_INTERVAL_MS = 30 * 60 * 1000;
 let presenceTimer: NodeJS.Timeout | undefined;
 function updatePresence(): void {
