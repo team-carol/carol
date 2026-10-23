@@ -1,49 +1,39 @@
 import { getConstantsCache, saveConstantsCache } from "./storage";
+import { setExternalTranslations } from "./aliases";
+import { fetchCatalog, setMaishiftVersionNames, versionCode, versionName as msVersionName, type CatalogSong, type RegionVersion } from "./maishift/catalog";
 import type { PlayRecord, MaimaiServer } from "./scraper";
 
-interface SongEntry {
-  title: string;
-  image_url?: string;
-  version?: string;
-  intl?: string; // "1" = 국제판 수록, "0" = 미수록
-  catcode?: string; // 장르명 (예: "POPS＆アニメ")
-  lev_bas_i?: string;
-  lev_adv_i?: string;
-  lev_exp_i?: string;
-  lev_mas_i?: string;
-  lev_remas_i?: string;
-  dx_lev_bas_i?: string;
-  dx_lev_adv_i?: string;
-  dx_lev_exp_i?: string;
-  dx_lev_mas_i?: string;
-  dx_lev_remas_i?: string;
-}
-
-const DIFF_FIELDS: Record<string, [keyof SongEntry, keyof SongEntry]> = {
-  BASIC:       ["lev_bas_i",   "dx_lev_bas_i"],
-  ADVANCED:    ["lev_adv_i",   "dx_lev_adv_i"],
-  EXPERT:      ["lev_exp_i",   "dx_lev_exp_i"],
-  MASTER:      ["lev_mas_i",   "dx_lev_mas_i"],
-  "Re:MASTER": ["lev_remas_i", "dx_lev_remas_i"],
-};
-
-// 국제판 기준 수록곡 (우선), 일본판은 국제판에 없는 곡 보충용
-const INTL_URL = "https://otoge-db.net/maimai/data/music-ex-intl.json";
-const JP_URL = "https://otoge-db.net/maimai/data/music-ex.json";
-
+// 곡·상수 카탈로그는 maishift 곡 목록(국제판 ASIA, 내수판 JAPAN)에서 받는다(예전엔 otoge-db).
+// 하루 한 번만 받아 constants_cache 에 두고 쓴다. 宴(우타게) 보면은 maishift 에 없다.
 let constantMap: Map<string, number> = new Map();
-// 내수판(JP) 상수 맵. otoge-db의 _i(내부 상수)는 국제판/JP 리밸런스로 값이 달라질 수 있어,
-// JP 데이터(music-ex.json)의 상수를 별도로 보관해 JP 프로필 레이팅 계산에 사용한다.
+// 내수판(JP) 상수 맵. 국제판/JP 리밸런스로 값이 달라질 수 있어,
+// JAPAN 곡 목록의 상수를 별도로 보관해 JP 프로필 레이팅 계산에 사용한다.
 let jpConstantMap: Map<string, number> = new Map();
+// 곡 → 재킷 파일명(DX NET 파일명, 예: "c7cfd8a91e0436ac.png")
 let jacketMap: Map<string, string> = new Map();
-// 곡 → otoge-db version 코드 (예: "26000" → 26000). 신곡/구곡 판정용.
+// 재킷 파일명 → DX NET 재킷 주소(국제판 곡은 maimaidx-eng.com, 내수판 전용 곡은 maimaidx.jp)
+let jacketUrlMap: Map<string, string> = new Map();
+// 곡 → 버전 코드 (예: CiRCLE 26000, CiRCLE PLUS 26500). 내수판 기준, 내수판에 없으면 국제판. 신곡/구곡 판정용.
 let versionMap: Map<string, number> = new Map();
+// 곡 → 국제판 버전 코드. 국제판은 곡이 들어온 버전이 내수판과 다를 수 있어 따로 둔다.
+let intlVersionMap: Map<string, number> = new Map();
+// 지역별 "곡|ST"·"곡|DX" → 버전 코드. 한 보면이 나중에 추가된 곡은 ST·DX 의 버전과 수록 지역이 다르다
+// (예: 物凄い勢いでけーねが物凄いうた 는 ST 가 양쪽, DX 는 내수판 MAGiCAL 에만). versionMap 은 이른 쪽.
+let jpKindVersionMap: Map<string, number> = new Map();
+let intlKindVersionMap: Map<string, number> = new Map();
 // 국제판(intl="1") 수록 곡 제목 집합. 곡추천에서 미수록 곡을 제외하는 데 사용.
 let intlTitles: Set<string> = new Set();
 // 내수판(JP) 수록 곡 제목 집합(music-ex.json 전곡). 지역 전용 곡 판정에 사용.
 let jpTitles: Set<string> = new Set();
 // 곡 → 장르(catcode)
 let genreMap: Map<string, string> = new Map();
+// "제목|ST/DX|난이도" → maishift 보면 번호, 제목 → 아티스트(곡 상세 카드용)
+let trackIdMap: Map<string, number> = new Map();
+// 버전 폴더 안 순서(maishift 곡 창의 "11 / 79"). 지역마다 다르다. "제목|ST/DX" → [순서(0부터), 세대 번호]
+type FolderData = { orders: [string, [number, number]][]; latest: number };
+let folderIntl: FolderData | null = null;
+let folderJp: FolderData | null = null;
+let artistMap: Map<string, string> = new Map();
 
 // maimai 장르 목록 (랜덤 명령어 장르 선택지)
 export const GENRES = [
@@ -70,8 +60,8 @@ const NEW_SONG_MAX_VERSION_JP = 27500; // MAGiCAL PLUS(27500) 미포함
 // 레이팅 "신곡" 범위는 버전 업데이트마다 통째로 옮겨간다. 과거 레이팅표를 역산할 때
 // 현재 범위로 신곡/구곡을 나누면 그 시점과 어긋나므로, 적용 시작일과 함께 이력을 둔다.
 // from 은 그 범위가 적용되기 시작한 play-day(포함). 최신순으로 정렬해 첫 일치를 쓴다.
-// 새 버전이 나오면 위에 한 줄 추가하고 NEW_SONG_MIN/MAX 도 함께 갱신할 것.
-// label 은 그 날 나온 버전 이름(프로필 레이팅 추이 그래프의 업데이트 표시에 쓴다).
+// maishift 버전 목록(windowsFromVersions)을 받으면 그걸 쓰고, 이 표는 받기 전에만 쓴다.
+// label 은 그 날 나온 버전 이름(프로필 히스토리 그래프의 업데이트 표시에 쓴다).
 // 국제판과 내수판은 업데이트 일정이 달라 이력을 따로 둔다.
 type NewSongWindowEntry = { from: string; min: number; max: number; label?: string };
 const NEW_SONG_WINDOWS: NewSongWindowEntry[] = [
@@ -87,8 +77,46 @@ const NEW_SONG_WINDOWS_JP: NewSongWindowEntry[] = [
   // otoge-db 에 없어(release 000000) 그보다 앞선 범위는 두지 않는다.
   { from: "", min: 26000, max: 27000 },
 ];
+// 위 표는 maishift 버전 목록을 아직 못 받았을 때만 쓴다. 받았으면 지역별 버전 출시 시각으로 계산한다:
+// 버전 i 가 나온 날부터 신곡 = 버전 i-1 ~ i (레이팅 신곡은 현재 버전과 바로 이전 버전).
+// isNewSong 이 기록마다 불리므로 버전 목록을 받을 때 한 번만 계산해 둔다.
+let windowsIntl: NewSongWindowEntry[] = [];
+let windowsJp: NewSongWindowEntry[] = [];
+
+/** 출시 시각(ms) → play-day(한국 시간 오전 4시 기준 날짜). achievements.ts 의 koreaPlayDayKey 와 같은 계산. */
+function playDayOf(ms: number): string {
+  return new Date(ms + 5 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+function windowsFromVersions(list: RegionVersion[]): NewSongWindowEntry[] {
+  const out: NewSongWindowEntry[] = list
+    .filter((v) => v.index >= 1)
+    .map((v) => ({ from: playDayOf(v.releasedAt), min: versionCode(v.index - 1), max: versionCode(v.index + 1), label: msVersionName(v.index) }))
+    .sort((a, b) => b.from.localeCompare(a.from));
+  // 가장 오래된 버전 이전 날짜도 그 범위로(표의 from: "" 와 같은 역할).
+  if (out.length) out.push({ ...out[out.length - 1], from: "", label: undefined });
+  return out;
+}
+
 function windowsFor(server: MaimaiServer): NewSongWindowEntry[] {
+  const computed = server === "jp" ? windowsJp : windowsIntl;
+  if (computed.length) return computed;
   return server === "jp" ? NEW_SONG_WINDOWS_JP : NEW_SONG_WINDOWS;
+}
+
+let regionVersionsIntl: RegionVersion[] = [];
+let regionVersionsJp: RegionVersion[] = [];
+function setRegionVersions(intl: RegionVersion[], jp: RegionVersion[]): void {
+  regionVersionsIntl = intl;
+  regionVersionsJp = jp;
+  setMaishiftVersionNames([...intl, ...jp]);
+  windowsIntl = windowsFromVersions(intl);
+  windowsJp = windowsFromVersions(jp);
+}
+
+/** 그 지역 버전 목록(세대 번호·이름·출시 시각 ms, 오래된 순). 곡 목록을 받기 전이면 빈 배열. */
+export function getRegionVersions(server: MaimaiServer): RegionVersion[] {
+  return server === "jp" ? regionVersionsJp : regionVersionsIntl;
 }
 
 export interface NewSongWindow { min: number; max: number }
@@ -101,10 +129,11 @@ export function versionUpdatesBetween(fromDay: string, toDay: string, server: Ma
     .sort((a, b) => a.day.localeCompare(b.day));
 }
 
-// playDay(YYYY-MM-DD)가 없으면 현재 범위. 이력보다 오래된 날짜는 가장 오래된 범위를 쓴다.
+// playDay(YYYY-MM-DD)가 없으면 오늘 범위(아직 출시 전인 버전은 빼고). 이력보다 오래된 날짜는 가장 오래된 범위를 쓴다.
 export function newSongWindowAt(playDay?: string, server: MaimaiServer = "intl"): NewSongWindow {
   const list = windowsFor(server);
-  const hit = playDay ? (list.find((w) => playDay >= w.from) ?? list[list.length - 1]) : list[0];
+  const day = playDay ?? playDayOf(Date.now());
+  const hit = list.find((w) => day >= w.from) ?? list[list.length - 1];
   return { min: hit.min, max: hit.max };
 }
 
@@ -125,35 +154,25 @@ export interface DailyFortuneSong {
 let dailyFortuneSongs: DailyFortuneSong[] = [];
 
 // 이미 존재하는 키는 덮어쓰지 않음 → 먼저 채운 쪽(국제판)이 우선
-function ingest(data: SongEntry[]): void {
+function ingest(data: CatalogSong[]): void {
   for (const song of data) {
-    if (song.image_url && !jacketMap.has(song.title)) jacketMap.set(song.title, song.image_url);
-    if (song.version && !versionMap.has(song.title)) {
-      const v = parseInt(song.version, 10);
-      if (!isNaN(v)) versionMap.set(song.title, v);
-    }
-    if (song.catcode && !genreMap.has(song.title)) genreMap.set(song.title, song.catcode);
-    for (const [diff, [stField, dxField]] of Object.entries(DIFF_FIELDS)) {
-      const v = parseFloat((song[stField] as string | undefined) ?? "");
-      const dv = parseFloat((song[dxField] as string | undefined) ?? "");
-      const stKey = `${song.title}|ST|${diff}`;
-      const dxKey = `${song.title}|DX|${diff}`;
-      if (!isNaN(v) && v > 0 && !constantMap.has(stKey)) constantMap.set(stKey, v);
-      if (!isNaN(dv) && dv > 0 && !constantMap.has(dxKey)) constantMap.set(dxKey, dv);
+    const file = song.jacketUrl.split("/").pop() ?? "";
+    if (file && !jacketMap.has(song.title)) jacketMap.set(song.title, file);
+    if (file && !jacketUrlMap.has(file)) jacketUrlMap.set(file, song.jacketUrl);
+    if (song.genre && !genreMap.has(song.title)) genreMap.set(song.title, song.genre);
+    if (song.artist && !artistMap.has(song.title)) artistMap.set(song.title, song.artist);
+    for (const c of song.charts) {
+      const key = `${song.title}|${c.kind}|${c.diff}`;
+      if (!constantMap.has(key)) constantMap.set(key, c.constant);
+      if (c.trackId !== undefined && !trackIdMap.has(key)) trackIdMap.set(key, c.trackId);
     }
   }
 }
 
-// JP 상수 맵 전용 수집 (music-ex.json의 _i 값을 권위 있게 채움)
-function ingestJpConstants(data: SongEntry[]): void {
-  for (const song of data) {
-    for (const [diff, [stField, dxField]] of Object.entries(DIFF_FIELDS)) {
-      const v = parseFloat((song[stField] as string | undefined) ?? "");
-      const dv = parseFloat((song[dxField] as string | undefined) ?? "");
-      if (!isNaN(v) && v > 0) jpConstantMap.set(`${song.title}|ST|${diff}`, v);
-      if (!isNaN(dv) && dv > 0) jpConstantMap.set(`${song.title}|DX|${diff}`, dv);
-    }
-  }
+function toConstantMap(data: CatalogSong[]): Map<string, number> {
+  const m = new Map<string, number>();
+  for (const song of data) for (const c of song.charts) m.set(`${song.title}|${c.kind}|${c.diff}`, c.constant);
+  return m;
 }
 
 function diffRank(diff: string): number {
@@ -196,85 +215,115 @@ function rebuildDailyFortuneSongs(): void {
     .sort((a, b) => a.title.localeCompare(b.title, "en"));
 }
 
-async function fetchSongs(url: string): Promise<SongEntry[]> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return await res.json() as SongEntry[];
-}
-
 interface ConstantsCache {
+  /** "maishift-api" 가 아니면(otoge-db·서버 함수 시절 캐시) 새로 받는다. */
+  source?: string;
   constants: [string, number][];
   jackets: [string, string][];
+  jacketUrls?: [string, string][];
   versions?: [string, number][];
+  intlVersions?: [string, number][];
+  jpKindVersions?: [string, number][];
+  intlKindVersions?: [string, number][];
   intl?: string[];
   genres?: [string, string][];
   jpConstants?: [string, number][];
   jpTitles?: string[];
+  koTitles?: [string, string][];
+  trackIds?: [string, number][];
+  artists?: [string, string][];
+  folderIntl?: FolderData;
+  folderJp?: FolderData;
+  versionsIntl?: RegionVersion[];
+  versionsJp?: RegionVersion[];
 }
 
-// 캐시 복원. version/intl/genre 데이터가 없는 구버전 캐시면 hasMeta=false 반환.
-function applyCache(data: string): { hasMeta: boolean } {
+// 캐시 복원. maishift 에서 받은 캐시가 아니면 fresh=false 반환.
+function applyCache(data: string): { fresh: boolean } {
   const parsed = JSON.parse(data) as ConstantsCache;
   constantMap = new Map(parsed.constants);
   jacketMap = new Map(parsed.jackets);
-  const hasMeta = !!parsed.versions && !!parsed.intl && !!parsed.genres && !!parsed.jpConstants && !!parsed.jpTitles;
-  versionMap = parsed.versions ? new Map(parsed.versions) : new Map();
-  intlTitles = parsed.intl ? new Set(parsed.intl) : new Set();
-  genreMap = parsed.genres ? new Map(parsed.genres) : new Map();
-  jpConstantMap = parsed.jpConstants ? new Map(parsed.jpConstants) : new Map();
-  jpTitles = parsed.jpTitles ? new Set(parsed.jpTitles) : new Set();
+  jacketUrlMap = new Map(parsed.jacketUrls ?? []);
+  versionMap = new Map(parsed.versions ?? []);
+  intlVersionMap = new Map(parsed.intlVersions ?? []);
+  jpKindVersionMap = new Map(parsed.jpKindVersions ?? []);
+  intlKindVersionMap = new Map(parsed.intlKindVersions ?? []);
+  intlTitles = new Set(parsed.intl ?? []);
+  genreMap = new Map(parsed.genres ?? []);
+  jpConstantMap = new Map(parsed.jpConstants ?? []);
+  jpTitles = new Set(parsed.jpTitles ?? []);
+  setExternalTranslations(new Map(parsed.koTitles ?? []));
+  trackIdMap = new Map(parsed.trackIds ?? []);
+  artistMap = new Map(parsed.artists ?? []);
+  setFolders(parsed.folderIntl ?? null, parsed.folderJp ?? null);
+  setRegionVersions(parsed.versionsIntl ?? [], parsed.versionsJp ?? []);
   rebuildDailyFortuneSongs();
-  return { hasMeta };
+  // 보면 번호·버전 폴더 순서·버전 목록·보면 종류별 버전이 없는 옛 캐시면 새로 받는다.
+  return { fresh: parsed.source === "maishift-api" && !!parsed.trackIds && !!parsed.folderIntl && !!parsed.versionsIntl?.length && !!parsed.jpKindVersions };
 }
 
 export async function loadConstants(): Promise<void> {
   const dbCache = await getConstantsCache();
   if (dbCache && Date.now() - dbCache.updatedAt < 24 * 60 * 60 * 1000) {
     try {
-      if (applyCache(dbCache.data).hasMeta) {
+      if (applyCache(dbCache.data).fresh) {
         console.log(`[constants] DB 캐시 복원: 상수 ${constantMap.size}개, 자켓 ${jacketMap.size}개, version ${versionMap.size}개, 국제판 ${intlTitles.size}개`);
         return;
       }
-      console.log("[constants] 캐시에 version/intl 없음 → 네트워크 재fetch");
+      console.log("[constants] maishift 캐시가 아님 → 네트워크 재fetch");
     } catch (e) {
       console.error("[constants] DB 캐시 파싱 실패, 네트워크 fetch 시도:", e);
     }
   }
 
   try {
-    const intl = await fetchSongs(INTL_URL);
+    const intlRes = await fetchCatalog("intl");
+    const jpRes = await fetchCatalog("jp");
+    const intl = intlRes.songs, jp = jpRes.songs;
+    const fIntl = folderDataOf(intlRes.songs, intlRes.latestVersion), fJp = folderDataOf(jpRes.songs, jpRes.latestVersion);
+    setFolders(fIntl, fJp);
+    setRegionVersions(intlRes.versions, jpRes.versions);
     constantMap = new Map();
-    jpConstantMap = new Map();
     jacketMap = new Map();
-    versionMap = new Map();
+    jacketUrlMap = new Map();
     genreMap = new Map();
-    jpTitles = new Set();
-    // 국제판 수록(intl="1") 곡만 집합에 담음 (JP 보충곡·미수록곡 제외)
-    intlTitles = new Set(intl.filter((s) => s.intl === "1").map((s) => s.title));
+    trackIdMap = new Map();
+    artistMap = new Map();
+    intlTitles = new Set(intl.map((s) => s.title));
+    jpTitles = new Set(jp.map((s) => s.title));
     ingest(intl);
     const intlCount = constantMap.size;
+    ingest(jp); // 국제판에 없는 곡·보면 보충
+    jpConstantMap = toConstantMap(jp); // JP 상수 맵 (JP 프로필 레이팅 계산용)
+    intlVersionMap = new Map(intl.map((s) => [s.title, s.version]));
+    versionMap = new Map([...intlVersionMap, ...jp.map((s) => [s.title, s.version] as [string, number])]);
+    intlKindVersionMap = kindVersionsOf(intl);
+    jpKindVersionMap = kindVersionsOf(jp);
+    const koTitles = new Map<string, string>();
+    for (const s of [...intl, ...jp]) if (s.korean && !koTitles.has(s.title)) koTitles.set(s.title, s.korean);
+    setExternalTranslations(koTitles);
 
-    let jpAdded = 0;
-    try {
-      const jp = await fetchSongs(JP_URL);
-      const before = constantMap.size;
-      ingest(jp);
-      ingestJpConstants(jp); // JP 상수 맵 (JP 프로필 레이팅 계산용)
-      jpTitles = new Set(jp.map((s) => s.title)); // JP 수록 곡 집합 (지역 전용 판정용)
-      jpAdded = constantMap.size - before;
-    } catch (e) {
-      console.error("[constants] JP 보충 로드 실패:", e);
-    }
-
-    console.log(`[constants] 국제판 ${intl.length}곡 (상수 ${intlCount}개) + JP 보충 ${jpAdded}개, JP상수 ${jpConstantMap.size}개, 자켓 ${jacketMap.size}개, version ${versionMap.size}개, 국제판수록 ${intlTitles.size}개`);
+    console.log(`[constants] maishift 국제판 ${intl.length}곡 (상수 ${intlCount}개) + JP 보충 ${constantMap.size - intlCount}개, JP상수 ${jpConstantMap.size}개, 자켓 ${jacketMap.size}개, 번역 ${koTitles.size}개`);
     await saveConstantsCache(JSON.stringify({
+      source: "maishift-api",
       constants: Array.from(constantMap.entries()),
       jackets: Array.from(jacketMap.entries()),
+      jacketUrls: Array.from(jacketUrlMap.entries()),
       versions: Array.from(versionMap.entries()),
+      intlVersions: Array.from(intlVersionMap.entries()),
+      jpKindVersions: Array.from(jpKindVersionMap.entries()),
+      intlKindVersions: Array.from(intlKindVersionMap.entries()),
       intl: Array.from(intlTitles),
       genres: Array.from(genreMap.entries()),
       jpConstants: Array.from(jpConstantMap.entries()),
       jpTitles: Array.from(jpTitles),
+      koTitles: Array.from(koTitles.entries()),
+      trackIds: Array.from(trackIdMap.entries()),
+      artists: Array.from(artistMap.entries()),
+      folderIntl: fIntl,
+      folderJp: fJp,
+      versionsIntl: intlRes.versions,
+      versionsJp: jpRes.versions,
     } satisfies ConstantsCache));
     rebuildDailyFortuneSongs();
   } catch (e) {
@@ -290,12 +339,27 @@ export async function loadConstants(): Promise<void> {
   }
 }
 
-// otoge-db 자켓 이미지 파일명 (예: "c7cfd8a91e0436ac.png")
+// 재킷 이미지 파일명 (예: "c7cfd8a91e0436ac.png")
 export function getJacketFile(title: string): string | null {
   return jacketMap.get(title) ?? null;
 }
 
-// 재킷 파일명 → 곡명. otoge-db 와 DX NET 의 재킷 파일명(해시)이 같아서, 재킷만 주어지는 곳(서클 과제곡 예고)에 쓴다.
+/** 곡의 재킷 원래 주소(maishift 가 준 DX NET 주소). 없으면 null. */
+export function getJacketUrl(title: string): string | null {
+  const file = jacketMap.get(title);
+  return file ? jacketUrlMap.get(file) ?? null : null;
+}
+
+// 재킷 파일명 → 재킷 이미지 주소. 국제판 곡은 DX NET(공개 이미지), 카탈로그에 없으면 국제판 경로로 짐작한다.
+// 내수판 전용 곡의 maimaidx.jp 는 중간 인증서를 보내지 않아 Node fetch 가 실패하므로(브라우저는 됨)
+// 같은 파일명을 두는 otoge-db 이미지 미러를 쓴다. 이미지 파일만 받고 곡 데이터는 받지 않는다.
+export function jacketFileUrl(file: string): string {
+  const url = jacketUrlMap.get(file);
+  if (url && new URL(url).host === "maimaidx.jp") return `https://otoge-db.net/maimai/jacket/${file}`;
+  return url ?? `https://maimaidx-eng.com/maimai-mobile/img/Music/${file}`;
+}
+
+// 재킷 파일명 → 곡명. 카탈로그 재킷이 DX NET 파일명이라, 재킷만 주어지는 곳(서클 과제곡 예고)에 쓴다.
 let jacketReverse: { src: Map<string, string>; size: number; map: Map<string, string> } | null = null;
 export function getTitleByJacket(fileOrUrl: string): string | null {
   const file = fileOrUrl.split("?")[0].split("/").pop() ?? "";
@@ -310,15 +374,42 @@ export function getTitleByJacket(fileOrUrl: string): string | null {
 }
 
 // 곡 version 세대 코드 (없으면 null)
-export function getSongVersion(title: string): number | null {
-  return versionMap.get(title) ?? null;
+// 곡 버전은 서버마다 다를 수 있다(예: Galaxy Blaster 는 국제판 CiRCLE, 내수판 CiRCLE PLUS).
+// versionMap 은 국제판 위에 내수판을 덮어쓴 맵이라 내수판 기준이고, 국제판은 intlVersionMap 을 먼저 본다.
+// musicKind(ST/DX)를 주면 그 보면의 버전을 먼저 본다(예: 居並ぶ穀物… DX 는 Splash, ST 는 MAGiCAL).
+function versionOf(title: string, server: MaimaiServer, musicKind?: string): number | undefined {
+  if (musicKind === "ST" || musicKind === "DX") {
+    const key = `${title}|${musicKind}`;
+    const v = server === "intl"
+      ? intlKindVersionMap.get(key) ?? jpKindVersionMap.get(key)
+      : jpKindVersionMap.get(key) ?? intlKindVersionMap.get(key);
+    if (v !== undefined) return v;
+  }
+  return (server === "intl" ? intlVersionMap.get(title) : undefined) ?? versionMap.get(title);
+}
+
+/** 보면 종류별 수록 정보가 있는 musicKind 면 "ST"/"DX", 아니면 null(제목 기준으로 판정). */
+function knownKind(title: string, musicKind?: string): "ST" | "DX" | null {
+  if (musicKind !== "ST" && musicKind !== "DX") return null;
+  const key = `${title}|${musicKind}`;
+  return intlKindVersionMap.has(key) || jpKindVersionMap.has(key) ? musicKind : null;
+}
+
+function kindVersionsOf(songs: CatalogSong[]): Map<string, number> {
+  const map = new Map<string, number>();
+  for (const s of songs) for (const [kind, v] of Object.entries(s.kindVersions)) if (v !== undefined) map.set(`${s.title}|${kind}`, v);
+  return map;
+}
+
+export function getSongVersion(title: string, server: MaimaiServer = "intl", musicKind?: string): number | null {
+  return versionOf(title, server, musicKind) ?? null;
 }
 
 // 레이팅 신곡(현재+이전 버전) 여부. version 데이터가 없으면 구곡으로 취급.
 // 서버별 세대 진행이 달라(내수판=MAGiCAL, 국제판=CiRCLE PLUS) 신곡 범위도 서버별 이력을 쓴다.
-// playDay 를 주면 그 시점의 신곡 범위로 판정한다(과거 레이팅표 역산·레이팅 추이 추정용).
-export function isNewSong(title: string, server: MaimaiServer = "intl", playDay?: string): boolean {
-  const v = versionMap.get(title);
+// playDay 를 주면 그 시점의 신곡 범위로 판정한다(과거 레이팅표 역산·히스토리 추정용).
+export function isNewSong(title: string, server: MaimaiServer = "intl", playDay?: string, musicKind?: string): boolean {
+  const v = versionOf(title, server, musicKind);
   if (v === undefined) return false;
   const w = newSongWindowAt(playDay, server);
   return v >= w.min && v < w.max;
@@ -355,23 +446,26 @@ function findGeneration(v: number): [number, number, string] | null {
 }
 
 // 곡의 수록 버전(세대명). version 데이터 없으면 null.
-export function getSongVersionName(title: string): string | null {
-  const v = versionMap.get(title);
+export function getSongVersionName(title: string, server: MaimaiServer = "intl", musicKind?: string): string | null {
+  const v = versionOf(title, server, musicKind);
   if (v === undefined) return null;
   return findGeneration(v)?.[2] ?? null;
 }
 
 // 곡이 해당 세대의 PLUS 버전인지 여부.
-export function isSongPlus(title: string): boolean {
-  const v = versionMap.get(title);
+export function isSongPlus(title: string, server: MaimaiServer = "intl", musicKind?: string): boolean {
+  const v = versionOf(title, server, musicKind);
   if (v === undefined) return false;
   const g = findGeneration(v);
   return g ? v >= g[1] : false;
 }
 
 // 국제판 수록 여부. 데이터가 없으면(구버전 캐시) 제외하지 않도록 true 반환.
-export function isIntlAvailable(title: string): boolean {
-  return intlTitles.size === 0 || intlTitles.has(title);
+// musicKind(ST/DX)를 주면 그 보면이 국제판에 있는지 본다.
+export function isIntlAvailable(title: string, musicKind?: string): boolean {
+  if (intlTitles.size === 0) return true;
+  const kind = knownKind(title, musicKind);
+  return kind ? intlKindVersionMap.has(`${title}|${kind}`) : intlTitles.has(title);
 }
 
 // 내수판 수록 여부. 데이터 없으면 true 반환(오탐 방지).
@@ -381,16 +475,64 @@ export function isJpAvailable(title: string): boolean {
 
 // 지역 전용 곡 판정: "jp"(내수판 전용) / "intl"(국제판 전용) / null(양쪽 or 판정불가).
 // 두 집합 중 하나라도 비어있으면(구버전 캐시) null 반환해 오탐 방지.
-export function getRegionExclusive(title: string): "jp" | "intl" | null {
+// musicKind(ST/DX)를 주면 그 보면 기준이다(곡은 양쪽에 있어도 한 보면만 한쪽에 있을 수 있다).
+export function getRegionExclusive(title: string, musicKind?: string): "jp" | "intl" | null {
   if (intlTitles.size === 0 || jpTitles.size === 0) return null;
-  const inIntl = intlTitles.has(title);
-  const inJp = jpTitles.has(title);
+  const kind = knownKind(title, musicKind);
+  const inIntl = kind ? intlKindVersionMap.has(`${title}|${kind}`) : intlTitles.has(title);
+  const inJp = kind ? jpKindVersionMap.has(`${title}|${kind}`) : jpTitles.has(title);
   if (inIntl && !inJp) return "intl";
   if (inJp && !inIntl) return "jp";
   return null;
 }
 
 // 곡 장르(catcode). 없으면 null.
+function folderDataOf(songs: CatalogSong[], latest: number): FolderData {
+  const orders: [string, [number, number]][] = [];
+  for (const s of songs) for (const f of s.folders ?? []) orders.push([`${s.title}|${f.kind}`, [f.order, f.version]]);
+  return { orders, latest };
+}
+
+interface FolderIndex { order: Map<string, [number, number]>; count: Map<number, number>; latest: number }
+let folderIndexIntl: FolderIndex | null = null;
+let folderIndexJp: FolderIndex | null = null;
+function indexOf(d: FolderData | null): FolderIndex | null {
+  if (!d) return null;
+  const count = new Map<number, number>();
+  for (const [, [, v]] of d.orders) count.set(v, (count.get(v) ?? 0) + 1);
+  return { order: new Map(d.orders), count, latest: d.latest };
+}
+function setFolders(intl: FolderData | null, jp: FolderData | null): void {
+  folderIntl = intl; folderJp = jp;
+  folderIndexIntl = indexOf(intl); folderIndexJp = indexOf(jp);
+}
+
+/**
+ * 버전 폴더 안 위치("11 / 79" — 게임에서 버전 정렬로 곡을 찾을 때). 지역 곡 목록 기준.
+ * tentative: 그 지역 최신 세대 곡이라 새 곡이 추가되면 순서가 바뀔 수 있음(maishift 는 "?" 를 붙인다).
+ */
+export function getVersionPosition(title: string, musicKind: string, server: MaimaiServer = "intl"): { order: number; total: number; tentative: boolean } | null {
+  const idx = server === "jp" ? folderIndexJp : folderIndexIntl;
+  const hit = idx?.order.get(`${title}|${musicKind === "DX" ? "DX" : "ST"}`);
+  if (!idx || !hit) return null;
+  const [order, version] = hit;
+  return { order: order + 1, total: idx.count.get(version) ?? 0, tentative: version >= idx.latest };
+}
+
+/** 그 지역 최신 세대 번호(maishift 곡 목록 regionLatestVersion). 모르면 null. */
+export function regionLatestVersion(server: MaimaiServer = "intl"): number | null {
+  return (server === "jp" ? folderIndexJp : folderIndexIntl)?.latest ?? null;
+}
+
+/** maishift 보면 번호. 곡 상세(달성률 변화·상수 변동·분포) 조회에 쓴다. */
+export function getTrackId(title: string, musicKind: string, diff: string): number | null {
+  return trackIdMap.get(`${title}|${musicKind === "DX" ? "DX" : "ST"}|${diff}`) ?? null;
+}
+
+export function getSongArtist(title: string): string | null {
+  return artistMap.get(title) ?? null;
+}
+
 export function getSongGenre(title: string): string | null {
   return genreMap.get(title) ?? null;
 }
@@ -418,7 +560,7 @@ export function getAllSongTitles(): AliasSongInfo[] {
   return Array.from(titles)
     .filter((title) => !isUtageSong(title))
     .map((title) => {
-      const version = versionMap.get(title) ?? 0;
+      const version = versionOf(title, "intl") ?? 0;
       return {
         title,
         version,
@@ -460,7 +602,7 @@ export function getChartsInConstantRange(min: number, max: number): ChartInfo[] 
   return charts;
 }
 
-// 검색용: otoge-db 카탈로그의 고유 (곡, 채보종류) 목록. 동기화 여부·프로필 지역과
+// 검색용: 카탈로그의 고유 (곡, 채보종류) 목록. 동기화 여부·프로필 지역과
 // 무관하게(국제판 프로필에서 JP 전용곡까지) /검색 이 클리어기록에 이 목록을 덧대 곡을
 // 노출하기 위한 것. constantMap 은 intl+JP 를 합쳐 담으므로 양쪽 곡이 모두 나온다.
 export function listCatalogSongKinds(): { title: string; musicKind: "ST" | "DX" }[] {
@@ -575,7 +717,7 @@ export function computeRatingTarget(clearRecords: PlayRecord[], server: MaimaiSe
     .filter((r) => r.achievementVal > 0)
     .map((r) => {
       const c = getConstant(r.title, r.musicKind, r.diff, server) ?? levelToNumber(r.level);
-      return { rec: r, rs: calcSongRating(r.achievementVal, c, r.fc), isNew: isNewSong(r.title, server, playDay) };
+      return { rec: r, rs: calcSongRating(r.achievementVal, c, r.fc), isNew: isNewSong(r.title, server, playDay, r.musicKind) };
     });
   const byRs = (a: { rs: number }, b: { rs: number }) => b.rs - a.rs;
   const news = rated.filter((x) => x.isNew).sort(byRs).slice(0, 15).map((x) => x.rec);

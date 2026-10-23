@@ -14,7 +14,7 @@ import { msg } from "../../messages";
 
 export const data = new SlashCommandBuilder()
   .setName("북마클릿")
-  .setDescription("프로필 동기화용 북마클릿 설치 가이드");
+  .setDescription("캐롤봇 추가 북마클릿(서클·지방·게임 설정) 설치 가이드");
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   const token = await getUserSyncToken(interaction.user.id);

@@ -12,5 +12,6 @@
   "geminiApiKey": "Google AI Studio API 키 (없으면 내수판 공지 번역 비활성)",
   "geminiModel": "gemini-3.6-flash (선택, 생략 시 이 값)",
   "mainotesFetchCharts": false,
+  "maishiftApiKey": "maishift 설정 › 개발자에서 발급한 API 키 (msk_…). 없으면 maishift 연동 비활성",
   "opsSharedSecret": "carol-ops의 carolStatusSecret과 동일한 공유 secret (없으면 /admin/status 비활성)"
 }

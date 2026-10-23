@@ -6,10 +6,10 @@ import {
 import {
   getCachedProfile,
   getUserFriendCode,
-  getProfilePrivate,
 } from "../../storage";
 import { searchResultEmbeds } from "../utils/embeds";
 import { msg } from "../../messages";
+import { notRegisteredNotice } from "../utils/notRegistered";
 
 export const data = new SlashCommandBuilder()
   .setName("검색")
@@ -43,20 +43,10 @@ export async function execute(
 ): Promise<void> {
   const target = interaction.options.getUser("user") ?? interaction.user;
   const userId = target.id;
-  if (target.id !== interaction.user.id && await getProfilePrivate(target.id)) {
-    await interaction.reply({
-      content: msg("common.profilePrivate", { user: `<@${target.id}>` }),
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
-  }
   const friendCode = await getUserFriendCode(userId);
   const cached = friendCode ? await getCachedProfile(friendCode) : null;
   if (!cached) {
-    const notice =
-      target.id === interaction.user.id
-        ? msg("common.selfNotRegistered")
-        : msg("common.otherNotRegistered", { user: `<@${target.id}>` });
+    const notice = await notRegisteredNotice(target.id, target.id === interaction.user.id);
     await interaction.reply({ content: notice, flags: MessageFlags.Ephemeral });
     return;
   }

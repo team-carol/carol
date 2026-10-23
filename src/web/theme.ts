@@ -71,7 +71,7 @@ export function topbar(right = ""): string {
 
 /** 사용자 페이지(북마클릿 설치·게임 설정·설정) 상단바 오른쪽 링크. */
 export function userNav(token: string, active: "sync" | "options" | "settings"): string {
-  const items: [typeof active, string, string][] = [["sync", "/sync", "북마클릿 설치"], ["options", "/options", "게임 설정"], ["settings", "/settings", "설정"]];
+  const items: [typeof active, string, string][] = [["sync", "/sync", "추가 북마클릿"], ["options", "/options", "게임 설정"], ["settings", "/settings", "설정"]];
   return items.map(([id, path, label]) => `<a class="topbar-link${id === active ? " on" : ""}" href="${path}?code=${token}">${label}</a>`).join("");
 }
 
@@ -88,8 +88,8 @@ export const ADMIN_CSS = `.page{max-width:880px}
 .admin-title{font-size:clamp(28px,4vw,40px);font-weight:500;color:var(--ink);letter-spacing:-.01em;line-height:1.2;margin-bottom:8px}
 .admin-sub{font-size:15px;color:var(--muted);margin-bottom:24px}`;
 
-type AdminTab = "aliases" | "messages" | "import" | "patch-notes";
-const ADMIN_TABS: [AdminTab, string][] = [["aliases", "곡 별명"], ["messages", "봇 문구"], ["import", "채보 등록"], ["patch-notes", "패치노트"]];
+type AdminTab = "aliases" | "names" | "messages" | "import" | "patch-notes";
+const ADMIN_TABS: [AdminTab, string][] = [["aliases", "곡 별명"], ["names", "이름 번역"], ["messages", "봇 문구"], ["import", "채보 등록"], ["patch-notes", "패치노트"]];
 
 export function adminTabs(token: string, active: AdminTab): string {
   return `<div class="admin-tabs">${ADMIN_TABS.map(([id, label]) =>

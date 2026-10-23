@@ -1,14 +1,15 @@
-import { SlashCommandBuilder, ChatInputCommandInteraction, MessageFlags, AttachmentBuilder } from "discord.js";
-import { getCachedProfile, getUserFriendCode, getAvatarBlob, getProfilePrivate, getTranslateTitles, getRatingSnapshot, getRatingSnapshotRange, getAchievementPlayEventLog, getAchievementLogRange } from "../../storage";
-import { getTopList, getClearList } from "../utils/embeds";
-import { renderRatingCard } from "../utils/ratingCard";
+import { SlashCommandBuilder, ChatInputCommandInteraction, MessageFlags, AttachmentBuilder, type RepliableInteraction } from "discord.js";
+import { getCachedProfile, getUserFriendCode, getTranslateTitles, getMaishiftLink } from "../../storage";
+import { getTopList, getClearList, loadAvatar } from "../utils/embeds";
+import { renderRatingCard, type RatingType } from "../utils/ratingCard";
 import { GAMES, isGameId } from "../../games";
 import { msg } from "../../messages";
-import type { GameId } from "../../games";
-import type { PlayRecord } from "../../scraper";
-import { koreaPlayDayRange, koreaPlayDayKey } from "../../achievements";
-import { computeRatingTarget } from "../../constants";
-import { rewindClearRecords } from "../../ratingRewind";
+import { koreaPlayDayRange } from "../../achievements";
+import { getMaishiftSnapshot, getMaishiftFuture } from "../../maishift";
+import { PENDING_FEATURES } from "../../maishift/features";
+import { versionName } from "../../maishift/catalog";
+import { kstStamp } from "../utils/cardKit";
+import { notRegisteredNotice, maishiftErrorText } from "../utils/notRegistered";
 
 export const data = new SlashCommandBuilder()
   .setName("레이팅표")
@@ -18,11 +19,14 @@ export const data = new SlashCommandBuilder()
   )
   .addStringOption((opt) =>
     opt
-      .setName("게임")
-      .setDescription("다른 리듬게임의 레이팅 체계로 환산 (생략 시 maimai DX)")
+      .setName("type")
+      .setDescription("레이팅 종류: S-레이팅, 미래시, 다른 리듬게임 환산 (생략 시 maimai DX)")
       .setRequired(false)
       .addChoices(
-        ...Object.values(GAMES).map((g) => ({ name: g.label, value: g.id })),
+        { name: GAMES.maimai.label, value: "maimai" },
+        { name: "S-레이팅", value: "srating" },
+        ...(PENDING_FEATURES.future ? [{ name: "미래시", value: "future" }] : []),
+        ...Object.values(GAMES).filter((g) => g.id !== "maimai").map((g) => ({ name: g.label, value: g.id })),
       ),
   )
   .addStringOption((opt) =>
@@ -36,116 +40,137 @@ function isPlayDayKey(value: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
 
+const dayOf = (ms: number) => kstStamp(ms).slice(0, 10);
+
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
-  const target = interaction.options.getUser("user") ?? interaction.user;
-  const gameOpt = interaction.options.getString("게임") ?? "maimai";
-  const game: GameId = isGameId(gameOpt) ? gameOpt : "maimai";
-  const dateOpt = (interaction.options.getString("date") ?? "").trim();
+  await show(
+    interaction,
+    (interaction.options.getUser("user") ?? interaction.user).id,
+    interaction.options.getString("type") ?? "maimai",
+    (interaction.options.getString("date") ?? "").trim(),
+  );
+}
+
+/** /레이팅표 와 /사진관 버튼이 같이 쓴다. typeOpt: type 옵션 값(maimai·srating·future·다른 게임), dateOpt: 비면 최신. */
+export async function show(interaction: RepliableInteraction, targetId: string, typeOpt: string, dateOpt: string): Promise<void> {
+  const target = { id: targetId };
+  const self = target.id === interaction.user.id;
+  // 미래시는 maimai DX 레이팅표를 다음 버전 기준으로 다시 계산한 것이다.
+  const future = typeOpt === "future";
+  const type: RatingType = typeOpt === "srating" || isGameId(typeOpt) ? typeOpt : "maimai";
   const userId = target.id;
-  if (target.id !== interaction.user.id && await getProfilePrivate(target.id)) {
-    await interaction.reply({ content: msg("common.profilePrivate", { user: `<@${target.id}>` }), flags: MessageFlags.Ephemeral });
+  if (dateOpt && !isPlayDayKey(dateOpt)) {
+    await interaction.reply({ content: msg("ratingImage.snapshotBadDate"), flags: MessageFlags.Ephemeral });
+    return;
+  }
+  if (future && !PENDING_FEATURES.future) {
+    await interaction.reply({ content: msg("common.featurePaused"), flags: MessageFlags.Ephemeral });
+    return;
+  }
+  if (dateOpt && future) {
+    await interaction.reply({ content: msg("ratingImage.futureWithDate"), flags: MessageFlags.Ephemeral });
+    return;
+  }
+  // 과거 날짜는 maishift 이전 기록(그 시점 레이팅 대상·S-레이팅 대상)만 주므로, 전체 기록이 필요한 다른 게임 환산은 안 된다.
+  if (dateOpt && type !== "maimai" && type !== "srating") {
+    await interaction.reply({ content: msg("ratingImage.snapshotGameUnsupported"), flags: MessageFlags.Ephemeral });
     return;
   }
   const friendCode = await getUserFriendCode(userId);
   const cached = friendCode ? await getCachedProfile(friendCode) : null;
   if (!cached) {
-    const text = target.id === interaction.user.id
-      ? msg("common.selfNotRegistered")
-      : msg("common.otherNotRegistered", { user: `<@${target.id}>` });
+    const text = await notRegisteredNotice(target.id, self);
     await interaction.reply({ content: text, flags: MessageFlags.Ephemeral });
     return;
   }
-  // 과거 날짜: 하루치 스냅샷(레이팅 대상 50곡 + 총합 레이팅)으로 대체한다.
-  // 스냅샷은 50곡만 보관하므로 전체 기록이 필요한 타 게임 환산은 지원하지 않는다.
-  let snapshotDay = "";
-  let rewindDay = "";
-  let deferred = false;
+  await interaction.deferReply();
   let profile = cached;
   let records = getTopList(cached);
+  let notice: string | undefined;
+  let futureVersion: string | undefined;
   if (dateOpt) {
-    if (!isPlayDayKey(dateOpt)) {
-      await interaction.reply({ content: msg("ratingImage.snapshotBadDate"), flags: MessageFlags.Ephemeral });
+    // 과거 날짜: 그날(오전 4시 기준 하루)이 끝나기 전 마지막 maishift 업로드의 레이팅표.
+    const link = await getMaishiftLink(userId);
+    let failure: string | null = null;
+    const result = link ? await getMaishiftSnapshot(link, koreaPlayDayRange(dateOpt).to).catch((e) => {
+      failure = maishiftErrorText(e);
+      if (!failure) console.error("[레이팅이미지] maishift 이전 기록:", e);
+      return null;
+    }) : null;
+    if (!result) {
+      await interaction.editReply({ content: failure ?? msg("ratingImage.snapshotFailed") });
       return;
     }
-    if (game !== "maimai") {
-      await interaction.reply({ content: msg("ratingImage.snapshotGameUnsupported"), flags: MessageFlags.Ephemeral });
+    if (result.kind === "private") {
+      await interaction.editReply({ content: self ? msg("ratingImage.pastPrivateSelf") : msg("ratingImage.pastPrivate", { user: `<@${target.id}>` }) });
       return;
     }
-    const snap = await getRatingSnapshot(cached.profileKey, dateOpt);
-    if (snap) {
-      let snapRecords: PlayRecord[] = [];
-      try {
-        const parsed = JSON.parse(snap.topJson);
-        if (Array.isArray(parsed)) snapRecords = parsed;
-      } catch { /* ignore */ }
-      snapshotDay = snap.playDay;
-      records = snapRecords;
-      // 스냅샷 레코드는 마크·ST/DX 보정이 끝난 상태라, clearJson 자리에 그대로 넣으면
-      // 렌더 쪽 markMap/kindResolver 가 현재 프로필 대신 그날 상태를 본다.
-      profile = { ...cached, rating: snap.rating, clearJson: snap.topJson, lastSyncedAt: snap.syncedAt };
-    } else {
-      // 스냅샷 도입 이전 날짜. 성과 이벤트 로그로 현재 클리어 기록을 되돌려 추정한다.
-      const logRange = await getAchievementLogRange(cached.profileKey);
-      const clearNow = getClearList(cached);
-      if (!logRange || clearNow.length === 0) {
-        const range = await getRatingSnapshotRange(cached.profileKey);
-        const notice = range
-          ? msg("ratingImage.snapshotMissing", { date: dateOpt, first: range.first, last: range.last })
-          : msg("ratingImage.rewindNoData", { date: dateOpt });
-        await interaction.reply({ content: notice, flags: MessageFlags.Ephemeral });
-        return;
-      }
-      const { to: cutoff } = koreaPlayDayRange(dateOpt);
-      const firstDay = koreaPlayDayKey(new Date(logRange.first));
-      if (cutoff <= logRange.first) {
-        await interaction.reply({
-          content: msg("ratingImage.rewindTooOld", { date: dateOpt, first: firstDay }),
-          flags: MessageFlags.Ephemeral,
-        });
-        return;
-      }
-      await interaction.deferReply();
-      deferred = true;
-      const laterEvents = await getAchievementPlayEventLog(cached.profileKey, cutoff);
-      const { records: rewound } = rewindClearRecords(clearNow, laterEvents);
-      // 신곡/구곡 판정은 그날의 버전 기준으로 (예: 2026-07-23 CiRCLE PLUS 업데이트 이전은
-      // PRiSM PLUS ~ CiRCLE 이 신곡).
-      records = computeRatingTarget(rewound, cached.server, dateOpt);
-      rewindDay = dateOpt;
-      // rating 0 → 카드 헤더가 표시 중인 50곡의 곡 레이팅 합계를 쓴다(= 역산된 총합).
-      profile = { ...cached, rating: 0, clearJson: JSON.stringify(rewound) };
+    if (result.kind === "none") {
+      await interaction.editReply({
+        content: result.first !== null && result.last !== null
+          ? msg("ratingImage.snapshotMissing", { date: dateOpt, first: dayOf(result.first), last: dayOf(result.last) })
+          : msg("ratingImage.snapshotNone"),
+      });
+      return;
     }
+    const snap = result.snapshot;
+    records = snap.top;
+    // 스냅샷 기록은 마크·ST/DX 가 이미 들어 있어 clearJson 자리에 넣으면 렌더 쪽 markMap/kindResolver 가 그날 상태를 본다.
+    // S-레이팅은 clearJson 에서 다시 고르므로 S-레이팅 대상도 함께 넣는다.
+    profile = {
+      ...cached,
+      playerName: snap.name,
+      trophy: snap.trophy,
+      trophyClass: snap.trophyClass,
+      rating: snap.rating,
+      clearJson: JSON.stringify(type === "srating" ? snap.sTop : snap.top),
+      lastSyncedAt: snap.uploadedAt,
+    };
+    notice = msg("ratingImage.snapshotNotice", { date: dateOpt, uploaded: kstStamp(snap.uploadedAt) });
+  } else if (future) {
+    const link = await getMaishiftLink(userId);
+    const result = link ? await getMaishiftFuture(link).catch((e) => {
+      console.error("[레이팅이미지] maishift 미래시:", e);
+      return undefined;
+    }) : undefined;
+    if (result === undefined) {
+      await interaction.editReply({ content: msg("ratingImage.futureFailed") });
+      return;
+    }
+    if (result === null) {
+      await interaction.editReply({ content: msg("ratingImage.futureNone") });
+      return;
+    }
+    records = result.top;
+    // 헤더 레이팅은 profile.rating 을 쓰므로 미래시 레이팅으로 바꾼다.
+    profile = { ...cached, rating: result.rating };
+    futureVersion = versionName(result.versionId);
+    notice = msg("ratingImage.futureNotice", { version: futureVersion, rating: cached.rating });
   }
-  // 치환 모드는 레이팅 대상 50곡이 아니라 전체 기록에서 다시 뽑으므로
-  // 레이팅 대상이 비어 있어도 clear 기록만 있으면 그릴 수 있다.
-  const hasSource =
-    records.length > 0 || (game !== "maimai" && getClearList(profile).length > 0);
+  // 치환 모드·S-레이팅은 레이팅 대상 50곡이 아니라 전체 기록에서 다시 뽑으므로
+  // 레이팅 대상이 비어 있어도 clear 기록만 있으면 그릴 수 있다. S-레이팅은 DX 점수가 있는 기록이 있어야 한다.
+  const hasSource = type === "srating"
+    ? getClearList(profile).some((r) => (r.dxScoreMax ?? 0) > 0)
+    : records.length > 0 || (type !== "maimai" && getClearList(profile).length > 0);
   if (!hasSource) {
-    // 역산 경로는 이미 defer 된 상태라 reply 를 다시 쓸 수 없다.
-    if (deferred) await interaction.editReply({ content: msg("ratingImage.noRecords") });
-    else await interaction.reply({ content: msg("ratingImage.noRecords"), flags: MessageFlags.Ephemeral });
+    await interaction.editReply({ content: msg(type === "srating" ? "ratingImage.sRatingNoData" : "ratingImage.noRecords") });
     return;
   }
-  if (!deferred) await interaction.deferReply();
   try {
     const png = await renderRatingCard(
       profile,
       records,
-      await getAvatarBlob(userId, profile.server),
+      await loadAvatar(userId, profile),
       await getTranslateTitles(interaction.user.id),
-      game,
-      !snapshotDay && !rewindDay,
-      rewindDay || undefined,
+      type,
+      !dateOpt && !future,
+      // JP 레이팅표는 곡 버전으로 신곡/구곡을 나누므로, 과거 날짜는 그날의 신곡 범위로.
+      dateOpt || undefined,
+      futureVersion,
     );
     await interaction.editReply({
-      content: rewindDay
-        ? msg("ratingImage.rewindNotice", { date: rewindDay })
-        : !snapshotDay
-          ? undefined
-          : snapshotDay === dateOpt
-            ? msg("ratingImage.snapshotNotice", { date: snapshotDay })
-            : msg("ratingImage.snapshotNoticeFallback", { actual: snapshotDay, date: dateOpt }),
-      files: [new AttachmentBuilder(png, { name: dateOpt ? `rating-${dateOpt}.png` : `rating-${game}.png` })],
+      content: notice,
+      files: [new AttachmentBuilder(png, { name: dateOpt ? `rating-${type}-${dateOpt}.png` : future ? "rating-future.png" : `rating-${type}.png` })],
     });
   } catch (e) {
     console.error("[레이팅이미지]", e);

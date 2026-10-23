@@ -11,7 +11,6 @@ import {
 import {
   getCachedProfile,
   getUserFriendCode,
-  getProfilePrivate,
   listGoals,
   countGoals,
   addGoal,
@@ -303,10 +302,6 @@ export async function handleButton(interaction: ButtonInteraction): Promise<void
     return;
   }
   const page = parseInt(pageRaw ?? "0") || 0;
-  if (ownerId !== interaction.user.id && (await getProfilePrivate(ownerId))) {
-    await interaction.reply({ content: msg("goal.otherPrivate"), flags: MessageFlags.Ephemeral });
-    return;
-  }
   const displayName =
     interaction.guild?.members.cache.get(ownerId)?.displayName ??
     interaction.client.users.cache.get(ownerId)?.username ??
@@ -320,13 +315,6 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 
   if (sub === "목록") {
     const target = interaction.options.getUser("user") ?? interaction.user;
-    if (target.id !== interaction.user.id && (await getProfilePrivate(target.id))) {
-      await interaction.reply({
-        content: msg("common.profilePrivate", { user: `<@${target.id}>` }),
-        flags: MessageFlags.Ephemeral,
-      });
-      return;
-    }
     await interaction.deferReply();
     const displayName =
       interaction.guild?.members.cache.get(target.id)?.displayName ?? target.username;

@@ -1,10 +1,8 @@
-import type { ExtraBookmarklet, MaimaiServer } from "../storage/types";
-import { BOOKMARKLET_PRESETS } from "./bookmarklet";
+import type { MaimaiServer } from "../storage/types";
 import { BASE_CSS, pageHead, topbar, siteFooter, userNav } from "./theme";
 
-export function settingsPage(token: string, isPrivate: boolean, enabledPresetIds: string[], bookmarklets: ExtraBookmarklet[], defaultServer: MaimaiServer, translate = false, friendCodePublic = false, circlePublic = true): string {
-  const presets = BOOKMARKLET_PRESETS.map((preset) => ({ ...preset, enabled: enabledPresetIds.includes(preset.id) }));
-  const dataJson = JSON.stringify({ private: isPrivate, presets, bookmarklets, defaultServer, translate, friendCodePublic, circlePublic })
+export function settingsPage(token: string, defaultServer: MaimaiServer, translate = false, circlePublic = true, dxDecimal = false): string {
+  const dataJson = JSON.stringify({ defaultServer, translate, circlePublic, dxDecimal })
     .replace(/</g, "\\u003c").replace(/>/g, "\\u003e");
   const tokenJson = JSON.stringify(token);
 
@@ -22,12 +20,15 @@ h1{font-size:clamp(36px,5vw,52px);font-weight:500;color:var(--ink);letter-spacin
 .toggle-info{flex:1}
 .toggle-title{color:var(--ink);font-size:16px;font-weight:500;margin-bottom:4px}
 .toggle-desc{font-size:14px;color:var(--muted);line-height:1.55}
+.ms-link{display:inline-block;margin-top:10px;font-size:14px;font-weight:600;color:var(--accent);text-decoration:none}
+.ms-link:hover{text-decoration:underline}
 .toggle{position:relative;width:48px;height:28px;flex-shrink:0}
 .toggle input{opacity:0;width:0;height:0;position:absolute}
 .toggle .slider{position:absolute;cursor:pointer;inset:0;background:var(--surface-2);box-shadow:inset 0 0 0 1px var(--border-2);border-radius:28px;transition:.2s}
 .toggle .slider::before{content:'';position:absolute;height:22px;width:22px;left:3px;top:3px;background:var(--ink-2);border-radius:50%;transition:.2s}
 .toggle input:checked+.slider{background:var(--accent);box-shadow:none}
 .toggle input:checked+.slider::before{transform:translateX(20px);background:#fff}
+.toggle input:disabled+.slider{cursor:not-allowed;opacity:.6}
 .toggle input:focus-visible+.slider{outline:2px solid #3898ec;outline-offset:2px}
 .server-options{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .server-btn{background:var(--canvas-alt);border:1px solid var(--border);border-radius:12px;padding:14px 16px;color:var(--ink-soft);text-align:left;cursor:pointer;transition:border-color .15s,background-color .15s}
@@ -36,22 +37,10 @@ h1{font-size:clamp(36px,5vw,52px);font-weight:500;color:var(--ink);letter-spacin
 .server-btn span{display:block;color:var(--dim);font-size:13px}
 .server-btn.active{border-color:var(--accent);background:rgba(255,146,148,.08)}
 .server-btn.active strong{color:var(--accent-soft)}
-.bm-list{list-style:none}
-.bm-item{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 0;border-top:1px solid var(--border)}
-.bm-item:first-child{border-top:none;padding-top:0}
-.bm-item-info{flex:1;min-width:0}
-.bm-label{color:var(--ink);font-size:15px;font-weight:500}
-.bm-code-preview{font-family:var(--font-mono);font-size:11.5px;color:var(--faint);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.bm-del{background:none;border:1px solid var(--border-2);color:var(--muted);border-radius:10px;padding:6px 14px;font-size:13px;cursor:pointer;transition:border-color .15s,color .15s;flex-shrink:0}
-.bm-del:hover{border-color:var(--err);color:var(--err)}
-.add-form{margin-top:18px;padding-top:18px;border-top:1px solid var(--border)}
 .input-group{margin-bottom:12px}
 .input-group label{display:block;font-size:13px;font-weight:500;color:var(--dim);margin-bottom:6px}
-.input-group input,.input-group textarea{width:100%;background:var(--canvas-alt);border:1px solid var(--border);border-radius:12px;padding:11px 14px;color:var(--ink);font-size:15px;outline:none;transition:border-color .15s}
-.input-group input:focus,.input-group textarea:focus{border-color:var(--accent)}
-.input-group input::placeholder,.input-group textarea::placeholder{color:var(--faint)}
-.input-group textarea{resize:vertical;min-height:72px;font-family:var(--font-mono);font-size:12.5px}
-.add-btn{width:100%;margin-top:4px}
+.input-group input,.input-group input:focus{border-color:var(--accent)}
+.input-group input::placeholder{color:var(--faint)}
 .achievement-filter{display:flex;align-items:end;gap:10px}
 .achievement-filter .input-group{flex:1;margin-bottom:0}
 .filter-save{padding:11px 20px}
@@ -59,8 +48,6 @@ h1{font-size:clamp(36px,5vw,52px);font-weight:500;color:var(--ink);letter-spacin
 .status:empty{min-height:0;margin-top:0}
 .status.ok{color:var(--ok)}
 .status.err{color:var(--err)}
-.empty{color:var(--faint);font-size:14px;text-align:center;padding:12px 0}
-.count{font-weight:400;color:var(--faint)}
 .link-card{display:flex;align-items:center;gap:16px;transition:border-color .15s}
 .link-card:hover{border-color:var(--border-2)}
 .link-arrow{font-size:20px;color:var(--accent-soft)}
@@ -70,7 +57,7 @@ h1{font-size:clamp(36px,5vw,52px);font-weight:500;color:var(--ink);letter-spacin
 ${topbar(userNav(token, "settings"))}
 <main class="page">
 <h1>설정</h1>
-<div class="nav"><a class="back" href="/sync?code=${token}">\u2190 북마클릿 설치</a></div>
+<div class="nav"><a class="back" href="/sync?code=${token}">\u2190 캐롤봇 추가 북마클릿</a></div>
 <div class="card">
 <p class="section-label">기본 서버</p>
 <div class="server-options">
@@ -81,25 +68,8 @@ ${topbar(userNav(token, "settings"))}
 </div>
 <div class="card">
 <p class="section-label">프로필 공개 여부</p>
-<div class="toggle-row">
-<div class="toggle-info">
-<div class="toggle-title" id="privTitle"></div>
-<div class="toggle-desc" id="privDesc"></div>
-</div>
-<label class="toggle"><input type="checkbox" id="privToggle" onchange="togglePrivacy()"><span class="slider"></span></label>
-</div>
-<div class="status" id="privStatus"></div>
-</div>
-<div class="card">
-<p class="section-label">친구 코드 공개 여부</p>
-<div class="toggle-row">
-<div class="toggle-info">
-<div class="toggle-title" id="fcTitle"></div>
-<div class="toggle-desc" id="fcDesc"></div>
-</div>
-<label class="toggle"><input type="checkbox" id="fcToggle" onchange="toggleFriendCode()"><span class="slider"></span></label>
-</div>
-<div class="status" id="fcStatus"></div>
+<div class="toggle-desc">프로필, 친구 코드, 이전 기록의 공개 여부는 maishift 설정을 따릅니다.</div>
+<a class="ms-link" href="https://maimai.shiftpsh.com/settings" target="_blank" rel="noopener">maishift 설정 열기 →</a>
 </div>
 <div class="card">
 <p class="section-label">서클 공개 여부</p>
@@ -113,15 +83,26 @@ ${topbar(userNav(token, "settings"))}
 <div class="status" id="circleStatus"></div>
 </div>
 <div class="card">
-<p class="section-label">곡 제목 한국어 번역</p>
+<p class="section-label">한국어 번역</p>
 <div class="toggle-row">
 <div class="toggle-info">
-<div class="toggle-title">일본어·한자 곡 번역 표시</div>
-<div class="toggle-desc">제목이 일본어/한자로만 된 곡을 한국어 번역으로 표시합니다. 번역이 등록된 곡에만 적용됩니다.</div>
+<div class="toggle-title">곡 제목, 지방, 스탬프 카드 번역 표시</div>
+<div class="toggle-desc">일본어 및 한자로 된 곡 제목과 지방 이름, 스탬프 카드 이름을 한국어로 번역합니다.</div>
 </div>
 <label class="toggle"><input type="checkbox" id="transToggle" onchange="toggleTranslate()"><span class="slider"></span></label>
 </div>
 <div class="status" id="transStatus"></div>
+</div>
+<div class="card">
+<p class="section-label">DX ✦ 랭크 표시</p>
+<div class="toggle-row">
+<div class="toggle-info">
+<div class="toggle-title">DX ✦ 랭크를 소수점 첫째 자리까지 표시</div>
+<div class="toggle-desc">곡 상세에서 DX ✦ 랭크를 ✦5.7과 같이 표시합니다.</div>
+</div>
+<label class="toggle"><input type="checkbox" id="dxDecToggle" onchange="toggleDxDecimal()"><span class="slider"></span></label>
+</div>
+<div class="status" id="dxDecStatus"></div>
 </div>
 <div class="card">
 <p class="section-label">오늘의 성과 필터</p>
@@ -134,37 +115,18 @@ ${topbar(userNav(token, "settings"))}
 <div class="toggle-desc">maimai DX NET 게임 옵션을 확인하고, 프리셋으로 저장해 두었다가 한 번에 적용할 수 있습니다.</div></div>
 <span class="link-arrow">\u2192</span>
 </a>
-<div class="card">
-<p class="section-label">프리셋 북마클릿 <span class="count" id="presetCount"></span></p>
-<ul class="bm-list" id="presetList"></ul>
-<div class="status" id="presetStatus"></div>
-</div>
-<div class="card">
-<p class="section-label">추가 북마클릿 <span class="count" id="bmCount"></span></p>
-<ul class="bm-list" id="bmList"></ul>
-<div class="add-form" id="addForm">
-<div class="input-group"><label>이름</label><input type="text" id="bmName" placeholder="\uC608: \uC2A4\uCF54\uC5B4 \uD45C\uC2DC" maxlength="30"></div>
-<div class="input-group"><label>코드</label><textarea id="bmCode" placeholder="javascript:..."></textarea></div>
-<button class="btn btn-primary add-btn" id="addBtn" onclick="addBm()">\uCD94\uAC00</button>
-<div class="status" id="bmStatus"></div>
-</div>
-</div>
 </main>
 ${siteFooter()}
 <script>
 var TOKEN=${tokenJson};
 var DATA=${dataJson};
-var MAX_BM=5;
 
 (function init(){
   renderDefaultServer();
-  renderPrivacy();
   renderTranslate();
-  renderFriendCode();
+  renderDxDecimal();
   renderCircle();
   loadAchievementFilter();
-  renderPresetList();
-  renderBmList();
 })();
 
 
@@ -206,57 +168,6 @@ function setDefaultServer(server){
   .catch(function(){DATA.defaultServer=prev;renderDefaultServer();showStatus('serverStatus','err','저장 실패');});
 }
 
-function renderPrivacy(){
-  var cb=document.getElementById('privToggle');
-  var t=document.getElementById('privTitle');
-  var d=document.getElementById('privDesc');
-  cb.checked=!DATA.private;
-  if(DATA.private){
-    t.textContent='\uD83D\uDD12 \uBE44\uACF5\uAC1C';
-    d.textContent='\uB2E4\uB978 \uC0AC\uB78C\uC774 \uB0B4 \uD504\uB85C\uD544/\uAC80\uC0C9/\uB808\uC774\uD305\uD45C\uB97C \uC870\uD68C\uD560 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4.';
-  } else {
-    t.textContent='\uD83C\uDF10 \uACF5\uAC1C';
-    d.textContent='\uB2E4\uB978 \uC0AC\uB78C\uC774 \uB0B4 \uD504\uB85C\uD544\uC744 \uC870\uD68C\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4.';
-  }
-}
-
-function renderBmList(){
-  var list=document.getElementById('bmList');
-  var countEl=document.getElementById('bmCount');
-  countEl.textContent=DATA.bookmarklets.length+'/'+MAX_BM;
-  if(DATA.bookmarklets.length===0){
-    list.innerHTML='<li class="empty">\uB4F1\uB85D\uB41C \uCD94\uAC00 \uBD81\uB9C8\uD074\uB9BF\uC774 \uC5C6\uC2B5\uB2C8\uB2E4.</li>';
-    return;
-  }
-  var html='';
-  DATA.bookmarklets.forEach(function(bm,i){
-    var label=esc(bm.label);
-    var preview=esc(bm.code.length>55?bm.code.substring(0,55)+'...':bm.code);
-    html+='<li class="bm-item"><div class="bm-item-info"><div class="bm-label">'+label+'</div><div class="bm-code-preview">'+preview+'</div></div><button class="bm-del" data-i="'+i+'">\uC0AD\uC81C</button></li>';
-  });
-  list.innerHTML=html;
-  list.querySelectorAll('.bm-del').forEach(function(btn){
-    btn.onclick=function(){deleteBm(parseInt(this.getAttribute('data-i'),10));};
-  });
-}
-
-function renderFriendCode(){
-  var on=!!DATA.friendCodePublic;
-  document.getElementById('fcToggle').checked=on;
-  document.getElementById('fcTitle').textContent=on?'공개':'비공개';
-  document.getElementById('fcDesc').textContent=on
-    ?'/프로필에 친구 코드가 표시됩니다. 내 프로필을 조회하는 사람은 모두 볼 수 있습니다.'
-    :'/프로필에 친구 코드를 표시하지 않습니다.';
-}
-
-function toggleFriendCode(){
-  var cb=document.getElementById('fcToggle');
-  var want=cb.checked;
-  fetch('/api/settings/friend-code?code='+TOKEN,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({public:want})})
-  .then(function(r){if(!r.ok)throw new Error(r.status);return r.json();})
-  .then(function(){DATA.friendCodePublic=want;renderFriendCode();showStatus('fcStatus','ok','저장됨');})
-  .catch(function(){cb.checked=!want;showStatus('fcStatus','err','저장 실패');});
-}
 
 function renderCircle(){
   var on=DATA.circlePublic!==false;
@@ -280,6 +191,19 @@ function renderTranslate(){
   document.getElementById('transToggle').checked=!!DATA.translate;
 }
 
+function renderDxDecimal(){
+  document.getElementById('dxDecToggle').checked=!!DATA.dxDecimal;
+}
+
+function toggleDxDecimal(){
+  var cb=document.getElementById('dxDecToggle');
+  var want=cb.checked;
+  fetch('/api/settings/dx-decimal?code='+TOKEN,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({decimal:want})})
+  .then(function(r){if(!r.ok)throw new Error(r.status);return r.json();})
+  .then(function(){DATA.dxDecimal=want;showStatus('dxDecStatus','ok','저장됨');})
+  .catch(function(){cb.checked=!cb.checked;showStatus('dxDecStatus','err','저장 실패');});
+}
+
 function toggleTranslate(){
   var cb=document.getElementById('transToggle');
   var want=cb.checked;
@@ -289,93 +213,12 @@ function toggleTranslate(){
   .catch(function(){cb.checked=!cb.checked;showStatus('transStatus','err','저장 실패');});
 }
 
-function togglePrivacy(){
-  var cb=document.getElementById('privToggle');
-  var wantPrivate=!cb.checked;
-  fetch('/api/settings/privacy?code='+TOKEN,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({private:wantPrivate})})
-  .then(function(r){if(!r.ok)throw new Error(r.status);return r.text();})
-  .then(function(){
-    DATA.private=wantPrivate;
-    renderPrivacy();
-    showStatus('privStatus','ok','\uC800\uC7A5\uB428');
-  })
-  .catch(function(){cb.checked=!cb.checked;showStatus('privStatus','err','\uC800\uC7A5 \uC2E4\uD328');});
-}
-
-function renderPresetList(){
-  var list=document.getElementById('presetList');
-  var countEl=document.getElementById('presetCount');
-  var enabled=DATA.presets.filter(function(p){return p.enabled;}).length;
-  countEl.textContent=enabled+'/'+DATA.presets.length;
-  if(DATA.presets.length===0){list.innerHTML='<li class="empty">사용 가능한 프리셋이 없습니다.</li>';return;}
-  var html='';
-  DATA.presets.forEach(function(p){
-    var code=esc(p.code.length>70?p.code.substring(0,70)+'...':p.code);
-    html+='<li class="bm-item"><div class="bm-item-info"><div class="bm-label">'+esc(p.label)+'</div><div class="toggle-desc">'+esc(p.description)+'</div><div class="bm-code-preview">'+code+'</div></div><label class="toggle"><input type="checkbox" data-preset="'+esc(p.id)+'" '+(p.enabled?'checked':'')+'><span class="slider"></span></label></li>';
-  });
-  list.innerHTML=html;
-  list.querySelectorAll('input[data-preset]').forEach(function(input){
-    input.onchange=function(){togglePreset(this.getAttribute('data-preset'),this);};
-  });
-}
-
-function togglePreset(id,cb){
-  var enabled=cb.checked;
-  fetch('/api/settings/preset?code='+TOKEN,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({presetId:id,enabled:enabled})})
-  .then(function(r){if(!r.ok)throw new Error(r.status);return r.json();})
-  .then(function(){
-    var preset=DATA.presets.find(function(p){return p.id===id;});
-    if(preset)preset.enabled=enabled;
-    renderPresetList();
-    showStatus('presetStatus','ok','저장됨');
-  })
-  .catch(function(){cb.checked=!cb.checked;showStatus('presetStatus','err','저장 실패');});
-}
-
-function addBm(){
-  var nameEl=document.getElementById('bmName');
-  var codeEl=document.getElementById('bmCode');
-  var name=nameEl.value.trim();
-  var code=codeEl.value.trim();
-  if(!name||!code){showStatus('bmStatus','err','\uC774\uB984\uACFC \uCF54\uB4DC\uB97C \uBAA8\uB450 \uC785\uB825\uD574\uC8FC\uC138\uC694.');return;}
-  if(!code.startsWith('javascript:')){showStatus('bmStatus','err','\uCF54\uB4DC\uB294 javascript: \uB85C \uC2DC\uC791\uD574\uC57C \uD569\uB2C8\uB2E4.');return;}
-  var exists=DATA.bookmarklets.some(function(b){return b.label===name;});
-  if(!exists&&DATA.bookmarklets.length>=MAX_BM){showStatus('bmStatus','err','\uCD5C\uB300 '+MAX_BM+'\uAC1C\uAE4C\uC9C0 \uB4F1\uB85D\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4.');return;}
-  document.getElementById('addBtn').disabled=true;
-  fetch('/api/settings/bookmarklet?code='+TOKEN,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'add',label:name,code:code})})
-  .then(function(r){if(!r.ok)return r.text().then(function(t){throw new Error(t);});return r.text();})
-  .then(function(){
-    var idx=DATA.bookmarklets.findIndex(function(b){return b.label===name;});
-    if(idx>=0)DATA.bookmarklets[idx]={label:name,code:code};
-    else DATA.bookmarklets.push({label:name,code:code});
-    nameEl.value='';codeEl.value='';
-    renderBmList();
-    document.getElementById('addBtn').disabled=false;
-    showStatus('bmStatus','ok','\uCD94\uAC00\uB428');
-  })
-  .catch(function(e){document.getElementById('addBtn').disabled=false;showStatus('bmStatus','err',e.message||'\uCD94\uAC00 \uC2E4\uD328');});
-}
-
-function deleteBm(idx){
-  var bm=DATA.bookmarklets[idx];
-  if(!bm)return;
-  if(!confirm(bm.label+' \uBD81\uB9C8\uD074\uB9BF\uC744 \uC0AD\uC81C\uD558\uC2DC\uACA0\uC2B5\uB2C8\uAE4C?'))return;
-  fetch('/api/settings/bookmarklet?code='+TOKEN,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'delete',label:bm.label})})
-  .then(function(r){if(!r.ok)throw new Error(r.status);return r.text();})
-  .then(function(){
-    DATA.bookmarklets.splice(idx,1);
-    renderBmList();
-    showStatus('bmStatus','ok','\uC0AD\uC81C\uB428');
-  })
-  .catch(function(){showStatus('bmStatus','err','\uC0AD\uC81C \uC2E4\uD328');});
-}
 
 function showStatus(id,cls,txt){
   var el=document.getElementById(id);el.className='status '+cls;el.textContent=txt;
   setTimeout(function(){el.style.opacity='0';setTimeout(function(){el.textContent='';el.className='status';el.style.opacity='1';},200);},2500);
 }
 
-function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 </script>
 </body></html>`;
 }

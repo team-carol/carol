@@ -39,8 +39,8 @@ test("buildBookmarklet: javascript: 스킴 로더", () => {
   assert.ok(out.includes("/bookmarklet.js?code=tok123"));
 });
 
-test("BOOKMARKLET_PRESETS: 첫 프리셋은 maishift", () => {
-  assert.equal(bm.BOOKMARKLET_PRESETS[0].id, "maishift");
-  assert.deepEqual(bm.getBookmarkletPresets([]), []);
-  assert.equal(bm.getBookmarkletPresets(["maishift"])[0].label, "maishift");
+test("MAISHIFT_BOOKMARKLET: maishift 북마클릿을 불러오는 javascript: 코드", () => {
+  assert.equal(bm.MAISHIFT_BOOKMARKLET.label, "maishift");
+  assert.ok(bm.MAISHIFT_BOOKMARKLET.code.startsWith("javascript:"));
+  assert.ok(bm.MAISHIFT_BOOKMARKLET.code.includes("https://maimai.shiftpsh.com/bookmarklet.js"));
 });

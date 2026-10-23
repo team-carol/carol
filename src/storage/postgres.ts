@@ -210,7 +210,7 @@ CREATE INDEX IF NOT EXISTS idx_user_goals_owner ON user_goals(discord_user_id, c
   );
   ALTER TABLE sessions ADD COLUMN IF NOT EXISTS patch_ack bigint NOT NULL DEFAULT 0;
   ALTER TABLE sessions ALTER COLUMN patch_ack SET DEFAULT (floor(extract(epoch from clock_timestamp()) * 1000))::bigint;`,],
-  // 친구 코드 공개 여부(/설정). 켜면 /프로필 임베드에 친구 코드를 보여 준다. 기본은 비공개.
+  // 친구 코드 공개 여부(옛 /설정). 지금은 maishift 친구 코드 공개 설정을 따라 쓰지 않는다(마이그레이션이라 열은 남김).
   [25, `ALTER TABLE sessions ADD COLUMN IF NOT EXISTS friend_code_public integer NOT NULL DEFAULT 0;`,],
   // 단위(段位) 이미지 URL. 프로필 카드에 클래스 이미지와 함께 표시한다. 다음 동기화부터 채워진다.
   [26, `ALTER TABLE profiles ADD COLUMN IF NOT EXISTS course_img text NOT NULL DEFAULT '';`,],
@@ -218,6 +218,13 @@ CREATE INDEX IF NOT EXISTS idx_user_goals_owner ON user_goals(discord_user_id, c
   // 공개 여부(/설정)는 기본 공개.
   [27, `ALTER TABLE profiles ADD COLUMN IF NOT EXISTS circle_json text NOT NULL DEFAULT '';
   ALTER TABLE sessions ADD COLUMN IF NOT EXISTS circle_public integer NOT NULL DEFAULT 1;`,],
+  // maishift 연동(/마이시프트 연동). ''=연동 안 함. 프로필·기록은 저장하지 않고 maishift 에서 그때그때 받는다.
+  [28, `ALTER TABLE sessions ADD COLUMN IF NOT EXISTS maishift_handle text NOT NULL DEFAULT '';`,],
+  // DX ✦ 랭크를 소수점 첫째 자리까지(maishift 표시 설정과 같은 항목). 보는 사람 기준.
+  [29, `ALTER TABLE sessions ADD COLUMN IF NOT EXISTS dx_rank_decimal integer NOT NULL DEFAULT 0;`,],
+  // 지방 이름·스탬프 카드 이름의 한국어 번역(/관리 → 이름 번역). 봇이 본 이름을 ko='' 로 먼저 쌓아 두고 운영자가 채운다.
+  // kind: area(끝 번호를 뗀 지방 이름) | stamp(스탬프 카드 이름). image_url 은 관리 화면에서 알아보기 쉽게.
+  [30, `CREATE TABLE IF NOT EXISTS name_translations (kind text NOT NULL, source text NOT NULL, ko text NOT NULL DEFAULT '', image_url text NOT NULL DEFAULT '', updated_at bigint NOT NULL DEFAULT 0, PRIMARY KEY(kind, source));`,],
 ];
 
 export interface MainotesSongRow { id:string; title:string; artist:string; bpm:string; genre:string; version:string; type:string }
@@ -254,39 +261,19 @@ export class PostgresStorage {
   private async tx<T>(fn:(c:PoolClient)=>Promise<T>):Promise<T>{const c=await this.pool.connect();try{await c.query("BEGIN");const x=await fn(c);await c.query("COMMIT");return x;}catch(e){await c.query("ROLLBACK");throw e;}finally{c.release();}}
 
   async cacheProfile(p:MaimaiProfile, playCount:number, recentJson="[]", topJson="[]", clearJson="[]", server:Db.MaimaiServer="intl", mapJson="[]"){const fc=p.friendCode??"me", key=`${server}:${fc}`, now=Date.now();await this.q(`INSERT INTO profiles(friend_code,display_friend_code,server_region,player_name,rating,rating_max,trophy,trophy_class,avatar,grade_img,course_img,stars,comment,play_count,total_play_count,raw_html,recent_json,top_json,clear_json,map_json,last_synced_at,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$20,$11,$12,$13,$14,'',$15,$16,$17,$18,$19,$19) ON CONFLICT(friend_code) DO UPDATE SET display_friend_code=excluded.display_friend_code,server_region=excluded.server_region,player_name=excluded.player_name,rating=excluded.rating,rating_max=excluded.rating_max,trophy=excluded.trophy,trophy_class=excluded.trophy_class,avatar=excluded.avatar,grade_img=excluded.grade_img,course_img=excluded.course_img,stars=excluded.stars,comment=excluded.comment,play_count=excluded.play_count,total_play_count=excluded.total_play_count,recent_json=excluded.recent_json,top_json=excluded.top_json,clear_json=excluded.clear_json,map_json=excluded.map_json,last_synced_at=excluded.last_synced_at`,[key,fc,server,p.playerName,p.rating,p.ratingMax,p.trophy,p.trophyClass,p.avatar,p.gradeImg,p.stars,p.comment??"",playCount,p.totalPlayCount??playCount,recentJson,topJson,clearJson,mapJson,now,p.courseImg??""]);return key;}
-  async getCachedProfile(fc:string){const r=await this.q<any>(`SELECT friend_code AS "profileKey",COALESCE(NULLIF(display_friend_code,''),friend_code) AS "friendCode",COALESCE(server_region,'intl') AS server,player_name AS "playerName",rating,rating_max AS "ratingMax",trophy,trophy_class AS "trophyClass",avatar,grade_img AS "gradeImg",COALESCE(course_img,'') AS "courseImg",COALESCE(circle_json,'') AS "circleJson",stars,comment,play_count AS "playCount",COALESCE(total_play_count,0) AS "totalPlayCount",last_synced_at AS "lastSyncedAt",recent_json AS "recentJson",top_json AS "topJson",clear_json AS "clearJson",COALESCE(map_json,'[]') AS "mapJson" FROM profiles WHERE friend_code=$1 OR display_friend_code=$1 LIMIT 1`,[fc]);if(r[0])r[0].lastSyncedAt=Number(r[0].lastSyncedAt);return r[0]??null;}
+  // 레이팅 대상·전체 기록은 maishift 에서 온다. 예전 캐롤봇이 저장한 top_json/clear_json(사용자당 수 MB)은 매 명령 읽지 않는다.
+  async getCachedProfile(fc:string){const r=await this.q<any>(`SELECT friend_code AS "profileKey",COALESCE(NULLIF(display_friend_code,''),friend_code) AS "friendCode",COALESCE(server_region,'intl') AS server,player_name AS "playerName",rating,rating_max AS "ratingMax",trophy,trophy_class AS "trophyClass",avatar,grade_img AS "gradeImg",COALESCE(course_img,'') AS "courseImg",COALESCE(circle_json,'') AS "circleJson",stars,comment,play_count AS "playCount",COALESCE(total_play_count,0) AS "totalPlayCount",last_synced_at AS "lastSyncedAt",recent_json AS "recentJson",'[]' AS "topJson",'[]' AS "clearJson",COALESCE(map_json,'[]') AS "mapJson" FROM profiles WHERE friend_code=$1 OR display_friend_code=$1 LIMIT 1`,[fc]);if(r[0])r[0].lastSyncedAt=Number(r[0].lastSyncedAt);return r[0]??null;}
   async getAllCachedProfiles(){return this.q(`SELECT friend_code AS "profileKey",COALESCE(NULLIF(display_friend_code,''),friend_code) AS "friendCode",server_region AS server,player_name AS "playerName",rating,rating_max AS "ratingMax",trophy,trophy_class AS "trophyClass",avatar,grade_img AS "gradeImg",COALESCE(course_img,'') AS "courseImg",COALESCE(circle_json,'') AS "circleJson",stars,comment,play_count AS "playCount",total_play_count AS "totalPlayCount",last_synced_at AS "lastSyncedAt",recent_json AS "recentJson",top_json AS "topJson",clear_json AS "clearJson",map_json AS "mapJson" FROM profiles`);}
   async deleteCachedProfile(fc:string){await this.q("DELETE FROM profiles WHERE friend_code=$1",[fc]);}
-
-  // 레이팅 대상 50곡 스냅샷. topJson 은 마크(FC/Sync)·ST/DX 보정까지 끝낸 상태로 넘어온다.
-  async saveRatingSnapshot(profileKey:string, playDay:string, topJson:string, rating:number, syncedAt:number){
-    await this.q(`INSERT INTO rating_snapshots(profile_key,play_day,top_json,rating,synced_at) VALUES($1,$2,$3,$4,$5)
-      ON CONFLICT(profile_key,play_day) DO UPDATE SET top_json=excluded.top_json,rating=excluded.rating,synced_at=excluded.synced_at`,
-      [profileKey,playDay,topJson,Math.round(rating)||0,syncedAt]);
-  }
-  // 요청 날짜 이하 중 가장 최근 스냅샷. 갱신하지 않은 날의 레이팅표는 직전 갱신 시점
-  // 상태와 같으므로, 정확히 일치하는 행이 없어도 직전 기록으로 답한다.
-  // 호출부는 반환된 playDay 가 요청 날짜와 다르면 그 사실을 함께 표시한다.
-  async getRatingSnapshot(profileKey:string, playDay:string){
-    const r=await this.q<any>(`SELECT play_day AS "playDay",top_json AS "topJson",rating,synced_at AS "syncedAt" FROM rating_snapshots WHERE profile_key=$1 AND play_day <= $2 ORDER BY play_day DESC LIMIT 1`,[profileKey,playDay]);
-    if(!r[0]) return null;
-    return {...r[0], rating:Number(r[0].rating), syncedAt:Number(r[0].syncedAt)};
-  }
-  // 레이팅 추이 그래프용. fromDay 이후 하루치 레이팅(오래된 날부터).
-  async listRatingSnapshots(profileKey:string, fromDay:string):Promise<{playDay:string;rating:number}[]>{
-    const r=await this.q<any>(`SELECT play_day AS "playDay",rating FROM rating_snapshots WHERE profile_key=$1 AND play_day >= $2 ORDER BY play_day`,[profileKey,fromDay]);
-    return r.map((x:any)=>({playDay:x.playDay,rating:Number(x.rating)}));
-  }
-  // 조회 가능한 날짜 범위 안내용. 스냅샷이 없는 날짜를 요청했을 때 쓴다.
-  async getRatingSnapshotRange(profileKey:string){
-    const r=await this.q<any>(`SELECT MIN(play_day) AS "first",MAX(play_day) AS "last",COUNT(*)::int AS "count" FROM rating_snapshots WHERE profile_key=$1`,[profileKey]);
-    return r[0]?.count ? r[0] as {first:string;last:string;count:number} : null;
-  }
 
   // clearJson 스냅샷(chart_clears)을 곡별로 upsert하면서 갱신 전 값을 같은 쿼리에서 돌려받는다.
   // CTE는 이 문(statement)의 쓰기가 반영되기 전 스냅샷을 보므로 "직전 값 vs 이번 값" 비교가 원자적이다.
   // 오른 채보만 걸러서 반환 — 트래킹 시작 전부터 있던 곡이든 방금 처음 친 곡이든 chart_clears에 값이
   // 없으면 0을 기존값으로 보고, 그 자체가 정확한 "진짜 처음 클리어"이므로 잘못된 0 표시가 아니다.
+  /** 이 프로필 키로 비교 기준(chart_clears)이 있는지. 없으면 첫 비교라 성과를 만들지 않는다. */
+  /** 비교 기준(직전 기록)을 다른 프로필 키로 복사한다(있는 보면은 그대로). maishift 키 → 캐롤봇 친구 코드 키로 바뀔 때. */
+  async copyChartClears(from:string,to:string){const r=await this.pool.query("INSERT INTO chart_clears(profile_key,chart_key,achievement_val,fc,sync,updated_at) SELECT $2,chart_key,achievement_val,fc,sync,updated_at FROM chart_clears WHERE profile_key=$1 ON CONFLICT(profile_key,chart_key) DO NOTHING",[from,to]);return r.rowCount??0;}
+  async hasChartClears(profileKey:string){const r=await this.q<any>("SELECT 1 FROM chart_clears WHERE profile_key=$1 LIMIT 1",[profileKey]);return r.length>0;}
   async upsertChartClears(profileKey:string, records:readonly Db.ChartClearInput[]):Promise<Db.ChartClearDiff[]>{
     if(!records.length) return [];
     const keys=records.map(r=>r.chartKey), vals=records.map(r=>r.achievementVal), fcs=records.map(r=>r.fc||""), syncs=records.map(r=>r.sync||""), now=Date.now();
@@ -331,7 +318,7 @@ SELECT u.chart_key AS "chartKey",u.achievement_val AS "achievementVal",u.fc,u.sy
         // 잘못 잡히므로, 단일 채보가 물리적으로 줄 수 있는 최대 곡 레이팅
         // (상수 불명 시 이론상 최대치 338)을 넘는 파싱값은 버린다.
         const parsedRatingUp=Number.isFinite(e.ratingUp)?Math.max(0,Number(e.ratingUp)):null;const ratingUpCeiling=levelConstant!=null&&Number.isFinite(levelConstant)?calcSongRating(score,levelConstant,e.fc):338;const ratingGain=parsedRatingUp!=null&&parsedRatingUp<=ratingUpCeiling?parsedRatingUp:0;
-        await c.query(`INSERT INTO achievement_play_event_log(event_key,profile_key,source_play_id,chart_key,is_baseline,played_at,source_sequence,captured_at,source_kind,achievement_val,fc,sync,rating_up,title,diff,level,music_kind,achievement_text,record_json,payload_hash,score_gain,is_meaningful,level_constant,achievement_before,rating_gain) VALUES($1,$2,$3,$4,0,$5,$6,$7,'clear_diff',$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,1,$20,$21,$22)`,[key,profile,id,e.chartKey,e.playedAt,e.sourceSequence,e.capturedAt??capturedAt,score,e.fc,e.sync,e.ratingUp??null,e.title,e.diff,e.level,e.musicKind,e.achievementText,e.recordJson,payload,Number.isFinite(gain)?gain:0,levelConstant,before,Number.isFinite(ratingGain)?ratingGain:0]);
+        await c.query(`INSERT INTO achievement_play_event_log(event_key,profile_key,source_play_id,chart_key,is_baseline,played_at,source_sequence,captured_at,source_kind,achievement_val,fc,sync,rating_up,title,diff,level,music_kind,achievement_text,record_json,payload_hash,score_gain,is_meaningful,level_constant,achievement_before,rating_gain) VALUES($1,$2,$3,$4,0,$5,$6,$7,$23,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,1,$20,$21,$22)`,[key,profile,id,e.chartKey,e.playedAt,e.sourceSequence,e.capturedAt??capturedAt,score,e.fc,e.sync,e.ratingUp??null,e.title,e.diff,e.level,e.musicKind,e.achievementText,e.recordJson,payload,Number.isFinite(gain)?gain:0,levelConstant,before,Number.isFinite(ratingGain)?ratingGain:0,e.sourceKind||'clear_diff']);
       } return "ok";});
   }
   // 상세 페이지의 (+N) 은 이벤트가 만들어지는 동기화에서 늘 함께 오지는 않는다.
@@ -355,7 +342,8 @@ SELECT u.chart_key AS "chartKey",u.achievement_val AS "achievementVal",u.fc,u.sy
     return filled;
   }
   async getAchievementPlayEventLog(k:string,from?:number,to?:number){const r=await this.q<any>(`SELECT event_key AS "eventKey",profile_key AS "profileKey",source_play_id AS "sourcePlayId",chart_key AS "chartKey",is_baseline AS "isBaseline",played_at AS "playedAt",source_sequence AS "sourceSequence",captured_at AS "capturedAt",source_kind AS "sourceKind",achievement_val AS "achievementVal",fc,sync,rating_up AS "ratingUp",title,diff,level,music_kind AS "musicKind",achievement_text AS "achievementText",record_json AS "recordJson",payload_hash AS "payloadHash",score_gain AS "scoreGain",is_meaningful AS "isMeaningful",level_constant AS "levelConstant",achievement_before AS "achievementBefore",rating_gain AS "ratingGain" FROM achievement_play_event_log WHERE profile_key=$1 AND ($2::bigint IS NULL OR played_at >= $2) AND ($3::bigint IS NULL OR played_at < $3) ORDER BY played_at DESC,source_sequence DESC,event_key DESC`,[k,from??null,to??null]);return r.map(x=>({...x,playedAt:Number(x.playedAt),capturedAt:Number(x.capturedAt),sourceSequence:Number(x.sourceSequence),isBaseline:Number(x.isBaseline),isMeaningful:Number(x.isMeaningful),scoreGain:Number(x.scoreGain),levelConstant:x.levelConstant==null?null:Number(x.levelConstant),achievementBefore:Number(x.achievementBefore??0),ratingGain:Math.max(0,Number(x.ratingGain)||0)}));}
-  async getDailyAchievementSummaries(discordUserId:string,from:number,to:number){const session=await this.q<any>("SELECT friend_code,default_server FROM sessions WHERE discord_user_id=$1",[discordUserId]);const stored=session[0]?.friend_code;const profileKey=stored?(/^(?:intl|jp):/.test(stored)?stored:`${session[0]?.default_server==='jp'?'jp':'intl'}:${stored}`):discordUserId;const threshold=await this.getAchievementMinimum(discordUserId);return (await this.getAchievementPlayEventLog(profileKey,from,to)).filter((x:any)=>x.isBaseline===0&&x.isMeaningful===1).reduce((a:any[],x:any)=>{const old=a.find(y=>y.chartKey===x.chartKey);if(!old&&(x.achievementVal>=threshold||fcRank(x.fc)>0||syncRank(x.sync)>=2))a.push({...x,achievementGain:Math.max(0,Number(x.achievementVal)-Number(x.achievementBefore??0)),achievementAfter:Number(x.achievementVal),ratingGain:Math.max(0,Number(x.ratingGain)||0)});return a;},[]);}
+  /** profileKeys 를 주면 그 키들의 성과를 합쳐 본다(maishift 키와 캐롤봇 친구 코드 키). 없으면 세션의 친구 코드로 찾는다(예전 방식). */
+  async getDailyAchievementSummaries(discordUserId:string,from:number,to:number,profileKeys?:readonly string[]){let keys=[...new Set(profileKeys??[])].filter(Boolean);if(!keys.length){const session=await this.q<any>("SELECT friend_code,default_server FROM sessions WHERE discord_user_id=$1",[discordUserId]);const stored=session[0]?.friend_code;keys=[stored?(/^(?:intl|jp):/.test(stored)?stored:`${session[0]?.default_server==='jp'?'jp':'intl'}:${stored}`):discordUserId];}const threshold=await this.getAchievementMinimum(discordUserId);const events=(await Promise.all(keys.map(k=>this.getAchievementPlayEventLog(k,from,to)))).flat().sort((a:any,b:any)=>b.playedAt-a.playedAt||b.sourceSequence-a.sourceSequence||(a.eventKey<b.eventKey?1:a.eventKey>b.eventKey?-1:0));return events.filter((x:any)=>x.isBaseline===0&&x.isMeaningful===1).reduce((a:any[],x:any)=>{const old=a.find(y=>y.chartKey===x.chartKey);if(!old&&(x.achievementVal>=threshold||fcRank(x.fc)>0||syncRank(x.sync)>=2))a.push({...x,achievementGain:Math.max(0,Number(x.achievementVal)-Number(x.achievementBefore??0)),achievementAfter:Number(x.achievementVal),ratingGain:Math.max(0,Number(x.ratingGain)||0)});return a;},[]);}
   // 성과 로그의 보유 범위. 과거 레이팅표 역산이 가능한 하한을 안내할 때 쓴다.
   async getAchievementLogRange(profileKey:string){
     const r=await this.q<any>(`SELECT MIN(played_at) AS "first",MAX(played_at) AS "last",COUNT(*)::int AS "count" FROM achievement_play_event_log WHERE profile_key=$1`,[profileKey]);
@@ -533,16 +521,13 @@ SELECT u.chart_key AS "chartKey",u.achievement_val AS "achievementVal",u.fc,u.sy
   }
 
   async getGuildSetting(id:string){const r=await this.q<any>("SELECT auto_role FROM guild_settings WHERE guild_id=$1",[id]);return r[0]?.auto_role!==0;} async setGuildSetting(id:string,v:boolean){await this.q("INSERT INTO guild_settings VALUES($1,$2) ON CONFLICT(guild_id) DO UPDATE SET auto_role=excluded.auto_role",[id,v?1:0]);}
-  async getProfilePrivate(id:string){const r=await this.q<any>("SELECT profile_private FROM sessions WHERE discord_user_id=$1",[id]);return r[0]?.profile_private===1;} async setProfilePrivate(id:string,v:boolean){const r=await this.pool.query("UPDATE sessions SET profile_private=$1 WHERE discord_user_id=$2",[v?1:0,id]);return r.rowCount??0;}
   // 세션 행이 없으면 null(= carol을 쓴 적 없는 사용자 → 방침 변경 고지 대상 아님).
   async getPolicyAck(id:string):Promise<number|null>{const r=await this.q<any>("SELECT policy_ack FROM sessions WHERE discord_user_id=$1",[id]);return r[0]?Number(r[0].policy_ack??0):null;}
   async setPolicyAck(id:string,v:number){await this.q("INSERT INTO sessions(discord_user_id,policy_ack) VALUES($1,$2) ON CONFLICT(discord_user_id) DO UPDATE SET policy_ack=excluded.policy_ack",[id,v]);}
   async saveProfileCircle(profileKey:string, json:string){await this.q("UPDATE profiles SET circle_json=$2 WHERE friend_code=$1",[profileKey,json]);}
   async getCirclePublic(id:string){const r=await this.q<any>("SELECT circle_public FROM sessions WHERE discord_user_id=$1",[id]);return Number(r[0]?.circle_public??1)===1;} async setCirclePublic(id:string,v:boolean){await this.q("INSERT INTO sessions(discord_user_id,circle_public) VALUES($1,$2) ON CONFLICT(discord_user_id) DO UPDATE SET circle_public=excluded.circle_public",[id,v?1:0]);}
-  async getFriendCodePublic(id:string){const r=await this.q<any>("SELECT friend_code_public FROM sessions WHERE discord_user_id=$1",[id]);return Number(r[0]?.friend_code_public??0)===1;} async setFriendCodePublic(id:string,v:boolean){await this.q("INSERT INTO sessions(discord_user_id,friend_code_public) VALUES($1,$2) ON CONFLICT(discord_user_id) DO UPDATE SET friend_code_public=excluded.friend_code_public",[id,v?1:0]);}
+  async getDxRankDecimal(id:string){const r=await this.q<any>("SELECT dx_rank_decimal FROM sessions WHERE discord_user_id=$1",[id]);return r[0]?.dx_rank_decimal===1;} async setDxRankDecimal(id:string,v:boolean){await this.q("INSERT INTO sessions(discord_user_id,dx_rank_decimal) VALUES($1,$2) ON CONFLICT(discord_user_id) DO UPDATE SET dx_rank_decimal=excluded.dx_rank_decimal",[id,v?1:0]);}
   async getTranslateTitles(id:string){const r=await this.q<any>("SELECT translate_titles FROM sessions WHERE discord_user_id=$1",[id]);return r[0]?.translate_titles===1;} async setTranslateTitles(id:string,v:boolean){await this.q("INSERT INTO sessions(discord_user_id,translate_titles) VALUES($1,$2) ON CONFLICT(discord_user_id) DO UPDATE SET translate_titles=excluded.translate_titles",[id,v?1:0]);}
-  async getEnabledBookmarkletPresetIds(id:string){const r=await this.q<any>("SELECT preset_bookmarklets FROM sessions WHERE discord_user_id=$1",[id]);try{const x=JSON.parse(r[0]?.preset_bookmarklets??"[]");return Array.isArray(x)?x.filter((v):v is string=>typeof v==='string'):[];}catch{return [];}}
-  async setBookmarkletPresetEnabled(id:string,p:string,v:boolean){const a=await this.getEnabledBookmarkletPresetIds(id),n=v?[...new Set([...a,p])]:a.filter(x=>x!==p);const r=await this.pool.query("UPDATE sessions SET preset_bookmarklets=$1 WHERE discord_user_id=$2",[JSON.stringify(n),id]);return r.rowCount??0;}
   async listOptionPresets(id:string):Promise<Db.OptionPresetRow[]>{const r=await this.q<any>("SELECT id,name,server,values_json,labels_json,updated_at FROM option_presets WHERE discord_user_id=$1 ORDER BY created_at,id",[id]);const parse=(t:string)=>{try{const x=JSON.parse(t);return x&&typeof x==="object"?x:{};}catch{return {};}};return r.map((x:any)=>({id:Number(x.id),name:x.name,server:x.server==="jp"?"jp":"intl",values:parse(x.values_json),labels:parse(x.labels_json),updatedAt:Number(x.updated_at)}));}
   /**
    * presetId 없음: 같은 이름이면 덮어쓰고, 새 이름인데 이미 max 개면 "limit".
@@ -564,10 +549,50 @@ SELECT u.chart_key AS "chartKey",u.achievement_val AS "achievementVal",u.fc,u.sy
   /** 세션이 없으면 null(방침 고지와 같은 기준). since 이후 공개분 중 아직 안 본 것, 최신순. */
   async getUnseenPatchNotes(id:string,since:number,limit:number):Promise<Db.PatchNoteRow[]|null>{const a=await this.q<any>("SELECT patch_ack FROM sessions WHERE discord_user_id=$1",[id]);if(!a[0])return null;const ack=Math.max(Number(a[0].patch_ack??0),since);const r=await this.q<any>("SELECT *, 0 AS seen FROM patch_notes WHERE published_at>$1 ORDER BY published_at DESC LIMIT $2",[ack,limit]);return r.map(patchRow);}
   async setPatchAck(id:string,at:number){await this.q("UPDATE sessions SET patch_ack=GREATEST(patch_ack,$2) WHERE discord_user_id=$1",[id,at]);}
-  async getExtraBookmarklets(id:string){const r=await this.q<any>("SELECT extra_bookmarklets FROM sessions WHERE discord_user_id=$1",[id]);try{return JSON.parse(r[0]?.extra_bookmarklets??"[]");}catch{return [];}} async addExtraBookmarklet(id:string,l:string,c:string){const a=(await this.getExtraBookmarklets(id)).filter((x:any)=>x.label!==l);a.push({label:l,code:c});await this.q("INSERT INTO sessions(discord_user_id,extra_bookmarklets) VALUES($1,$2) ON CONFLICT(discord_user_id) DO UPDATE SET extra_bookmarklets=excluded.extra_bookmarklets",[id,JSON.stringify(a)]);} async removeExtraBookmarklet(id:string,l:string){const a=await this.getExtraBookmarklets(id),n=a.filter((x:any)=>x.label!==l);if(n.length===a.length)return false;await this.q("UPDATE sessions SET extra_bookmarklets=$1 WHERE discord_user_id=$2",[JSON.stringify(n),id]);return true;}
+  /** maishift 아이디를 연동한 사용자들과, 그 서버에서 캐롤봇 북마클릿으로 확인된 프로필 키(없으면 ''). */
+  async getMaishiftUsers(handle:string,server:Db.MaimaiServer){const r=await this.q<any>("SELECT discord_user_id AS id,COALESCE(CASE WHEN $2='jp' THEN friend_code_jp ELSE friend_code_intl END,'') AS fc FROM sessions WHERE lower(maishift_handle)=lower($1) AND COALESCE(default_server,'intl')=$2",[handle,server]);return r.map((x:any)=>({discordUserId:x.id as string,profileKey:(x.fc as string)||""}));}
+  /** 캐롤봇 북마클릿이 모은 부가 데이터(최근 플레이·지방)만 저장한다. 프로필 값은 maishift 에서 온다. */
+  async saveSyncExtras(fc:string,server:Db.MaimaiServer,recentJson:string,mapJson:string){const key=`${server}:${fc}`,now=Date.now();await this.q("INSERT INTO profiles(friend_code,display_friend_code,server_region,player_name,recent_json,map_json,last_synced_at,created_at) VALUES($1,$2,$3,'',$4,$5,$6,$6) ON CONFLICT(friend_code) DO UPDATE SET display_friend_code=excluded.display_friend_code,server_region=excluded.server_region,recent_json=excluded.recent_json,map_json=excluded.map_json,last_synced_at=excluded.last_synced_at",[key,fc,server,recentJson,mapJson,now]);return key;}
+  async getMaishiftLink(id:string){const r=await this.q<any>("SELECT maishift_handle,COALESCE(default_server,'intl') AS server FROM sessions WHERE discord_user_id=$1",[id]);const h=r[0]?.maishift_handle||"";return h?{handle:h as string,server:(r[0].server==='jp'?'jp':'intl') as Db.MaimaiServer}:null;} async setMaishiftHandle(id:string,handle:string){await this.q("INSERT INTO sessions(discord_user_id,maishift_handle) VALUES($1,$2) ON CONFLICT(discord_user_id) DO UPDATE SET maishift_handle=excluded.maishift_handle",[id,handle]);}
+  /** 캐롤봇 프로필 키(intl:친구코드)에 연동된 maishift 아이디. */
+  /**
+   * maishift 연동 해제: 아이디를 지우고, maishift 에서 받아 저장한 데이터를 지운다(maishift 개발자 약관).
+   * - maishift 키(ms:<서버>:<아이디>)는 같은 아이디를 연동한 사람이 함께 쓰므로, 해제 뒤 그 아이디·서버를 연동한 사람이 없을 때만 지운다.
+   * - 캐롤봇 친구 코드 키는 이 사용자 것이므로 maishift 로 만든 성과(source_kind='maishift')·비교 기준·레이팅표 캐시를 지운다.
+   *   캐롤봇 북마클릿으로 만든 예전 성과와 북마클릿 데이터(최근 플레이·서클 등)는 maishift 데이터가 아니라 남긴다.
+   * - 목표는 사용자가 만든 것이라 남기고, maishift 기록으로 계산한 진행률만 비운다.
+   */
+  async unlinkMaishift(id:string, link:{handle:string;server:Db.MaimaiServer}):Promise<void>{
+    await this.tx(async c=>{
+      const s=await c.query<any>("SELECT COALESCE(friend_code_intl,'') AS intl,COALESCE(friend_code_jp,'') AS jp FROM sessions WHERE discord_user_id=$1",[id]);
+      await c.query("UPDATE sessions SET maishift_handle='' WHERE discord_user_id=$1",[id]);
+      for(const server of ["intl","jp"] as const){
+        const left=await c.query("SELECT 1 FROM sessions WHERE lower(maishift_handle)=lower($1) AND COALESCE(default_server,'intl')=$2 LIMIT 1",[link.handle,server]);
+        if(left.rowCount)continue;
+        const ms=`ms:${server}:${link.handle}`;
+        await c.query("DELETE FROM chart_clears WHERE profile_key=$1",[ms]);
+        await c.query("DELETE FROM achievement_play_event_log WHERE profile_key=$1",[ms]);
+        await c.query("DELETE FROM achievement_play_event_log_state WHERE profile_key=$1",[ms]);
+      }
+      const carolKeys=[s.rows[0]?.intl,s.rows[0]?.jp].filter((k:string)=>!!k);
+      for(const key of carolKeys) await c.query("DELETE FROM achievement_play_event_log WHERE profile_key=$1 AND source_kind='maishift'",[key]);
+      const current=link.server==="jp"?s.rows[0]?.jp:s.rows[0]?.intl;
+      if(current){
+        await c.query("DELETE FROM chart_clears WHERE profile_key=$1",[current]);
+        await c.query("UPDATE profiles SET rating_card_blob=NULL,rating_card_synced_at=0 WHERE friend_code=$1",[current]);
+      }
+      await c.query("UPDATE user_goals SET progress=0,current_json='{}',completed_at=0,updated_at=$2 WHERE discord_user_id=$1",[id,Date.now()]);
+    });
+  }
+  async getMaishiftHandleByProfileKey(key:string){const r=await this.q<any>("SELECT maishift_handle FROM sessions WHERE (friend_code=$1 OR friend_code_intl=$1 OR friend_code_jp=$1) AND maishift_handle<>'' LIMIT 1",[key]);return (r[0]?.maishift_handle as string|undefined)||null;}
+  async getKvCache(key:string){const r=await this.q<any>("SELECT data,updated_at AS \"updatedAt\" FROM constants_cache WHERE key=$1",[key]);return r[0]?{data:r[0].data as string,updatedAt:Number(r[0].updatedAt)}:null;} async saveKvCache(key:string,d:string){await this.q("INSERT INTO constants_cache VALUES($1,$2,$3) ON CONFLICT(key) DO UPDATE SET data=excluded.data,updated_at=excluded.updated_at",[key,d,Date.now()]);}
   async getConstantsCache(){const r=await this.q<any>("SELECT data,updated_at AS \"updatedAt\" FROM constants_cache WHERE key='main'");return r[0]??null;} async saveConstantsCache(d:string){await this.q("INSERT INTO constants_cache VALUES('main',$1,$2) ON CONFLICT(key) DO UPDATE SET data=excluded.data,updated_at=excluded.updated_at",[d,Date.now()]);}
   async getRatingCardCache(fc:string){const r=await this.q<any>("SELECT rating_card_blob AS blob,rating_card_synced_at AS \"syncedAt\",rating_card_version AS version FROM profiles WHERE friend_code=$1",[fc]);return r[0]?.blob?r[0]:null;} async saveRatingCardCache(fc:string,d:Buffer,s:number,v:number){await this.q("UPDATE profiles SET rating_card_blob=$1,rating_card_synced_at=$2,rating_card_version=$3 WHERE friend_code=$4",[d,s,v,fc]);}
   async getAllAliases(){return this.q("SELECT id,title,alias,is_translation AS \"isTranslation\" FROM song_aliases ORDER BY title,alias");} async getTranslationAliases(){return this.q("SELECT title,alias FROM song_aliases WHERE is_translation=1");} async addAlias(t:string,a:string){const r=await this.q<any>("INSERT INTO song_aliases(title,alias) VALUES($1,$2) ON CONFLICT(title,alias) DO NOTHING RETURNING id",[t,a]);return r[0]?{id:r[0].id,title:t,alias:a,isTranslation:false}:null;} async deleteAlias(id:number){const r=await this.pool.query("DELETE FROM song_aliases WHERE id=$1",[id]);return (r.rowCount??0)>0;} async setAliasTranslation(id:number,on:boolean){return this.tx(async c=>{const r=await c.query<any>("SELECT title FROM song_aliases WHERE id=$1",[id]);if(!r.rows[0])return null;if(on)await c.query("UPDATE song_aliases SET is_translation=0 WHERE title=$1",[r.rows[0].title]);await c.query("UPDATE song_aliases SET is_translation=$1 WHERE id=$2",[on?1:0,id]);return r.rows[0].title;});}
+  async listNameTranslations(){return this.q<Db.NameTranslationRow>("SELECT kind,source,ko,image_url AS \"imageUrl\" FROM name_translations ORDER BY kind,source");}
+  /** 봇이 본 이름을 번역 대기로 쌓는다(이미 있으면 그대로). */ async noteNames(kind:string,items:{source:string;imageUrl:string}[]){for(const b of batches(items,500)){const v:unknown[]=[];const ph=b.map((x,i)=>{v.push(kind,x.source,x.imageUrl);return `($${i*3+1},$${i*3+2},$${i*3+3})`;});await this.q(`INSERT INTO name_translations(kind,source,image_url) VALUES ${ph.join(",")} ON CONFLICT(kind,source) DO NOTHING`,v);}}
+  async setNameTranslation(kind:string,source:string,ko:string){const r=await this.pool.query("UPDATE name_translations SET ko=$3,updated_at=$4 WHERE kind=$1 AND source=$2",[kind,source,ko,Date.now()]);return (r.rowCount??0)>0;}
+  /** 이미 저장된 지방 진행도에서 지방 이름을 모은다(이름 번역 기능 이전에 동기화한 사용자 몫). */ async listStoredAreas(){const r=await this.q<any>("SELECT DISTINCT a->>'name' AS name,a->>'imageUrl' AS \"imageUrl\" FROM profiles p, LATERAL jsonb_array_elements(p.map_json::jsonb) a WHERE p.map_json LIKE '[%' AND jsonb_typeof(p.map_json::jsonb)='array'");return r.filter((x:any)=>typeof x.name==="string"&&x.name).map((x:any)=>({name:x.name as string,imageUrl:(x.imageUrl as string)||""}));}
   async getMessageOverrides(){return this.q<Db.BotMessageRow>("SELECT key,text FROM bot_messages");}
   async setMessageOverride(key:string,text:string){await this.pool.query("INSERT INTO bot_messages(key,text,updated_at) VALUES($1,$2,$3) ON CONFLICT(key) DO UPDATE SET text=EXCLUDED.text, updated_at=EXCLUDED.updated_at",[key,text,Date.now()]);}
   async deleteMessageOverride(key:string){const r=await this.pool.query("DELETE FROM bot_messages WHERE key=$1",[key]);return (r.rowCount??0)>0;}

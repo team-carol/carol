@@ -17,8 +17,13 @@ import {
   getJacketFile,
   isNewSong,
   getSongVersion,
+  getSongVersionName,
+  jacketFileUrl,
 } from "../../constants";
 import { displayTitle } from "../../aliases";
+import { TROPHY_STYLE, pill } from "./cardKit";
+import { versionName } from "../../maishift/catalog";
+import { S_RATING_COUNT, chartSRating, dxStars, formatChartSRating, formatSRating, sRatingTier } from "../../sRating";
 import { msg, cardCacheVersion, type MessageKey } from "../../messages";
 
 // 게임 설정(games.ts)의 섹션·레이팅 라벨을 관리 페이지에서 고칠 수 있는 문구로 바꾼다. 표에 없으면 그대로.
@@ -27,11 +32,13 @@ const LABEL_KEYS: Record<string, MessageKey> = {
   OTHERS: "ratingCard.sectionOthers",
   BEST: "ratingCard.sectionBest",
   VOLFORCE: "ratingCard.sectionVolforce",
+  SRATING: "ratingCard.sectionSRating",
 };
 const RATING_LABEL_KEYS: Record<string, MessageKey> = {
   RATING: "ratingCard.ratingLabel",
   VOLFORCE: "ratingCard.volforceLabel",
   POTENTIAL: "ratingCard.potentialLabel",
+  SRATING: "ratingCard.sRatingLabel",
 };
 const labelText = (label: string, table: Record<string, MessageKey>) => (table[label] ? msg(table[label]) : label);
 import type { GameId } from "../../games";
@@ -45,9 +52,22 @@ import {
   GAME_CM_COLOR,
   GAME_DIFF_COLOR,
   MAI_DIFF_COLOR,
+  MAI_CM_COLOR,
   RS_DEFAULT_COLOR,
   RS_DOUBLE_COLOR,
 } from "../../games";
+
+// S-레이팅 ✦ 색: ✦5 밝은 노랑(✦3 SS 색과 구분), ✦4·3·2 는 레이팅표의 SSS·SS·S 랭크 색, ✦1 흰색.
+function sStarColor(stars: number): string {
+  if (stars >= 5) return "#fde047";
+  if (stars === 4) return MAI_CM_COLOR["SSS"];
+  if (stars === 3) return MAI_CM_COLOR["SS"];
+  if (stars === 2) return MAI_CM_COLOR["S"];
+  return "#ffffff";
+}
+
+/** /레이팅표 type: maimai DX 레이팅, S-레이팅, 다른 게임 환산. */
+export type RatingType = GameId | "srating";
 
 // ─── Design tokens (ported from mailog, colors from src/brand.ts) ──────────────────────────────────
 const CARD_W = 110;
@@ -57,7 +77,7 @@ const TILE_R = 10; // 자켓 타일 모서리 (랜딩 카드처럼 둥글게)
 const PANEL_R = 16; // 섹션 패널 모서리 (랜딩 rounded-2xl)
 const ACCENT = BRAND.accent;
 // 카드 레이아웃/계산이 바뀌면 올린다 → 기존 렌더 캐시가 자동 무효화됨
-const CARD_VERSION = 17;
+const CARD_VERSION = 21;
 
 // ─── Satori element helper (no JSX) ───────────────────────────────────────
 type El = {
@@ -80,13 +100,60 @@ interface CardVM {
   rsText: string;
   rsColor: string;
   lv: string;
+  /** 상수가 추정값(maishift "?") — 상수 오른쪽 위에 작은 "?" */
+  lvEstimated?: boolean;
   diff: string;
   diffColor: string;
   isDx: boolean;
   showKind: boolean;
   mark: string;
+  /** mark 색을 cmColor 대신 직접 줄 때(S-레이팅 ✦) */
+  markColor?: string;
+  /** mark 에 빛 번짐을 줄 때(S-레이팅 ✦5) */
+  markGlow?: string;
   clearMark: string;
   jacketFile: string | null;
+  /** 신곡 카드 오른쪽 위 버전 배지 */
+  version?: { label: string; color: string; ink: string };
+}
+
+// 버전(세대 번호)별 테마 색. maishift 신곡 버전 표시와 같은 구분.
+export function songVersionColor(v: number): string {
+  if (v <= 1) return "#2b8791";
+  if (v <= 3) return "#b5db01";
+  if (v <= 5) return "#ff6809";
+  if (v <= 7) return "#ff006f";
+  if (v <= 9) return "#9b6bff";
+  if (v <= 11) return "#6decfd";
+  if (v === 12) return "#202e80";
+  if (v <= 14) return "#30a3ee";
+  if (v <= 16) return "#68c0ab";
+  if (v <= 18) return "#079edf";
+  if (v <= 20) return "#be89ff";
+  if (v <= 22) return "#ffbd1f";
+  if (v <= 24) return "#1d6faa";
+  if (v <= 26) return "#ff65c4";
+  return "#148462";
+}
+
+/** 배경색 위에서 읽히는 글자색(밝은 배경엔 검정). */
+export function inkOn(hex: string): string {
+  const n = parseInt(hex.slice(1), 16);
+  const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((c) => {
+    const x = c / 255;
+    return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.4 ? "#111111" : "#ffffff";
+}
+
+/** 신곡 버전 배지. maishift 기록은 곡의 세대 번호, 아니면 곡 목록의 버전 이름(색은 기본). */
+function versionBadge(r: PlayRecord, server: MaimaiServer): CardVM["version"] {
+  if (r.songVersion !== undefined) {
+    const color = songVersionColor(r.songVersion);
+    return { label: versionName(r.songVersion), color, ink: inkOn(color) };
+  }
+  const name = getSongVersionName(r.title, server, r.musicKind);
+  return name ? { label: name, color: BRAND.surface2, ink: BRAND.ink } : undefined;
 }
 
 const MAI_COMBO_MARKS = ["AP+", "AP", "FC+", "FC"];
@@ -98,7 +165,8 @@ function toVM(
   translate = false,
   game: GameId = "maimai",
 ): CardVM {
-  const constant = getConstant(r.title, r.musicKind, r.diff, server);
+  // 기록에 상수가 있으면(maishift) 그 값 — 과거 레이팅표는 그 시점 상수로 계산한다.
+  const constant = r.constant ?? getConstant(r.title, r.musicKind, r.diff, server);
   const lvNum = constant !== null ? constant : levelToNumber(r.level);
   // 레이팅 대상 페이지엔 FC/AP·Sync 아이콘이 없어 clear 기록의 마크를 우선 사용
   const marks = markMap?.get(chartKey(r));
@@ -120,7 +188,7 @@ function toVM(
       ? (allMarks.find((m) => MAI_COMBO_MARKS.includes(m)) ?? "")
       : (allMarks[1] ?? "");
 
-  const version = getSongVersion(r.title) ?? undefined;
+  const version = getSongVersion(r.title, server, r.musicKind) ?? undefined;
   const diffLabel = game === "maimai" ? r.diff : convertDiff(game, r.diff, version);
   const diffColor =
     game === "maimai"
@@ -144,6 +212,8 @@ function toVM(
           ? constant.toFixed(1)
           : r.level
         : getDisplayLv(lvNum, game, r.title).toFixed(1),
+    // maishift 가 추정 상수로 표시한 보면은 maishift 처럼 "?" 를 붙인다.
+    lvEstimated: game === "maimai" && constant !== null && r.constant !== undefined && !!r.constantEstimated,
     diff: diffLabel,
     diffColor,
     isDx: r.musicKind === "DX",
@@ -154,13 +224,13 @@ function toVM(
   };
 }
 
-// ─── Jacket prefetch (in-memory → DB cache → otoge-db) ────────────────────
-// 레이팅 대상곡 페이지엔 자켓이 없어 otoge-db의 image_url(파일명)로 받아온다.
+// ─── Jacket prefetch (in-memory → DB cache → DX NET) ──────────────────────
+// 레이팅 대상곡 페이지엔 자켓이 없어 곡 카탈로그의 재킷 파일명으로 DX NET 에서 받아온다.
 // 자켓은 곡 단위라 프로필마다 겹치는 게 대부분이다. 매 렌더마다 DB 조회 + base64
 // 인코딩을 반복하지 않도록 파일명 → data URL(또는 null) 결과를 프로세스 메모리에
 // 캐시한다. 곡 수만큼(수천 개)만 늘어나고 갱신될 일이 없어 상한은 두지 않는다.
 const jacketDataUrlCache = new Map<string, string | null>();
-/** otoge-db 자켓 파일명 → data URL. 성과표도 DX NET 자켓이 없을 때 이걸 쓴다. */
+/** 카탈로그 재킷 파일명 → data URL. 성과표도 기록에 DX NET 자켓이 없을 때 이걸 쓴다. */
 export async function fetchJacketDataUrl(file: string): Promise<string | null> {
   const memo = jacketDataUrlCache.get(file);
   if (memo !== undefined) return memo;
@@ -168,7 +238,7 @@ export async function fetchJacketDataUrl(file: string): Promise<string | null> {
   let buf = await getSongJacket(key);
   if (!buf) {
     try {
-      const res = await fetch(`https://otoge-db.net/maimai/jacket/${file}`);
+      const res = await fetch(jacketFileUrl(file));
       if (res.ok) {
         buf = Buffer.from(await res.arrayBuffer());
         await saveSongJacket(key, buf);
@@ -251,6 +321,30 @@ function jacketCard(
     ),
   );
 
+  // 신곡 버전 배지(오른쪽 위)
+  if (vm.version) {
+    layers.push(
+      el(
+        "div",
+        {
+          position: "absolute",
+          top: 5,
+          right: 5,
+          display: "flex",
+          padding: "1px 6px",
+          borderRadius: 99,
+          background: vm.version.color,
+          maxWidth: CARD_W - 40,
+        },
+        el(
+          "span",
+          { fontSize: 7, color: vm.version.ink, fontWeight: 800, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
+          vm.version.label,
+        ),
+      ),
+    );
+  }
+
   // bottom info block
   const infoRows: El[] = [];
   // 자릿수가 많으면(예: Arcaea의 소수 3자리) 카드 폭에 맞게 살짝 줄인다.
@@ -276,11 +370,13 @@ function jacketCard(
               {
                 fontSize: 12,
                 fontWeight: 800,
-                color: cmColor[vm.mark] ?? "rgba(255,255,255,0.75)",
+                color: vm.markColor ?? cmColor[vm.mark] ?? "rgba(255,255,255,0.75)",
                 marginLeft: 5,
                 lineHeight: 1,
                 // 밝은 자켓 위에서도 읽히도록 어두운 그림자로 분리한다.
-                textShadow: "0 1px 2px rgba(0,0,0,0.95), 0 0 4px rgba(0,0,0,0.8)",
+                textShadow: vm.markGlow
+                  ? `0 1px 2px rgba(0,0,0,0.95), 0 0 6px ${vm.markGlow}, 0 0 10px ${vm.markGlow}`
+                  : "0 1px 2px rgba(0,0,0,0.95), 0 0 4px rgba(0,0,0,0.8)",
               },
               vm.mark,
             ),
@@ -296,6 +392,9 @@ function jacketCard(
         { fontSize: 9, fontWeight: 700, color: "rgba(255,255,255,0.9)" },
         vm.lv,
       ),
+      ...(vm.lvEstimated
+        ? [el("span", { fontSize: 6, fontWeight: 700, color: "rgba(255,255,255,0.9)", marginLeft: 1, position: "relative", top: -3 }, "?")]
+        : []),
       el(
         "span",
         {
@@ -602,8 +701,8 @@ export function ratingBreakdown(profile: CachedProfile): { newSum: number; newCo
   const markMap = buildMarkMap(clearRecords);
   const resolveKind = buildKindResolver(clearRecords);
   const rs = (r: PlayRecord) => toVM({ ...r, musicKind: resolveKind(r) }, markMap, profile.server).rs;
-  const news = profile.server === "jp" ? records.filter((r) => isNewSong(r.title, "jp")).slice(0, 15) : records.slice(0, 15);
-  const olds = profile.server === "jp" ? records.filter((r) => !isNewSong(r.title, "jp")).slice(0, 35) : records.slice(15, 50);
+  const news = profile.server === "jp" ? records.filter((r) => isNewSong(r.title, "jp", undefined, r.musicKind)).slice(0, 15) : records.slice(0, 15);
+  const olds = profile.server === "jp" ? records.filter((r) => !isNewSong(r.title, "jp", undefined, r.musicKind)).slice(0, 35) : records.slice(15, 50);
   const sum = (list: PlayRecord[]) => list.reduce((acc, r) => acc + rs(r), 0);
   return { newSum: sum(news), newCount: news.length, oldSum: sum(olds), oldCount: olds.length };
 }
@@ -613,20 +712,25 @@ export async function renderRatingCard(
   records: PlayRecord[],
   avatarBuf: Buffer | null,
   translate = false,
-  game: GameId = "maimai",
+  type: RatingType = "maimai",
   // 과거 스냅샷 렌더는 현재 프로필 기준 캐시(profileKey 단일 행)를 오염시키면 안 되므로 끈다.
   allowCache = true,
   // 과거 역산 렌더용. 주면 그 시점의 신곡 범위로 신곡/구곡을 나눈다.
   newSongDay?: string,
+  // 미래시 레이팅표면 그 버전 이름. 레이팅 옆에 "<버전> 미래시" 표시를 붙인다.
+  futureVersion?: string,
 ): Promise<Buffer> {
+  // S-레이팅은 maimai 기록을 그대로 쓰고(난이도·마크 표기 동일) 곡 값과 고르는 규칙만 다르다.
+  const sRating = type === "srating";
+  const game: GameId = sRating ? "maimai" : type;
   const cfg = GAMES[game];
   const cmColor = GAME_CM_COLOR[game];
   // 곡별 RS는 게임별 포맷을 쓰되, 섹션 평균은 maimai만 기존 표기(소수 1자리)를 유지
-  const formatAvg = game === "maimai" ? (v: number) => v.toFixed(1) : cfg.formatRS;
+  const formatAvg = sRating ? (v: number) => v.toFixed(3) : game === "maimai" ? (v: number) => v.toFixed(1) : cfg.formatRS;
   // ─── Render cache: return cached PNG if profile and card version unchanged ─
   // 번역 표시본은 뷰어별로 달라 공유 캐시(원제 기준)를 쓰지 않고 매번 새로 렌더한다.
   // 타 게임 치환본도 마찬가지로 maimai 기준 캐시를 공유하지 않는다.
-  const cacheable = allowCache && !translate && game === "maimai";
+  const cacheable = allowCache && !translate && type === "maimai";
   const cached = cacheable ? await getRatingCardCache(profile.profileKey) : null;
   if (
     cached &&
@@ -659,19 +763,50 @@ export async function renderRatingCard(
   // 타 게임은 mai-log와 동일하게 전체 기록에서 게임별 규칙으로 다시 뽑는다.
   const sections: { label: string; cols: number; vms: CardVM[] }[] = [];
   let totalRs: string;
+  let sRatingMean = 0;
 
-  if (game === "maimai") {
+  if (sRating) {
+    // maishift 전체 기록에서 DX 점수가 있는 보면만. 값이 0 인 보면(DX 별 없음)도 50개가 안 되면 채운다.
+    const pool = clearRecords.length > 0 ? clearRecords : records;
+    const rated = pool
+      .filter((r) => r.achievementVal > 0 && (r.dxScoreMax ?? 0) > 0)
+      .map((r) => {
+        const fixed = fix(r);
+        const percent = ((fixed.dxScore ?? 0) / (fixed.dxScoreMax ?? 1)) * 100;
+        const constant = fixed.constant ?? getConstant(fixed.title, fixed.musicKind, fixed.diff, profile.server) ?? levelToNumber(fixed.level);
+        const value = chartSRating(constant, percent);
+        const stars = dxStars(percent);
+        const vm: CardVM = {
+          ...vmOf(r),
+          rs: value,
+          rsText: formatChartSRating(value),
+          ach: `${percent.toFixed(2)}%`,
+          mark: stars ? `✦${stars}` : "",
+          markColor: sStarColor(stars),
+          markGlow: stars >= 5 ? "rgba(253,224,71,0.7)" : undefined,
+        };
+        return { vm, ach: r.achievementVal };
+      })
+      // 값이 같으면 달성률이 높은 보면부터(maishift 와 같은 순서).
+      .sort((a, b) => b.vm.rs - a.vm.rs || b.ach - a.ach)
+      .slice(0, S_RATING_COUNT)
+      .map((x) => x.vm);
+    sections.push({ label: "SRATING", cols: 10, vms: rated });
+    // S-레이팅은 합이 아니라 평균이다.
+    sRatingMean = rated.length ? rated.reduce((acc, v) => acc + v.rs, 0) / rated.length : 0;
+    totalRs = formatSRating(sRatingMean);
+  } else if (game === "maimai") {
     // 국제판: maimai net 파싱 순서(신곡 15 + 구곡 35)를 그대로 신뢰.
     // JP: 전체 기록에서 직접 산출하므로 버전(isNewSong)으로 분류(15/35 미만 오분류 방지).
     const newRecords =
       profile.server === "jp"
-        ? records.filter((r) => isNewSong(r.title, "jp", newSongDay)).slice(0, 15)
+        ? records.filter((r) => isNewSong(r.title, "jp", newSongDay, r.musicKind)).slice(0, 15)
         : records.slice(0, 15);
     const otherRecords =
       profile.server === "jp"
-        ? records.filter((r) => !isNewSong(r.title, "jp", newSongDay)).slice(0, 35)
+        ? records.filter((r) => !isNewSong(r.title, "jp", newSongDay, r.musicKind)).slice(0, 35)
         : records.slice(15, 50);
-    const newVms = newRecords.map(vmOf);
+    const newVms: CardVM[] = newRecords.map((r) => ({ ...vmOf(r), version: versionBadge(r, profile.server) }));
     const otherVms = otherRecords.map(vmOf);
     sections.push({ label: "NEW", cols: 3, vms: newVms });
     sections.push({ label: "OTHERS", cols: 7, vms: otherVms });
@@ -691,12 +826,12 @@ export async function renderRatingCard(
 
     if (cfg.select === "newOld") {
       const news = rated
-        .filter((x) => isNewSong(x.r.title, profile.server))
+        .filter((x) => isNewSong(x.r.title, profile.server, undefined, x.r.musicKind))
         .sort(byRs)
         .slice(0, first.count)
         .map((x) => x.vm);
       const olds = rated
-        .filter((x) => !isNewSong(x.r.title, profile.server))
+        .filter((x) => !isNewSong(x.r.title, profile.server, undefined, x.r.musicKind))
         .sort(byRs)
         .slice(0, second.count)
         .map((x) => x.vm);
@@ -772,15 +907,19 @@ export async function renderRatingCard(
             display: "flex",
           }),
       el("div", { display: "flex", flexDirection: "column" }, [
-        ...(profile.trophy
-          ? [
-              el(
-                "span",
-                { fontSize: 8, color: BRAND.dim, marginBottom: 1 },
-                profile.trophy,
-              ),
-            ]
-          : []),
+        // 칭호: /프로필·/서클 카드와 같은 등급 색 띠. 문구가 비면 빈 띠만.
+        el("div", { display: "flex", marginBottom: 3 }, [
+          pill(profile.trophy || "\u00a0", {
+            ...(TROPHY_STYLE[profile.trophyClass] ?? TROPHY_STYLE.normal),
+            fontSize: 8,
+            padding: "2px 7px",
+            maxWidth: 260,
+            overflow: "hidden",
+            whiteSpace: "nowrap",
+            textOverflow: "ellipsis",
+            ...(profile.trophy ? {} : { width: 100 }),
+          }),
+        ]),
         el(
           "span",
           { fontSize: 12, fontWeight: 700, color: BRAND.ink },
@@ -790,7 +929,7 @@ export async function renderRatingCard(
     ],
   );
 
-  const wordmark = el("div", { display: "flex", alignItems: "baseline" }, [
+  const mark = el("div", { display: "flex", alignItems: "baseline" }, [
     el(
       "span",
       { fontSize: 13, fontWeight: 700, color: BRAND.dim, marginRight: 6 },
@@ -799,9 +938,23 @@ export async function renderRatingCard(
     el("span", { fontSize: 13, fontWeight: 800, color: BRAND.ink }, "carol"),
     el("span", { fontSize: 13, fontWeight: 800, color: ACCENT }, "bot"),
   ]);
+  // maishift 데이터면 출처를 워드마크 아래에 작게 붙인다.
+  const wordmark = profile.source === "maishift"
+    ? el("div", { display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }, [
+        mark,
+        el("span", { fontSize: 10, fontWeight: 600, color: BRAND.dim }, msg("maishift.credit")),
+      ])
+    : mark;
 
-  const ratingBlock = game === "maimai"
+  const tier = sRating ? sRatingTier(sRatingMean) : null;
+  const ratingBlock = type === "maimai"
     ? ratingPlate(Number(totalRs) || 0)
+    : sRating
+    ? el("div", { display: "flex", flexDirection: "column", alignItems: "flex-end" }, [
+        el("span", { fontSize: 8, color: BRAND.dim }, labelText("SRATING", RATING_LABEL_KEYS)),
+        el("span", { fontSize: 20, fontWeight: 800, color: ACCENT, lineHeight: 1.1 }, totalRs),
+        ...(tier ? [el("span", { fontSize: 9, fontWeight: 700, color: BRAND.ink2, marginTop: 2 }, tier)] : []),
+      ])
     : el(
     "div",
     { display: "flex", flexDirection: "column", alignItems: "flex-end" },
@@ -838,8 +991,10 @@ export async function renderRatingCard(
       ),
       el(
         "div",
-        { display: "flex", flex: 1, justifyContent: "flex-end" },
-        ratingBlock,
+        { display: "flex", flex: 1, justifyContent: "flex-end", alignItems: "center", gap: 10 },
+        futureVersion
+          ? [pill(msg("ratingCard.futureBadge", { version: futureVersion }), { background: ACCENT, color: BRAND.canvas, fontSize: 11, padding: "4px 10px" }), ratingBlock]
+          : ratingBlock,
       ),
     ],
   );

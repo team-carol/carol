@@ -1,8 +1,9 @@
 export const MAIMAI_SERVERS = ["intl", "jp"] as const;
 export type MaimaiServer = (typeof MAIMAI_SERVERS)[number];
 export function isMaimaiServer(value: string): value is MaimaiServer { return value === "intl" || value === "jp"; }
-export interface CachedProfile { profileKey:string; server:MaimaiServer; friendCode:string; playerName:string; rating:number; ratingMax:number; trophy:string; trophyClass:string; avatar:string; gradeImg:string; courseImg:string; circleJson?:string; stars:string; comment:string; playCount:number; totalPlayCount:number; lastSyncedAt:number; recentJson:string; topJson:string; clearJson:string; mapJson:string; }
-export interface ExtraBookmarklet { label:string; code:string; }
+export interface CachedProfile { profileKey:string; server:MaimaiServer; friendCode:string; playerName:string; rating:number; ratingMax:number; trophy:string; trophyClass:string; avatar:string; gradeImg:string; courseImg:string; circleJson?:string; stars:string; comment:string; playCount:number; totalPlayCount:number; lastSyncedAt:number; recentJson:string; topJson:string; clearJson:string; mapJson:string; /** "maishift" 면 프로필·기록이 maishift 에서 온 값(출처 표기용). */ source?:"maishift"; /** maishift 업로드마다의 레이팅·누적 플레이 횟수(시간순). maishift 연동일 때만. */ maishiftHistory?:MaishiftHistoryPoint[]; /** 그 지역의 버전 목록(출시 시각 포함). maishift 연동일 때만. */ maishiftVersions?:MaishiftVersion[]; /** maishift 가 공개하는 친구 코드(사용자가 maishift 에서 친구 코드를 공개했을 때만). */ maishiftFriendCode?:string; /** maishift "이전 기록 공개" 설정. 성과(기록 변화)를 다른 사람에게 보일지 정한다. */ maishiftPastPublic?:boolean; }
+export interface MaishiftVersion { id:number; name:string; releasedAt:number; }
+export interface MaishiftHistoryPoint { at:number; rating:number; playTotal:number; playCurrent:number; /** maishift 세대 번호(25=CiRCLE, 26=CiRCLE PLUS …) */ versionId:number; }
 export interface OptionPresetInput { name:string; server:MaimaiServer; values:Record<string,string>; labels:Record<string,[string,string]>; }
 export interface OptionPresetRow extends OptionPresetInput { id:number; updatedAt:number; }
 /** scraper.UserOptionField 와 같은 모양(storage 는 scraper 를 import 하지 않는다). */
@@ -13,8 +14,9 @@ export interface PatchNoteRow extends PatchNoteInput { id:number; publishedAt:nu
 export interface OptionSnapshot { server:MaimaiServer; fields:UserOptionField[]; syncedAt:number; }
 export interface SongAliasRow { id:number; title:string; alias:string; isTranslation:boolean; }
 export interface BotMessageRow { key:string; text:string; }
+export interface NameTranslationRow { kind:string; source:string; ko:string; imageUrl:string; }
 export interface AchievementPlayEventInput { profileKey:string; discordUserId?:string; playDay:string; chartKey:string; detailIdx?:string; sourceSequence:number; playedAt:number; firstCapturedAt?:number; sourceKind?:string; legacyUpdatedAt?:number; recordJson:string; achievementVal:number; isNewScore?:boolean; ratingUp?:number|null; title?:string; diff?:string; level?:string; musicKind?:string; achievementText?:string; fc?:string; sync?:string; }
-export interface AchievementPlayEventLogInput { profileKey:string; sourcePlayId?:string; playedAt:number; chartKey:string; sourceSequence:number; capturedAt?:number; recordJson:string; achievementVal:number; achievementBefore:number; fc:string; sync:string; ratingUp?:number|null; title:string; diff:string; level:string; musicKind:string; achievementText:string; levelConstant?:number|null; }
+export interface AchievementPlayEventLogInput { profileKey:string; sourcePlayId?:string; playedAt:number; chartKey:string; sourceSequence:number; capturedAt?:number; recordJson:string; achievementVal:number; achievementBefore:number; fc:string; sync:string; ratingUp?:number|null; title:string; diff:string; level:string; musicKind:string; achievementText:string; levelConstant?:number|null; /** 성과를 만든 출처. maishift 기록 비교로 만든 성과는 "maishift"(연동 해제 때 지운다). 없으면 "clear_diff". */ sourceKind?:string; }
 export interface AchievementPlayEventLogRecord extends AchievementPlayEventLogInput { eventKey:string; payloadHash:string; scoreGain?:number; isMeaningful?:boolean; levelConstant?:number|null; ratingGain?:number; }
 export interface DailyAchievementSummary extends AchievementPlayEventLogRecord { achievementGain: number; achievementAfter:number; ratingGain:number; levelConstant?:number|null; }
 export interface ChartClearInput { chartKey:string; achievementVal:number; fc:string; sync:string; }

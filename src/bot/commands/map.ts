@@ -1,7 +1,8 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, MessageFlags } from "discord.js";
 import { getCachedProfile, getUserFriendCode } from "../../storage";
-import { mapAreaEmbed } from "../utils/embeds";
+import { mapAreaEmbed, getMapAreaList } from "../utils/embeds";
 import { msg } from "../../messages";
+import { notRegisteredNotice } from "../utils/notRegistered";
 
 export const data = new SlashCommandBuilder()
   .setName("지방")
@@ -11,7 +12,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   const friendCode = await getUserFriendCode(interaction.user.id);
   if (!friendCode) {
     await interaction.reply({
-      content: msg("common.selfNotRegistered"),
+      content: await notRegisteredNotice(interaction.user.id, true),
       flags: MessageFlags.Ephemeral,
     });
     return;
@@ -20,9 +21,15 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   const cached = await getCachedProfile(friendCode);
   if (!cached) {
     await interaction.reply({
-      content: msg("common.selfNotRegistered"),
+      content: await notRegisteredNotice(interaction.user.id, true),
       flags: MessageFlags.Ephemeral,
     });
+    return;
+  }
+
+  // 지방 진행도는 캐롤봇 추가 북마클릿이 모은다. 없으면 등록을 안내한다.
+  if (!getMapAreaList(cached).length) {
+    await interaction.reply({ content: msg("common.needCarolBookmarklet"), flags: MessageFlags.Ephemeral });
     return;
   }
 

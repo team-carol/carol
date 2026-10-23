@@ -14,7 +14,7 @@ src/
 ├── mainotes/   # mai-notes.com 메타데이터 인덱스 — 검색용. 채보 본문은 받지 않는다
 ├── db.ts       # SQLite singleton, schema, migrations, caches, settings
 ├── scraper.ts  # maimai DX NET HTML parser and PlayRecord model
-├── constants.ts # otoge-db constants/jacket metadata and rating math
+├── constants.ts # song catalog/constants/jackets (maishift songs, daily cache) and rating math
 ├── config.ts   # config.json loader + default PORT
 ├── crypto.ts   # AES-GCM helpers; may write encryptionKey to config.json
 ├── fonts.ts    # NotoSansJP download/cache for satori
@@ -42,9 +42,8 @@ src/
 - Keep shared files framework-free. Web uses raw `http`; bot uses `discord.js`; shared modules should not depend on either unless already established.
 - `db.ts` owns all table creation and migrations at import time. Add columns with `ALTER TABLE ... ADD COLUMN` in `try/catch`; never drop/rename.
 - Store user-specific web access via `sync_token`; routes resolve it through `findUserBySyncToken`.
-- Session settings live on `sessions`: `profile_private`, `extra_bookmarklets`, `preset_bookmarklets`.
-- `profile_private` default is public (`0`); `getProfilePrivate()` treats missing/null as public.
-- Bookmarklet presets are stored as JSON ID arrays in `preset_bookmarklets`, not as dedicated per-preset columns.
+- Session settings live on `sessions`. `extra_bookmarklets`/`preset_bookmarklets` columns remain from migrations but are unused (preset and private bookmarklets were removed; maishift always runs).
+- Profile / friend-code / past-record visibility follows the user's maishift settings (no carol toggles). `sessions.profile_private` and `friend_code_public` columns remain from migrations but are unused. Circle visibility (`circle_public`) is still a carol setting because circle data only comes from the carol extra bookmarklet.
 - Constants cache survives restarts in `constants_cache`; network failure at startup should remain non-fatal.
 
 ## ANTI-PATTERNS

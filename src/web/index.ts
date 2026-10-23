@@ -3,17 +3,19 @@ import * as fs from "fs";
 import { createHash, timingSafeEqual } from "crypto";
 import { gunzip } from "zlib";
 import { promisify } from "util";
-import { parseHome, parsePlayerData, parseFriendCode as parseFC, parseRecentRecords, parsePlaylogHistory, parseTop5, parseTopSongs, parseMusicScore, mergeTopRecords, getMaimaiBaseUrl, parseMapAreas, parsePlaylogDetail, chartKey, buildMarkMap, buildKindResolver, parseUserOptions, parseCircle } from "../scraper";
-import { cacheProfile, getCachedProfile, saveUserSession, getUserSyncToken, findUserBySyncToken, getUserFriendCodeForServer, saveAvatarBlob, getAvatarBlob, getSongJacket, saveSongJacket, getExtraBookmarklets, getProfilePrivate, setProfilePrivate, addExtraBookmarklet, removeExtraBookmarklet, getEnabledBookmarkletPresetIds, setBookmarkletPresetEnabled, getUserDefaultServer, setUserDefaultServer, isMaimaiServer, getMapImage, saveMapImage, saveAchievementPlayEventLogBatch, upsertChartClears, backfillEventRatingUp, saveRatingSnapshot, getAllAliases, addAlias, deleteAlias, setAliasTranslation, setMessageOverride, deleteMessageOverride, getTranslateTitles, setTranslateTitles, getFriendCodePublic, setFriendCodePublic, saveProfileCircle, getCirclePublic, setCirclePublic, getRegisteredUserCount, getAchievementMinimum, setAchievementMinimum, listGoals, updateGoalProgress, getPolicyAck, setPolicyAck, getSimaiChart, saveSimaiChart, listRegistryCharts, auditRegistryCharts, listOptionPresets, saveOptionPreset, deleteOptionPreset, saveOptionSnapshot, getOptionSnapshots, listPatchNotes, savePatchNote, setPatchNotePublished, deletePatchNote } from "../storage";
+import { parseFriendCode as parseFC, parseRecentRecords, parsePlaylogHistory, getMaimaiBaseUrl, parseMapAreas, parsePlaylogDetail, parseUserOptions, parseCircle } from "../scraper";
+import { saveSyncExtras, getMaishiftLink, saveUserSession, findUserBySyncToken, getAvatarBlob, getSongJacket, saveSongJacket, getUserDefaultServer, setUserDefaultServer, isMaimaiServer, getMapImage, saveMapImage, backfillEventRatingUp, getAllAliases, listNameTranslations, setNameTranslation, addAlias, deleteAlias, setAliasTranslation, setMessageOverride, deleteMessageOverride, getTranslateTitles, setTranslateTitles, getDxRankDecimal, setDxRankDecimal, saveProfileCircle, getCirclePublic, setCirclePublic, getRegisteredUserCount, getAchievementMinimum, setAchievementMinimum, getPolicyAck, setPolicyAck, getSimaiChart, saveSimaiChart, listRegistryCharts, auditRegistryCharts, listOptionPresets, saveOptionPreset, deleteOptionPreset, saveOptionSnapshot, getOptionSnapshots, listPatchNotes, savePatchNote, setPatchNotePublished, deletePatchNote } from "../storage";
 import { POLICY_VERSION } from "../policy";
 import type { SongAliasRow } from "../storage/types";
-import { buildBookmarkletJs, setBaseUrl, getBaseUrl, buildBookmarklet, BOOKMARKLET_PRESETS, getBookmarkletPresets } from "./bookmarklet";
+import { scheduleMaishiftCheck } from "../maishift";
+import { saveRankImages, knownRankImageFiles } from "../rankImages";
+import { buildBookmarkletJs, setBaseUrl, getBaseUrl, buildBookmarklet, MAISHIFT_BOOKMARKLET } from "./bookmarklet";
 import { OPTION_CLIENT_JS, OPTION_PRESET_MAX, buildOptionBookmarklet, sanitizeOptionPreset } from "./optionPreset";
 import { optionsPage } from "./optionsPage";
 import { patchNotesAdminPage } from "./patchNotesAdminPage";
 import { sanitizePatchNote } from "../patchNotes";
 import { appVersion } from "../version";
-import { computeRatingTarget, getAllSongTitles } from "../constants";
+import { getAllSongTitles } from "../constants";
 import { settingsPage } from "./settingsPage";
 import { aliasAdminPage } from "./aliasAdminPage";
 import { chartPlayerPage, chartNotFoundPage } from "./chartPlayer";
@@ -27,6 +29,7 @@ import { getReadyVideo } from "../bot/utils/chartVideoQueue";
 import type { Chart } from "../simai/types";
 import { messagesAdminPage, type MessageRowVM } from "./messagesAdminPage";
 import { BASE_CSS, pageHead, topbar, siteFooter, BRAND_AVATAR_PATH, userNav } from "./theme";
+import { privacyPage, termsPage } from "./legalPages";
 import { BRAND_AVATAR_PNG } from "./brandAvatar";
 import {
   MESSAGE_KEYS, defaultOf, getOverride, rawText, placeholdersOf,
@@ -34,9 +37,9 @@ import {
 } from "../messages";
 import { isValidAdminToken, issueAdminToken } from "./adminAuth";
 import { loadAliases } from "../aliases";
+import { noteAreaNames, setNameTranslationCache, NAME_KINDS, type NameKind } from "../nameTranslations";
+import { namesAdminPage } from "./namesAdminPage";
 import { CONFIG, PORT } from "../config";
-import { hasValidRecordDate, recordPlayedAt, koreaPlayDayKey } from "../achievements";
-import { evaluateGoal, GOAL_KINDS, type GoalKind } from "../goals";
 
 const isDev = !CONFIG.baseUrl;
 // 도메인 이전 공지: 구 도메인(Host가 baseUrl과 다름)으로 들어온 요청에만 경고 표시. 이전 완료 후 삭제할 것.
@@ -101,16 +104,9 @@ async function cacheMapImages(areas: readonly { imageUrl: string }[], server: st
   return saved;
 }
 
-const LEGAL_CSS = `${BASE_CSS}
-.page{max-width:760px}
-h1{font-size:clamp(32px,4.4vw,44px);font-weight:500;color:var(--ink);line-height:1.2;letter-spacing:-.01em;padding-bottom:18px;margin-bottom:8px;border-bottom:1px solid var(--border)}
-h1+p{font-size:13.5px;color:var(--dim);margin-bottom:12px}
-h2{font-size:20px;font-weight:500;color:var(--ink);margin:36px 0 10px}
-p{margin:8px 0;font-size:15.5px;line-height:1.75;color:var(--ink-soft)}`;
-
 function guidePage(token: string, bookmarklet: string): string {
   const bmEscaped = bookmarklet.replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/`/g, "\\`");
-  return `<!DOCTYPE html><html lang="ko"><head>${pageHead("북마클릿 설치 · 캐롤봇")}
+  return `<!DOCTYPE html><html lang="ko"><head>${pageHead("캐롤봇 추가 북마클릿 설치 · 캐롤봇")}
 <style>
 ${BASE_CSS}
 .page{max-width:680px}
@@ -133,20 +129,12 @@ h1{font-size:clamp(36px,5vw,52px);font-weight:500;color:var(--ink);letter-spacin
 .step::before{content:counter(s);flex-shrink:0;width:26px;height:26px;margin-top:1px;background:var(--surface-2);color:var(--accent-soft);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:500}
 .tab{display:none}
 .tab.active{display:block}
-.extra{margin-top:48px;padding-top:40px;border-top:1px solid var(--border)}
-.extra h2{font-size:clamp(24px,3vw,30px);font-weight:500;color:var(--ink);line-height:1.2;margin-bottom:12px}
-.extraIntro{font-size:15.5px;color:var(--muted);margin-bottom:20px}
-.extraActions{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
-.extraCard{display:block;background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:20px;color:var(--ink-soft);transition:border-color .15s}
-a.extraCard:hover{border-color:#f2857f;color:var(--ink-soft)}
-.extraCard strong{display:block;color:var(--ink);font-size:17px;font-weight:500;margin-bottom:6px}
-.extraCard span{display:block;color:var(--muted);font-size:14px;line-height:1.55}
-@media(max-width:560px){.card{padding:22px}.extraActions{grid-template-columns:1fr}}
+@media(max-width:560px){.card{padding:22px}}
 </style></head><body>
 ${topbar(userNav(token, "sync"))}
 <main class="page">
-<h1>북마클릿 설치</h1>
-<p class="lead">maimai DX NET에서 한 번 실행하면 기록이 캐롤봇으로 동기화됩니다.</p>
+<h1>캐롤봇 추가 북마클릿 설치</h1>
+<p class="lead">프로필·기록은 maishift에서 가져옵니다. 서클·지방·게임 설정처럼 maishift에 없는 정보는 maimai DX NET에서 이 북마클릿을 실행하면 캐롤봇으로 동기화됩니다.</p>
 <div class="tabs">
 <button class="tabBtn active" id="tbPC" onclick="sw('PC')">💻 PC</button>
 <button class="tabBtn" id="tbMB" onclick="sw('MB')">📱 모바일</button>
@@ -155,13 +143,12 @@ ${topbar(userNav(token, "sync"))}
 <div class="card">
 <p class="eyebrow">Step 01</p>
 <p>아래 버튼을 브라우저 북마크바로 드래그하세요.</p>
-<a class="btn btn-primary bm" href="${bookmarklet}" draggable="true">캐롤봇</a>
+<a class="btn btn-primary bm" href="${bookmarklet}" draggable="true">캐롤봇 추가</a>
 <p class="hint">북마크바가 없으면 <code>Ctrl+Shift+B</code></p>
 </div>
 <div class="card">
 <p class="eyebrow">Step 02</p>
-<p><a href="/settings?code=${token}">설정</a> 페이지에서 프리셋 북마클릿을 설정하세요.</p>
-<p class="hint">캐롤봇 동기화 시 함께 실행할 외부 북마클릿(예: maishift)을 켜고 끌 수 있습니다.</p>
+<p>maishift 북마클릿은 캐롤봇 추가 북마클릿을 실행할 때 자동으로 함께 실행됩니다.</p>
 </div>
 <div class="card">
 <p class="eyebrow">Step 03</p>
@@ -177,8 +164,7 @@ ${topbar(userNav(token, "sync"))}
 </div>
 <div class="card">
 <p class="eyebrow">Step 02</p>
-<p><a href="/settings?code=${token}">설정</a> 페이지에서 프리셋 북마클릿을 설정하세요.</p>
-<p class="hint">캐롤봇 동기화 시 함께 실행할 외부 북마클릿(예: maishift)을 켜고 끌 수 있습니다.</p>
+<p>maishift 북마클릿은 캐롤봇 추가 북마클릿을 실행할 때 자동으로 함께 실행됩니다.</p>
 </div>
 <div class="card">
 <p class="eyebrow">Step 03</p>
@@ -188,16 +174,6 @@ ${topbar(userNav(token, "sync"))}
 <li class="step">URL 칸을 모두 지우고, 복사한 코드를 <strong>붙여넣기</strong></li>
 <li class="step"><a href="https://maimaidx-eng.com/maimai-mobile/" target="_blank">maimai DX NET</a> 또는 <a href="https://maimaidx.jp/maimai-mobile/" target="_blank">maimaiでらっくすNET</a>에서 해당 북마크 실행</li>
 </ol>
-</div>
-</div>
-<div class="extra">
-<p class="eyebrow">추가 북마클릿</p>
-<h2>사설 북마클릿 관리</h2>
-<p class="extraIntro">여러 계정이나 서버를 쓰는 경우, 설정 페이지에서 북마클릿을 최대 <strong>5개</strong>까지 추가로 등록할 수 있습니다.</p>
-<div class="extraActions">
-<a class="extraCard" href="/settings?code=${token}"><strong>추가</strong><span>이름과 코드를 입력해 새 북마클릿 등록</span></a>
-<a class="extraCard" href="/settings?code=${token}"><strong>삭제</strong><span>등록된 목록에서 필요 없는 북마클릿 제거</span></a>
-<div class="extraCard"><strong>사용</strong><span>기본 북마클릿처럼 maimai DX net에서 실행</span></div>
 </div>
 </div>
 </main>
@@ -483,13 +459,10 @@ export function startWebServer(port: number): void {
       res.writeHead(200, { "content-type": "application/javascript; charset=utf-8", "cache-control": "no-cache" });
       const code = url.searchParams.get("code") ?? "";
       const userId = code ? await findUserBySyncToken(code) : null;
-      const extras = userId ? await getExtraBookmarklets(userId) : [];
-      const presetIds = userId ? await getEnabledBookmarkletPresetIds(userId) : [];
-      const bookmarklets = [...getBookmarkletPresets(presetIds), ...extras];
       const policyNotice = userId ? ((await getPolicyAck(userId)) ?? POLICY_VERSION) < POLICY_VERSION : false;
       const canonicalHost = CONFIG.baseUrl ? new URL(CONFIG.baseUrl).host : "";
       const isLegacyHost = !!canonicalHost && req.headers.host !== canonicalHost;
-      res.end(buildBookmarkletJs(bookmarklets, { policyNotice, deprecationCutoff: isLegacyHost ? DOMAIN_MIGRATION_CUTOFF : undefined }));
+      res.end(buildBookmarkletJs([MAISHIFT_BOOKMARKLET], { policyNotice, deprecationCutoff: isLegacyHost ? DOMAIN_MIGRATION_CUTOFF : undefined, knownRankImages: { intl: knownRankImageFiles("intl"), jp: knownRankImageFiles("jp") } }));
       return;
     }
 
@@ -501,56 +474,13 @@ export function startWebServer(port: number): void {
 
     if (req.method === "GET" && url.pathname === "/privacy") {
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-      res.end(`<!DOCTYPE html><html lang="ko"><head>${pageHead("개인정보처리방침 · 캐롤봇")}
-<style>${LEGAL_CSS}</style></head><body>
-${topbar()}
-<main class="page">
-<h1>개인정보처리방침</h1>
-<p>최종 수정일: 2026년 10월 12일</p>
-<h2>1. 수집하는 정보</h2>
-<p>본 봇은 Discord 사용자 ID, maimai DX net 프로필 데이터(플레이어명, 친구 코드, 레이팅, 칭호, 클래스, 아바타 이미지, 최근 플레이 기록, 재킷 이미지)를 수집합니다. 북마클릿으로 동기화할 때는 maimai DX net의 게임 옵션 설정값(노트 속도, 판정 표시, 효과음 등)도 함께 수집하며, 사용자가 옵션 프리셋을 저장하면 그 설정값을 저장합니다. 사용자가 maimai DX net 서클에 가입되어 있다면 서클 정보(서클 이름·서클 코드·소개 문구·서클 색상, 서클 포인트와 순위, 이번 달 서클 진행도와 본인의 서클 포인트, 서클 챌린지 과제곡과 달성률, 멤버의 플레이어명·아이콘·칭호·레이팅·서클 포인트)도 함께 수집합니다.</p>
-<h2>2. 수집 방법</h2>
-<p>사용자가 maimai DX net에 로그인된 브라우저에서 <strong>북마클릿</strong> 또는 <strong>캐롤익스텐션(비공식 크롬 확장)</strong>을 실행하여, 해당 페이지의 HTML을 사용자 브라우저에서 직접 서버로 전송합니다. SEGA ID, 비밀번호 등 계정 정보는 절대 수집하지 않습니다.</p>
-<p>캐롤익스텐션을 쓰는 경우, 사용자가 확장 설정에서 동기화를 명시적으로 켜고 동기화 토큰을 등록해야 합니다. 동기화는 (1) maimai DX net 화면의 버튼을 눌렀을 때, 또는 (2) 사용자가 "자동" 모드를 켠 경우 홈 화면에 접속했고 플레이 횟수가 지난 동기화 이후 변한 것이 확인됐을 때에만 실행됩니다. 백그라운드 상시 수집은 하지 않으며, 전송되는 데이터의 종류와 목적은 북마클릿과 동일합니다.</p>
-<h2>3. 데이터 저장</h2>
-<p>프로필 데이터는 PostgreSQL 데이터베이스에 저장됩니다. 세션 정보는 암호화하여 저장하며, 아바타 및 재킷 이미지는 base64 인코딩하여 저장합니다. base64 인코딩은 암호화가 아닙니다.</p>
-<h2>4. 데이터 사용 목적</h2>
-<p>Discord에서 maimai DX 프로필과 서클 정보를 표시하고, 게임 설정 페이지에서 현재 게임 옵션을 보여 주거나 옵션 프리셋을 편집·적용하는 용도로만 사용됩니다.</p>
-<p>친구 코드는 사용자의 maimai DX 프로필을 구분하고 Discord 계정과 연결하는 데 사용합니다. 친구 코드는 기본으로 다른 사람에게 표시하지 않으며, 사용자가 설정 페이지에서 친구 코드 공개를 켠 경우에만 /프로필 명령어 결과에 표시합니다.</p>
-<p>서클 정보는 /프로필의 서클 이름과 /서클 명령어에 사용합니다. 서클 정보는 기본으로 공개되며, 사용자가 설정 페이지에서 서클 공개를 끄면 /프로필에 서클 이름을 표시하지 않고 /서클 결과도 본인에게만 보여 줍니다. 서클 멤버의 정보는 해당 서클을 보여 주는 용도로만 사용합니다.</p>
-<h2>5. 제3자 제공</h2>
-<p>수집된 데이터를 제3자에게 제공하지 않습니다.</p>
-<h2>6. 데이터 삭제</h2>
-<p>/프로필 데이터는 북마클릿 또는 캐롤익스텐션으로 동기화할 때마다 덮어쓰기됩니다. 옵션 프리셋은 게임 설정 페이지에서 언제든 직접 삭제할 수 있습니다. 완전한 삭제를 원하시면 봇 관리자에게 요청해 주세요.</p>
-</main>
-${siteFooter()}
-</body></html>`);
+      res.end(privacyPage());
       return;
     }
 
     if (req.method === "GET" && url.pathname === "/terms") {
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-      res.end(`<!DOCTYPE html><html lang="ko"><head>${pageHead("이용약관 · 캐롤봇")}
-<style>${LEGAL_CSS}</style></head><body>
-${topbar()}
-<main class="page">
-<h1>이용약관</h1>
-<p>최종 수정일: 2026년 9월</p>
-<h2>1. 서비스 설명</h2>
-<p>캐롤봇은 Discord에서 SEGA의 아케이드 리듬 게임 「maimai DX」의 공식 웹사이트(maimai DX net) 프로필을 조회할 수 있는 비공식 팬 메이드 봇입니다.</p>
-<h2>2. 저작권</h2>
-<p>본 서비스는 SEGA와 공식적으로 제휴, 후원 또는 승인되지 않았습니다. maimai DX, maimai DX net 및 관련된 모든 게임 자산, 캐릭터, 음악, 이미지, 상표의 저작권 및 모든 권리는 <strong>SEGA Corporation</strong>에 있습니다. 본 봇은 팬 목적으로만 운영됩니다.</p>
-	<h2>3. 사용자 책임</h2>
-	<p>사용자는 maimai DX net에 로그인된 상태에서 북마클릿 또는 캐롤익스텐션(비공식 크롬 확장)을 실행하여 데이터를 전송합니다. 이 과정에서 발생하는 모든 책임은 사용자에게 있습니다. 캐롤익스텐션은 캐롤봇과 별개로 배포되는 비공식 소프트웨어이며, 사용자가 직접 설치하고 동기화를 활성화한 경우에만 동작합니다.</p>
-	<h2>4. 추가 북마클릿 사용 책임</h2>
-	<p>사용자가 직접 추가하거나 활성화한 외부 북마클릿, 프리셋 외 스크립트, 제3자 제공 코드의 실행 여부와 결과는 전적으로 사용자 본인의 판단과 책임에 따릅니다. 캐롤봇은 해당 스크립트를 작성, 검증, 통제하지 않으며, 그로 인해 발생하는 데이터 손실, 계정 문제, 보안 사고, 서비스 이용 제한, 기타 손해에 대해 책임을 지지 않습니다.</p>
-	<h2>5. 서비스 중단</h2>
-	<p>본 서비스는 언제든지 사전 통지 없이 중단될 수 있습니다. 서비스 제공자는 서비스 중단으로 인한 손해에 대해 책임을 지지 않습니다.</p>
-	<h2>6. 면책 조항</h2>
-	<p>본 서비스는 "있는 그대로" 제공되며, 어떠한 종류의 명시적 또는 묵시적 보증 없이 제공됩니다.</p>
-	</main>
-${siteFooter()}
-</body></html>`);
+      res.end(termsPage());
       return;
     }
 
@@ -567,15 +497,12 @@ ${siteFooter()}
       const token = url.searchParams.get("code") || "";
       const userId = await findUserBySyncToken(token);
       if (!userId && !isDev) { res.writeHead(403); res.end("expired"); return; }
-      const isPrivate = userId ? await getProfilePrivate(userId) : false;
-      const presetIds = userId ? await getEnabledBookmarkletPresetIds(userId) : [];
-      const bookmarklets = userId ? await getExtraBookmarklets(userId) : [];
       const defaultServer = userId ? await getUserDefaultServer(userId) : "intl";
       const translate = userId ? await getTranslateTitles(userId) : false;
-      const friendCodePublic = userId ? await getFriendCodePublic(userId) : false;
       const circlePublic = userId ? await getCirclePublic(userId) : true;
+      const dxDecimal = userId ? await getDxRankDecimal(userId) : false;
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-      res.end(settingsPage(token, isPrivate, presetIds, bookmarklets, defaultServer, translate, friendCodePublic, circlePublic));
+      res.end(settingsPage(token, defaultServer, translate, circlePublic, dxDecimal));
       return;
     }
 
@@ -850,6 +777,35 @@ ${siteFooter()}
       return;
     }
 
+    // ─── 지방·스탬프 카드 이름 번역 (namesAdminPage.ts) ────────────────────
+    if (req.method === "GET" && url.pathname === "/admin/names") {
+      const token = url.searchParams.get("code") || "";
+      if (!isValidAdminToken(token)) { res.writeHead(403); res.end("expired"); return; }
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" });
+      res.end(namesAdminPage(token, await listNameTranslations()));
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/api/admin/names") {
+      const json = (status: number, data: unknown) => { res.writeHead(status, { "content-type": "application/json" }); res.end(JSON.stringify(data)); };
+      if (!isValidAdminToken(url.searchParams.get("code") || "")) { json(403, { ok: false, error: "expired" }); return; }
+      try {
+        const body = JSON.parse(await readBody(req));
+        const kind = body.kind as NameKind;
+        const source = typeof body.source === "string" ? body.source : "";
+        const ko = (typeof body.ko === "string" ? body.ko : "").trim();
+        if (!NAME_KINDS.includes(kind) || !source) { json(400, { ok: false, error: "invalid_body" }); return; }
+        if (ko.length > 100) { json(400, { ok: false, error: "100자 이하로 입력하세요" }); return; }
+        if (!(await setNameTranslation(kind, source, ko))) { json(404, { ok: false, error: "목록에 없는 이름입니다" }); return; }
+        setNameTranslationCache(kind, source, ko);
+        json(200, { ok: true, ko });
+      } catch (e) {
+        console.error("[admin] 이름 번역 저장 실패:", e);
+        const badBody = e instanceof SyntaxError;
+        json(badBody ? 400 : 500, { ok: false, error: badBody ? "invalid_body" : "서버 오류가 발생했습니다" });
+      }
+      return;
+    }
+
     // 별명을 해당 곡의 한국어 번역으로 지정/해제 (곡당 1개)
     if (req.method === "POST" && url.pathname === "/api/admin/aliases/translation") {
       const token = url.searchParams.get("code") || "";
@@ -946,13 +902,10 @@ ${siteFooter()}
       const token = url.searchParams.get("code") || "";
       const userId = await findUserBySyncToken(token);
       if (!userId) { res.writeHead(403, { "content-type": "application/json" }); res.end(JSON.stringify({ error: "expired" })); return; }
-      const isPrivate = await getProfilePrivate(userId);
-      const presets = await getEnabledBookmarkletPresetIds(userId);
-      const bookmarklets = await getExtraBookmarklets(userId);
       const defaultServer = await getUserDefaultServer(userId);
       const translate = await getTranslateTitles(userId);
       res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({ private: isPrivate, presets, bookmarklets, defaultServer, translate, friendCodePublic: await getFriendCodePublic(userId), circlePublic: await getCirclePublic(userId), minimumAchievement: await getAchievementMinimum(userId) }));
+      res.end(JSON.stringify({ defaultServer, translate, circlePublic: await getCirclePublic(userId), minimumAchievement: await getAchievementMinimum(userId) }));
       return;
     }
 
@@ -960,6 +913,23 @@ ${siteFooter()}
       const token=url.searchParams.get("code")||"", userId=await findUserBySyncToken(token);
       if(!userId){res.writeHead(403,{"content-type":"application/json"});res.end(JSON.stringify({error:"expired"}));return;}
       try { const body=JSON.parse(await readBody(req)); const value=body.minimumAchievement; if(typeof value!=="number"||!Number.isFinite(value)||value<0||value>101){res.writeHead(400,{"content-type":"application/json"});res.end(JSON.stringify({error:"invalid_minimum_achievement"}));return;} await setAchievementMinimum(userId,value); res.writeHead(200,{"content-type":"application/json"});res.end(JSON.stringify({minimumAchievement:value})); } catch {res.writeHead(400,{"content-type":"application/json"});res.end(JSON.stringify({error:"invalid_body"}));}
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/settings/dx-decimal") {
+      const token = url.searchParams.get("code") || "";
+      const userId = await findUserBySyncToken(token);
+      if (!userId) { res.writeHead(403, { "content-type": "application/json" }); res.end(JSON.stringify({ error: "expired" })); return; }
+      try {
+        const body = JSON.parse(await readBody(req));
+        const value = body.decimal === true;
+        await setDxRankDecimal(userId, value);
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ decimal: value }));
+      } catch {
+        res.writeHead(400, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: "invalid_body" }));
+      }
       return;
     }
 
@@ -980,23 +950,6 @@ ${siteFooter()}
       return;
     }
 
-    if (req.method === "POST" && url.pathname === "/api/settings/friend-code") {
-      const token = url.searchParams.get("code") || "";
-      const userId = await findUserBySyncToken(token);
-      if (!userId) { res.writeHead(403, { "content-type": "application/json" }); res.end(JSON.stringify({ error: "expired" })); return; }
-      try {
-        const body = JSON.parse(await readBody(req));
-        const value = body.public === true;
-        await setFriendCodePublic(userId, value);
-        res.writeHead(200, { "content-type": "application/json" });
-        res.end(JSON.stringify({ friendCodePublic: value }));
-      } catch {
-        res.writeHead(400, { "content-type": "application/json" });
-        res.end(JSON.stringify({ error: "invalid_body" }));
-      }
-      return;
-    }
-
     if (req.method === "POST" && url.pathname === "/api/settings/circle") {
       const token = url.searchParams.get("code") || "";
       const userId = await findUserBySyncToken(token);
@@ -1007,23 +960,6 @@ ${siteFooter()}
         await setCirclePublic(userId, value);
         res.writeHead(200, { "content-type": "application/json" });
         res.end(JSON.stringify({ circlePublic: value }));
-      } catch {
-        res.writeHead(400, { "content-type": "application/json" });
-        res.end(JSON.stringify({ error: "invalid_body" }));
-      }
-      return;
-    }
-
-    if (req.method === "POST" && url.pathname === "/api/settings/privacy") {
-      const token = url.searchParams.get("code") || "";
-      const userId = await findUserBySyncToken(token);
-      if (!userId) { res.writeHead(403, { "content-type": "application/json" }); res.end(JSON.stringify({ error: "expired" })); return; }
-      try {
-        const body = JSON.parse(await readBody(req));
-        const value = !!body.private;
-        await setProfilePrivate(userId, value);
-        res.writeHead(200, { "content-type": "application/json" });
-        res.end(JSON.stringify({ private: value }));
       } catch {
         res.writeHead(400, { "content-type": "application/json" });
         res.end(JSON.stringify({ error: "invalid_body" }));
@@ -1053,80 +989,6 @@ ${siteFooter()}
       return;
     }
 
-    if (req.method === "POST" && url.pathname === "/api/settings/preset") {
-      const token = url.searchParams.get("code") || "";
-      const userId = await findUserBySyncToken(token);
-      if (!userId) { res.writeHead(403, { "content-type": "application/json" }); res.end(JSON.stringify({ error: "expired" })); return; }
-      try {
-        const body = JSON.parse(await readBody(req));
-        const presetId = (body.presetId || "").trim();
-        if (!BOOKMARKLET_PRESETS.some((preset) => preset.id === presetId)) {
-          res.writeHead(400, { "content-type": "application/json" });
-          res.end(JSON.stringify({ error: "invalid_preset" }));
-          return;
-        }
-        const enabled = !!body.enabled;
-        await setBookmarkletPresetEnabled(userId, presetId, enabled);
-        const presets = await getEnabledBookmarkletPresetIds(userId);
-        res.writeHead(200, { "content-type": "application/json" });
-        res.end(JSON.stringify({ presets }));
-      } catch {
-        res.writeHead(400, { "content-type": "application/json" });
-        res.end(JSON.stringify({ error: "invalid_body" }));
-      }
-      return;
-    }
-
-    if (req.method === "POST" && url.pathname === "/api/settings/bookmarklet") {
-      const token = url.searchParams.get("code") || "";
-      const userId = await findUserBySyncToken(token);
-      if (!userId) { res.writeHead(403, { "content-type": "application/json" }); res.end(JSON.stringify({ error: "expired" })); return; }
-      try {
-        const body = JSON.parse(await readBody(req));
-        const action: string = body.action;
-        if (action === "add") {
-          const label = (body.label || "").trim();
-          const code = (body.code || "").trim();
-          if (!label || !code) {
-            res.writeHead(400, { "content-type": "application/json" });
-            res.end(JSON.stringify({ error: "missing_fields" }));
-            return;
-          }
-          const existing = await getExtraBookmarklets(userId);
-          if (existing.length >= 5) {
-            res.writeHead(400, { "content-type": "application/json" });
-            res.end(JSON.stringify({ error: "max_reached" }));
-            return;
-          }
-          if (existing.some((b: { label: string }) => b.label === label)) {
-            res.writeHead(400, { "content-type": "application/json" });
-            res.end(JSON.stringify({ error: "duplicate_label" }));
-            return;
-          }
-          await addExtraBookmarklet(userId, label, code);
-        } else if (action === "delete") {
-          const label = (body.label || "").trim();
-          if (!label) {
-            res.writeHead(400, { "content-type": "application/json" });
-            res.end(JSON.stringify({ error: "missing_fields" }));
-            return;
-          }
-          await removeExtraBookmarklet(userId, label);
-        } else {
-          res.writeHead(400, { "content-type": "application/json" });
-          res.end(JSON.stringify({ error: "invalid_action" }));
-          return;
-        }
-        const bookmarklets = await getExtraBookmarklets(userId);
-        res.writeHead(200, { "content-type": "application/json" });
-        res.end(JSON.stringify({ bookmarklets }));
-      } catch {
-        res.writeHead(400, { "content-type": "application/json" });
-        res.end(JSON.stringify({ error: "invalid_body" }));
-      }
-      return;
-    }
-
 
 
     if (req.method === "POST" && url.pathname === "/sync") {
@@ -1145,31 +1007,21 @@ ${siteFooter()}
       let data: any;
       try { data = JSON.parse(raw); } catch { res.writeHead(400); res.end("invalid_json"); return; }
       const syncServer = typeof data.server === "string" && isMaimaiServer(data.server) ? data.server : "intl";
-      const homeHtml: string = data.h || "";
-      const playerHtml: string = data.p || "";
+      // 프로필·레이팅·전체 기록은 maishift 에서 온다. 캐롤봇 북마클릿은 maishift 에 없는 것만 보낸다:
+      // 친구 코드(누구의 데이터인지), 최근 플레이와 상세(성과의 플레이 시각·레이팅 상승분), 지방, 게임 설정, 서클.
       const fcHtml: string = data.f || "";
       const recordHtml: string = data.r || "";
-      const ratingTargetHtml: string = data.rt || "";
-      const top4Html: string = data.tb4 || "";
-      const top3Html: string = data.tb3 || "";
-      const top2Html: string = data.tb2 || "";
-      const top1Html: string = data.tb1 || "";
-      const top0Html: string = data.tb0 || "";
       const mapHtml: string = data.m || "";
       const eventMapHtml: string = data.em || "";
       const optionHtml: string = typeof data.uo === "string" ? data.uo : "";
       const circleHtml: string = typeof data.ci === "string" ? data.ci : "";
       const circleMemberHtml: string = typeof data.cm === "string" ? data.cm : "";
       const circleRankingHtml: string = typeof data.cr === "string" ? data.cr : "";
-      const avatarBase64: string = data.a || "";
       const detailPayloads = Array.isArray(data.dt) ? data.dt : [];
-      console.log(`[web] user=${syncUserId.slice(-6)}, server=${syncServer}, home=${homeHtml.length}B, player=${playerHtml.length}B, record=${recordHtml.length}B, ratingTarget=${ratingTargetHtml.length}B, fc=${fcHtml.length}B, top4=${top4Html.length}B, top3=${top3Html.length}B, top2=${top2Html.length}B, top1=${top1Html.length}B, top0=${top0Html.length}B, map=${mapHtml.length}B, eventMap=${eventMapHtml.length}B, option=${optionHtml.length}B, circle=${circleHtml.length}B, circleMember=${circleMemberHtml.length}B, circleRanking=${circleRankingHtml.length}B`);
+      console.log(`[web] user=${syncUserId.slice(-6)}, server=${syncServer}, record=${recordHtml.length}B, fc=${fcHtml.length}B, map=${mapHtml.length}B, eventMap=${eventMapHtml.length}B, option=${optionHtml.length}B, circle=${circleHtml.length}B, circleMember=${circleMemberHtml.length}B, circleRanking=${circleRankingHtml.length}B`);
       if (isDev) {
-        fs.writeFileSync("debug_home.html", homeHtml, "utf-8");
-        fs.writeFileSync("debug_pd.html", playerHtml, "utf-8");
         fs.writeFileSync("debug_fc.html", fcHtml, "utf-8");
         fs.writeFileSync("debug_record.html", recordHtml, "utf-8");
-        fs.writeFileSync("debug_rating_target.html", ratingTargetHtml, "utf-8");
         fs.writeFileSync("debug_map.html", mapHtml, "utf-8");
         fs.writeFileSync("debug_event_map.html", eventMapHtml, "utf-8");
         if (optionHtml) fs.writeFileSync("debug_option.html", optionHtml, "utf-8");
@@ -1185,18 +1037,7 @@ ${siteFooter()}
       }
 
       try {
-        const home = parseHome(homeHtml, syncServer);
-        const usePd = !home.playerName && playerHtml;
-        const effective = usePd ? parseHome(playerHtml, syncServer) : home;
-        console.log(`[web] parseHome: name="${effective.playerName}", rating=${effective.rating}, fc=${effective.friendCode}, usePd=${usePd}`);
-        console.log(`[web] avatar url: ${effective.avatar?.substring(0, 80) || "(empty)"}`);
-        console.log(`[web] avatar b64: ${avatarBase64 ? avatarBase64.substring(0, 40) + "..." : "(empty)"}`);
-        const { playCount, totalPlayCount } = parsePlayerData(playerHtml);
-        const fcRaw = parseFC(fcHtml);
-        // 친구코드 우선순위: 13자리인 값만 채택. home의 input[name=idx]는
-        // 내수판에서 페이지 인덱스("0")를 반환하므로 13자리 검증을 통과한 값만 사용한다.
-        const fc = [effective.friendCode, fcRaw].find((v) => v && /^\d{13}$/.test(v)) || token;
-
+        const fc = parseFC(fcHtml);
         const recentRecords = parseRecentRecords(recordHtml, syncServer);
         const historyRecords = parsePlaylogHistory(recordHtml, syncServer);
         const detailMap = new Map<string, string>();
@@ -1207,42 +1048,20 @@ ${siteFooter()}
           if (!idx || !html) continue;
           detailMap.set(idx, html);
         }
-        const enrichedRecentRecords = recentRecords.map((record) => {
+        const enrich = (record: (typeof recentRecords)[number]) => {
           const detailHtml = record.detailIdx ? detailMap.get(record.detailIdx) : undefined;
           return detailHtml ? { ...record, ...parsePlaylogDetail(detailHtml) } : record;
-        });
-        const enrichedHistoryRecords = historyRecords.map((record) => {
-          const detailHtml = record.detailIdx ? detailMap.get(record.detailIdx) : undefined;
-          return detailHtml ? { ...record, ...parsePlaylogDetail(detailHtml) } : record;
-        });
-        const clearHtmls = [top4Html, top3Html, top2Html, top1Html, top0Html].filter((h) => h);
-        const clearRecords = clearHtmls.length > 0 ? mergeTopRecords(clearHtmls.map((h) => parseMusicScore(h, syncServer))) : [];
-        // 내수판(JP)은 레이팅 대상 페이지 수집에 유료 코스가 필요하므로,
-        // 전체 기록에서 레이팅 대상(신곡 15 + 구곡 35)을 직접 추론한다.
-        const topRecords = syncServer === "jp"
-          ? computeRatingTarget(clearRecords, syncServer)
-          : ratingTargetHtml
-            ? parseMusicScore(ratingTargetHtml, syncServer)
-            : parseTop5(recordHtml, syncServer);
+        };
+        const enrichedRecentRecords = recentRecords.map(enrich);
+        const enrichedHistoryRecords = historyRecords.map(enrich);
         const mapAreas = [
           ...parseMapAreas(mapHtml, "normal", syncServer),
           ...parseMapAreas(eventMapHtml, "event", syncServer),
         ];
-        const emptyFc = clearRecords.filter((r) => !r.fc).length;
-        const expectedRecentRecords = Math.min(Math.max(playCount || 1, 1), 5);
-        console.log(`[web] recentRecords: ${enrichedRecentRecords.length} songs, historyRecords: ${enrichedHistoryRecords.length} songs, top: ${topRecords.length} (rating target), clear: ${clearRecords.length} (empty fc: ${emptyFc}), mapAreas: ${mapAreas.length}, detailPayloads: ${detailMap.size}`);
+        console.log(`[web] fc=${fc ? "ok" : "none"}, recentRecords: ${enrichedRecentRecords.length}, historyRecords: ${enrichedHistoryRecords.length}, mapAreas: ${mapAreas.length}, detailPayloads: ${detailMap.size}`);
 
-        if (!effective.playerName || !/^\d{13}$/.test(fc) || enrichedRecentRecords.length < expectedRecentRecords || clearRecords.length === 0 || topRecords.length === 0) {
-          console.warn("[web] invalid sync payload", {
-            hasName: !!effective.playerName,
-            hasFriendCode: /^\d{13}$/.test(fc),
-            recent: enrichedRecentRecords.length,
-            expectedRecent: expectedRecentRecords,
-            clear: clearRecords.length,
-            top: topRecords.length,
-            recordBytes: recordHtml.length,
-            clearBytes: clearHtmls.reduce((sum, html) => sum + html.length, 0),
-          });
+        if (!/^\d{13}$/.test(fc) || !recordHtml) {
+          console.warn("[web] invalid sync payload", { hasFriendCode: /^\d{13}$/.test(fc), recordBytes: recordHtml.length });
           res.writeHead(400); res.end("invalid_sync_payload");
           return;
         }
@@ -1253,51 +1072,11 @@ ${siteFooter()}
           return;
         }
 
-        const preexistingProfile = (await getCachedProfile(`${syncServer}:${fc}`)) !== null;
-        const savedProfileKey = await cacheProfile({
-          playerName: effective.playerName || "???", rating: effective.rating || 0,
-          ratingMax: effective.ratingMax || 0, gradeImg: effective.gradeImg || "", courseImg: effective.courseImg || "",
-          avatar: effective.avatar || "", trophy: effective.trophy || "",
-          trophyClass: effective.trophyClass || "normal", stars: effective.stars || "0",
-          playCount: playCount || 0, totalPlayCount: totalPlayCount || 0, comment: effective.comment || "", friendCode: fc,
-        }, playCount || 0, JSON.stringify(enrichedRecentRecords), JSON.stringify(topRecords), JSON.stringify(clearRecords), syncServer, JSON.stringify(mapAreas));
-        const syncStamp = Date.now();
+        // 최근 플레이(프로필 카드 표시) + 플레이 이력(성과의 플레이 시각·레이팅 상승분 매칭)을 함께 둔다.
+        const savedProfileKey = await saveSyncExtras(fc, syncServer, JSON.stringify({ recent: enrichedRecentRecords, history: enrichedHistoryRecords }), JSON.stringify(mapAreas));
 
-        // 하루치 레이팅 대상 50곡 + 총합 레이팅 스냅샷. profiles.top_json 은 동기화마다
-        // 덮어써져 이력이 없으므로 과거 레이팅표 조회를 위해 따로 남긴다.
-        // 레이팅 대상 페이지엔 마크(FC/Sync)가 없고 ST/DX 도 부정확해, 렌더 시점과 동일하게
-        // clearRecords 로 보정한 상태로 저장한다(스냅샷만으로 카드를 그릴 수 있도록).
-        if (topRecords.length > 0) {
-          try {
-            const markMap = buildMarkMap(clearRecords);
-            const resolveKind = buildKindResolver(clearRecords);
-            const snapshotRecords = topRecords.map((r) => {
-              const musicKind = resolveKind(r);
-              const marks = markMap.get(chartKey({ ...r, musicKind })) ?? { fc: r.fc, sync: r.sync };
-              return { ...r, musicKind, fc: marks.fc, sync: marks.sync };
-            });
-            await saveRatingSnapshot(
-              savedProfileKey,
-              koreaPlayDayKey(new Date(syncStamp)),
-              JSON.stringify(snapshotRecords),
-              effective.rating || 0,
-              syncStamp,
-            );
-          } catch (snapshotError) {
-            console.error("[web] 레이팅 스냅샷 저장 실패 (동기화는 계속 진행):", snapshotError);
-          }
-        }
-        // 성과(achievement)는 clearJson(전체 클리어 기록) 스냅샷 diff로 판정한다: chart_clears
-        // 테이블에 이번 clearRecords를 upsert하면서 직전 값과 원자적으로 비교해, 실제로 오른 채보만
-        // 돌려받는다. 스크래핑 depth나 "NEW" 마커 여부에 기대지 않으므로 트래킹 이전부터 있던 곡이든
-        // 방금 처음 친 곡이든 정확한 기존값 기준으로 빠짐없이 감지된다. 레이팅 상승분(+N)만 history의
-        // detail 파싱 결과에서 채워 넣는다(clearJson에는 이 값이 없음). 이 처리는 부가 기능이라 실패해도
-        // 프로필 저장/세션 갱신 같은 핵심 동기화에는 영향 없게 별도 try/catch로 격리한다.
-        let canonicalStatus = "ok";
+        // 이번 동기화에서 받은 상세 페이지의 (+N) 으로, 이전에 상세 수집에 실패해 rating_up 이 비어 있던 성과를 메운다.
         try {
-          // 이번 동기화에서 받은 상세 페이지의 (+N) 으로, 이전 동기화 때 상세 수집에
-          // 실패해 rating_up 이 비어 있던 이벤트를 먼저 메운다. 새 이벤트가 하나도
-          // 생기지 않는 동기화(달성률 변화 없음)에서도 동작해야 하므로 배치와 분리한다.
           const ratingUpByPlayId = new Map<string, number>();
           for (const r of [...enrichedRecentRecords, ...enrichedHistoryRecords]) {
             if (r.detailIdx && typeof r.ratingUp === "number") ratingUpByPlayId.set(r.detailIdx, r.ratingUp);
@@ -1309,46 +1088,17 @@ ${siteFooter()}
             );
             if (filled) console.log(`[web] 레이팅 상승 백필: ${filled}건 (상세 ${ratingUpByPlayId.size}개 기준)`);
           }
-          const chartDiffs = await upsertChartClears(
-            savedProfileKey,
-            clearRecords.map((r) => ({ chartKey: chartKey(r), achievementVal: r.achievementVal, fc: r.fc, sync: r.sync })),
-          );
-          // 첫 동기화는 비교 대상이 없어 diff 결과가 전부 "0에서 시작"이 되므로, chart_clears는
-          // 채워두되(다음 동기화부터 비교 가능) 성과 이벤트는 만들지 않는다.
-          if (preexistingProfile && chartDiffs.length) {
-            const historyByChart = new Map<string, typeof enrichedHistoryRecords>();
-            for (const r of enrichedHistoryRecords) {
-              const k = chartKey(r);
-              const list = historyByChart.get(k);
-              if (list) list.push(r); else historyByChart.set(k, [r]);
-            }
-            // chartDiffs의 chartKey는 항상 이번 clearRecords에서 만들어졌으므로 매칭이 항상 존재한다.
-            const clearByChart = new Map(clearRecords.map((r) => [chartKey(r), r]));
-            const events = chartDiffs.map((d, idx) => {
-              const candidates = historyByChart.get(d.chartKey) ?? [];
-              const match = candidates.find((r) => Math.abs(r.achievementVal - d.achievementVal) < 0.00005)
-                ?? candidates.reduce<typeof candidates[number] | undefined>((best, r) => (!best || r.achievementVal > best.achievementVal ? r : best), undefined);
-              const playedAt = match && hasValidRecordDate(match.date) ? recordPlayedAt(match.date) : syncStamp;
-              const source = clearByChart.get(d.chartKey)!;
-              return {
-                profileKey: savedProfileKey,
-                sourcePlayId: match?.detailIdx ?? `clear:${d.chartKey}:${d.achievementVal.toFixed(4)}:${syncStamp}`,
-                chartKey: d.chartKey, playedAt, sourceSequence: idx, capturedAt: syncStamp,
-                recordJson: JSON.stringify(match ?? source), achievementVal: d.achievementVal, achievementBefore: d.achievementBefore,
-                // 이번 동기화에서 새로 얻은 마크만 기록한다. 달성률만 오른 날엔 예전 FC/FS 를 붙이지 않음
-                // (레이팅 표는 clearJson 기준이라 현재 마크를 그대로 표시 — 여긴 "오늘의 성과"용).
-                fc: d.fcImproved ? d.fc : "", sync: d.syncImproved ? d.sync : "", ratingUp: match?.ratingUp,
-                title: source.title, diff: source.diff, level: source.level, musicKind: source.musicKind,
-                achievementText: match?.achievement ?? `${d.achievementVal.toFixed(4)}%`,
-              };
-            });
-            canonicalStatus = await saveAchievementPlayEventLogBatch(events, syncStamp);
-          }
-        } catch (achievementError) {
-          console.error("[web] 성과 로그 처리 실패 (동기화는 계속 진행):", achievementError);
-          canonicalStatus = "achievement_error";
+        } catch (backfillError) {
+          console.error("[web] 레이팅 상승 백필 실패 (동기화는 계속 진행):", backfillError);
         }
         await saveUserSession(syncUserId, "{}", savedProfileKey, syncServer);
+
+        // 성과·목표·레이팅 스냅샷은 maishift 전체 기록이 바뀔 때 만든다(src/maishift/sync.ts).
+        // 함께 실행된 maishift 북마클릿의 업로드가 끝났을 즈음 확인한다.
+        if (userId) {
+          const link = await getMaishiftLink(userId).catch(() => null);
+          if (link) scheduleMaishiftCheck(link);
+        }
 
         // 게임 옵션 스냅샷(/options 페이지·프리셋 편집용). 부가 기능이라 실패해도 동기화는 계속.
         if (userId && optionHtml) {
@@ -1370,64 +1120,22 @@ ${siteFooter()}
           }
         }
 
-        // 목표(todo) 진행률 재평가. 부가 기능이라 실패해도 프로필 저장 등 핵심 동기화에는
-        // 영향 없도록 별도 try/catch 로 격리한다. 판정은 이번 동기화의 clearRecords 기준.
-        if (userId) {
-          try {
-            const goals = await listGoals(userId);
-            if (goals.length) {
-              const goalCtx = {
-                profile: { rating: effective.rating || 0, clearJson: "[]", server: syncServer },
-                clearRecords,
-              };
-              for (const goal of goals) {
-                try {
-                  const spec = JSON.parse(goal.specJson);
-                  if (!GOAL_KINDS.includes(spec?.kind as GoalKind)) continue;
-                  const evaluation = evaluateGoal(spec, goalCtx);
-                  await updateGoalProgress(
-                    goal.id,
-                    evaluation.progress,
-                    JSON.stringify({ valueText: evaluation.valueText, targetText: evaluation.targetText, detail: evaluation.detail, at: syncStamp }),
-                    evaluation.done ? syncStamp : 0,
-                  );
-                } catch (goalError) {
-                  console.warn(`[web] 목표 평가 실패 goalId=${goal.id}:`, goalError instanceof Error ? goalError.message : goalError);
-                }
-              }
-              console.log(`[web] 목표 ${goals.length}개 재평가 완료 user=${userId.slice(-6)}`);
-            }
-          } catch (goalsError) {
-            console.error("[web] 목표 재평가 실패 (동기화는 계속 진행):", goalsError);
-          }
+        // 단위·클래스 이미지(공용 게임 이미지). 북마클릿은 아직 저장되지 않은 것만 보낸다.
+        try {
+          const added = await saveRankImages(syncServer, data.ri);
+          if (added) console.log(`[web] 단위·클래스 이미지 ${added}개 저장`);
+        } catch (rankError) {
+          console.warn("[web] 단위·클래스 이미지 저장 실패:", rankError instanceof Error ? rankError.message : rankError);
         }
 
+        // 처음 보는 지방 이름은 /관리 이름 번역에 번역 대기로 올린다.
+        noteAreaNames(mapAreas).catch((e) => console.error("[names] 지방 이름 기록 실패:", e));
         const savedMapImages = await cacheMapImages(mapAreas, syncServer);
         console.log(`[web] map images saved: ${savedMapImages}`);
-
-        // base64 아바타 → DB에 저장
-        if (avatarBase64 && avatarBase64.startsWith("data:")) {
-          const m = avatarBase64.match(/^data:image\/\w+;base64,(.+)$/);
-          if (m) await saveAvatarBlob(syncUserId, syncServer, m[1]);
-        }
-        if (Array.isArray(data.js)) {
-          let saved = 0;
-          for (const j of data.js) {
-            if (j && typeof j === "object" && "data" in j && "url" in j && typeof j.data === "string" && typeof j.url === "string") {
-              const m = j.url.match(/\/img\/Music\/([^.]+)\.png/);
-              if (m) {
-                const b64 = j.data.replace(/^data:image\/\w+;base64,/, "");
-                await saveSongJacket(m[1], Buffer.from(b64, "base64"));
-                saved++;
-              }
-            }
-          }
-          console.log(`[web] song jackets saved: ${saved}`);
-        }
-        console.log(`[web] 저장: ${effective.playerName} ⭐${effective.rating} server=${syncServer} fc=${fc} canonical=${canonicalStatus}`);
+        console.log(`[web] 저장: server=${syncServer} fc=${fc}`);
         // 동기화까지 마친 사용자는 현재 방침을 고지받은 것으로 간주 (오버레이 상단에 표시됨)
         if (!isPreview) { try { await setPolicyAck(syncUserId, POLICY_VERSION); } catch (e) { console.error("[web] policy_ack 갱신 실패:", e); } }
-        res.writeHead(200); res.end(canonicalStatus);
+        res.writeHead(200); res.end("ok");
       } catch (e) {
         console.error("[web] 동기화 실패:", e);
         res.writeHead(500); res.end("sync error");
