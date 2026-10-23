@@ -60,7 +60,8 @@ export function maishiftSeries(history: readonly MaishiftHistoryPoint[], days: s
   }
   return {
     points: picked.map(({ day, h }) => ({ day, rating: h.rating, estimated: false })),
-    plays: picked.map(({ day, h }) => ({ day, total: h.playTotal, current: h.playCurrent })),
+    // 플레이 횟수가 없는 히스토리(API 업로드 목록으로 만든 것)는 플레이 그래프를 그리지 않는다.
+    plays: history.some((h) => h.playTotal > 0) ? picked.map(({ day, h }) => ({ day, total: h.playTotal, current: h.playCurrent })) : [],
     updates,
   };
 }

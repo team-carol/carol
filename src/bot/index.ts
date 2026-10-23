@@ -28,7 +28,6 @@ import * as fortune      from "./commands/fortune";
 import * as settings     from "./commands/settings";
 import * as gameOptions  from "./commands/gameOptions";
 import * as circle       from "./commands/circle";
-import * as serverSettings from "./commands/serverSettings";
 import * as newsSettings from "./commands/newsSettings";
 import { startNewsPoller, handleNewsButton } from "./newsPoller";
 import * as search       from "./commands/search";
@@ -44,6 +43,7 @@ import * as ratingcalc   from "./commands/ratingcalc";
 import * as maishift     from "./commands/maishift";
 import * as history      from "./commands/history";
 import * as stamp        from "./commands/stamp";
+import { PENDING_FEATURES } from "../maishift/features";
 import * as photo        from "./commands/photo";
 import { initMaishift } from "../maishift";
 import { guardSlowAck } from "./utils/slowAck";
@@ -52,7 +52,8 @@ import { loadRankImages } from "../rankImages";
 
 type Command = { data: { toJSON(): object; name: string }; execute: (i: ChatInputCommandInteraction) => Promise<void>; autocomplete?: (i: AutocompleteInteraction) => Promise<void> };
 
-const COMMANDS: Command[] = [profile, circle, bookmarklet, ratingtable, ratingimage, achievement, fortune, settings, gameOptions, serverSettings, newsSettings, search, status, songrec, random, areaMap, report, admin, goal, chart, ratingcalc, maishift, history, stamp, photo];
+// 스탬프는 maishift 공식 API 엔드포인트가 나올 때까지 등록하지 않는다(src/maishift/features.ts).
+const COMMANDS: Command[] = [profile, circle, bookmarklet, ratingtable, ratingimage, achievement, fortune, settings, gameOptions, newsSettings, search, status, songrec, random, areaMap, report, admin, goal, chart, ratingcalc, maishift, history, ...(PENDING_FEATURES.stamps ? [stamp] : []), photo];
 const EPHEMERAL_REPLY = { flags: MessageFlags.Ephemeral } as const;
 
 const RATING_CARD_GC_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000;
@@ -309,10 +310,6 @@ client.on(Events.InteractionCreate, async (i) => {
     }
     // 프로필을 읽는 버튼도 늦어지면 대신 defer 한다. 원래 메시지를 고치는 버튼은 deferUpdate.
     guardSlowAck(i, ["page:", "search:", "map:", "goal:", "trkd:"].some((p) => i.customId.startsWith(p)) ? "update" : "reply");
-    if (i.customId.startsWith("serverset:")) {
-      try { await serverSettings.handleButton(i); } catch (e) { console.error("[serverset-btn]", e); }
-      return;
-    }
     if (i.customId.startsWith("news:")) {
       try { await handleNewsButton(i); } catch (e) { console.error("[news-btn]", e); }
       return;

@@ -11,6 +11,10 @@
 
 export const MESSAGES = {
   // ── 공통 ────────────────────────────────────────────────────────────────
+  // maishift 공식 API 에 엔드포인트가 아직 없어 꺼 둔 기능(src/maishift/features.ts)
+  "common.featurePaused": "이 기능은 maishift 공식 API 지원을 기다리고 있어 잠시 사용할 수 없습니다.",
+  // maishift API 이용 한도(앱 전체 분당 120단위)를 넘었을 때
+  "common.rateLimited": "지금 maishift 조회 요청이 많아 처리할 수 없습니다. {minutes}분 뒤에 다시 시도해 주세요.",
   "common.selfNotRegistered":
     "maishift 계정이 연동되어 있지 않습니다. `/마이시프트 연동`으로 먼저 연동해 주세요.\n계속해서 해당 메시지가 출력되면 잠시 후 다시 시도해 주세요.",
   "common.selfMaishiftPrivate": "maishift 프로필이 비공개로 설정되어 있습니다.",
@@ -125,26 +129,6 @@ export const MESSAGES = {
   // ── 공통 (서버/권한) ────────────────────────────────────────────────────
   "common.guildOnly": "서버에서만 사용 가능합니다.",
   "common.guildAdminOnly": "서버 관리자만 사용 가능합니다.",
-
-  // ── /역할설정 ───────────────────────────────────────────────────────────
-  "role.needManageRoles": "봇에 '역할 관리' 권한이 필요합니다.",
-  "role.needBookmarklet": "먼저 `/마이시프트 연동`으로 maishift 계정을 연동해 주세요.",
-  "role.noProfileData": "프로필 데이터가 없습니다. maishift에 기록을 올린 뒤 다시 시도해 주세요.",
-  "role.ratingTooLow": "레이팅이 2000 미만이라 역할이 부여되지 않습니다.",
-  "role.memberUnavailable": "멤버 정보를 불러올 수 없습니다.",
-  "role.rolePositionTooHigh":
-    "\"{role}\" 역할이 봇보다 높거나 같아서 부여할 수 없습니다. 관리자가 역할 순서를 조정해주세요.",
-  "role.granted": "레이팅 **{rating}** → **{role}** 역할 부여 완료!",
-  "role.failed": "역할 부여 실패: {reason}",
-  "role.unknownError": "알 수 없는 오류가 발생했습니다.",
-
-  // ── /서버설정 ───────────────────────────────────────────────────────────
-  "serverSettings.title": "서버 설정",
-  "serverSettings.autoRoleField": "자동 역할 부여",
-  "serverSettings.enabled": "✅ 활성화",
-  "serverSettings.disabled": "❌ 비활성화",
-  "serverSettings.enableButton": "활성화",
-  "serverSettings.disableButton": "비활성화",
 
   // ── /설정 ───────────────────────────────────────────────────────────────
   "settings.title": "⚙️ 웹 설정",
@@ -438,6 +422,8 @@ export const MESSAGES = {
   "profileCard.playsTitle": "플레이 횟수",
   "profileCard.playsMeta": "누적 {total}회 · 현재 버전 {current}회",
   "history.empty": "아직 maishift 히스토리가 없습니다.",
+  "history.pastPrivateSelf": "maishift에서 이전 기록 공개 설정이 꺼져 있어 히스토리를 볼 수 없습니다.",
+  "history.pastPrivate": "{user} 님은 maishift에서 이전 기록을 공개하지 않았습니다.",
   "history.failed": "히스토리 이미지를 만들지 못했습니다. 잠시 후 다시 시도해 주세요.",
   "history.period.all": "전체",
   "history.period.version": "현재 버전",

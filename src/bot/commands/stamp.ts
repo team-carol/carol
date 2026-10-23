@@ -4,6 +4,7 @@ import { loadAvatar } from "../utils/embeds";
 import { renderStampCard } from "../utils/stampCard";
 import { notRegisteredNotice } from "../utils/notRegistered";
 import { getStampCards } from "../../maishift/stamps";
+import { PENDING_FEATURES } from "../../maishift/features";
 import { regionLatestVersion } from "../../constants";
 import { msg } from "../../messages";
 import { noteStampNames } from "../../nameTranslations";
@@ -20,6 +21,10 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 
 /** /스탬프 와 /사진관 버튼이 같이 쓴다. */
 export async function show(interaction: RepliableInteraction, targetId: string): Promise<void> {
+  if (!PENDING_FEATURES.stamps) {
+    await interaction.reply({ content: msg("common.featurePaused"), flags: MessageFlags.Ephemeral });
+    return;
+  }
   const target = { id: targetId };
   const self = target.id === interaction.user.id;
   const friendCode = await getUserFriendCode(target.id);

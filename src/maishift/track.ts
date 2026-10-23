@@ -5,6 +5,7 @@
  */
 import { callServerFn, FN } from "./serverFn";
 import { callApi } from "./api";
+import { PENDING_FEATURES } from "./features";
 
 interface ApiDistBand { from: number; to: number; players: number; suppressed: boolean; counts: Record<string, number> | null }
 
@@ -46,7 +47,7 @@ export async function getTrackInfo(trackId: number): Promise<TrackInfo> {
     return null;
   });
   const [levels, dist] = await Promise.all([
-    soft(callServerFn<{ versionId: number; internalLevel: number }[]>(FN.trackLevels, { trackId }), "상수"),
+    PENDING_FEATURES.trackHistory ? soft(callServerFn<{ versionId: number; internalLevel: number }[]>(FN.trackLevels, { trackId }), "상수") : Promise.resolve(null),
     soft(callApi<{ coarse: ApiDistBand[]; computedAt?: string }>(`/charts/${trackId}/distribution`), "분포"),
   ]);
   const info: TrackInfo = {

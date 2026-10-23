@@ -3,7 +3,8 @@
  *
  * - 모든 요청에 X-API-Key(config.json `maishiftApiKey`). 키는 URL 에 넣지 않는다(넣으면 거부된다).
  * - 이용 한도: 앱마다 120단위, 초당 2단위씩 찬다. 요청을 한 줄로 세우고, 남은 양(X-RateLimit-Remaining)이
- *   이번 요청 비용보다 적으면 찰 때까지 기다린다. 그래도 429 면 Retry-After 만큼 기다렸다 다시 보낸다.
+ *   이번 요청 비용보다 적으면 잠깐(MAX_BUDGET_WAIT_MS)은 찰 때까지 기다린다. 그보다 오래 기다려야 하거나 429 가 오면
+ *   MaishiftError(rate_limited, retryAfterSec)를 던지고, 명령은 "몇 분 뒤 다시 시도" 안내를 보여 준다.
  * - 개발자 약관: maishift 출처와 SEGA 와 무관한 비공식 앱임을 표시, 비상업, 재킷은 API 가 준 주소로만.
  *
  * API 에 없는 데이터(미래시·스탬프·버전 폴더 순서·보면 상수 이력·보면 기록 변화·플레이 횟수 히스토리)는
@@ -17,7 +18,10 @@ const USER_AGENT = "carol-bot (Discord bot; +https://www.team-carol.com)";
 const TIMEOUT_MS = 15_000;
 const MIN_INTERVAL_MS = 250;
 const REFILL_PER_SEC = 2;
-const MAX_RETRIES = 2;
+/** 한도가 찰 때까지 이만큼은 기다린다. 더 걸리면 바로 rate_limited 로 알린다. */
+const MAX_BUDGET_WAIT_MS = 5_000;
+/** 429 의 Retry-After 가 이 이하면 한 번 기다렸다 다시 보낸다. */
+const RETRY_AFTER_MAX_SEC = 3;
 
 export type ApiRegion = "intl" | "jp";
 
@@ -77,6 +81,7 @@ export async function callApi<T>(path: string, query: Record<string, string | nu
   return throttled(async () => {
     for (let attempt = 0; ; attempt++) {
       const budgetWait = waitForBudget(cost);
+      if (budgetWait > MAX_BUDGET_WAIT_MS) throw new MaishiftError(`rate limit budget (${path})`, "rate_limited", Math.ceil(budgetWait / 1000));
       if (budgetWait > 0) await sleep(budgetWait);
       let res: Response;
       try {
@@ -86,11 +91,15 @@ export async function callApi<T>(path: string, query: Record<string, string | nu
       }
       const left = Number(res.headers.get("x-ratelimit-remaining"));
       if (Number.isFinite(left)) remaining = { units: left, at: Date.now() };
-      if (res.status === 429 && attempt < MAX_RETRIES) {
-        const after = Number(res.headers.get("retry-after"));
-        console.warn(`[maishift-api] 한도 초과, ${after || 1}초 뒤 다시 시도: ${path}`);
-        await sleep((Number.isFinite(after) && after > 0 ? after : 1) * 1000);
-        continue;
+      if (res.status === 429) {
+        const raw = Number(res.headers.get("retry-after"));
+        const after = Number.isFinite(raw) && raw > 0 ? raw : 60;
+        if (attempt === 0 && after <= RETRY_AFTER_MAX_SEC) {
+          await sleep(after * 1000);
+          continue;
+        }
+        console.warn(`[maishift-api] 한도 초과(${after}초 뒤 가능): ${path}`);
+        throw new MaishiftError(`rate limited (${path})`, "rate_limited", after);
       }
       let body: unknown = null;
       try { body = await res.json(); } catch { /* 본문 없음 */ }

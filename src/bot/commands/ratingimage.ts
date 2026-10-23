@@ -6,9 +6,10 @@ import { GAMES, isGameId } from "../../games";
 import { msg } from "../../messages";
 import { koreaPlayDayRange } from "../../achievements";
 import { getMaishiftSnapshot, getMaishiftFuture } from "../../maishift";
+import { PENDING_FEATURES } from "../../maishift/features";
 import { versionName } from "../../maishift/catalog";
 import { kstStamp } from "../utils/cardKit";
-import { notRegisteredNotice } from "../utils/notRegistered";
+import { notRegisteredNotice, maishiftErrorText } from "../utils/notRegistered";
 
 export const data = new SlashCommandBuilder()
   .setName("레이팅표")
@@ -24,7 +25,7 @@ export const data = new SlashCommandBuilder()
       .addChoices(
         { name: GAMES.maimai.label, value: "maimai" },
         { name: "S-레이팅", value: "srating" },
-        { name: "미래시", value: "future" },
+        ...(PENDING_FEATURES.future ? [{ name: "미래시", value: "future" }] : []),
         ...Object.values(GAMES).filter((g) => g.id !== "maimai").map((g) => ({ name: g.label, value: g.id })),
       ),
   )
@@ -62,6 +63,10 @@ export async function show(interaction: RepliableInteraction, targetId: string, 
     await interaction.reply({ content: msg("ratingImage.snapshotBadDate"), flags: MessageFlags.Ephemeral });
     return;
   }
+  if (future && !PENDING_FEATURES.future) {
+    await interaction.reply({ content: msg("common.featurePaused"), flags: MessageFlags.Ephemeral });
+    return;
+  }
   if (dateOpt && future) {
     await interaction.reply({ content: msg("ratingImage.futureWithDate"), flags: MessageFlags.Ephemeral });
     return;
@@ -86,12 +91,14 @@ export async function show(interaction: RepliableInteraction, targetId: string, 
   if (dateOpt) {
     // 과거 날짜: 그날(오전 4시 기준 하루)이 끝나기 전 마지막 maishift 업로드의 레이팅표.
     const link = await getMaishiftLink(userId);
+    let failure: string | null = null;
     const result = link ? await getMaishiftSnapshot(link, koreaPlayDayRange(dateOpt).to).catch((e) => {
-      console.error("[레이팅이미지] maishift 이전 기록:", e);
+      failure = maishiftErrorText(e);
+      if (!failure) console.error("[레이팅이미지] maishift 이전 기록:", e);
       return null;
     }) : null;
     if (!result) {
-      await interaction.editReply({ content: msg("ratingImage.snapshotFailed") });
+      await interaction.editReply({ content: failure ?? msg("ratingImage.snapshotFailed") });
       return;
     }
     if (result.kind === "private") {

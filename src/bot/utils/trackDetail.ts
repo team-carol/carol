@@ -9,6 +9,7 @@ import { renderTrackCard } from "./trackCard";
 import { getConstant, getJacketFile, getSongArtist, getSongVersion, getTrackId } from "../../constants";
 import { versionIndex, versionName } from "../../maishift/catalog";
 import { getTrackInfo, getTrackScores } from "../../maishift/track";
+import { PENDING_FEATURES } from "../../maishift/features";
 import { displayTitle } from "../../aliases";
 import { versionPositionText } from "./versionPosition";
 import { msg } from "../../messages";
@@ -62,7 +63,7 @@ export async function handleTrackButton(i: ButtonInteraction): Promise<void> {
     const link = await getMaishiftLink(ctx.userId);
     const [info, scores, translate, dxDecimal, jacket, positionText] = await Promise.all([
       getTrackInfo(trackId),
-      link ? getTrackScores(trackId, link.handle) : Promise.resolve(null),
+      link && PENDING_FEATURES.trackHistory ? getTrackScores(trackId, link.handle) : Promise.resolve(null),
       getTranslateTitles(i.user.id),
       // DX ✦ 소수점 표시는 번역처럼 보는(누른) 사람의 설정.
       getDxRankDecimal(i.user.id),

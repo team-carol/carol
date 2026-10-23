@@ -1,6 +1,6 @@
 /**
  * maishift(maimai.shiftpsh.com) 서버 함수 호출. 공식 API(api.ts)에 없는 데이터만 아직 여기로 받는다:
- * 미래시(profile `<handle>:<세대>`), 레이팅 히스토리의 플레이 횟수, 스탬프 카드, 보면의 버전별 상수·업로드별 기록 변화.
+ * 미래시(profile `<handle>:<세대>`), 스탬프 카드, 보면의 버전별 상수·업로드별 기록 변화. 이 기능들은 지금 꺼 두었다(features.ts).
  * 운영자가 이 데이터의 엔드포인트를 곧 만들어 주기로 했다(2026-10-21). 나오면 api.ts 로 옮기고 이 파일을 지운다.
  *
  * maishift 는 TanStack Start 로 만들어져 있어, 페이지가 데이터를 `GET /_serverFn/<해시>?payload=...` 로 받는다.
@@ -18,8 +18,6 @@ const MIN_INTERVAL_MS = 250;
 export const FN = {
   /** {handle, region} → 프로필 요약 + 레이팅 대상곡 + 상위 기록 100개. 미래시(`<handle>:<세대>`)만 쓴다. */
   profile: "8cc17f2a26e01e823beaeca45b578af6db3bd0bc627a603a0add3b0772a33301",
-  /** {handle, region} → 업로드마다 한 점씩 쌓인 레이팅·플레이 횟수 히스토리. 프로필 홈 그래프 */
-  history: "086876d75e2fef4bee772eae80535e80dcbc84fa6e64fc0db1f0f2737222bc4f",
   /** {handle, region} → 스탬프 카드 목록(/profile/<id>/stamp 페이지) */
   stamps: "65fab9a29adf0d76bf504a523d5d3d4b5432a1ddb98b9444ab9f5d7027e39bf0",
   // ─── 곡 카드를 눌렀을 때 창(곡 상세). trackId 는 보면 번호(곡 목록의 track.i). ───
@@ -34,7 +32,8 @@ export type MaishiftRegion = "ASIA" | "JAPAN";
 export class MaishiftError extends Error {
   /** region_missing: 요청한 지역(ASIA/JAPAN)에 기록이 없음 — maishift 는 이때 그 사람의 대표 지역 기록을 준다. */
   /** private: 사용자가 maishift 에서 프로필(개인 성과 페이지)을 비공개로 함 — "User record is not public." */
-  constructor(message: string, readonly kind: "not_found" | "unavailable" | "format" | "region_missing" | "private") { super(message); }
+  /** rate_limited: 공식 API 이용 한도(앱 전체 분당 120단위)를 넘음. retryAfterSec 뒤에 다시 시도할 수 있다. */
+  constructor(message: string, readonly kind: "not_found" | "unavailable" | "format" | "region_missing" | "private" | "rate_limited", readonly retryAfterSec?: number) { super(message); }
 }
 
 // ─── seroval JSON ───────────────────────────────────────────────────────────

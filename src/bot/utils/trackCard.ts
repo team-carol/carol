@@ -12,6 +12,7 @@ import { calcSongRating } from "../../constants";
 import { chartSRating, dxRankStep, dxRankLabel, formatChartSRating } from "../../sRating";
 import type { TrackInfo, TrackScore } from "../../maishift/track";
 import { msg } from "../../messages";
+import { PENDING_FEATURES } from "../../maishift/features";
 
 const WIDTH = 920;
 const INNER = WIDTH - 48 - 34; // 카드 패딩·패널 패딩·테두리를 뺀 패널 안쪽 폭
@@ -310,8 +311,8 @@ export async function renderTrackCard(d: TrackCardData): Promise<Buffer> {
       el("span", {}, msg("trackCard.player", { name: d.playerName || "—" })),
     ]),
     myRecord,
-    history,
-    levels,
+    // 달성률 변화·버전별 상수는 maishift 공식 API 엔드포인트가 나올 때까지 그리지 않는다(src/maishift/features.ts).
+    ...(PENDING_FEATURES.trackHistory ? [history, levels] : []),
     dist,
   ]);
   return renderInWorker(root, WIDTH);

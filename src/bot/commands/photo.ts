@@ -6,6 +6,7 @@ import {
 } from "discord.js";
 import { getCachedProfile, getUserFriendCode, getMaishiftLink, getAchievementPlayEventLog, achievementProfileKeys } from "../../storage";
 import { maishiftFutureVersion, getMaishiftUploadDays } from "../../maishift";
+import { PENDING_FEATURES } from "../../maishift/features";
 import { koreaPlayDayKey } from "../../achievements";
 import { HISTORY_PERIODS } from "../../ratingHistory";
 import { hasCarolSync } from "../utils/syncExtras";
@@ -98,6 +99,8 @@ async function buildMenu(targetId: string, ownerId: string, wanted: Selection = 
   const cached = friendCode ? await getCachedProfile(friendCode).catch(() => null) : null;
   const link = cached ? await getMaishiftLink(targetId) : null;
   const unavailable = new Set<string>();
+  if (!PENDING_FEATURES.future) unavailable.add("future");
+  if (!PENDING_FEATURES.stamps) unavailable.add("stamp");
   if (cached) {
     // 프로필을 받아 둔 뒤라 요청 없이 알 수 있는 것만 본다.
     if (!link || maishiftFutureVersion(link) === null) unavailable.add("future");

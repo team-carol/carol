@@ -1,7 +1,7 @@
 /**
  * maishift 응답 → 캐롤봇 형식(PlayRecord, CachedProfile 필드). 명령들은 maishift 응답을 직접 보지 않고
  * 여기서 바꾼 값만 쓴다. 공식 API(api.ts) 응답은 Api* 형식이고, Ms* 는 API 에 없어 아직 서버 함수(serverFn.ts)로
- * 받는 데이터(미래시·히스토리·버전 폴더 순서)의 형식이다.
+ * 받는 데이터(미래시)의 형식이다.
  */
 import type { PlayRecord } from "../scraper";
 import type { MaimaiServer, MaishiftHistoryPoint } from "../storage/types";
@@ -182,7 +182,6 @@ export interface MsProfileResult {
   /** 이전 기록(업로드별 스냅샷)을 볼 수 있는지 — 사용자의 maishift "이전 기록 공개" 설정 */
   pastRecordsVisible?: boolean;
 }
-export interface MsHistoryPoint { rating: number; ratingNew: number; ratingOld: number; playCountTotal: number; playCountCurrent: number; date: string; versionId: number }
 
 export function toPlayRecord(song: MsSong, track: MsTrack & { r: MsRecord }): PlayRecord {
   const achievementVal = track.r.a / 10000;
@@ -223,18 +222,20 @@ export function ratingTargetSum(rec: NonNullable<MsProfileResult["userRecord"]>)
   return [...rec.ratingsLatest, ...rec.ratingsOld].reduce((sum, idx) => sum + Math.floor(tracks[idx]?.r?.g ?? 0), 0);
 }
 
-/** 업로드(이전 기록) 하나. at: 시각(ms). */
-export interface MsUpload { id: number; at: number; rating: number }
+/** 업로드(이전 기록) 하나. at: 시각(ms), version: 그때 플레이하던 세대(모르면 null). */
+export interface MsUpload { id: number; at: number; rating: number; version: number | null }
 
 const TROPHY_CLASS: Record<string, string> = { NORMAL: "normal", BRONZE: "bronze", SILVER: "silver", GOLD: "gold", RAINBOW: "rainbow" };
 export function trophyClassOf(tier: string | undefined): string {
   return TROPHY_CLASS[(tier ?? "").toUpperCase()] ?? "normal";
 }
 
-/** 히스토리 → 캐롤봇 형식(시간순). 시각을 못 읽는 점은 버린다. */
-export function historyPoints(list: MsHistoryPoint[]): MaishiftHistoryPoint[] {
-  return list
-    .map((h) => ({ at: Date.parse(h.date), rating: h.rating, playTotal: h.playCountTotal, playCurrent: h.playCountCurrent, versionId: h.versionId }))
-    .filter((h) => Number.isFinite(h.at) && h.rating > 0)
-    .sort((a, b) => a.at - b.at);
+/** 업로드(이전 기록) 목록 → 레이팅 히스토리(시간순). API 업로드 목록에는 플레이 횟수가 없어 0 으로 둔다(그래프가 그리지 않는다). */
+export function uploadHistory(list: readonly MsUpload[]): MaishiftHistoryPoint[] {
+  const sorted = [...list].filter((u) => u.rating > 0).sort((a, b) => a.at - b.at);
+  let version = 0;
+  return sorted.map((u) => {
+    if (u.version !== null) version = u.version;
+    return { at: u.at, rating: u.rating, playTotal: 0, playCurrent: 0, versionId: version };
+  });
 }

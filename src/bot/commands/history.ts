@@ -57,7 +57,11 @@ export async function show(interaction: RepliableInteraction, targetId: string, 
   }
   const history = cached.maishiftHistory ?? [];
   if (!history.length) {
-    await interaction.editReply({ content: msg("history.empty") });
+    // 레이팅 히스토리는 maishift 이전 기록 목록으로 만들므로, 이전 기록을 공개하지 않으면 볼 수 없다.
+    const content = cached.maishiftPastPublic === false
+      ? (self ? msg("history.pastPrivateSelf") : msg("history.pastPrivate", { user: `<@${target.id}>` }))
+      : msg("history.empty");
+    await interaction.editReply({ content });
     return;
   }
   try {

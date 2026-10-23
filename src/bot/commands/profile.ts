@@ -1,7 +1,6 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, MessageFlags, type RepliableInteraction } from "discord.js";
 import { getCachedProfile, getUserFriendCode } from "../../storage";
 import { buildProfileReply } from "../utils/embeds";
-import { autoRole } from "../utils/roles";
 import { msg } from "../../messages";
 import { notRegisteredNotice } from "../utils/notRegistered";
 
@@ -20,7 +19,6 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   const target = interaction.options.getUser("user") ?? interaction.user;
   const format = interaction.options.getString("형식") === "embed" ? "embed" : "image";
   const cached = await show(interaction, target.id, format);
-  if (cached && target.id === interaction.user.id) await autoRole(interaction, cached.rating);
 }
 
 /** /프로필 과 /사진관 버튼이 같이 쓴다. 보여 준 프로필을 돌려준다(역할 갱신용). */

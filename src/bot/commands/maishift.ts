@@ -2,6 +2,7 @@ import { SlashCommandBuilder, ChatInputCommandInteraction, MessageFlags } from "
 import { getMaishiftLink, setMaishiftHandle, getUserDefaultServer, unlinkMaishift } from "../../storage";
 import { lookupMaishift, applyCachedRecords, dropMaishiftCache, MaishiftError } from "../../maishift";
 import { msg } from "../../messages";
+import { maishiftErrorText } from "../utils/notRegistered";
 
 // /마이시프트: maishift 아이디 연동(임시 — 공식 API 전까지). 연동하면 프로필·기록을 maishift 에서 받아 쓴다.
 // 아이디만 입력하면 바로 연동된다(본인 확인 없음 — maishift 프로필은 공개 데이터라서).
@@ -46,9 +47,11 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   } catch (e) {
     const notFound = e instanceof MaishiftError && (e.kind === "not_found" || e.kind === "region_missing");
     const isPrivate = e instanceof MaishiftError && e.kind === "private";
-    if (!notFound && !isPrivate) console.error("[maishift] 연동 실패:", e);
+    const limited = maishiftErrorText(e);
+    if (!notFound && !isPrivate && !limited) console.error("[maishift] 연동 실패:", e);
     await interaction.editReply({
-      content: isPrivate ? msg("maishift.privateOnLink", { handle })
+      content: limited ? limited
+        : isPrivate ? msg("maishift.privateOnLink", { handle })
         : notFound ? msg("maishift.notFound", { handle, server: server === "jp" ? "JAPAN" : "ASIA" })
         : msg("maishift.unavailable"),
     });
