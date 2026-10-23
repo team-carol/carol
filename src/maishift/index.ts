@@ -2,8 +2,9 @@
  * maishift 연동. 프로필·기록·이전 기록은 공식 API(api.ts), API 에 없는 것(히스토리·미래시)은 서버 함수(serverFn.ts).
  *
  * 프로필·기록은 캐롤봇 DB에 저장하지 않고 메모리에만 잠깐 둔다. 이용 한도(앱마다 분당 120단위)를 아끼려고:
- * - 프로필(5단위)은 아이디마다 PROFILE_TTL_MS 에 한 번만 확인한다.
- * - 전체 기록(10)·업로드 목록(2)·레이팅 히스토리는 프로필의 syncedAt(maishift 업로드 시각)이 바뀌었을 때만 다시 받는다.
+ * - 프로필(5단위)과 업로드 목록(2, 받아 둔 게 있으면 첫 쪽만)은 아이디마다 PROFILE_TTL_MS 에 한 번만 확인한다.
+ *   업로드 목록은 이전 기록 공개 여부·레이팅 히스토리를 알려 주므로, 업로드 없이 설정만 바꿔도 다음 확인 때 반영된다.
+ * - 전체 기록(10)은 프로필의 syncedAt(maishift 업로드 시각)이 바뀌었을 때만 다시 받는다.
  * - 모든 요청은 api.ts / serverFn.ts 에서 한 줄로 세워 간격을 둔다.
  */
 import { registerProfileOverlay, type MaishiftLink } from "../storage";
@@ -85,11 +86,15 @@ async function refresh(link: MaishiftLink): Promise<Entry> {
   const prev = cache.get(key);
   const fetchRecords = () => callApi<ApiRecordsResult>(apiPath(link, "/records"), { region });
   // 업로드 목록: 이전 기록 공개 여부, 레이팅 히스토리(그래프), 과거 레이팅표·/사진관 날짜 목록이 모두 이것을 쓴다.
-  // 그래프용 부가 데이터라 못 받아도 프로필은 보여 준다(다음 업로드 때 다시 시도). 비공개면 히스토리도 없다.
+  // 그래프용 부가 데이터라 못 받아도 프로필은 보여 준다(다음 확인 때 다시 시도). 비공개면 히스토리도 없다.
   const fetchUploads = (): Promise<{ visible: boolean; history: MaishiftHistoryPoint[] }> => syncUploads(link)
     .then((up) => ({ visible: true, history: uploadHistory(up.list) }))
     .catch((e) => {
-      if (e instanceof MaishiftError && e.kind === "private") return { visible: false, history: [] };
+      if (e instanceof MaishiftError && e.kind === "private") {
+        // 이전 기록 공개를 끈 사용자: 받아 둔 업로드 목록·지난 기록도 지운다.
+        forgetPastRecords(link);
+        return { visible: false, history: [] };
+      }
       console.error(`[maishift] ${link.handle} 업로드 목록:`, (e as Error).message);
       return { visible: prev?.pastRecordsVisible ?? false, history: prev?.history ?? [] };
     });
@@ -102,9 +107,11 @@ async function refresh(link: MaishiftLink): Promise<Entry> {
     }
     throw e;
   });
-  // 캐시가 없으면(재시작 직후·첫 조회) 한꺼번에 요청해 기다리는 시간을 줄인다.
-  // 캐시가 있으면 프로필(작음)만 먼저 보고, 업로드 시각이 바뀌었을 때만 나머지를 받는다.
-  const cold = prev ? null : { records: fetchRecords(), uploads: fetchUploads() };
+  // 업로드 목록(2단위)은 확인할 때마다 프로필과 함께 받는다. 업로드 없이 이전 기록 공개 설정만 바꿔도 다음 확인 때
+  // 반영되게 하려는 것이다(받아 둔 목록이 있으면 첫 쪽만 받는다).
+  // 전체 기록(10단위)은 캐시가 없을 때(재시작 직후·첫 조회)는 함께 요청하고, 있으면 업로드 시각이 바뀌었을 때만 받는다.
+  const uploadsReq = fetchUploads();
+  const cold = prev ? null : { records: fetchRecords() };
   cold?.records.catch(() => {});
   const res = await profileReq;
   regionMissing.delete(key);
@@ -114,22 +121,19 @@ async function refresh(link: MaishiftLink): Promise<Entry> {
   const same = prev && prev.updatedAt === p.syncedAt ? prev : null;
   let topJson = same?.topJson ?? "";
   let clearJson = same?.clearJson ?? "";
-  let history = same?.history;
-  let pastRecordsVisible = same?.pastRecordsVisible;
   if (!same) {
-    const [recordsRes, uploads] = await Promise.all([cold?.records ?? fetchRecords(), cold?.uploads ?? fetchUploads()]);
+    const recordsRes = await (cold?.records ?? fetchRecords());
     const records = apiAllRecords(recordsRes, region);
     const top = apiRatingTargets(recordsRes, region);
     topJson = JSON.stringify(top);
     clearJson = JSON.stringify(records);
-    history = uploads.history;
-    pastRecordsVisible = uploads.visible;
     // 새 기록이 올라왔으면 성과·스냅샷·목표를 갱신한다. 조회는 기다리게 하지 않는다.
     const job: Promise<void> = applyMaishiftUpdate({ link, records, top, rating: p.rating, uploadedAt: Date.parse(p.syncedAt) || Date.now() })
       .catch((e) => console.error(`[maishift] ${link.handle} 기록 반영:`, e))
       .finally(() => { if (applying.get(key) === job) applying.delete(key); });
     applying.set(key, job);
   }
+  const uploads = await uploadsReq;
   const entry: Entry = {
     checkedAt: Date.now(),
     updatedAt: p.syncedAt,
@@ -147,8 +151,8 @@ async function refresh(link: MaishiftLink): Promise<Entry> {
     friendCode: p.friendCode ?? "",
     topJson,
     clearJson,
-    history: history ?? [],
-    pastRecordsVisible: pastRecordsVisible === true,
+    history: uploads.history,
+    pastRecordsVisible: uploads.visible,
     futureVersion: futureVersionOf(link),
   };
   remember(key, entry);
@@ -264,6 +268,14 @@ function forgetUser(link: MaishiftLink): void {
   }
   for (const k of [...snapshotCache.keys()]) if (k.split("~")[0].endsWith(`:${handle}`)) snapshotCache.delete(k);
   forgetStampCards(link.handle);
+  forgetTrackScores(link.handle);
+}
+
+/** 이전 기록 공개를 끈 사용자: 받아 둔 업로드 목록과 지난 기록을 지운다. */
+function forgetPastRecords(link: MaishiftLink): void {
+  const key = keyOf(link);
+  uploadsCache.delete(key);
+  for (const k of [...snapshotCache.keys()]) if (k.startsWith(`${key}~`)) snapshotCache.delete(k);
   forgetTrackScores(link.handle);
 }
 
