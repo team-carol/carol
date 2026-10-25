@@ -174,7 +174,7 @@ export function describeGoal(spec: GoalSpec): string {
     return `${spec.title} ${spec.diff}${kind} — ${criterionLabel(spec.criterion)}`;
   }
   const scope = spec.count == null ? msg("goalText.scopeAll") : msg("goalText.scopeCount", { count: spec.count });
-  return `Lv${spec.levelLabel} · ${criterionLabel(spec.criterion)} ${scope}`;
+  return `Lv${spec.levelLabel} ✦ ${criterionLabel(spec.criterion)} ${scope}`;
 }
 
 export interface EvaluationContext {

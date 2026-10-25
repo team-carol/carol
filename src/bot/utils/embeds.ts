@@ -5,6 +5,7 @@ import {
   ButtonStyle,
   ActionRowBuilder,
   ContainerBuilder,
+  SeparatorSpacingSize,
   SectionBuilder,
   TextDisplayBuilder,
   MessageFlags,
@@ -29,6 +30,7 @@ import {
   calcSongRating,
   isNewSong,
   listCatalogSongKinds,
+  resolveSongPick,
   getRegionExclusive,
   getSongGenre,
   getSongVersionName,
@@ -38,6 +40,9 @@ import {
 import { aliasMatches, normalizeQuery, displayTitle } from "../../aliases";
 import { areaDisplayName } from "../../nameTranslations";
 import { ratingColor } from "./roles";
+import { diffEmoji, rankEmoji, comboEmoji, syncEmoji, dxStarEmoji } from "./emoji";
+import { getScoreRank } from "../../games";
+import { dxStars } from "../../sRating";
 import { renderProfileCard } from "./profileCard";
 import { circleOf } from "./circle";
 import { versionName } from "../../maishift/catalog";
@@ -180,7 +185,7 @@ export function profileEmb(
   hasAvatar: boolean,
   circleName: string | null = null,
 ) {
-  const stars = p.stars && p.stars !== "0" ? " · ★×" + p.stars : "";
+  const stars = p.stars && p.stars !== "0" ? " ✦ ★×" + p.stars : "";
   const serverLabel = p.server === "jp" ? "JP" : "INTERNATIONAL";
   const emb = new EmbedBuilder()
     .setColor(ratingColor(p.rating))
@@ -196,7 +201,7 @@ export function profileEmb(
     )
     .setFooter({
       text: msg("embed.profileFooter", { server: serverLabel, synced: new Date(p.lastSyncedAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }) })
-        + (p.source === "maishift" ? `  ·  ${msg("maishift.credit")}` : ""),
+        + (p.source === "maishift" ? `  ✦  ${msg("maishift.credit")}` : ""),
     });
   if (hasAvatar) emb.setThumbnail("attachment://avatar.png");
   const friendCode = publicFriendCode(p) ?? undefined;
@@ -293,11 +298,11 @@ export async function recentEmbeds(
   const embeds = await Promise.all(
     game.map(async (r, i) => {
       const kind = r.musicKind ? ` [${r.musicKind}]` : "";
-      const rankStr = [r.fc, r.sync].filter(Boolean).join(" · ");
+      const rankStr = [r.fc, r.sync].filter(Boolean).join(" ✦ ");
       const constant = getConstant(r.title, r.musicKind, r.diff, p.server);
       const lv = constant !== null ? constant.toFixed(1) : r.level;
       const desc =
-        `\`${r.diff} ${lv}\`` + (rankStr ? `  ·  \`${rankStr}\`` : "");
+        `\`${r.diff} ${lv}\`` + (rankStr ? `  ✦  \`${rankStr}\`` : "");
       const emb = new EmbedBuilder()
         .setColor(0x2b2d31)
         .setTitle(truncateVisual(displayTitle(r.title, translate), 26) + kind)
@@ -502,15 +507,19 @@ export async function searchResultEmbeds(
 }> {
   // Components V2: 검색어 한 줄 → 곡마다 컨테이너(제목·재킷·지역/장르/버전, 코드 블록 점수표, 상세·외부 출력 버튼) → 페이지 버튼.
   const records = getClearList(p);
-  const q = normalizeQuery(query);
+  // 자동완성 목록에서 고른 곡이면 그 곡·종류만, 아니면 검색어로 찾는다(예전과 같이).
+  const picked = resolveSongPick(query);
   const translate = await getTranslateTitles(userId);
+  const shownQuery = picked ? displayTitle(picked.title, translate) : query;
+  const q = normalizeQuery(picked ? picked.title : query);
   // 같은 곡명이라도 ST/DX 채보는 별도 결과로 분리 (musicKind 포함 키로 그룹핑).
   // 검색 대상은 클리어기록 스냅샷이 아니라 otoge-db 카탈로그 → 동기화하지 않았어도,
   // 국제판 프로필이라도 JP 전용곡까지 잡힌다. 기록이 있으면 점수/FC/SYNC 를 덧댄다.
   type SearchGroup = { title: string; musicKind: string; records: PlayRecord[] };
   const byChart = new Map<string, SearchGroup>();
-  const matchTitle = (t: string) =>
-    normalizeQuery(t).includes(q) || aliasMatches(t, q);
+  const matchTitle = (t: string, kind: string) => picked
+    ? t === picked.title && kind === picked.musicKind
+    : normalizeQuery(t).includes(q) || aliasMatches(t, q);
   const ensureGroup = (title: string, musicKind: string): SearchGroup => {
     const key = `${musicKind}|${title}`;
     let g = byChart.get(key);
@@ -523,14 +532,14 @@ export async function searchResultEmbeds(
   // 1) 카탈로그(미플레이 곡 포함). ST/DX 타입 필터도 여기서 적용.
   for (const c of listCatalogSongKinds()) {
     if (typeFilter && c.musicKind !== typeFilter) continue;
-    if (!matchTitle(c.title)) continue;
+    if (!matchTitle(c.title, c.musicKind)) continue;
     ensureGroup(c.title, c.musicKind);
   }
   // 2) 내 클리어 기록을 덧댄다(카탈로그에 없는 곡이라도 기록이 있으면 노출).
   for (const r of records) {
     const kind = r.musicKind || "";
     if (typeFilter && kind !== typeFilter) continue;
-    if (!matchTitle(r.title)) continue;
+    if (!matchTitle(r.title, kind)) continue;
     ensureGroup(r.title, kind).records.push(r);
   }
   const keys = Array.from(byChart.entries())
@@ -550,7 +559,7 @@ export async function searchResultEmbeds(
 
   if (keys.length === 0) {
     return {
-      components: [new TextDisplayBuilder().setContent(msg("searchResult.empty", { query, type: typeLabel }))],
+      components: [new TextDisplayBuilder().setContent(msg("searchResult.empty", { query: shownQuery, type: typeLabel }))],
       files: [],
       flags: MessageFlags.IsComponentsV2,
     };
@@ -582,13 +591,11 @@ export async function searchResultEmbeds(
         const constant = getConstant(title, musicKind, d, p.server, true);
         if (d === "Re:MASTER" && constant === null && !r) return [];
         const lv = constant !== null ? constant.toFixed(1) : (r?.level ?? "?");
-        const ach =
-          r && r.achievementVal > 0 ? r.achievementVal.toFixed(4) + "%" : "?";
-        const fc = r?.fc || "-";
-        const sync = r?.sync || "-";
-        return [
-          `${d.padEnd(9)} ${ach.padStart(9)}  ${String(lv).padStart(4)}  ${fc.padStart(4)}  ${sync.padStart(4)}`,
-        ];
+        // 난이도·랭크·FC/AP·FS/FDX·DX ✦ 는 이모지로. 모바일에서 한 줄에 들어가게 코드 블록·인라인 코드는 쓰지 않는다.
+        if (!r || r.achievementVal <= 0) return [msg("searchResult.rowNotPlayed", { diff: diffEmoji(d), constant: lv })];
+        const stars = r.dxScoreMax ? dxStars(((r.dxScore ?? 0) / r.dxScoreMax) * 100) : 0;
+        const marks = [rankEmoji(getScoreRank(r.achievementVal)), comboEmoji(r.fc), syncEmoji(r.sync), dxStarEmoji(stars)].filter(Boolean).join(" ");
+        return [msg("searchResult.row", { diff: diffEmoji(d), constant: lv, achievement: `${r.achievementVal.toFixed(4)}%`, marks })];
       });
       const buf = await jacketBuffer(
         all[0] ??
@@ -641,8 +648,11 @@ export async function searchResultEmbeds(
       } else {
         container.addTextDisplayComponents((t) => t.setContent(heading));
       }
+      // 곡 정보 / 플레이 정보 / 버튼을 구분선으로 나눈다.
       return container
-        .addTextDisplayComponents((t) => t.setContent("```\n" + lines.join("\n") + "\n```"))
+        .addSeparatorComponents((s) => s.setSpacing(SeparatorSpacingSize.Small))
+        .addTextDisplayComponents((t) => t.setContent(lines.join("\n")))
+        .addSeparatorComponents((s) => s.setSpacing(SeparatorSpacingSize.Small))
         .addActionRowComponents(
           new ActionRowBuilder<ButtonBuilder>().addComponents(
             // maishift 곡 창과 같은 정보의 이미지(trk:<토큰>:<전체 결과 안 순서>).
@@ -677,7 +687,7 @@ export async function searchResultEmbeds(
 
   return {
     components: [
-      new TextDisplayBuilder().setContent(msg("searchResult.author", { query, type: typeLabel })),
+      new TextDisplayBuilder().setContent(msg("searchResult.author", { query: shownQuery, type: typeLabel })),
       ...containers,
       new ActionRowBuilder<ButtonBuilder>().addComponents(prevBtn, countBtn, nextBtn),
     ],

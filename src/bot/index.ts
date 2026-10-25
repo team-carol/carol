@@ -18,6 +18,7 @@ import { loadRegistryIndex } from "../simai/registryIndex";
 import { loadMainotesIndex, syncMainotes } from "../mainotes";
 import { mainotesSource } from "../mainotes/source";
 import { registerChartSource } from "../simai/source";
+import { loadAppEmojis } from "./utils/emoji";
 import { loadMessages, msg, onMessagesReloaded } from "../messages";
 import { appVersion } from "../version";
 import { loadFonts } from "../fonts";
@@ -143,6 +144,8 @@ client.once(Events.ClientReady, async (c) => {
   void runMainotesSync();
   setInterval(() => void runMainotesSync(), MAINOTES_SYNC_INTERVAL_MS);
   loadFonts().catch((e) => console.error("[fonts] 초기 로드 실패:", e));
+  // 랭크·FC/AP·FS/FDX·DX ✦ 이모지(봇 애플리케이션 이모지). 못 불러와도 글자로 대신한다.
+  loadAppEmojis(c).catch((e) => console.error("[emoji] 로드 실패:", e));
   void runRatingCardGC();
   setInterval(() => void runRatingCardGC(), RATING_CARD_GC_INTERVAL_MS);
   void runSimaiChartGC();
@@ -458,7 +461,7 @@ client.on(Events.InteractionCreate, async (i) => {
         const result = await mapAreaEmbed(cached, userId, Math.floor(areaIdx / 5));
         const emb = result.embeds[areaIdx % 5];
         if (!emb) { await (i as ButtonInteraction).reply({ content: msg("button.mapNotFound"), ...EPHEMERAL_REPLY }); return; }
-        emb.setFooter({ text: `${cached.playerName}의 지방 진행도  ·  공유: ${i.user.username}` });
+        emb.setFooter({ text: `${cached.playerName}의 지방 진행도  ✦  공유: ${i.user.username}` });
         const file = result.files.find((f) => f.name === `map${areaIdx}.png`);
         await (i as ButtonInteraction).editReply({ embeds: [emb], files: file ? [file] : [] });
       } catch (e) {

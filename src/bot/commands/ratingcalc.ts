@@ -41,7 +41,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     .setTitle(msg("ratingcalc.title"))
     .setColor(0x9333ea)
     .addFields(
-      { name: msg("ratingcalc.inputField"), value: `\`${constant.toFixed(1)}\`  ·  \`${ach.toFixed(4)}%\` (${rank})${ap ? "  ·  AP" : ""}`, inline: false },
+      { name: msg("ratingcalc.inputField"), value: `\`${constant.toFixed(1)}\`  ✦  \`${ach.toFixed(4)}%\` (${rank})${ap ? "  ✦  AP" : ""}`, inline: false },
       { name: msg("ratingcalc.songRatingField"), value: `**${songRating}**`, inline: false },
     );
 
