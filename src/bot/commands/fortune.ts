@@ -2,8 +2,8 @@ import { SlashCommandBuilder, ChatInputCommandInteraction, EmbedBuilder, Attachm
 import { getDailyFortuneSong, getJacketFile, jacketFileUrl } from "../../constants";
 import { getTranslateTitles } from "../../storage";
 import { displayTitle, normalizeQuery } from "../../aliases";
-import { searchRegistry } from "../../simai/registryIndex";
-import { resolveChart, makeChartKey } from "../../simai/source";
+import { searchAllCharts } from "../../simai/chartSearch";
+import { resolveChart } from "../../simai/source";
 import { parseMaidata } from "../../simai/parse";
 import { renderPreviewGif } from "../utils/chartGif";
 import { msg } from "../../messages";
@@ -32,29 +32,30 @@ function constantStyle(level: number): { color: number } {
 }
 
 /**
- * 운세 곡과 같은 곡·같은 난이도의 등록 채보(simai)를 찾아 미리보기 GIF 를 만든다.
- * 등록 채보가 없거나 그 난이도가 없으면 null — 미리보기는 부가 기능이라 조용히 건너뛴다.
- * ST/DX(스탠다드/디럭스)는 채보가 다르므로 kind 로 등록분을 고른 뒤, 그 maidata 에서
- * 운세가 가리키는 정확한 난이도를 뽑아 렌더한다.
+ * 운세 곡과 같은 곡·같은 난이도의 채보(mai-notes 또는 등록 채보)를 찾아 미리보기 GIF 를 만든다.
+ * 채보가 없거나 그 난이도가 없으면 null — 미리보기는 부가 기능이라 조용히 건너뛴다.
+ * ST/DX(스탠다드/디럭스)는 채보가 다르므로 kind 로 고른 뒤, 그 maidata 에서
+ * 운세가 가리키는 정확한 난이도를 뽑아 렌더한다. mai-notes 는 보면 하나가 난이도 하나다.
  */
 async function fortunePreviewGif(title: string, kind: string, diffName: string): Promise<Buffer | null> {
   const wantDiff = DIFF_NUM[diffName];
   if (!wantDiff) return null;
   const wantType = kind === "DX" ? "deluxe" : "standard";
   const nt = normalizeQuery(title);
-  const exact = searchRegistry(title, 25).filter((h) => normalizeQuery(h.title) === nt);
+  const exact = searchAllCharts(title, 25).filter((h) => normalizeQuery(h.title) === nt && h.difficulty === wantDiff);
   if (exact.length === 0) return null;
   // 같은 타입(ST/DX) 우선, 타입 미상("")은 차선, 그다음 아무거나.
   const pick =
     exact.find((h) => h.type === wantType) ??
     exact.find((h) => h.type === "") ??
     exact[0];
-  const resolved = await resolveChart(makeChartKey("registry", pick.id));
+  const resolved = await resolveChart(pick.key);
   const parsed = parseMaidata(resolved.maidata);
-  const chart = parsed.charts[wantDiff];
+  // mai-notes 본문은 헤더가 없어 난이도 키가 0(미상)이다. 보면 하나가 난이도 하나라 그 하나를 쓴다.
+  const chart = parsed.charts[wantDiff] ?? (pick.source === "mainotes" ? Object.values(parsed.charts)[0] : undefined);
   if (!chart || chart.notes.length === 0) return null;
   const { gif } = await renderPreviewGif({
-    id: pick.id, title: resolved.title, artist: resolved.artist,
+    id: resolved.storedId ?? pick.key, title: resolved.title, artist: resolved.artist,
     designer: resolved.designer, level: resolved.level, difficulty: wantDiff, chart,
   });
   return gif;

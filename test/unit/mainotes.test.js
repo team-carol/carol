@@ -91,9 +91,9 @@ test("getChartById: 없는 id 는 null", () => {
 });
 
 // ── 공급원 경계 ────────────────────────────────────────────────────────────
-// 허락을 받기 전까지 mai-notes 채보 본문은 절대 나오면 안 된다.
+// config.mainotesFetchCharts=false(급히 끄기)면 새 채보 본문을 받지 않는다.
 
-test("mainotes 공급원: 데이터가 있어도 기본값에서는 no-permission (fetch 플래그 off)", async () => {
+test("mainotes 공급원: fetch 플래그를 끄면 no-permission", async () => {
   seed();
   const { CONFIG } = require("../../dist/config");
   CONFIG.mainotesFetchCharts = false;
@@ -185,4 +185,34 @@ test("fetchManifest: HTTP 오류를 삼키지 않는다", async () => {
   try {
     await assert.rejects(() => fetchManifest(), /HTTP 500/);
   } finally { global.fetch = real; }
+});
+
+// ── 플레이어 페이지에서 본문 꺼내기 ────────────────────────────────────────────
+const { extractPlayerChart } = require("../../dist/mainotes/client");
+
+test("extractPlayerChart: textarea#simaiInput 의 본문을 꺼내고 HTML 엔티티를 푼다", () => {
+  const html = '<html><body><textarea id="simaiInput" placeholder="simai形式の譜面データを入力してください...">(200){4},,,\n1-5[8:1]&amp;,1&lt;5,\nE\n</textarea></body></html>';
+  assert.equal(extractPlayerChart(html), "(200){4},,,\n1-5[8:1]&,1<5,\nE");
+});
+
+test("extractPlayerChart: textarea 가 없거나 비어 있으면 null", () => {
+  assert.equal(extractPlayerChart("<!DOCTYPE html><title>maiノーツ</title>"), null);
+  assert.equal(extractPlayerChart('<textarea id="simaiInput">  </textarea>'), null);
+});
+
+// ── /보면 검색: mai-notes + 등록 채보 ──────────────────────────────────────────
+const { searchAllCharts } = require("../../dist/simai/chartSearch");
+const { setRegistryIndex } = require("../../dist/simai/registryIndex");
+
+test("searchAllCharts: 같은 곡·종류·난이도는 mai-notes 를 쓰고, mai-notes 에 없는 보면은 등록 채보로 채운다", () => {
+  seed(); // c1 Alpha DX MASTER(데이터 있음), c2 Alpha DX BASIC(없음), c3 Beta ST Re:MASTER(있음)
+  setRegistryIndex([
+    { id: "r1", title: "Alpha", artist: "A", designer: "", difficulty: 4, level: "13+", type: "deluxe" },  // c1 과 겹침
+    { id: "r2", title: "Alpha", artist: "A", designer: "", difficulty: 1, level: "4", type: "deluxe" },    // mai-notes 는 본문 없음
+    { id: "r3", title: "Beta", artist: "B", designer: "", difficulty: 5, level: "14", type: "" },          // 종류 모름 → 겹친 것으로 봄
+    { id: "r4", title: "Alpha", artist: "A", designer: "", difficulty: 4, level: "13", type: "standard" }, // 다른 종류
+  ]);
+  const keys = searchAllCharts("", 25).map((h) => h.key).sort();
+  assert.deepEqual(keys, ["mainotes:c1", "mainotes:c3", "registry:r2", "registry:r4"]);
+  setRegistryIndex([]);
 });

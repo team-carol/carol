@@ -15,6 +15,9 @@ import { loadConstants } from "../constants";
 import { loadAliases } from "../aliases";
 import { loadNameTranslations, backfillAreaNames } from "../nameTranslations";
 import { loadRegistryIndex } from "../simai/registryIndex";
+import { loadMainotesIndex, syncMainotes } from "../mainotes";
+import { mainotesSource } from "../mainotes/source";
+import { registerChartSource } from "../simai/source";
 import { loadMessages, msg, onMessagesReloaded } from "../messages";
 import { appVersion } from "../version";
 import { loadFonts } from "../fonts";
@@ -55,6 +58,20 @@ type Command = { data: { toJSON(): object; name: string }; execute: (i: ChatInpu
 // 스탬프는 maishift 공식 API 엔드포인트가 나올 때까지 등록하지 않는다(src/maishift/features.ts).
 const COMMANDS: Command[] = [profile, circle, bookmarklet, ratingtable, ratingimage, achievement, fortune, settings, gameOptions, newsSettings, search, status, songrec, random, areaMap, report, admin, goal, chart, ratingcalc, maishift, history, ...(PENDING_FEATURES.stamps ? [stamp] : []), photo];
 const EPHEMERAL_REPLY = { flags: MessageFlags.Ephemeral } as const;
+
+// mai-notes 메타데이터 동기화. 운영자 조건이 "대량 통신 금지" 라서 manifest.json 한 개를
+// 하루 1회 ETag 조건부로만 받는다. 실제 하한은 syncMainotes 안에 있고, 여기 간격은 그 창이 열렸는지 보는 주기다.
+const MAINOTES_SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000;
+async function runMainotesSync(): Promise<void> {
+  try {
+    const r = await syncMainotes();
+    if (r.skipped) return;
+    if (r.changed) console.log(`[mainotes] manifest 갱신: 곡 ${r.songs}개, 채보 ${r.charts}개`);
+    else console.log("[mainotes] manifest 변경 없음 (304)");
+  } catch (e) {
+    console.error("[mainotes] 동기화 실패:", e);
+  }
+}
 
 const RATING_CARD_GC_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000;
 const RATING_CARD_GC_INTERVAL_MS = 24 * 60 * 60 * 1000;
@@ -116,6 +133,15 @@ client.once(Events.ClientReady, async (c) => {
   } catch (e) {
     console.error("[registry] 채보 인덱스 로드 실패:", e);
   }
+  // mai-notes 채보(2026-10-25 운영자 허락). 검색 인덱스는 DB 사본을 올리고, manifest 는 하루 1회만 받는다.
+  registerChartSource(mainotesSource);
+  try {
+    await loadMainotesIndex();
+  } catch (e) {
+    console.error("[mainotes] 인덱스 로드 실패:", e);
+  }
+  void runMainotesSync();
+  setInterval(() => void runMainotesSync(), MAINOTES_SYNC_INTERVAL_MS);
   loadFonts().catch((e) => console.error("[fonts] 초기 로드 실패:", e));
   void runRatingCardGC();
   setInterval(() => void runRatingCardGC(), RATING_CARD_GC_INTERVAL_MS);
