@@ -283,6 +283,8 @@ export const MESSAGES = {
   "searchResult.author": "-# \"{query}\"{type} 에 대한 검색 결과",
   "searchResult.title": "### {title}{kind}",
   "searchResult.regionExclusive": "{version} 전용",
+  // 검색 결과 점수표에서 플레이하지 않은 난이도
+  "searchResult.notPlayed": "—",
   "searchResult.externalButton": "▶ 외부출력",
   "searchResult.genreSuffix": "\n{genre}",
   "searchResult.versionSuffix": "\n{version}",

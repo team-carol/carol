@@ -18,6 +18,7 @@ import { loadRegistryIndex } from "../simai/registryIndex";
 import { loadMainotesIndex, syncMainotes } from "../mainotes";
 import { mainotesSource } from "../mainotes/source";
 import { registerChartSource } from "../simai/source";
+import { loadAppEmojis } from "./utils/emoji";
 import { loadMessages, msg, onMessagesReloaded } from "../messages";
 import { appVersion } from "../version";
 import { loadFonts } from "../fonts";
@@ -143,6 +144,8 @@ client.once(Events.ClientReady, async (c) => {
   void runMainotesSync();
   setInterval(() => void runMainotesSync(), MAINOTES_SYNC_INTERVAL_MS);
   loadFonts().catch((e) => console.error("[fonts] 초기 로드 실패:", e));
+  // 랭크·FC/AP·FS/FDX·DX ✦ 이모지(봇 애플리케이션 이모지). 못 불러와도 글자로 대신한다.
+  loadAppEmojis(c).catch((e) => console.error("[emoji] 로드 실패:", e));
   void runRatingCardGC();
   setInterval(() => void runRatingCardGC(), RATING_CARD_GC_INTERVAL_MS);
   void runSimaiChartGC();

@@ -38,6 +38,9 @@ import {
 import { aliasMatches, normalizeQuery, displayTitle } from "../../aliases";
 import { areaDisplayName } from "../../nameTranslations";
 import { ratingColor } from "./roles";
+import { rankEmoji, comboEmoji, syncEmoji, dxStarEmoji } from "./emoji";
+import { getScoreRank } from "../../games";
+import { dxStars } from "../../sRating";
 import { renderProfileCard } from "./profileCard";
 import { circleOf } from "./circle";
 import { versionName } from "../../maishift/catalog";
@@ -582,13 +585,12 @@ export async function searchResultEmbeds(
         const constant = getConstant(title, musicKind, d, p.server, true);
         if (d === "Re:MASTER" && constant === null && !r) return [];
         const lv = constant !== null ? constant.toFixed(1) : (r?.level ?? "?");
-        const ach =
-          r && r.achievementVal > 0 ? r.achievementVal.toFixed(4) + "%" : "?";
-        const fc = r?.fc || "-";
-        const sync = r?.sync || "-";
-        return [
-          `${d.padEnd(9)} ${ach.padStart(9)}  ${String(lv).padStart(4)}  ${fc.padStart(4)}  ${sync.padStart(4)}`,
-        ];
+        // 난이도·상수는 인라인 코드로 폭을 맞추고, 랭크·FC/AP·FS/FDX·DX ✦ 는 이모지로(코드 블록 안에서는 이모지가 안 보인다).
+        const head = "`" + `${d.padEnd(9)} ${String(lv).padStart(4)}` + "`";
+        if (!r || r.achievementVal <= 0) return [`${head} ${msg("searchResult.notPlayed")}`];
+        const stars = r.dxScoreMax ? dxStars(((r.dxScore ?? 0) / r.dxScoreMax) * 100) : 0;
+        const marks = [rankEmoji(getScoreRank(r.achievementVal)), comboEmoji(r.fc), syncEmoji(r.sync), dxStarEmoji(stars)].filter(Boolean).join(" ");
+        return [`${head} **${r.achievementVal.toFixed(4)}%** ${marks}`];
       });
       const buf = await jacketBuffer(
         all[0] ??
@@ -642,7 +644,7 @@ export async function searchResultEmbeds(
         container.addTextDisplayComponents((t) => t.setContent(heading));
       }
       return container
-        .addTextDisplayComponents((t) => t.setContent("```\n" + lines.join("\n") + "\n```"))
+        .addTextDisplayComponents((t) => t.setContent(lines.join("\n")))
         .addActionRowComponents(
           new ActionRowBuilder<ButtonBuilder>().addComponents(
             // maishift 곡 창과 같은 정보의 이미지(trk:<토큰>:<전체 결과 안 순서>).
