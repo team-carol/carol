@@ -40,7 +40,7 @@ import {
 import { aliasMatches, normalizeQuery, displayTitle } from "../../aliases";
 import { areaDisplayName } from "../../nameTranslations";
 import { ratingColor } from "./roles";
-import { diffEmoji, rankEmoji, comboEmoji, syncEmoji, dxStarEmoji } from "./emoji";
+import { diffEmoji, rankEmoji, comboEmoji, syncEmoji, dxStarEmoji, blankEmoji } from "./emoji";
 import { getScoreRank } from "../../games";
 import { dxStars } from "../../sRating";
 import { renderProfileCard } from "./profileCard";
@@ -493,6 +493,12 @@ export function getSearchCtx(token: string): SearchCtx | undefined {
   return searchCtx.get(token);
 }
 
+/** 점수표 숫자 칸 맞춤: 정수부가 width 자리보다 짧으면 앞에 숫자 폭 공백(U+2007)을 채운다. 숫자로 시작하지 않으면 그대로. */
+function padDigits(text: string, width: number): string {
+  const n = /^\d*/.exec(text)![0].length;
+  return n > 0 && n < width ? " ".repeat(width - n) + text : text;
+}
+
 export async function searchResultEmbeds(
   p: NonNullable<Awaited<ReturnType<typeof getCachedProfile>>>,
   userId: string,
@@ -590,12 +596,16 @@ export async function searchResultEmbeds(
         // (예: ST에만 Re:MASTER가 있는 곡의 DX 카드에 Re:MASTER가 뜨는 문제 방지)
         const constant = getConstant(title, musicKind, d, p.server, true);
         if (d === "Re:MASTER" && constant === null && !r) return [];
-        const lv = constant !== null ? constant.toFixed(1) : (r?.level ?? "?");
+        const lv = padDigits(constant !== null ? constant.toFixed(1) : (r?.level ?? "?"), 2);
         // 난이도·랭크·FC/AP·FS/FDX·DX ✦ 는 이모지로. 모바일에서 한 줄에 들어가게 코드 블록·인라인 코드는 쓰지 않는다.
         if (!r || r.achievementVal <= 0) return [msg("searchResult.rowNotPlayed", { diff: diffEmoji(d), constant: lv })];
         const stars = r.dxScoreMax ? dxStars(((r.dxScore ?? 0) / r.dxScoreMax) * 100) : 0;
-        const marks = [rankEmoji(getScoreRank(r.achievementVal)), comboEmoji(r.fc), syncEmoji(r.sync), dxStarEmoji(stars)].filter(Boolean).join(" ");
-        return [msg("searchResult.row", { diff: diffEmoji(d), constant: lv, achievement: `${r.achievementVal.toFixed(4)}%`, marks })];
+        // 없는 마크 자리는 빈칸 이모지로 채워 뒤의 마크가 줄마다 같은 자리에 오게 한다(끝의 빈칸은 뺀다).
+        const marks = [rankEmoji(getScoreRank(r.achievementVal)), comboEmoji(r.fc), syncEmoji(r.sync), dxStarEmoji(stars)];
+        while (marks.length && !marks[marks.length - 1]) marks.pop();
+        const marksText = marks.map((m) => m || blankEmoji()).filter(Boolean).join(" ");
+        const achievement = padDigits(`${r.achievementVal.toFixed(4)}%`, 3);
+        return [msg("searchResult.row", { diff: diffEmoji(d), constant: lv, achievement, marks: marksText })];
       });
       const buf = await jacketBuffer(
         all[0] ??
