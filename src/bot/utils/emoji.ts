@@ -14,8 +14,23 @@ export async function loadAppEmojis(client: Client): Promise<void> {
   if (!app) return;
   const list = await app.emojis.fetch();
   const map = new Map([...list.values()].filter((e) => e.name).map((e) => [e.name!, e.toString()]));
-  // 아직 올리지 않은 그림은 올린다(새 이모지를 추가했거나 새 봇일 때).
+  // 아직 올리지 않은 그림은 올린다(새 이모지를 추가했거나 새 봇일 때). 그림을 바꿀 때는 이름 끝 번호를 올리므로,
+  // assets 에 없는 carol_ 이모지(예전 그림)는 지운다.
   const files = fs.existsSync(ASSET_DIR) ? fs.readdirSync(ASSET_DIR).filter((f) => f.endsWith(".png")) : [];
+  const wanted = new Set(files.map((f) => f.replace(/\.png$/, "")));
+  let removed = 0;
+  if (files.length) {
+    for (const e of list.values()) {
+      if (!e.name?.startsWith("carol_") || wanted.has(e.name)) continue;
+      try {
+        await e.delete();
+        map.delete(e.name);
+        removed++;
+      } catch (err) {
+        console.error(`[emoji] ${e.name} 지우기 실패:`, (err as Error).message);
+      }
+    }
+  }
   let added = 0;
   for (const file of files) {
     const name = file.replace(/\.png$/, "");
@@ -29,7 +44,7 @@ export async function loadAppEmojis(client: Client): Promise<void> {
     }
   }
   EMOJI = map;
-  console.log(`[emoji] 애플리케이션 이모지 ${EMOJI.size}개${added ? ` (새로 올림 ${added}개)` : ""}`);
+  console.log(`[emoji] 애플리케이션 이모지 ${EMOJI.size}개${added ? ` (새로 올림 ${added}개)` : ""}${removed ? ` (예전 그림 지움 ${removed}개)` : ""}`);
 }
 
 function emoji(name: string, fallback: string): string {
@@ -38,7 +53,7 @@ function emoji(name: string, fallback: string): string {
 
 const DIFF: Record<string, [string, string]> = {
   BASIC: ["carol_basic", "BAS"], ADVANCED: ["carol_advanced", "ADV"], EXPERT: ["carol_expert", "EXP"],
-  MASTER: ["carol_master", "MAS"], "Re:MASTER": ["carol_remaster", "Re:M"],
+  MASTER: ["carol_master", "MAS"], "Re:MASTER": ["carol_remaster2", "Re:M"],
 };
 const RANK: Record<string, string> = {
   "SSS+": "carol_sssp", SSS: "carol_sss", "SS+": "carol_ssp", SS: "carol_ss", "S+": "carol_sp", S: "carol_s",
