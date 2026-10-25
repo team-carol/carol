@@ -30,6 +30,7 @@ import {
   calcSongRating,
   isNewSong,
   listCatalogSongKinds,
+  resolveSongPick,
   getRegionExclusive,
   getSongGenre,
   getSongVersionName,
@@ -506,15 +507,19 @@ export async function searchResultEmbeds(
 }> {
   // Components V2: 검색어 한 줄 → 곡마다 컨테이너(제목·재킷·지역/장르/버전, 코드 블록 점수표, 상세·외부 출력 버튼) → 페이지 버튼.
   const records = getClearList(p);
-  const q = normalizeQuery(query);
+  // 자동완성 목록에서 고른 곡이면 그 곡·종류만, 아니면 검색어로 찾는다(예전과 같이).
+  const picked = resolveSongPick(query);
   const translate = await getTranslateTitles(userId);
+  const shownQuery = picked ? displayTitle(picked.title, translate) : query;
+  const q = normalizeQuery(picked ? picked.title : query);
   // 같은 곡명이라도 ST/DX 채보는 별도 결과로 분리 (musicKind 포함 키로 그룹핑).
   // 검색 대상은 클리어기록 스냅샷이 아니라 otoge-db 카탈로그 → 동기화하지 않았어도,
   // 국제판 프로필이라도 JP 전용곡까지 잡힌다. 기록이 있으면 점수/FC/SYNC 를 덧댄다.
   type SearchGroup = { title: string; musicKind: string; records: PlayRecord[] };
   const byChart = new Map<string, SearchGroup>();
-  const matchTitle = (t: string) =>
-    normalizeQuery(t).includes(q) || aliasMatches(t, q);
+  const matchTitle = (t: string, kind: string) => picked
+    ? t === picked.title && kind === picked.musicKind
+    : normalizeQuery(t).includes(q) || aliasMatches(t, q);
   const ensureGroup = (title: string, musicKind: string): SearchGroup => {
     const key = `${musicKind}|${title}`;
     let g = byChart.get(key);
@@ -527,14 +532,14 @@ export async function searchResultEmbeds(
   // 1) 카탈로그(미플레이 곡 포함). ST/DX 타입 필터도 여기서 적용.
   for (const c of listCatalogSongKinds()) {
     if (typeFilter && c.musicKind !== typeFilter) continue;
-    if (!matchTitle(c.title)) continue;
+    if (!matchTitle(c.title, c.musicKind)) continue;
     ensureGroup(c.title, c.musicKind);
   }
   // 2) 내 클리어 기록을 덧댄다(카탈로그에 없는 곡이라도 기록이 있으면 노출).
   for (const r of records) {
     const kind = r.musicKind || "";
     if (typeFilter && kind !== typeFilter) continue;
-    if (!matchTitle(r.title)) continue;
+    if (!matchTitle(r.title, kind)) continue;
     ensureGroup(r.title, kind).records.push(r);
   }
   const keys = Array.from(byChart.entries())
@@ -554,7 +559,7 @@ export async function searchResultEmbeds(
 
   if (keys.length === 0) {
     return {
-      components: [new TextDisplayBuilder().setContent(msg("searchResult.empty", { query, type: typeLabel }))],
+      components: [new TextDisplayBuilder().setContent(msg("searchResult.empty", { query: shownQuery, type: typeLabel }))],
       files: [],
       flags: MessageFlags.IsComponentsV2,
     };
@@ -682,7 +687,7 @@ export async function searchResultEmbeds(
 
   return {
     components: [
-      new TextDisplayBuilder().setContent(msg("searchResult.author", { query, type: typeLabel })),
+      new TextDisplayBuilder().setContent(msg("searchResult.author", { query: shownQuery, type: typeLabel })),
       ...containers,
       new ActionRowBuilder<ButtonBuilder>().addComponents(prevBtn, countBtn, nextBtn),
     ],

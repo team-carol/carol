@@ -1,3 +1,4 @@
+import { createHash } from "crypto";
 import { getConstantsCache, saveConstantsCache } from "./storage";
 import { setExternalTranslations } from "./aliases";
 import { fetchCatalog, setMaishiftVersionNames, versionCode, versionName as msVersionName, type CatalogSong, type RegionVersion } from "./maishift/catalog";
@@ -618,6 +619,26 @@ export function listCatalogSongKinds(): { title: string; musicKind: "ST" | "DX" 
     out.push({ title, musicKind });
   }
   return out;
+}
+
+// /검색 자동완성에서 고른 곡. 값은 "#<해시 10자>"(곡 종류·제목). 보면 번호는 지역마다 겹칠 수 있어 쓰지 않는다.
+function songPickHash(musicKind: string, title: string): string {
+  return createHash("sha1").update(`${musicKind}|${title}`).digest("hex").slice(0, 10);
+}
+export function songPickValue(title: string, musicKind: string): string {
+  return `#${songPickHash(musicKind, title)}`;
+}
+let songPicks: { src: Map<string, number>; size: number; map: Map<string, { title: string; musicKind: "ST" | "DX" }> } | null = null;
+/** 자동완성 값이면 그 곡·종류, 아니면 null(직접 입력한 검색어). */
+export function resolveSongPick(value: string): { title: string; musicKind: "ST" | "DX" } | null {
+  const m = value.match(/^#([0-9a-f]{10})$/);
+  if (!m) return null;
+  if (!songPicks || songPicks.src !== constantMap || songPicks.size !== constantMap.size) {
+    const map = new Map<string, { title: string; musicKind: "ST" | "DX" }>();
+    for (const c of listCatalogSongKinds()) map.set(songPickHash(c.musicKind, c.title), c);
+    songPicks = { src: constantMap, size: constantMap.size, map };
+  }
+  return songPicks.map.get(m[1]) ?? null;
 }
 
 // 상수 → 표기 레벨 (X.0~X.5 → "X", X.6~X.9 → "X+")
