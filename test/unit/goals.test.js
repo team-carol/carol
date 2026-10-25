@@ -99,11 +99,11 @@ test("describeGoal", () => {
   assert.equal(g.describeGoal({ kind: "rating", target: 15000 }), "레이팅 15000 도달");
   assert.equal(
     g.describeGoal({ kind: "aggregate", criterion: { type: "combo", value: "AP" }, levelLabel: "13+", constantMin: 13.6, constantMax: 13.9, count: 10 }),
-    "Lv13+ · AP 이상 10개",
+    "Lv13+ ✦ AP 이상 10개",
   );
   assert.equal(
     g.describeGoal({ kind: "aggregate", criterion: { type: "achievement", value: 100, rank: "SSS" }, levelLabel: "14", constantMin: 14, constantMax: 14.5, count: null }),
-    "Lv14 · SSS 이상 전곡",
+    "Lv14 ✦ SSS 이상 전곡",
   );
 });
 

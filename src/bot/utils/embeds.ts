@@ -185,7 +185,7 @@ export function profileEmb(
   hasAvatar: boolean,
   circleName: string | null = null,
 ) {
-  const stars = p.stars && p.stars !== "0" ? " · ★×" + p.stars : "";
+  const stars = p.stars && p.stars !== "0" ? " ✦ ★×" + p.stars : "";
   const serverLabel = p.server === "jp" ? "JP" : "INTERNATIONAL";
   const emb = new EmbedBuilder()
     .setColor(ratingColor(p.rating))
@@ -201,7 +201,7 @@ export function profileEmb(
     )
     .setFooter({
       text: msg("embed.profileFooter", { server: serverLabel, synced: new Date(p.lastSyncedAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }) })
-        + (p.source === "maishift" ? `  ·  ${msg("maishift.credit")}` : ""),
+        + (p.source === "maishift" ? `  ✦  ${msg("maishift.credit")}` : ""),
     });
   if (hasAvatar) emb.setThumbnail("attachment://avatar.png");
   const friendCode = publicFriendCode(p) ?? undefined;
@@ -298,11 +298,11 @@ export async function recentEmbeds(
   const embeds = await Promise.all(
     game.map(async (r, i) => {
       const kind = r.musicKind ? ` [${r.musicKind}]` : "";
-      const rankStr = [r.fc, r.sync].filter(Boolean).join(" · ");
+      const rankStr = [r.fc, r.sync].filter(Boolean).join(" ✦ ");
       const constant = getConstant(r.title, r.musicKind, r.diff, p.server);
       const lv = constant !== null ? constant.toFixed(1) : r.level;
       const desc =
-        `\`${r.diff} ${lv}\`` + (rankStr ? `  ·  \`${rankStr}\`` : "");
+        `\`${r.diff} ${lv}\`` + (rankStr ? `  ✦  \`${rankStr}\`` : "");
       const emb = new EmbedBuilder()
         .setColor(0x2b2d31)
         .setTitle(truncateVisual(displayTitle(r.title, translate), 26) + kind)

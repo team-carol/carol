@@ -253,7 +253,7 @@ async function goalsEmbed(
     const bar = progressBar(e.done ? 1 : e.progress);
     const pct = `${progressPercent(e.progress, e.done)}%`;
     const status = e.done ? "✅" : "⏳";
-    const detail = e.valueText ? ` · ${e.valueText}${e.targetText ? ` / ${e.targetText}` : ""}` : "";
+    const detail = e.valueText ? ` ✦ ${e.valueText}${e.targetText ? ` / ${e.targetText}` : ""}` : "";
     return `\`${String(number).padStart(2, " ")}.\` ${status} **${e.label}**\n\`${bar}\` ${pct}${detail}`;
   });
 

@@ -461,7 +461,7 @@ client.on(Events.InteractionCreate, async (i) => {
         const result = await mapAreaEmbed(cached, userId, Math.floor(areaIdx / 5));
         const emb = result.embeds[areaIdx % 5];
         if (!emb) { await (i as ButtonInteraction).reply({ content: msg("button.mapNotFound"), ...EPHEMERAL_REPLY }); return; }
-        emb.setFooter({ text: `${cached.playerName}의 지방 진행도  ·  공유: ${i.user.username}` });
+        emb.setFooter({ text: `${cached.playerName}의 지방 진행도  ✦  공유: ${i.user.username}` });
         const file = result.files.find((f) => f.name === `map${areaIdx}.png`);
         await (i as ButtonInteraction).editReply({ embeds: [emb], files: file ? [file] : [] });
       } catch (e) {

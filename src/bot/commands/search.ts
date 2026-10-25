@@ -62,7 +62,7 @@ export async function autocomplete(interaction: AutocompleteInteraction): Promis
   await interaction.respond(hits.map((c) => {
     const ko = getTranslation(c.title);
     // Discord 는 이름을 100자까지만 받는다.
-    const name = `${c.title} [${c.musicKind}]${ko ? ` · ${ko}` : ""}`.slice(0, 100);
+    const name = `${c.title} [${c.musicKind}]${ko ? ` ✦ ${ko}` : ""}`.slice(0, 100);
     return { name, value: songPickValue(c.title, c.musicKind) };
   }));
 }
