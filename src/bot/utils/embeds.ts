@@ -586,11 +586,10 @@ export async function searchResultEmbeds(
         if (d === "Re:MASTER" && constant === null && !r) return [];
         const lv = constant !== null ? constant.toFixed(1) : (r?.level ?? "?");
         // 난이도·랭크·FC/AP·FS/FDX·DX ✦ 는 이모지로. 모바일에서 한 줄에 들어가게 코드 블록·인라인 코드는 쓰지 않는다.
-        const head = `${diffEmoji(d)} ${lv}`;
-        if (!r || r.achievementVal <= 0) return [`${head} ${msg("searchResult.notPlayed")}`];
+        if (!r || r.achievementVal <= 0) return [msg("searchResult.rowNotPlayed", { diff: diffEmoji(d), constant: lv })];
         const stars = r.dxScoreMax ? dxStars(((r.dxScore ?? 0) / r.dxScoreMax) * 100) : 0;
         const marks = [rankEmoji(getScoreRank(r.achievementVal)), comboEmoji(r.fc), syncEmoji(r.sync), dxStarEmoji(stars)].filter(Boolean).join(" ");
-        return [`${head} **${r.achievementVal.toFixed(4)}%** ${marks}`];
+        return [msg("searchResult.row", { diff: diffEmoji(d), constant: lv, achievement: `${r.achievementVal.toFixed(4)}%`, marks })];
       });
       const buf = await jacketBuffer(
         all[0] ??
