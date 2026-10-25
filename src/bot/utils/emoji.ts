@@ -1,15 +1,35 @@
-// 봇 애플리케이션 이모지(난이도·랭크·FC/AP·FS/FDX·DX ✦). 그림은 scripts/make-emoji.js 가 만들고
-// scripts/upload-emoji.js 가 봇에 올린다. 개발 봇과 배포 봇은 서로 다른 애플리케이션이라 이모지 ID 가 다르므로
-// 시작할 때 이름으로 찾아 둔다. 올리지 않았거나 못 불러왔으면 글자로 대신한다.
+// 봇 애플리케이션 이모지(난이도·랭크·FC/AP·FS/FDX·DX ✦). 그림은 scripts/make-emoji.js 가 assets/emoji 에 만들고,
+// 봇이 시작할 때 아직 없는 이모지를 그 그림으로 올린다(이미지에 assets/emoji 를 넣는다). 개발 봇과 배포 봇은 서로 다른
+// 애플리케이션이라 이모지 ID 가 다르므로 이름으로 찾아 둔다. 못 불러왔으면 글자로 대신한다.
+import * as fs from "fs";
+import * as path from "path";
 import type { Client } from "discord.js";
+
+const ASSET_DIR = path.join(__dirname, "..", "..", "..", "assets", "emoji");
 
 let EMOJI = new Map<string, string>();
 
 export async function loadAppEmojis(client: Client): Promise<void> {
-  if (!client.application) return;
-  const list = await client.application.emojis.fetch();
-  EMOJI = new Map([...list.values()].filter((e) => e.name).map((e) => [e.name!, e.toString()]));
-  console.log(`[emoji] 애플리케이션 이모지 ${EMOJI.size}개`);
+  const app = client.application;
+  if (!app) return;
+  const list = await app.emojis.fetch();
+  const map = new Map([...list.values()].filter((e) => e.name).map((e) => [e.name!, e.toString()]));
+  // 아직 올리지 않은 그림은 올린다(새 이모지를 추가했거나 새 봇일 때).
+  const files = fs.existsSync(ASSET_DIR) ? fs.readdirSync(ASSET_DIR).filter((f) => f.endsWith(".png")) : [];
+  let added = 0;
+  for (const file of files) {
+    const name = file.replace(/\.png$/, "");
+    if (map.has(name)) continue;
+    try {
+      const e = await app.emojis.create({ attachment: fs.readFileSync(path.join(ASSET_DIR, file)), name });
+      map.set(name, e.toString());
+      added++;
+    } catch (err) {
+      console.error(`[emoji] ${name} 올리기 실패:`, (err as Error).message);
+    }
+  }
+  EMOJI = map;
+  console.log(`[emoji] 애플리케이션 이모지 ${EMOJI.size}개${added ? ` (새로 올림 ${added}개)` : ""}`);
 }
 
 function emoji(name: string, fallback: string): string {
