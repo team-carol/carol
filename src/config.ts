@@ -12,7 +12,7 @@ export const CONFIG = require("../config.json") as {
   carolIssueGuildId?: string;
   geminiApiKey?: string;
   geminiModel?: string;
-  // mai-notes 채보 본문을 실제로 받아올지. 기본 꺼짐(현재 mai-notes 소스는 미사용).
+  // mai-notes 채보 본문을 받아올지. 생략하면 켜짐(2026-10-25 운영자 허락). false 면 새 본문을 받지 않는다.
   mainotesFetchCharts?: boolean;
   /** maishift 공식 API 키(X-API-Key). 설정 › 개발자에서 발급. */
   maishiftApiKey?: string;
