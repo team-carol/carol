@@ -19,14 +19,16 @@ const SIZE = 128;
 // maishift 레거시 색상(배지 위쪽 색). 아래쪽은 같은 색 82%.
 const RAINBOW = ["#60ffff", "#54c7ff", "#fa7eff", "#f0554c", "#fffc4c", "#62e34c"];
 const DARK = "#2d2d2d";
-/** [이모지 이름, 글자, 위첨자("+")·별("star")·작은 앞글자("pre:Re:"), 색] */
+/** [이모지 이름, 글자, 위첨자("+")·별("star")·윗줄 작은 글자("top:Re:"), 색("white:<글자색>" 이면 흰 바탕)] */
+// 그림을 바꾸면 이름 끝 번호를 올린다(봇은 같은 이름이 있으면 다시 올리지 않고, assets 에 없는 carol_ 이모지는 지운다).
 const EMOJIS = [
   // 난이도(캐롤봇 카드의 난이도 색)
   ["carol_basic", "BAS", "", "#16a34a"],
   ["carol_advanced", "ADV", "", "#ea580c"],
   ["carol_expert", "EXP", "", "#dc2626"],
   ["carol_master", "MAS", "", "#9333ea"],
-  ["carol_remaster", "M", "pre:Re:", "#c084fc"],
+  // Re:MASTER 는 게임처럼 흰 바탕에 보라 글자, "Re:" 윗줄 + "MAS" 아랫줄
+  ["carol_remaster2", "MAS", "top:Re:", "white:#9333ea"],
   ["carol_sssp", "SSS", "+", "rainbow"],
   ["carol_sss", "SSS", "", "#e61919"],
   ["carol_ssp", "SS", "+", "#f5a900"],
@@ -79,17 +81,20 @@ function starSvg(color) {
 }
 
 function tile([, text, sup, color]) {
-  const background = color === "rainbow"
+  const white = color.startsWith("white:") ? color.slice(6) : "";
+  const background = white
+    ? "linear-gradient(180deg, #ffffff 0%, #ede4ff 100%)"
+    : color === "rainbow"
     ? `linear-gradient(135deg, ${RAINBOW.join(", ")})`
     : `linear-gradient(180deg, ${color} 0%, ${hexA(color, 0.82)} 100%)`;
   // 밝은 무지개 위의 흰 글자가 묻히지 않게 그림자를 더 진하게.
   const shadow = color === "rainbow" ? "0 2px 5px rgba(0, 0, 0, 0.55)" : "0 2px 6px rgba(0, 0, 0, 0.3)";
   const fontSize = textSize(text, sup);
-  const pre = sup.startsWith("pre:") ? sup.slice(4) : "";
-  const label = pre
+  const top = sup.startsWith("top:") ? sup.slice(4) : "";
+  const label = top
     ? [
-        el("span", { fontSize: 40, color: "#ffffff", lineHeight: 1, letterSpacing: -1, marginBottom: 6, textShadow: shadow }, pre),
-        el("span", { fontSize: 72, color: "#ffffff", lineHeight: 1, textShadow: shadow }, text),
+        el("span", { fontSize: 34, color: white || "#ffffff", lineHeight: 1, marginBottom: 2 }, top),
+        el("span", { fontSize: 48, color: white || "#ffffff", lineHeight: 1, letterSpacing: -2 }, text),
       ]
     : sup === "star"
     ? [
@@ -106,11 +111,11 @@ function tile([, text, sup, color]) {
     el("div", {
       position: "relative", display: "flex", width: 120, height: 120, borderRadius: 30, overflow: "hidden",
       alignItems: "center", justifyContent: "center", background,
-      border: `3px solid ${color === "rainbow" ? "rgba(255, 255, 255, 0.45)" : "rgba(255, 255, 255, 0.22)"}`,
+      border: `3px solid ${white ? "rgba(192, 132, 252, 0.9)" : color === "rainbow" ? "rgba(255, 255, 255, 0.45)" : "rgba(255, 255, 255, 0.22)"}`,
     }, [
       // 위쪽 은은한 광택(캐롤봇 카드의 밝은 테두리 느낌)
       el("div", { display: "flex", position: "absolute", left: 0, top: 0, width: 120, height: 56, background: "linear-gradient(180deg, rgba(255,255,255,0.22), rgba(255,255,255,0))" }, []),
-      el("div", { display: "flex", alignItems: pre ? "flex-end" : "center", justifyContent: "center", fontFamily: "Pretendard", fontWeight: 800 }, label),
+      el("div", { display: "flex", flexDirection: top ? "column" : "row", alignItems: "center", justifyContent: "center", fontFamily: "Pretendard", fontWeight: 800 }, label),
     ]),
   ]);
 }
