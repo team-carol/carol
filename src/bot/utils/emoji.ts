@@ -1,4 +1,4 @@
-// 봇 애플리케이션 이모지(랭크·FC/AP·FS/FDX·DX ✦). 그림은 scripts/make-emoji.js 가 만들고
+// 봇 애플리케이션 이모지(난이도·랭크·FC/AP·FS/FDX·DX ✦). 그림은 scripts/make-emoji.js 가 만들고
 // scripts/upload-emoji.js 가 봇에 올린다. 개발 봇과 배포 봇은 서로 다른 애플리케이션이라 이모지 ID 가 다르므로
 // 시작할 때 이름으로 찾아 둔다. 올리지 않았거나 못 불러왔으면 글자로 대신한다.
 import type { Client } from "discord.js";
@@ -16,12 +16,22 @@ function emoji(name: string, fallback: string): string {
   return EMOJI.get(name) ?? fallback;
 }
 
+const DIFF: Record<string, [string, string]> = {
+  BASIC: ["carol_basic", "BAS"], ADVANCED: ["carol_advanced", "ADV"], EXPERT: ["carol_expert", "EXP"],
+  MASTER: ["carol_master", "MAS"], "Re:MASTER": ["carol_remaster", "Re:M"],
+};
 const RANK: Record<string, string> = {
   "SSS+": "carol_sssp", SSS: "carol_sss", "SS+": "carol_ssp", SS: "carol_ss", "S+": "carol_sp", S: "carol_s",
   AAA: "carol_aaa", AA: "carol_aa", A: "carol_a", BBB: "carol_bbb", BB: "carol_bb", B: "carol_b", C: "carol_c", D: "carol_d",
 };
 const COMBO: Record<string, string> = { "AP+": "carol_app", AP: "carol_ap", "FC+": "carol_fcp", FC: "carol_fc" };
 const SYNC: Record<string, string> = { "FDX+": "carol_fdxp", FDX: "carol_fdx", "FS+": "carol_fsp", FS: "carol_fs", SYNC: "carol_sync" };
+
+/** 난이도(BASIC~Re:MASTER). 이모지가 없으면 줄인 이름. */
+export function diffEmoji(diff: string): string {
+  const d = DIFF[diff];
+  return d ? emoji(d[0], `**${d[1]}**`) : diff;
+}
 
 /** 달성률 랭크("SSS+" 등). 모르는 값은 그대로. */
 export function rankEmoji(rank: string): string {

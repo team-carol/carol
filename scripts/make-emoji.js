@@ -19,8 +19,14 @@ const SIZE = 128;
 // maishift 레거시 색상(배지 위쪽 색). 아래쪽은 같은 색 82%.
 const RAINBOW = ["#60ffff", "#54c7ff", "#fa7eff", "#f0554c", "#fffc4c", "#62e34c"];
 const DARK = "#2d2d2d";
-/** [이모지 이름, 글자, 위첨자, 색] */
+/** [이모지 이름, 글자, 위첨자("+")·별("star")·작은 앞글자("pre:Re:"), 색] */
 const EMOJIS = [
+  // 난이도(캐롤봇 카드의 난이도 색)
+  ["carol_basic", "BAS", "", "#16a34a"],
+  ["carol_advanced", "ADV", "", "#ea580c"],
+  ["carol_expert", "EXP", "", "#dc2626"],
+  ["carol_master", "MAS", "", "#9333ea"],
+  ["carol_remaster", "M", "pre:Re:", "#c084fc"],
   ["carol_sssp", "SSS", "+", "rainbow"],
   ["carol_sss", "SSS", "", "#e61919"],
   ["carol_ssp", "SS", "+", "#f5a900"],
@@ -79,7 +85,13 @@ function tile([, text, sup, color]) {
   // 밝은 무지개 위의 흰 글자가 묻히지 않게 그림자를 더 진하게.
   const shadow = color === "rainbow" ? "0 2px 5px rgba(0, 0, 0, 0.55)" : "0 2px 6px rgba(0, 0, 0, 0.3)";
   const fontSize = textSize(text, sup);
-  const label = sup === "star"
+  const pre = sup.startsWith("pre:") ? sup.slice(4) : "";
+  const label = pre
+    ? [
+        el("span", { fontSize: 40, color: "#ffffff", lineHeight: 1, letterSpacing: -1, marginBottom: 6, textShadow: shadow }, pre),
+        el("span", { fontSize: 72, color: "#ffffff", lineHeight: 1, textShadow: shadow }, text),
+      ]
+    : sup === "star"
     ? [
         { type: "img", props: { src: starSvg("#ffffff"), width: 46, height: 46, style: { marginRight: 2 } } },
         el("span", { fontSize: 76, color: "#ffffff", lineHeight: 1, textShadow: shadow }, text),
@@ -98,7 +110,7 @@ function tile([, text, sup, color]) {
     }, [
       // 위쪽 은은한 광택(캐롤봇 카드의 밝은 테두리 느낌)
       el("div", { display: "flex", position: "absolute", left: 0, top: 0, width: 120, height: 56, background: "linear-gradient(180deg, rgba(255,255,255,0.22), rgba(255,255,255,0))" }, []),
-      el("div", { display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Pretendard", fontWeight: 800 }, label),
+      el("div", { display: "flex", alignItems: pre ? "flex-end" : "center", justifyContent: "center", fontFamily: "Pretendard", fontWeight: 800 }, label),
     ]),
   ]);
 }

@@ -38,7 +38,7 @@ import {
 import { aliasMatches, normalizeQuery, displayTitle } from "../../aliases";
 import { areaDisplayName } from "../../nameTranslations";
 import { ratingColor } from "./roles";
-import { rankEmoji, comboEmoji, syncEmoji, dxStarEmoji } from "./emoji";
+import { diffEmoji, rankEmoji, comboEmoji, syncEmoji, dxStarEmoji } from "./emoji";
 import { getScoreRank } from "../../games";
 import { dxStars } from "../../sRating";
 import { renderProfileCard } from "./profileCard";
@@ -585,8 +585,8 @@ export async function searchResultEmbeds(
         const constant = getConstant(title, musicKind, d, p.server, true);
         if (d === "Re:MASTER" && constant === null && !r) return [];
         const lv = constant !== null ? constant.toFixed(1) : (r?.level ?? "?");
-        // 난이도·상수는 인라인 코드로 폭을 맞추고, 랭크·FC/AP·FS/FDX·DX ✦ 는 이모지로(코드 블록 안에서는 이모지가 안 보인다).
-        const head = "`" + `${d.padEnd(9)} ${String(lv).padStart(4)}` + "`";
+        // 난이도·랭크·FC/AP·FS/FDX·DX ✦ 는 이모지로. 모바일에서 한 줄에 들어가게 코드 블록·인라인 코드는 쓰지 않는다.
+        const head = `${diffEmoji(d)} ${lv}`;
         if (!r || r.achievementVal <= 0) return [`${head} ${msg("searchResult.notPlayed")}`];
         const stars = r.dxScoreMax ? dxStars(((r.dxScore ?? 0) / r.dxScoreMax) * 100) : 0;
         const marks = [rankEmoji(getScoreRank(r.achievementVal)), comboEmoji(r.fc), syncEmoji(r.sync), dxStarEmoji(stars)].filter(Boolean).join(" ");
