@@ -493,10 +493,15 @@ export function getSearchCtx(token: string): SearchCtx | undefined {
   return searchCtx.get(token);
 }
 
-/** 점수표 숫자 칸 맞춤: 정수부가 width 자리보다 짧으면 앞에 숫자 폭 공백(U+2007)을 채운다. 숫자로 시작하지 않으면 그대로. */
-function padDigits(text: string, width: number): string {
+// 디스코드 글꼴은 숫자 폭이 제각각이고 "1" 이 좁다. 긴 쪽 값은 늘 1 로 시작하므로(상수 10~15, 달성률 100~101%)
+// 모자란 첫 자리는 "1" 폭에 가까운 공백으로 채운다(스크린샷 측정: 보통 굵기 "1" ≈ 0.36em, 굵게 ≈ 0.43em).
+const PAD_ONE = "\u2004"; // 1/3em
+const PAD_ONE_BOLD = "\u2005\u2006"; // 1/4em + 1/6em
+
+/** 점수표 숫자 칸 맞춤: 정수부가 width 자리보다 짧으면 앞을 채운다(첫 자리는 one, 나머지는 숫자 폭 공백 U+2007). 숫자로 시작하지 않으면 그대로. */
+function padDigits(text: string, width: number, one: string): string {
   const n = /^\d*/.exec(text)![0].length;
-  return n > 0 && n < width ? " ".repeat(width - n) + text : text;
+  return n > 0 && n < width ? one + "\u2007".repeat(width - n - 1) + text : text;
 }
 
 export async function searchResultEmbeds(
@@ -596,7 +601,7 @@ export async function searchResultEmbeds(
         // (예: ST에만 Re:MASTER가 있는 곡의 DX 카드에 Re:MASTER가 뜨는 문제 방지)
         const constant = getConstant(title, musicKind, d, p.server, true);
         if (d === "Re:MASTER" && constant === null && !r) return [];
-        const lv = padDigits(constant !== null ? constant.toFixed(1) : (r?.level ?? "?"), 2);
+        const lv = padDigits(constant !== null ? constant.toFixed(1) : (r?.level ?? "?"), 2, PAD_ONE);
         // 난이도·랭크·FC/AP·FS/FDX·DX ✦ 는 이모지로. 모바일에서 한 줄에 들어가게 코드 블록·인라인 코드는 쓰지 않는다.
         if (!r || r.achievementVal <= 0) return [msg("searchResult.rowNotPlayed", { diff: diffEmoji(d), constant: lv })];
         const stars = r.dxScoreMax ? dxStars(((r.dxScore ?? 0) / r.dxScoreMax) * 100) : 0;
@@ -604,7 +609,7 @@ export async function searchResultEmbeds(
         const marks = [rankEmoji(getScoreRank(r.achievementVal)), comboEmoji(r.fc), syncEmoji(r.sync), dxStarEmoji(stars)];
         while (marks.length && !marks[marks.length - 1]) marks.pop();
         const marksText = marks.map((m) => m || blankEmoji()).filter(Boolean).join(" ");
-        const achievement = padDigits(`${r.achievementVal.toFixed(4)}%`, 3);
+        const achievement = padDigits(`${r.achievementVal.toFixed(4)}%`, 3, PAD_ONE_BOLD);
         return [msg("searchResult.row", { diff: diffEmoji(d), constant: lv, achievement, marks: marksText })];
       });
       const buf = await jacketBuffer(
