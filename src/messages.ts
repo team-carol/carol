@@ -99,6 +99,8 @@ export const MESSAGES = {
   "chart.footerRegistry": "등록된 채보",
   "chart.footerSource": "채보 출처: {source} · 링크를 아는 사람만 볼 수 있습니다",
   "chart.sourceCredit": "채보: [{designer}]({url}) · simai wiki",
+  "chart.sourceCreditMainotes": "채보: [{designer}]({url}) · mai-notes",
+  "chart.sourceLinkMainotes": "채보: [mai-notes]({url})",
   "chart.needInput": "재생할 채보를 골라주세요. `곡명` 에 곡 이름을 입력하거나, `파일` 로 maidata.txt 를 올리면 됩니다.",
   "chart.bothInput": "`곡명` 과 `파일` 중 하나만 지정해주세요.",
   "chart.unavailable.not-found": "채보를 찾지 못했습니다. 목록에서 골라주세요.",

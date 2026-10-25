@@ -6,8 +6,8 @@ import { randomBytes } from "crypto";
 import { saveSimaiChart, countSimaiChartsByOwner, getTranslateTitles } from "../../storage";
 import { displayTitle } from "../../aliases";
 import { parseMaidata, UNKNOWN_DIFFICULTY } from "../../simai/parse";
-import { resolveChart, makeChartKey, ChartUnavailableError } from "../../simai/source";
-import { searchRegistry, registrySize } from "../../simai/registryIndex";
+import { resolveChart, ChartUnavailableError } from "../../simai/source";
+import { searchAllCharts, chartIndexSize } from "../../simai/chartSearch";
 import { renderPreviewGif } from "../utils/chartGif";
 import { getBaseUrl } from "../../web/bookmarklet";
 import { PORT } from "../../config";
@@ -50,15 +50,15 @@ export const data = new SlashCommandBuilder()
 
 /** 곡 이름 자동완성. 네트워크를 쓰지 않고 메모리 인덱스만 본다. */
 export async function autocomplete(interaction: AutocompleteInteraction): Promise<void> {
-  if (registrySize() === 0) { await interaction.respond([]); return; }
+  if (chartIndexSize() === 0) { await interaction.respond([]); return; }
   const q = interaction.options.getFocused();
-  const hits = searchRegistry(q, 25);
+  const hits = searchAllCharts(q, 25);
   await interaction.respond(hits.map((c) => {
     const diff = DIFF_LABEL[c.difficulty] ?? "?";
     const lv = c.level ? ` ${c.level}` : "";
     // 같은 곡의 스탠다드/DX 를 구분(둘 다 있으면 이름이 같아진다).
     const name = `${c.title}${typeTag(c.type)} · ${diff}${lv}`.slice(0, 100);
-    return { name, value: makeChartKey("registry", c.id) };
+    return { name, value: c.key };
   }));
 }
 
@@ -224,6 +224,14 @@ interface ReplyInput {
   chartType?: string;
 }
 
+/** 원본 페이지 링크와 보면 제작자. mai-notes 는 제작자를 모르는 보면이 많아 그때는 링크만. */
+function sourceCredit(url: string, designer: string): string {
+  if (url.startsWith("https://mai-notes.com/")) {
+    return designer ? msg("chart.sourceCreditMainotes", { url, designer }) : msg("chart.sourceLinkMainotes", { url });
+  }
+  return msg("chart.sourceCredit", { url, designer: designer || "?" });
+}
+
 /** 링크 + 통계 + 미리보기 GIF 를 붙여 응답한다. 파일/곡 어느 쪽으로 왔든 같다. */
 async function reply(interaction: ChatInputCommandInteraction, x: ReplyInput): Promise<void> {
   const url = `${getBaseUrl(PORT)}/chart?id=${x.id}`;
@@ -239,8 +247,8 @@ async function reply(interaction: ChatInputCommandInteraction, x: ReplyInput): P
     .setDescription(
       msg("chart.openLink", { url })
       + (x.chart.bpmAssumed ? "\n" + msg("chart.bpmAssumedNote") : "")
-      // 원본 링크 + 제작자 크레딧. atwiki 등록분이면 항상 출처를 건다.
-      + (x.sourceUrl ? "\n" + msg("chart.sourceCredit", { url: x.sourceUrl, designer: x.designer || "?" }) : ""),
+      // 원본 링크 + 제작자 크레딧. mai-notes·atwiki 채보면 항상 출처를 건다.
+      + (x.sourceUrl ? "\n" + sourceCredit(x.sourceUrl, x.designer) : ""),
     )
     .addFields(
       { name: msg("chart.fieldChart"), value: `\`${DIFF_LABEL[x.diff] ?? msg("chart.diffUnknown")}\`${x.level ? "  ·  Lv." + x.level : ""}`, inline: true },

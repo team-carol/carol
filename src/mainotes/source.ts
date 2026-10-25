@@ -1,16 +1,12 @@
 // mai-notes 채보 공급원.
 //
-// 채보 본문은 https://mai-notes.com/data/charts/<UUID>.txt 로 받는다. manifest 와
-// 같은 /data/ 정적 경로다. 본문에는 헤더(&title 등)가 없어 제목·아티스트·난이도는
-// 메모리 인덱스(manifest 메타데이터)에서 채운다.
+// 채보 본문은 보면 플레이어 페이지(https://mai-notes.com/player/<UUID>)에서 받는다(client.ts).
+// 본문에는 헤더(&title 등)가 없어 제목·아티스트·난이도는 메모리 인덱스(manifest 메타데이터)에서 채운다.
 //
-// ⚠️ 기본적으로 꺼져 있다(config.mainotesFetchCharts). mai-notes 운영자에게 이용
-// 허락을 문의해 둔 상태이고, 답을 받기 전에는 받아오지 않는다. 지금은 테스트용으로만
-// 로컬 config.json 에서 켠다. 거절되면 이 파일과 src/mainotes/ 를 지우고,
-// src/bot/index.ts 의 registerChartSource(mainotesSource) 한 줄을 빼면 된다.
-//
-// 한 번 받은 채보는 simai_charts 에 source='mainotes' 로 캐시하고 다시 받지 않는다.
-// 운영자가 요구한 조건("대량 통신 금지")을 지키기 위한 것이다.
+// 2026-10-25 mai-notes 운영자가 디스코드 봇 이용을 허락했다. 조건: 대량 통신 금지, 받은 채보 데이터의
+// 2차 배포 금지. 그래서 한 번 받은 채보는 simai_charts 에 source='mainotes' 로 캐시하고 다시 받지 않으며,
+// maidata 원문은 사용자에게 내려주지 않는다(웹 플레이어·GIF·영상으로 재생 결과만 보여 준다).
+// config.mainotesFetchCharts 를 false 로 두면 새 본문을 받지 않는다(급히 끌 때).
 
 import { ChartUnavailableError, type ChartSource, type ResolvedChart } from "../simai/source";
 import { getSimaiChart, saveSimaiChart } from "../storage";
@@ -34,8 +30,8 @@ export const mainotesSource: ChartSource = {
       return toResolved(meta, cached.maidata);
     }
 
-    // 허락 전에는 여기서 막는다. 목록·검색은 되지만 본문은 나오지 않는다.
-    if (!CONFIG.mainotesFetchCharts) throw new ChartUnavailableError("no-permission");
+    // 급히 끌 때(config.mainotesFetchCharts=false). 목록·검색은 되지만 본문은 나오지 않는다.
+    if (CONFIG.mainotesFetchCharts === false) throw new ChartUnavailableError("no-permission");
 
     const body = await fetchChartBody(id);
     // 파싱해서 chart_json 까지 만들어 캐시한다. 실패하면 그대로 던진다.
@@ -65,5 +61,8 @@ function toResolved(meta: NonNullable<ReturnType<typeof getChartById>>, maidata:
     title: meta.title, artist: meta.artist, designer: meta.designer,
     level: meta.level, difficulty: meta.difficulty,
     maidata, attribution: "mai-notes", storedId: meta.id,
+    // 원본 플레이어 페이지 링크로 출처를 밝힌다.
+    sourceUrl: `https://mai-notes.com/player/${meta.id}`,
+    chartType: meta.type,
   };
 }
