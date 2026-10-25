@@ -20,6 +20,8 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && apt-get purge -y python3 make g++ && apt-get autoremove -y \
   && apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/*
 COPY --from=build /app/dist/ ./dist/
+# 봇 애플리케이션 이모지 그림. 시작할 때 아직 없는 이모지를 올린다(src/bot/utils/emoji.ts).
+COPY assets/emoji/ ./assets/emoji/
 VOLUME ["/app/data"]
 ENV NODE_ENV=production
 ENV DATA_DIR=/app/data

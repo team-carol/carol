@@ -57,7 +57,7 @@ export async function autocomplete(interaction: AutocompleteInteraction): Promis
     const diff = DIFF_LABEL[c.difficulty] ?? "?";
     const lv = c.level ? ` ${c.level}` : "";
     // 같은 곡의 스탠다드/DX 를 구분(둘 다 있으면 이름이 같아진다).
-    const name = `${c.title}${typeTag(c.type)} · ${diff}${lv}`.slice(0, 100);
+    const name = `${c.title}${typeTag(c.type)} ✦ ${diff}${lv}`.slice(0, 100);
     return { name, value: c.key };
   }));
 }
@@ -251,12 +251,12 @@ async function reply(interaction: ChatInputCommandInteraction, x: ReplyInput): P
       + (x.sourceUrl ? "\n" + sourceCredit(x.sourceUrl, x.designer) : ""),
     )
     .addFields(
-      { name: msg("chart.fieldChart"), value: `\`${DIFF_LABEL[x.diff] ?? msg("chart.diffUnknown")}\`${x.level ? "  ·  Lv." + x.level : ""}`, inline: true },
-      { name: msg("chart.fieldBpm"), value: `\`${x.chart.bpm}\`${x.chart.bpmAssumed ? " (추정)" : ""}  ·  ${x.chart.measures}마디`, inline: true },
+      { name: msg("chart.fieldChart"), value: `\`${DIFF_LABEL[x.diff] ?? msg("chart.diffUnknown")}\`${x.level ? "  ✦  Lv." + x.level : ""}`, inline: true },
+      { name: msg("chart.fieldBpm"), value: `\`${x.chart.bpm}\`${x.chart.bpmAssumed ? " (추정)" : ""}  ✦  ${x.chart.measures}마디`, inline: true },
       { name: msg("chart.fieldLength"), value: `\`${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}\``, inline: true },
       {
         name: msg("chart.fieldNotes"),
-        value: `TAP \`${s.tap}\` · HOLD \`${s.hold + s.touchHold}\` · SLIDE \`${s.slide}\` · TOUCH \`${s.touch}\` · BREAK \`${s.break}\`\n합계 \`${s.total}\``,
+        value: `TAP \`${s.tap}\` ✦ HOLD \`${s.hold + s.touchHold}\` ✦ SLIDE \`${s.slide}\` ✦ TOUCH \`${s.touch}\` ✦ BREAK \`${s.break}\`\n합계 \`${s.total}\``,
       },
     )
     .setFooter({ text: x.footer });

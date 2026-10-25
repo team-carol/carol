@@ -334,7 +334,7 @@ export async function execute(
       .addFields(
         {
           name: "채보",
-          value: `\`${r.diff}\`  ·  상수 \`${r.level.toFixed(1)}\`  ·  ${r.isNew ? msg("songrec.newSong") : msg("songrec.oldSong")}`,
+          value: `\`${r.diff}\`  ✦  상수 \`${r.level.toFixed(1)}\`  ✦  ${r.isNew ? msg("songrec.newSong") : msg("songrec.oldSong")}`,
           inline: true,
         },
         {

@@ -145,7 +145,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     diffOpt || undefined,
     genreOpt || undefined,
     verOpt ? verOpt + (plusOpt === "plus" ? " PLUS" : plusOpt === "base" ? " (무인)" : "") : undefined,
-  ].filter(Boolean).join("  ·  ");
+  ].filter(Boolean).join("  ✦  ");
   const translate = await getTranslateTitles(interaction.user.id);
   const embeds = await Promise.all(picks.map(async (c, i) => {
     const rec = clearMap?.get(`${c.title}|${c.kind}|${c.diff}`);
@@ -158,7 +158,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       .setTitle(`${displayTitle(c.title, translate)} [${c.kind}]`)
       .setDescription(msg("common.externalLink", { url: ytUrl }))
       .addFields(
-        { name: "채보", value: `\`${c.diff}\`  ·  상수 \`${c.level.toFixed(1)}\``, inline: true },
+        { name: "채보", value: `\`${c.diff}\`  ✦  상수 \`${c.level.toFixed(1)}\``, inline: true },
       );
     // 장르(catcode)·수록 버전은 OTOGE DB 데이터. 있을 때만 표시.
     const genre = getSongGenre(c.title);
@@ -176,7 +176,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     }
     if (rec && rec.achievementVal > 0) {
       const ach = rec.achievementVal.toFixed(4) + "%";
-      emb.addFields({ name: "내 기록", value: `${ach}${rec.fc ? "  ·  " + rec.fc : ""}`, inline: true });
+      emb.addFields({ name: "내 기록", value: `${ach}${rec.fc ? "  ✦  " + rec.fc : ""}`, inline: true });
     }
     if (i === 0) emb.setAuthor({ name: header });
     const jacket = getJacketFile(c.title);

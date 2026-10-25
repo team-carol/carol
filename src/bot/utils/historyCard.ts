@@ -106,7 +106,7 @@ export async function renderHistoryCard(profile: CachedProfile, avatarBuf: Buffe
     background: CANVAS, padding: 24, color: TEXT, fontFamily: "Noto Sans JP",
   }, [
     // 머리
-    userCardHeader(profile, avatarUrl, eyebrow, [kstStamp(d.lastAt), weekText(d.lastAt, d.lastVersionId, d.versions)].filter(Boolean).join("  ·  ")),
+    userCardHeader(profile, avatarUrl, eyebrow, [kstStamp(d.lastAt), weekText(d.lastAt, d.lastVersionId, d.versions)].filter(Boolean).join("  ✦  ")),
     // 플레이 카운트·단위·클래스·투어 멤버
     el("div", { display: "flex", background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 16, padding: "14px 18px", marginTop: 12 }, [
       statCell(msg("historyCard.playCount"), el("div", { display: "flex", alignItems: "baseline", gap: 6 }, [

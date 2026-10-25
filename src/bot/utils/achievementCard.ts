@@ -342,7 +342,7 @@ export async function renderAchievementCard(
           el("span", { color: MUTED, fontSize: 11 }, [
             msg("achievementCard.subtitle", { day: playDay }),
             ...(totalPages > 1 ? [msg("achievementCard.page", { page: clampedPage + 1, total: totalPages })] : []),
-          ].join(" · ")),
+          ].join(" ✦ ")),
         ]),
         el("div", { display: "flex", gap: 30 }, [
           stat(msg("achievementCard.count"), String(sortedRecords.length), ACCENT),
