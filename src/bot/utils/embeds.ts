@@ -5,6 +5,7 @@ import {
   ButtonStyle,
   ActionRowBuilder,
   ContainerBuilder,
+  SeparatorSpacingSize,
   SectionBuilder,
   TextDisplayBuilder,
   MessageFlags,
@@ -642,8 +643,11 @@ export async function searchResultEmbeds(
       } else {
         container.addTextDisplayComponents((t) => t.setContent(heading));
       }
+      // 곡 정보 / 플레이 정보 / 버튼을 구분선으로 나눈다.
       return container
+        .addSeparatorComponents((s) => s.setSpacing(SeparatorSpacingSize.Small))
         .addTextDisplayComponents((t) => t.setContent(lines.join("\n")))
+        .addSeparatorComponents((s) => s.setSpacing(SeparatorSpacingSize.Small))
         .addActionRowComponents(
           new ActionRowBuilder<ButtonBuilder>().addComponents(
             // maishift 곡 창과 같은 정보의 이미지(trk:<토큰>:<전체 결과 안 순서>).
