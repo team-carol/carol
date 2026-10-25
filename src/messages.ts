@@ -286,7 +286,7 @@ export const MESSAGES = {
   // 검색 결과 점수표 한 줄. {diff} 난이도 이모지, {constant} 상수, {achievement} 달성률, {marks} 랭크·FC/AP·FS/FDX·DX ✦ 이모지
   "searchResult.row": "{diff} {constant} ✦ **{achievement}** {marks}",
   // 플레이하지 않은 난이도
-  "searchResult.rowNotPlayed": "{diff} {constant}",
+  "searchResult.rowNotPlayed": "{diff} {constant} ✦ -",
   "searchResult.externalButton": "▶ 외부출력",
   "searchResult.genreSuffix": "\n{genre}",
   "searchResult.versionSuffix": "\n{version}",
