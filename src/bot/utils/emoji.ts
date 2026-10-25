@@ -83,6 +83,11 @@ export function syncEmoji(sync: string): string {
   return sync && SYNC[sync] ? emoji(SYNC[sync], sync) : sync;
 }
 
+/** 투명한 빈칸(점수표에서 없는 마크 자리 채우기). 이모지가 없으면 "". */
+export function blankEmoji(): string {
+  return emoji("carol_blank", "");
+}
+
 /** DX ✦1~5. 0 이면 "". */
 export function dxStarEmoji(stars: number): string {
   return stars >= 1 && stars <= 5 ? emoji(`carol_star${stars}`, `✦${stars}`) : "";

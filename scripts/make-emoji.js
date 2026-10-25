@@ -19,7 +19,7 @@ const SIZE = 128;
 // maishift 레거시 색상(배지 위쪽 색). 아래쪽은 같은 색 82%.
 const RAINBOW = ["#60ffff", "#54c7ff", "#fa7eff", "#f0554c", "#fffc4c", "#62e34c"];
 const DARK = "#2d2d2d";
-/** [이모지 이름, 글자, 위첨자("+")·별("star")·윗줄 작은 글자("top:Re:"), 색("white:<글자색>" 이면 흰 바탕)] */
+/** [이모지 이름, 글자, 위첨자("+")·별("star")·윗줄 작은 글자("top:Re:")·빈칸("blank"), 색("white:<글자색>" 이면 흰 바탕)] */
 // 그림을 바꾸면 이름 끝 번호를 올린다(봇은 같은 이름이 있으면 다시 올리지 않고, assets 에 없는 carol_ 이모지는 지운다).
 const EMOJIS = [
   // 난이도(캐롤봇 카드의 난이도 색)
@@ -57,6 +57,8 @@ const EMOJIS = [
   ["carol_star3", "3", "star", "#d09000"],
   ["carol_star2", "2", "star", "#3fb842"],
   ["carol_star1", "1", "star", "#5aa88d"],
+  // 빈칸(투명). /검색 점수표에서 FC/AP·FS/FDX 가 없는 자리를 채워 뒤의 마크가 줄마다 같은 자리에 오게 한다.
+  ["carol_blank", "", "blank", ""],
 ];
 
 function el(type, style, children) {
@@ -81,6 +83,7 @@ function starSvg(color) {
 }
 
 function tile([, text, sup, color]) {
+  if (sup === "blank") return el("div", { display: "flex", width: SIZE, height: SIZE }, []);
   const white = color.startsWith("white:") ? color.slice(6) : "";
   const background = white
     ? "linear-gradient(180deg, #ffffff 0%, #ede4ff 100%)"
