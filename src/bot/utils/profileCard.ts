@@ -9,11 +9,11 @@ import type { PlayRecord } from "../../scraper";
 import { getConstant, getJacketFile } from "../../constants";
 import { displayTitle } from "../../aliases";
 import { getScoreRank, MAI_CM_COLOR } from "../../games";
-import { fetchJacketDataUrl, ratingBreakdown, ratingPlate } from "./ratingCard";
+import { fetchJacketDataUrl, ratingBreakdown, ratingPlate, plateProgress, plateDial } from "./ratingCard";
 import { musicKindIcons, KIND_ICON_RATIO } from "./dxnetAssets";
 import { alignLeftMargin } from "./textMetrics";
 import type { RatingPoint, PlayCountPoint } from "../../ratingHistory";
-import { lineChart, lineSwatch, dashedSwatch } from "./historyChart";
+import { lineChart, lineSwatch, dashedSwatch, CHART_W } from "./historyChart";
 import { hasCarolSync } from "./syncExtras";
 import { msg, cardTextSignature } from "../../messages";
 
@@ -46,7 +46,7 @@ const MARK_COLOR: Record<string, string> = {
   "FDX+": "#10b981", FDX: "#34d399", "FS+": "#22c55e", FS: "#4ade80",
 };
 
-const PROFILE_CARD_VERSION = 19;
+const PROFILE_CARD_VERSION = 21;
 const PROFILE_CARD_CACHE_MAX = 64;
 const profileCardCache = new Map<string, Buffer>();
 
@@ -180,9 +180,23 @@ export const RATING_AXES = {
   right: (v: number) => String(v),
 };
 
-function ratingChartPanel(points: RatingPoint[], days: string[], updates: { day: string; label: string }[] = []): El {
+// 히스토리 오른쪽의 레이팅 단계 다이얼. 그래프는 그만큼 좁힌다.
+const DIAL_W = 212;
+const DIAL_GAP = 16;
+const HISTORY_CHART_W = CHART_W - DIAL_W - DIAL_GAP * 2 - 1;
+
+function withDial(main: El, rating: number): El {
+  return el("div", { display: "flex", alignItems: "stretch", gap: DIAL_GAP }, [
+    main,
+    el("div", { display: "flex", alignItems: "center", paddingLeft: DIAL_GAP, borderLeft: `1px solid ${BORDER}` }, [plateDial(rating, DIAL_W)]),
+  ]);
+}
+
+function ratingChartPanel(points: RatingPoint[], days: string[], updates: { day: string; label: string }[] = [], rating = 0): El {
   if (!points.length) {
-    return panel(msg("profileCard.ratingTitle"), "", [el("span", { color: MUTED, fontSize: 12, padding: "10px 0" }, msg("profileCard.ratingEmpty"))]);
+    return panel(msg("profileCard.ratingTitle"), "", [withDial(el("div", { display: "flex", alignItems: "center", width: HISTORY_CHART_W }, [
+      el("span", { color: MUTED, fontSize: 12, padding: "10px 0" }, msg("profileCard.ratingEmpty")),
+    ]), rating)]);
   }
   const first = points[0], last = points[points.length - 1];
   const withYear = first.day.slice(0, 4) !== last.day.slice(0, 4);
@@ -191,7 +205,7 @@ function ratingChartPanel(points: RatingPoint[], days: string[], updates: { day:
     ? `${dayLabel(first.day, withYear)} ${first.rating} → ${dayLabel(last.day, withYear)} ${last.rating} (${delta >= 0 ? "+" : ""}${delta})`
     : `${dayLabel(last.day, false)} ${last.rating}`;
   return panel(msg("profileCard.ratingTitle"), meta, [
-    lineChart(days, [{ values: points.map((p) => ({ day: p.day, value: p.rating, estimated: p.estimated })), color: ACCENT, fill: true }], { height: CHART_H, updates, lastLabel: true, extendTo: days[days.length - 1], mirror: RATING_AXES }),
+    withDial(lineChart(days, [{ values: points.map((p) => ({ day: p.day, value: p.rating, estimated: p.estimated })), color: ACCENT, fill: true }], { height: CHART_H, updates, lastLabel: true, extendTo: days[days.length - 1], mirror: RATING_AXES, width: HISTORY_CHART_W }), rating),
     // 범례는 점선(추정)만 설명한다. 추정 구간이 없으면 범례를 두지 않는다.
     ...(points.some((p) => p.estimated)
       ? [el("div", { display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 6, marginTop: 8, color: MUTED, fontSize: 10 }, [
@@ -249,6 +263,7 @@ export async function renderProfileCard(
   const trophyStyle = TROPHY_STYLE[profile.trophyClass] ?? TROPHY_STYLE.normal;
   const stars = Number(profile.stars) || 0;
   const avg = (sum: number, n: number) => (n ? msg("profileCard.average", { value: (sum / n).toFixed(1) }) : "");
+  const progress = plateProgress(profile.rating || 0);
 
   const width = 920;
   const root = el("div", {
@@ -282,9 +297,12 @@ export async function renderProfileCard(
           stars ? el("span", { color: "#fbbf24", fontSize: 13, fontWeight: 700 }, `★ ${stars}`) : el("span", {}, ""),
         ]),
       ]),
-      el("div", { display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 16, flexShrink: 0 }, [
+      el("div", { display: "flex", flexDirection: "column", alignItems: "flex-end", gap: progress ? 10 : 16, flexShrink: 0 }, [
         wordmark(creditOf(profile)),
-        ratingPlate(profile.rating || 0),
+        el("div", { display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 7 }, [
+          ratingPlate(profile.rating || 0),
+          ...(progress ? [progress] : []),
+        ]),
       ]),
     ]),
     // 레이팅 구성·플레이 횟수. 레이팅 합계는 오른쪽 위 플레이트에 있으므로 여기선 구성만.
@@ -295,7 +313,7 @@ export async function renderProfileCard(
       { value: String(profile.totalPlayCount || profile.playCount || 0), label: msg("profileCard.totalPlayCount") },
     ]),
     clearPanel(clears),
-    ...(history ? [ratingChartPanel(history.points, history.days, history.updates)] : []),
+    ...(history ? [ratingChartPanel(history.points, history.days, history.updates, profile.rating || 0)] : []),
     ...(history?.plays && history.plays.length > 1 ? [playCountPanel(history.plays, history.days, history.updates)] : []),
     // 최근 플레이는 캐롤봇 추가 북마클릿 데이터라, 그 북마클릿을 실행한 사용자에게만 보인다.
     ...(synced ? [panel(msg("profileCard.recentTitle"), msg("profileCard.recentMeta", { count: recent.length }), recent.length

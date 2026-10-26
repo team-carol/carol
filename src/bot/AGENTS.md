@@ -27,7 +27,7 @@ src/bot/
 | Guild auto-role setting | `commands/serverSettings.ts` | Admin-only `/서버설정`; button IDs are `serverset:*`. |
 | Profile display | `commands/profile.ts`, `utils/embeds.ts` | Uses cached profile and privacy checks. |
 | Search command | `commands/search.ts`, `utils/embeds.ts` | `search:{userId}:{encodedQuery}:{pageIdx}` buttons. |
-| Rating table/image | `commands/ratingtable.ts`, `commands/ratingimage.ts` | `/레이팅표` uses PNG cache (maimai DX only). `type` option: maimai DX, S-레이팅 (`src/sRating.ts`, maishift DX scores), other-game conversion (`src/games.ts`). |
+| Rating table/image | `commands/ratingimage.ts` | `/레이팅표` uses PNG cache (maimai DX only). `type` option: maimai DX, S-레이팅 (`src/sRating.ts`, maishift DX scores), other-game conversion (`src/games.ts`). |
 | Bot status | `commands/status.ts` | Operational counts/timestamps. |
 | simai 채보 업로드 | `commands/chart.ts`, `src/simai/parse.ts` | `/보면` 이 maidata.txt 첨부를 파싱해 `simai_charts` 에 저장하고 `/chart?id=` 링크를 준다. 업로드본은 30일 뒤 `runSimaiChartGC` 가 정리. |
 | `/보면` 곡 검색 | `commands/chart.ts` 의 `autocomplete()` | `곡` 옵션은 mai-notes 인덱스를 메모리에서 찾는다. 자동완성은 3초 제한이라 DB/네트워크를 타면 안 된다. `InteractionCreate` 의 `isAutocomplete()` 분기가 제일 먼저 실행된다. |
