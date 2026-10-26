@@ -40,6 +40,7 @@ import {
 import { aliasMatches, normalizeQuery, displayTitle } from "../../aliases";
 import { areaDisplayName } from "../../nameTranslations";
 import { ratingColor } from "./roles";
+import { nextPlateStep } from "./ratingCard";
 import { diffEmoji, rankEmoji, comboEmoji, syncEmoji, dxStarEmoji, blankEmoji } from "./emoji";
 import { padColumn } from "./ggsans";
 import { getScoreRank } from "../../games";
@@ -205,6 +206,8 @@ export function profileEmb(
         + (p.source === "maishift" ? `  ✦  ${msg("maishift.credit")}` : ""),
     });
   if (hasAvatar) emb.setThumbnail("attachment://avatar.png");
+  const next = nextPlateStep(p.rating || 0);
+  if (next) emb.addFields({ name: msg("embed.nextTierField"), value: msg("embed.nextTierValue", { tier: next.label, left: next.left.toLocaleString("ko-KR") }), inline: true });
   const friendCode = publicFriendCode(p) ?? undefined;
   if (friendCode) emb.addFields({ name: msg("embed.friendCodeField"), value: `\`${friendCode}\``, inline: true });
   // 서클 이름은 /설정 의 서클 공개(기본 공개)가 켜져 있을 때만.

@@ -25,7 +25,6 @@ import { loadFonts } from "../fonts";
 
 import * as profile      from "./commands/profile";
 import * as bookmarklet  from "./commands/bookmarklet";
-import * as ratingtable  from "./commands/ratingtable";
 import * as ratingimage  from "./commands/ratingimage";
 import * as achievement  from "./commands/achievement";
 import * as fortune      from "./commands/fortune";
@@ -57,7 +56,7 @@ import { loadRankImages } from "../rankImages";
 type Command = { data: { toJSON(): object; name: string }; execute: (i: ChatInputCommandInteraction) => Promise<void>; autocomplete?: (i: AutocompleteInteraction) => Promise<void> };
 
 // 스탬프는 maishift 공식 API 엔드포인트가 나올 때까지 등록하지 않는다(src/maishift/features.ts).
-const COMMANDS: Command[] = [profile, circle, bookmarklet, ratingtable, ratingimage, achievement, fortune, settings, gameOptions, newsSettings, search, status, songrec, random, areaMap, report, admin, goal, chart, ratingcalc, maishift, history, ...(PENDING_FEATURES.stamps ? [stamp] : []), photo];
+const COMMANDS: Command[] = [profile, circle, bookmarklet, ratingimage, achievement, fortune, settings, gameOptions, newsSettings, search, status, songrec, random, areaMap, report, admin, goal, chart, ratingcalc, maishift, history, ...(PENDING_FEATURES.stamps ? [stamp] : []), photo];
 const EPHEMERAL_REPLY = { flags: MessageFlags.Ephemeral } as const;
 
 // mai-notes 메타데이터 동기화. 운영자 조건이 "대량 통신 금지" 라서 manifest.json 한 개를

@@ -34,6 +34,8 @@ export interface ChartOpts {
   extendTo?: string;
   /** 왼쪽 축만 쓰는 그래프에서, 같은 눈금을 오른쪽에 다른 값으로도 적는다(예: 레이팅 ÷ 50 = 곡 평균) */
   mirror?: { left: (v: number) => string; right: (v: number) => string };
+  /** 그래프 전체 폭(기본 CHART_W). 옆에 다른 것을 둘 때 줄인다. */
+  width?: number;
 }
 
 export function niceStep(range: number): number {
@@ -101,7 +103,8 @@ export function lineChart(days: string[], series: ChartSeries[], opts: ChartOpts
   });
   const main = extended[0].values;
   const hasRight = extended.some((s) => s.axis === "right") || !!opts.mirror;
-  const plotW = CHART_W - AXIS_W * (hasRight ? 2 : 1) - GAP * (hasRight ? 2 : 1);
+  const W = opts.width ?? CHART_W;
+  const plotW = W - AXIS_W * (hasRight ? 2 : 1) - GAP * (hasRight ? 2 : 1);
   const firstI = index.get(main[0].day) ?? 0;
   const lastI = index.get(main[main.length - 1].day) ?? firstI;
   const span = Math.max(1, lastI - firstI);
@@ -162,9 +165,9 @@ export function lineChart(days: string[], series: ChartSeries[], opts: ChartOpts
   // 그래프 아래 라벨 줄(가로 눈금·버전 이름). 왼쪽 축 폭까지 포함한 한 영역에서 x 를 직접 계산해 그래프와 맞춘다.
   const offset = AXIS_W + GAP;
   const below = (items: { x: number; label: string; color: string; bold?: boolean }[]) =>
-    el("div", { display: "flex", position: "relative", height: 14, width: CHART_W }, items.map((it) =>
+    el("div", { display: "flex", position: "relative", height: 14, width: W }, items.map((it) =>
       // 글자 가운데가 x 에 오도록 고정 폭 상자 안에서 가운데 정렬(span 의 textAlign 은 먹지 않는다).
-      el("div", { display: "flex", justifyContent: "center", position: "absolute", top: 0, left: offset + Math.max(-offset, Math.min(CHART_W - offset - 72, it.x - 36)), width: 72 }, [
+      el("div", { display: "flex", justifyContent: "center", position: "absolute", top: 0, left: offset + Math.max(-offset, Math.min(W - offset - 72, it.x - 36)), width: 72 }, [
         el("span", { color: it.color, fontSize: 10, fontWeight: it.bold ? 700 : 400, lineHeight: 1, whiteSpace: "nowrap" }, it.label),
       ])));
 

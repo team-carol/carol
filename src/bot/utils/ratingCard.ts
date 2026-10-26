@@ -1,4 +1,3 @@
-import { RATING_ROLES } from "./roles";
 import { BRAND } from "../../brand";
 import { renderInWorker } from "./renderPool";
 import type { PlayRecord, ChartMarks, MaimaiServer } from "../../scraper";
@@ -558,14 +557,36 @@ function starsSvg(count: number): string {
   return url;
 }
 
-// 별 개수 = /레이팅기준표(RATING_ROLES)의 단계 번호. 금 I(14000)부터만 센다
-// (그 아래 구간은 기준표가 게임과 달라 쓰지 않는다). 예: 금 II → 2, 무지개(극) III → 3.
-const ROMAN_STARS: Record<string, number> = { I: 1, II: 2, III: 3, IV: 4 };
+// 게임 기준 레이팅 단계. 플레이트 색이 바뀌는 점수에, 금(14000)부터는 별 단계(250점마다)를 더했다.
+// 별 개수 = 단계 번호. 예: 금 II → 2, 무지개(극) III → 3. 프로필의 "다음 단계까지" 도 이 표를 쓴다.
+const PLATE_STEPS: { min: number; key: MessageKey; star?: number }[] = [
+  { min: 16750, key: "card.plate.hyperRainbow", star: 4 },
+  { min: 16500, key: "card.plate.hyperRainbow", star: 3 },
+  { min: 16250, key: "card.plate.hyperRainbow", star: 2 },
+  { min: 16000, key: "card.plate.hyperRainbow", star: 1 },
+  { min: 15750, key: "card.plate.rainbow", star: 4 },
+  { min: 15500, key: "card.plate.rainbow", star: 3 },
+  { min: 15250, key: "card.plate.rainbow", star: 2 },
+  { min: 15000, key: "card.plate.rainbow", star: 1 },
+  { min: 14750, key: "card.plate.platinum", star: 2 },
+  { min: 14500, key: "card.plate.platinum", star: 1 },
+  { min: 14250, key: "card.plate.gold", star: 2 },
+  { min: 14000, key: "card.plate.gold", star: 1 },
+  { min: 13000, key: "card.plate.silver" },
+  { min: 12000, key: "card.plate.bronze" },
+  { min: 10000, key: "card.plate.purple" },
+  { min: 7000, key: "card.plate.red" },
+  { min: 4000, key: "card.plate.yellow" },
+  { min: 2000, key: "card.plate.green" },
+  { min: 1000, key: "card.plate.blue" },
+  { min: 0, key: "card.plate.white" },
+];
+const ROMAN = ["", "I", "II", "III", "IV"];
+function plateStepLabel(step: { key: MessageKey; star?: number }): string {
+  return step.star ? `${msg(step.key)} ${ROMAN[step.star]}` : msg(step.key);
+}
 function plateStars(value: number): number {
-  if (value < 14000) return 0;
-  const role = RATING_ROLES.find(([min]) => value >= min);
-  if (!role) return 0;
-  return ROMAN_STARS[role[1].split(" ").pop() ?? ""] ?? 0;
+  return PLATE_STEPS.find((st) => value >= st.min)?.star ?? 0;
 }
 
 /** 레이팅 플레이트(별 포함). 프로필 카드도 같은 모양을 쓴다. */
@@ -618,6 +639,71 @@ export function ratingPlate(value: number, scale = PLATE_S): El {
   } as unknown as El;
   // 별 묶음과 플레이트 사이는 Figma(4)보다 넉넉히 띄운다.
   return el("div", { display: "flex", alignItems: "center", gap: 8 }, [stars, frame]);
+}
+
+/** 다음 레이팅 단계. 최고 단계(무지개(극) IV)면 null. progress 는 현재 단계 시작점부터 0~1. */
+export function nextPlateStep(value: number): { label: string; left: number; progress: number; fill: string } | null {
+  const v = Math.max(0, Math.floor(value));
+  const i = PLATE_STEPS.findIndex((st) => v >= st.min);
+  if (i <= 0) return null;
+  const cur = PLATE_STEPS[i];
+  const next = PLATE_STEPS[i - 1];
+  const fill = (PLATE_TIERS.find((t) => next.min >= t.min) ?? PLATE_TIERS[0]).fill;
+  return { label: plateStepLabel(next), left: next.min - v, progress: (v - cur.min) / (next.min - cur.min), fill };
+}
+
+// 다이얼: 가운데 줄이 지금 단계, 위로 높은 단계·아래로 낮은 단계 3개씩. 가운데 줄만 크게 강조하고
+// 나머지는 같은 크기로 왼쪽을 맞추되 멀어질수록 흐려진다. 인덱스는 |가운데와의 거리|.
+const DIAL_REACH = 3;
+const DIAL_OPACITY = [1, 0.75, 0.55, 0.38];
+const DIAL_CENTER_H = 44;
+const DIAL_SIDE_H = 24;
+const DIAL_PAD_L = 18; // 줄 안 왼쪽 여백. 가운데 줄의 강조 막대가 이 안에 들어간다.
+
+/** 레이팅 단계 다이얼(프로필 카드 히스토리 옆). 가운데 줄에는 지금 레이팅을 적는다. */
+export function plateDial(value: number, width: number): El {
+  const v = Math.max(0, Math.floor(value));
+  const cur = Math.max(0, PLATE_STEPS.findIndex((st) => v >= st.min));
+  const rows: El[] = [];
+  for (let d = -DIAL_REACH; d <= DIAL_REACH; d++) {
+    const center = d === 0;
+    const height = center ? DIAL_CENTER_H : DIAL_SIDE_H;
+    const step = PLATE_STEPS[cur + d]; // PLATE_STEPS 는 높은 단계부터라 d<0 이 위(높은 단계)
+    if (!step) {
+      rows.push(el("div", { height }));
+      continue;
+    }
+    rows.push(el("div", {
+      display: "flex", alignItems: "center", position: "relative",
+      height, opacity: DIAL_OPACITY[Math.abs(d)], padding: `0 12px 0 ${center ? DIAL_PAD_L - 1 : DIAL_PAD_L}px`,
+      ...(center ? { borderRadius: 10, background: BRAND.surface2, border: `1px solid ${BRAND.border2}` } : {}),
+    }, [
+      // 강조 막대. 한글 글리프가 줄 상자 가운데보다 2px 쯤 아래에 그려져서 막대도 그만큼 내린다.
+      ...(center ? [el("div", { position: "absolute", left: 6, top: (DIAL_CENTER_H - 2 - 15) / 2 + 2, width: 3, height: 15, borderRadius: 99, background: BRAND.accent })] : []),
+      el("span", { color: center ? BRAND.ink : BRAND.inkSoft, fontSize: center ? 15 : 12, fontWeight: center ? 800 : 700, lineHeight: 1, whiteSpace: "nowrap" }, plateStepLabel(step)),
+      el("span", {
+        marginLeft: "auto", paddingLeft: 8, flexShrink: 0, color: center ? BRAND.accentSoft : BRAND.dim, fontFamily: "Pretendard",
+        fontSize: center ? 14 : 11, fontWeight: 700, lineHeight: 1,
+      }, (center ? v : step.min).toLocaleString("ko-KR")),
+    ]));
+  }
+  return el("div", { display: "flex", flexDirection: "column", justifyContent: "center", width, flexShrink: 0 }, rows);
+}
+
+/** 플레이트 아래에 두는 다음 단계 진행 바(프로필 카드). 바 폭은 플레이트 틀과 같다. 최고 단계면 null. */
+export function plateProgress(value: number, scale = PLATE_S): El | null {
+  const next = nextPlateStep(value);
+  if (!next) return null;
+  const width = Math.round(150 * scale * 100) / 100;
+  // 그라디언트를 바 전체에 깔고 남은 부분을 덮어서, 채운 만큼 다음 플레이트 색이 드러나게 한다.
+  const cover = Math.round(width * (1 - next.progress) * 100) / 100;
+  const fill = next.fill.startsWith("linear-gradient") ? { backgroundImage: next.fill } : { background: next.fill };
+  return el("div", { display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 5 }, [
+    el("div", { display: "flex", justifyContent: "flex-end", width, height: 5, borderRadius: 99, overflow: "hidden", ...fill },
+      el("div", { width: cover, height: "100%", background: BRAND.surface2 })),
+    el("span", { fontSize: 10, fontWeight: 700, color: BRAND.muted, whiteSpace: "nowrap", lineHeight: 1 },
+      msg("card.plateNext", { tier: next.label, left: next.left.toLocaleString("ko-KR") })),
+  ]);
 }
 
 function sectionLabel(
