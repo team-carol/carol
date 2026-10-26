@@ -210,10 +210,6 @@ export const MESSAGES = {
   "status.userCountValue": "{count}명",
   "status.lastSync": "마지막 동기화",
 
-  // ── /레이팅기준표 ───────────────────────────────────────────────────────
-  "ratingTable.title": "레이팅 티어 기준표",
-  "ratingTable.footer": "/역할설정 으로 현재 레이팅에 맞는 역할 부여",
-
   // ── /오늘의곡 ───────────────────────────────────────────────────────────
   "fortune.noSongs": "오늘의 운세를 만들 곡을 찾지 못했습니다. 곡 데이터를 다시 불러와 주세요.",
   "fortune.title": "오늘의 운세",
@@ -256,6 +252,8 @@ export const MESSAGES = {
   "embed.profileBody": "**{name}**  ✦  **{rating}**\n플레이 {play}/{total}회{stars}",
   "embed.profileFooter": "서버: {server}  ✦  마지막 동기화: {synced}",
   "embed.friendCodeField": "친구 코드",
+  "embed.nextTierField": "다음 단계",
+  "embed.nextTierValue": "{tier}까지 {left}",
   "embed.circleField": "서클",
   "embed.prev": "◀ 이전",
   "embed.next": "다음 ▶",
@@ -411,6 +409,21 @@ export const MESSAGES = {
   // 게임 용어(난이도, 랭크, FC/AP, ST/DX)와 숫자는 카드 코드에 그대로 둔다.
   "card.createdBy": "Created by",
   "card.lastSynced": "마지막 동기화 {time} (KST)",
+  // 레이팅 플레이트 아래 다음 단계 진행 바(프로필 카드)
+  "card.plateNext": "{tier}까지 {left}",
+  // 레이팅 단계 이름(게임 플레이트 색). 금부터는 뒤에 I~IV 가 붙는다.
+  "card.plate.white": "하양",
+  "card.plate.blue": "파랑",
+  "card.plate.green": "초록",
+  "card.plate.yellow": "노랑",
+  "card.plate.red": "빨강",
+  "card.plate.purple": "보라",
+  "card.plate.bronze": "동",
+  "card.plate.silver": "은",
+  "card.plate.gold": "금",
+  "card.plate.platinum": "백금",
+  "card.plate.rainbow": "무지개",
+  "card.plate.hyperRainbow": "무지개(극)",
 
   "profileCard.eyebrow": "PLAYER PROFILE ✦ {server}",
   "profileCard.circleChip": "CIRCLE",
