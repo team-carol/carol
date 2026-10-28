@@ -63,10 +63,14 @@ const EMOJIS = [
 
 // 넓은 그림(ST/DX 배지)을 정사각형 몇 칸으로 잘라 이어 붙여 쓰는 이모지. 이름 끝에 _a, _b, _c 가 붙는다.
 // 그림은 /성과 카드와 같은 DX NET 배지(113:32). DX NET 점검 중이면 인터넷 아카이브의 같은 주소 사본을 받는다.
-/** [이모지 이름, DX NET 그림 파일명, 칸 수] */
+// 디스코드는 이모지를 글줄 맨 아래에 맞추는데, 임베드 제목은 글줄이 높아 배지가 글자보다 낮게 앉는다.
+// 그래서 임베드용(e)은 배지를 조금 줄여 칸 맨 위에 붙인다(가운데보다 128 기준 16 위).
+/** [이모지 이름, DX NET 그림 파일명, 칸 수, { height: 배지 높이, top: 위 여백 }(생략하면 칸 너비에 맞춰 세로 가운데)] */
 const WIDE = [
   ["carol_dx", "music_dx.png", 3],
   ["carol_st", "music_standard.png", 3],
+  ["carol_dxe", "music_dx.png", 3, { height: 96, top: 0 }],
+  ["carol_ste", "music_standard.png", 3, { height: 96, top: 0 }],
 ];
 const WIDE_DIR = path.join(ROOT, "data", "dxnet");
 
@@ -145,12 +149,16 @@ async function ensureWideSource(file) {
   return `data:image/png;base64,${fs.readFileSync(local).toString("base64")}`;
 }
 
-// 넓은 그림의 i 번째 칸. 그림 전체 너비를 칸 수에 맞추고 세로 가운데에 둔 뒤 viewBox 로 그 칸만 잘라 그린다.
-function wideTile(src, tiles, i) {
-  const width = SIZE * tiles;
-  const height = Math.round(width * 32 / 113);
+// 넓은 그림의 i 번째 칸. 그림을 칸 수만큼의 너비에 맞추고(높이를 정했으면 그 높이에 맞춰 가로 가운데)
+// 세로 가운데(또는 정한 위 여백)에 둔 뒤 viewBox 로 그 칸만 잘라 그린다.
+function wideTile(src, tiles, i, opt = {}) {
+  const total = SIZE * tiles;
+  const height = opt.height ?? Math.round(total * 32 / 113);
+  const width = opt.height ? Math.round(height * 113 / 32) : total;
+  const x = Math.round((total - width) / 2);
+  const y = opt.top ?? Math.round((SIZE - height) / 2);
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${SIZE}" height="${SIZE}" viewBox="${SIZE * i} 0 ${SIZE} ${SIZE}">`
-    + `<image xlink:href="${src}" x="0" y="${Math.round((SIZE - height) / 2)}" width="${width}" height="${height}" preserveAspectRatio="none"/></svg>`;
+    + `<image xlink:href="${src}" x="${x}" y="${y}" width="${width}" height="${height}" preserveAspectRatio="none"/></svg>`;
   return new Resvg(svg).render().asPng();
 }
 
@@ -177,12 +185,12 @@ async function main() {
     fs.writeFileSync(path.join(OUT, `${e[0]}.png`), await render(tile(e), SIZE, SIZE, fonts));
   }
   const wideNames = [];
-  for (const [name, file, tiles] of WIDE) {
+  for (const [name, file, tiles, opt] of WIDE) {
     const src = await ensureWideSource(file);
     const names = [];
     for (let i = 0; i < tiles; i++) {
       const tileName = `${name}_${String.fromCharCode(97 + i)}`;
-      fs.writeFileSync(path.join(OUT, `${tileName}.png`), wideTile(src, tiles, i));
+      fs.writeFileSync(path.join(OUT, `${tileName}.png`), wideTile(src, tiles, i, opt));
       names.push(tileName);
     }
     wideNames.push(names);
