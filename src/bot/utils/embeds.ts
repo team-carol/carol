@@ -42,7 +42,7 @@ import { aliasMatches, normalizeQuery, displayTitle } from "../../aliases";
 import { areaDisplayName } from "../../nameTranslations";
 import { ratingColor } from "./roles";
 import { nextPlateStep } from "./ratingCard";
-import { diffEmoji, rankEmoji, comboEmoji, syncEmoji, dxStarEmoji, blankEmoji } from "./emoji";
+import { diffEmoji, rankEmoji, comboEmoji, syncEmoji, dxStarEmoji, blankEmoji, kindEmoji } from "./emoji";
 import { padColumn } from "./ggsans";
 import { getScoreRank } from "../../games";
 import { dxStars } from "../../sRating";
@@ -599,7 +599,7 @@ export async function searchResultEmbeds(
       const all = group.records;
       const title = group.title;
       const musicKind = group.musicKind;
-      const kind = musicKind ? ` [${musicKind}]` : "";
+      const kind = musicKind ? ` ${kindEmoji(musicKind)}` : "";
       const rows = DIFF_ORDER.flatMap((d): { d: string; lv: string; achievement?: string; marks: string }[] => {
         const r = all.find((x) => x.diff === d);
         // 검색은 이미 ST/DX로 분리돼 있으므로 exact(상호 폴백 없음)로 조회.
