@@ -1,14 +1,21 @@
 import {
-  SlashCommandBuilder, ChatInputCommandInteraction, AutocompleteInteraction, EmbedBuilder,
+  SlashCommandBuilder, ChatInputCommandInteraction, AutocompleteInteraction,
   ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, AttachmentBuilder,
+  ContainerBuilder, SectionBuilder, SeparatorSpacingSize, TextDisplayBuilder, escapeMarkdown,
 } from "discord.js";
 import { randomBytes } from "crypto";
-import { saveSimaiChart, countSimaiChartsByOwner, getTranslateTitles } from "../../storage";
+import { saveSimaiChart, countSimaiChartsByOwner, getTranslateTitles, getUserFriendCode, getCachedProfile } from "../../storage";
 import { displayTitle } from "../../aliases";
 import { parseMaidata, UNKNOWN_DIFFICULTY } from "../../simai/parse";
 import { resolveChart, ChartUnavailableError } from "../../simai/source";
 import { searchAllCharts, chartIndexSize } from "../../simai/chartSearch";
 import { renderPreviewGif } from "../utils/chartGif";
+import { jacketBuffer, getClearList } from "../utils/embeds";
+import { diffEmoji, rankEmoji, comboEmoji, syncEmoji, dxStarEmoji } from "../utils/emoji";
+import { getConstant, getJacketFile, getSongVersionName, isSongPlus, getSongGenre } from "../../constants";
+import { getScoreRank } from "../../games";
+import { dxStars } from "../../sRating";
+import type { PlayRecord } from "../../scraper";
 import { getBaseUrl } from "../../web/bookmarklet";
 import { PORT } from "../../config";
 import { msg } from "../../messages";
@@ -106,8 +113,8 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
         id, title: found.title, artist: found.artist,
         designer: found.designer, level: found.level, diff, chart,
         sourceUrl: found.sourceUrl, chartType: found.chartType,
-        footer: found.attribution
-          ? msg("chart.footerSource", { source: found.attribution })
+        footer: found.attribution && found.sourceUrl
+          ? msg("chart.footerSource", { source: found.attribution, url: found.sourceUrl })
           : msg("chart.footerRegistry"),
       });
     } catch (e) {
@@ -224,80 +231,161 @@ interface ReplyInput {
   chartType?: string;
 }
 
-/** 원본 페이지 링크와 보면 제작자. mai-notes 는 제작자를 모르는 보면이 많아 그때는 링크만. */
+/** 보면 제작자(원본 페이지 링크). 출처 사이트는 아래 출처 줄에 링크로 걸리므로, 제작자를 모르면 줄을 뺀다. */
 function sourceCredit(url: string, designer: string): string {
-  if (url.startsWith("https://mai-notes.com/")) {
-    return designer ? msg("chart.sourceCreditMainotes", { url, designer }) : msg("chart.sourceLinkMainotes", { url });
-  }
-  return msg("chart.sourceCredit", { url, designer: designer || "?" });
+  return designer ? msg("chart.sourceCredit", { url, designer }) : "";
 }
 
-/** 링크 + 통계 + 미리보기 GIF 를 붙여 응답한다. 파일/곡 어느 쪽으로 왔든 같다. */
+/** m:ss */
+function clock(ms: number): string {
+  const sec = Math.round(ms / 1000);
+  return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`;
+}
+
+/** BPM 이 바뀌는 채보는 "150–300" 처럼 범위로. */
+function bpmText(chart: Chart): string {
+  const fmt = (b: number) => (Number.isInteger(b) ? String(b) : b.toFixed(1));
+  const bpms = chart.bpmEvents.map((e) => e.bpm).filter((b) => b > 0);
+  const lo = bpms.length ? Math.min(...bpms) : chart.bpm;
+  const hi = bpms.length ? Math.max(...bpms) : chart.bpm;
+  const text = lo !== hi ? `${fmt(lo)}–${fmt(hi)}` : fmt(chart.bpm);
+  return chart.bpmAssumed ? msg("chart.bpmGuess", { bpm: text }) : text;
+}
+
+/**
+ * 노트 하나로 깎이는 달성률(%). 기본 점수 가중치는 TAP·TOUCH 1, HOLD 2, SLIDE 3, BREAK 5 이고 GREAT 는 80%.
+ * BREAK 보너스 1% 는 BREAK 수로 나누며 PERFECT 는 그중 75%·50% 만 받는다.
+ */
+function judgeLoss(s: Chart["stats"]): { tapGreat: number; break75: number; break50: number } {
+  const weight = s.tap + s.touch + 2 * (s.hold + s.touchHold) + 3 * s.slide + 5 * s.break;
+  const bonus = s.break > 0 ? 1 / s.break : 0;
+  return { tapGreat: weight > 0 ? (0.2 / weight) * 100 : 0, break75: 0.25 * bonus, break50: 0.5 * bonus };
+}
+
+/** 실행한 사람의 이 보면 기록 한 줄. 연동하지 않았으면 null. */
+async function myRecordLine(userId: string, title: string, kind: string, diff: string): Promise<string | null> {
+  try {
+    const fc = await getUserFriendCode(userId);
+    const p = fc ? await getCachedProfile(fc) : null;
+    if (!p) return null;
+    const r = getClearList(p).find((c) => c.title === title && c.musicKind === kind && c.diff === diff);
+    if (!r || r.achievementVal <= 0) return msg("chart.myRecordNone");
+    const stars = r.dxScoreMax ? dxStars(((r.dxScore ?? 0) / r.dxScoreMax) * 100) : 0;
+    const marks = [rankEmoji(getScoreRank(r.achievementVal)), comboEmoji(r.fc), syncEmoji(r.sync), dxStarEmoji(stars)];
+    return msg("chart.myRecord", { achievement: `${r.achievementVal.toFixed(4)}%`, marks: marks.filter(Boolean).join(" ") });
+  } catch (e) {
+    console.error("[보면] 내 기록 조회 실패:", e);
+    return null;
+  }
+}
+
+/** 곡 정보·노트 수·내 기록·미리보기 GIF 를 Components V2 컨테이너로 응답한다. 파일/곡 어느 쪽으로 왔든 같다. */
 async function reply(interaction: ChatInputCommandInteraction, x: ReplyInput): Promise<void> {
   const url = `${getBaseUrl(PORT)}/chart?id=${x.id}`;
   const s = x.chart.stats;
-  const secs = Math.round(x.chart.durationMs / 1000);
   // 곡명 한국어 번역: 실행 유저의 표시 설정(translate_titles)이 켜져 있고 번역 별명이
   // 있으면 치환. 다른 임베드(검색·최근)와 같은 방식.
   const translate = await getTranslateTitles(interaction.user.id);
   const shownTitle = displayTitle(x.title, translate);
-  const embed = new EmbedBuilder()
-    .setColor(DIFF_COLOR[x.diff] ?? 0x9333ea)
-    .setTitle((shownTitle || msg("chart.untitled")) + typeTag(x.chartType))
-    .setDescription(
-      msg("chart.openLink", { url })
-      + (x.chart.bpmAssumed ? "\n" + msg("chart.bpmAssumedNote") : "")
-      // 원본 링크 + 제작자 크레딧. mai-notes·atwiki 채보면 항상 출처를 건다.
-      + (x.sourceUrl ? "\n" + sourceCredit(x.sourceUrl, x.designer) : ""),
-    )
-    .addFields(
-      { name: msg("chart.fieldChart"), value: `\`${DIFF_LABEL[x.diff] ?? msg("chart.diffUnknown")}\`${x.level ? "  ✦  Lv." + x.level : ""}`, inline: true },
-      { name: msg("chart.fieldBpm"), value: `\`${x.chart.bpm}\`${x.chart.bpmAssumed ? " (추정)" : ""}  ✦  ${x.chart.measures}마디`, inline: true },
-      { name: msg("chart.fieldLength"), value: `\`${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}\``, inline: true },
-      {
-        name: msg("chart.fieldNotes"),
-        value: `TAP \`${s.tap}\` ✦ HOLD \`${s.hold + s.touchHold}\` ✦ SLIDE \`${s.slide}\` ✦ TOUCH \`${s.touch}\` ✦ BREAK \`${s.break}\`\n합계 \`${s.total}\``,
-      },
-    )
-    .setFooter({ text: x.footer });
-  if (x.artist) embed.setAuthor({ name: x.artist });
+  const kind = x.chartType === "deluxe" ? "DX" : x.chartType === "standard" ? "ST" : "";
+  const diffName: string | undefined = DIFF_LABEL[x.diff];
+  // 카탈로그에 있는 곡(재킷이 있으면 있는 곡)이면 상수·버전·장르·재킷·내 기록·외부출력을 붙인다.
+  // 업로드 파일은 제목이 카탈로그와 같을 때만 붙는다.
+  const inCatalog = getJacketFile(x.title) !== null;
+  const constant = inCatalog && diffName && kind ? getConstant(x.title, kind, diffName, "intl", true) : null;
+  const versionName = inCatalog && kind ? getSongVersionName(x.title, "intl", kind) : null;
+  const version = versionName ? versionName + (isSongPlus(x.title, "intl", kind) ? " PLUS" : "") : null;
+  const genre = inCatalog ? getSongGenre(x.title) : null;
 
-  // 미리보기 GIF. 웹 플레이어와 같은 렌더러를 워커에서 돌려 몇 초치를 잘라낸다.
-  const files: AttachmentBuilder[] = [];
-  try {
-    const asked = interaction.options.getNumber("시작");
-    const { gif, startMs, clipMs } = await renderPreviewGif(
+  // 미리보기 GIF 는 웹 플레이어와 같은 렌더러를 워커에서 돌려 몇 초치를 잘라낸다. 재킷·내 기록과 같이 기다린다.
+  const asked = interaction.options.getNumber("시작");
+  const [jacket, mine, preview] = await Promise.all([
+    inCatalog ? jacketBuffer({ title: x.title, jacketUrl: "" } as PlayRecord) : Promise.resolve(null),
+    inCatalog && diffName && kind ? myRecordLine(interaction.user.id, x.title, kind, diffName) : Promise.resolve(null),
+    renderPreviewGif(
       { id: x.id, title: x.title, artist: x.artist, designer: x.designer,
         level: x.level, difficulty: x.diff, chart: x.chart },
       asked !== null ? asked * 1000 : undefined,
-    );
-    files.push(new AttachmentBuilder(gif, { name: "preview.gif" }));
-    embed.setImage("attachment://preview.gif");
-    const s0 = Math.round(startMs / 1000);
-    embed.addFields({
-      name: msg("chart.fieldPreview"),
-      value: msg("chart.previewRange", {
-        from: `${Math.floor(s0 / 60)}:${String(s0 % 60).padStart(2, "0")}`,
-        sec: Math.round(clipMs / 1000),
-      }),
-      inline: true,
-    });
-  } catch (e) {
-    // 미리보기는 부가 기능이라, 실패해도 링크는 그대로 준다.
-    console.error("[보면] 미리보기 생성 실패:", e);
-  }
+    ).catch((e) => {
+      // 미리보기는 부가 기능이라, 실패해도 나머지는 그대로 준다.
+      console.error("[보면] 미리보기 생성 실패:", e);
+      return null;
+    }),
+  ]);
+
+  const heading = [
+    msg("chart.title", { title: escapeMarkdown(shownTitle || msg("chart.untitled")), kind: kind ? ` [${kind}]` : "" }),
+    x.artist && msg("chart.artist", { artist: escapeMarkdown(x.artist) }),
+    (version || genre) && msg("chart.version", { version: [version, genre].filter(Boolean).join(" / ") }),
+    msg("chart.level", {
+      diff: diffName ? diffEmoji(diffName) : msg("chart.diffUnknown"),
+      level: constant !== null ? constant.toFixed(1) : x.level,
+    }).trimEnd(),
+    msg("chart.info", { bpm: bpmText(x.chart), length: clock(x.chart.durationMs), measures: x.chart.measures }),
+  ].filter(Boolean).join("\n");
+
+  const loss = judgeLoss(s);
+  const notes = [
+    msg("chart.notes", { total: s.total, dxScore: s.total * 3 }),
+    msg("chart.notesBreakdown", { tap: s.tap, hold: s.hold + s.touchHold, slide: s.slide, touch: s.touch, break: s.break }),
+    loss.tapGreat > 0 && msg("chart.lossTap", { loss: loss.tapGreat.toFixed(4) }),
+    s.break > 0 && msg("chart.lossBreak", { p75: loss.break75.toFixed(4), p50: loss.break50.toFixed(4) }),
+  ].filter(Boolean).join("\n");
 
   // 링크 버튼은 https 일 때만 단다. baseUrl 이 비어 있는 로컬 개발에서는 URL 이
   // http://localhost:... 라 Discord 가 거부할 수 있고, 그러면 응답 전체가 실패한다.
-  // 어차피 embed 설명에 같은 링크가 마크다운으로 들어가 있어 기능은 잃지 않는다.
-  const row = new ActionRowBuilder<ButtonBuilder>();
-  if (url.startsWith("https://")) {
-    row.addComponents(new ButtonBuilder().setStyle(ButtonStyle.Link).setURL(url).setLabel(msg("chart.button")));
+  // 그때는 아래 작은 글씨에 같은 링크를 넣어 기능은 잃지 않는다.
+  const linkButton = url.startsWith("https://");
+  const foot = [
+    preview && msg("chart.previewRange", { from: clock(preview.startMs), sec: Math.round(preview.clipMs / 1000) }),
+    x.sourceUrl && sourceCredit(x.sourceUrl, x.designer),
+    x.footer,
+    x.chart.bpmAssumed && msg("chart.bpmAssumedNote"),
+    !linkButton && msg("chart.openLink", { url }),
+  ].filter(Boolean).map((l) => `-# ${l}`).join("\n");
+
+  const files: AttachmentBuilder[] = [];
+  const container = new ContainerBuilder().setAccentColor(DIFF_COLOR[x.diff] ?? 0x9333ea);
+  if (jacket) {
+    files.push(new AttachmentBuilder(jacket, { name: "jacket.png" }));
+    container.addSectionComponents(
+      new SectionBuilder()
+        .addTextDisplayComponents((t) => t.setContent(heading))
+        .setThumbnailAccessory((t) => t.setURL("attachment://jacket.png")),
+    );
+  } else {
+    container.addTextDisplayComponents((t) => t.setContent(heading));
   }
+  container
+    .addSeparatorComponents((sp) => sp.setSpacing(SeparatorSpacingSize.Small))
+    .addTextDisplayComponents((t) => t.setContent(notes));
+  if (mine) {
+    container
+      .addSeparatorComponents((sp) => sp.setSpacing(SeparatorSpacingSize.Small))
+      .addTextDisplayComponents((t) => t.setContent(mine));
+  }
+  if (preview) {
+    files.push(new AttachmentBuilder(preview.gif, { name: "preview.gif" }));
+    container.addMediaGalleryComponents((g) => g.addItems((it) => it.setURL("attachment://preview.gif")));
+  }
+  container.addTextDisplayComponents((t) => t.setContent(foot));
+
   // 풀영상(400px/60fps, 가이드음)을 만들어 캐시하는 버튼. 처음 한 번만 렌더되고
   // 그 뒤로는 캐시로 즉시 나온다.
-  row.addComponents(
+  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder().setStyle(ButtonStyle.Secondary).setCustomId(`chartvid:${x.id}`).setLabel(msg("chart.videoButton")),
   );
-  await interaction.editReply({ embeds: [embed], components: [row], files });
+  if (linkButton) {
+    row.addComponents(new ButtonBuilder().setStyle(ButtonStyle.Link).setURL(url).setLabel(msg("chart.playButton")));
+  }
+  if (inCatalog) {
+    const q = encodeURIComponent(`maimai ${x.title} ${kind} ${diffName ?? ""} 外部出力`.replace(/\s+/g, " ").trim());
+    row.addComponents(new ButtonBuilder().setStyle(ButtonStyle.Link)
+      .setURL(`https://www.youtube.com/results?search_query=${q}`).setLabel(msg("chart.externalButton")));
+  }
+  container
+    .addSeparatorComponents((sp) => sp.setSpacing(SeparatorSpacingSize.Small))
+    .addActionRowComponents(row);
+
+  await interaction.editReply({ components: [container], files, flags: MessageFlags.IsComponentsV2 });
 }
