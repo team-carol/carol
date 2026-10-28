@@ -33,6 +33,7 @@ import {
   resolveSongPick,
   getRegionExclusive,
   getSongGenre,
+  getSongArtist,
   getSongVersionName,
   isSongPlus,
   jacketFileUrl,
@@ -650,7 +651,7 @@ export async function searchResultEmbeds(
       // 제목이 아닌 점수표 위 한 줄에 둔다.
       const exclusive = getRegionExclusive(title, musicKind);
       const verLabel = p.server === "jp" ? "japan ver." : "intl ver.";
-      // 장르(catcode)·수록 버전은 OTOGE DB 데이터. 있을 때만 리전 라벨 아래 들여써서 붙인다.
+      // 장르·수록 버전은 있을 때만 붙인다. 버전은 지역과 같은 줄, 장르는 다음 줄(아티스트 줄까지 넣어도 글 높이가 재킷과 맞게).
       const genre = getSongGenre(title);
       const versionName = getSongVersionName(title, p.server, musicKind);
       const versionBase = versionName ? versionName + (isSongPlus(title, p.server, musicKind) ? " PLUS" : "") : null;
@@ -659,10 +660,13 @@ export async function searchResultEmbeds(
       const versionLabel = versionBase && position ? msg("searchResult.versionPosition", { version: versionBase, position }) : versionBase;
       const regionLine =
         (exclusive ? msg("searchResult.regionExclusive", { version: exclusive === "jp" ? "japan ver." : "intl ver." }) : verLabel)
-        + (genre ? msg("searchResult.genreSuffix", { genre }) : "")
         + (versionLabel ? msg("searchResult.versionSuffix", { version: versionLabel }) : "")
+        + (genre ? msg("searchResult.genreSuffix", { genre }) : "")
         + "\n";
-      const heading = msg("searchResult.title", { title: escapeMarkdown(displayTitle(title, translate)), kind }) + "\n" + regionLine.trimEnd();
+      const artist = getSongArtist(title);
+      const heading = msg("searchResult.title", { title: escapeMarkdown(displayTitle(title, translate)), kind })
+        + (artist ? "\n" + msg("searchResult.artist", { artist: escapeMarkdown(artist) }) : "")
+        + "\n" + regionLine.trimEnd();
       const container = new ContainerBuilder().setAccentColor(musicKind === "DX" ? 0xf97316 : musicKind === "ST" ? 0x3b82f6 : 0x8a8087);
       if (buf) {
         const name = `sjacket${i}.png`;
