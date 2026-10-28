@@ -280,14 +280,17 @@ export const MESSAGES = {
   "searchResult.empty": "\"{query}\"{type} 검색 결과 없음",
   "searchResult.author": "-# \"{query}\"{type} 에 대한 검색 결과",
   "searchResult.title": "### {title}{kind}",
+  // 제목 아래 아티스트(작은 글씨). 아티스트를 모르면 이 줄은 빠진다.
+  "searchResult.artist": "-# {artist}",
   "searchResult.regionExclusive": "{version} 전용",
   // 검색 결과 점수표 한 줄. {diff} 난이도 이모지, {constant} 상수, {achievement} 달성률, {marks} 랭크·FC/AP·FS/FDX·DX ✦ 이모지
   "searchResult.row": "{diff} {constant} ✦ **{achievement}** {marks}",
   // 플레이하지 않은 난이도
   "searchResult.rowNotPlayed": "{diff} {constant} ✦ —",
   "searchResult.externalButton": "▶ 외부출력",
+  // 지역 뒤에 붙는 버전·장르. 버전은 지역과 같은 줄, 장르는 다음 줄(글 높이를 재킷 썸네일에 맞춘 줄 수)
   "searchResult.genreSuffix": "\n{genre}",
-  "searchResult.versionSuffix": "\n{version}",
+  "searchResult.versionSuffix": " ✦ {version}",
   "searchResult.versionPosition": "{version} ✦ {position}",
   "searchResult.detailButton": "상세 보기",
   "stamp.empty": "maishift에 스탬프 카드 정보가 없습니다.",
