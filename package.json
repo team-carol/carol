@@ -1,6 +1,6 @@
 {
   "name": "carol",
-  "version": "2.0.8",
+  "version": "2.0.9",
   "description": "maimai DX net profile Discord bot",
   "main": "dist/bot/index.js",
   "scripts": {
