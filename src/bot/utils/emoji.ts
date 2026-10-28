@@ -98,6 +98,12 @@ export function kindEmoji(kind: string): string {
   return tiles.every(Boolean) ? tiles.join("") : `[${kind}]`;
 }
 
+/** 임베드 제목(최대 256자)의 "곡명 배지". 이모지 코드가 길어 256자를 넘으면 "[DX]" 글자로. */
+export function titleWithKind(title: string, kind: string): string {
+  const withBadge = `${title} ${kindEmoji(kind)}`;
+  return withBadge.length <= 256 ? withBadge : `${title} [${kind}]`.slice(0, 256);
+}
+
 /** DX ✦1~5. 0 이면 "". */
 export function dxStarEmoji(stars: number): string {
   return stars >= 1 && stars <= 5 ? emoji(`carol_star${stars}`, `✦${stars}`) : "";
