@@ -98,7 +98,8 @@ export function kindEmoji(kind: string, embed = false): string {
   const base = KIND[kind] && KIND[kind] + (embed ? "e" : "");
   if (!base) return kind ? `[${kind}]` : "";
   const tiles = ["a", "b", "c"].map((t) => EMOJI.get(`${base}_${t}`));
-  return tiles.every(Boolean) ? tiles.join("") : `[${kind}]`;
+  // 칸 사이에 word joiner(U+2060)를 넣어, 긴 제목이 줄바꿈될 때 배지가 칸 사이에서 갈라지지 않게 한다(넘치면 통째로 다음 줄).
+  return tiles.every(Boolean) ? tiles.join("\u2060") : `[${kind}]`;
 }
 
 /** 임베드 제목(최대 256자)의 "곡명 배지". 이모지 코드가 길어 256자를 넘으면 "[DX]" 글자로. */
