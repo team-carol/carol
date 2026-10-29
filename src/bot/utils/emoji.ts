@@ -1,4 +1,4 @@
-// 봇 애플리케이션 이모지(난이도·랭크·FC/AP·FS/FDX·DX ✦). 그림은 scripts/make-emoji.js 가 assets/emoji 에 만들고,
+// 봇 애플리케이션 이모지(난이도·랭크·FC/AP·FS/FDX·DX ✦·ST/DX 배지). 그림은 scripts/make-emoji.js 가 assets/emoji 에 만들고,
 // 봇이 시작할 때 아직 없는 이모지를 그 그림으로 올린다(이미지에 assets/emoji 를 넣는다). 개발 봇과 배포 봇은 서로 다른
 // 애플리케이션이라 이모지 ID 가 다르므로 이름으로 찾아 둔다. 못 불러왔으면 글자로 대신한다.
 import * as fs from "fs";
@@ -86,6 +86,25 @@ export function syncEmoji(sync: string): string {
 /** 투명한 빈칸(점수표에서 없는 마크 자리 채우기). 이모지가 없으면 "". */
 export function blankEmoji(): string {
   return emoji("carol_blank", "");
+}
+
+const KIND: Record<string, string> = { DX: "carol_dx", ST: "carol_st" };
+
+/**
+ * ST/DX 배지(/성과 카드와 같은 DX NET 배지를 세 칸으로 잘라 이어 붙인 이모지). 한 칸이라도 없으면 "[DX]" 처럼 글자로.
+ * embed: 임베드 제목용. 임베드 제목은 이모지가 글자보다 낮게 앉아서 배지를 위로 올려 그린 것을 쓴다.
+ */
+export function kindEmoji(kind: string, embed = false): string {
+  const base = KIND[kind] && KIND[kind] + (embed ? "e" : "");
+  if (!base) return kind ? `[${kind}]` : "";
+  const tiles = ["a", "b", "c"].map((t) => EMOJI.get(`${base}_${t}`));
+  return tiles.every(Boolean) ? tiles.join("") : `[${kind}]`;
+}
+
+/** 임베드 제목(최대 256자)의 "곡명 배지". 이모지 코드가 길어 256자를 넘으면 "[DX]" 글자로. */
+export function titleWithKind(title: string, kind: string): string {
+  const withBadge = `${title} ${kindEmoji(kind, true)}`;
+  return withBadge.length <= 256 ? withBadge : `${title} [${kind}]`.slice(0, 256);
 }
 
 /** DX ✦1~5. 0 이면 "". */

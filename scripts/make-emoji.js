@@ -1,4 +1,4 @@
-// 디스코드 애플리케이션 이모지(랭크·FC/AP·FS/FDX·DX ✦) PNG 를 만든다. 결과는 assets/emoji/<이름>.png.
+// 디스코드 애플리케이션 이모지(난이도·랭크·FC/AP·FS/FDX·DX ✦·ST/DX 배지) PNG 를 만든다. 결과는 assets/emoji/<이름>.png.
 // 색은 maishift 의 "레거시" 색상 구성(배지 색)을 따르고, 모양·글꼴은 캐롤봇 카드(둥근 사각형, Pretendard)에 맞춘다.
 //
 //   node scripts/make-emoji.js            # assets/emoji/*.png + preview.png
@@ -60,6 +60,19 @@ const EMOJIS = [
   // 빈칸(투명). /검색 점수표에서 FC/AP·FS/FDX 가 없는 자리를 채워 뒤의 마크가 줄마다 같은 자리에 오게 한다.
   ["carol_blank", "", "blank", ""],
 ];
+
+// 넓은 그림(ST/DX 배지)을 정사각형 몇 칸으로 잘라 이어 붙여 쓰는 이모지. 이름 끝에 _a, _b, _c 가 붙는다.
+// 그림은 /성과 카드와 같은 DX NET 배지(113:32). DX NET 점검 중이면 인터넷 아카이브의 같은 주소 사본을 받는다.
+// 디스코드는 이모지를 글줄 맨 아래에 맞추는데, 임베드 제목은 글줄이 높아 배지가 글자보다 낮게 앉는다.
+// 그래서 임베드용(e)은 배지를 조금 줄여 칸 맨 위에 붙인다(가운데보다 128 기준 16 위).
+/** [이모지 이름, DX NET 그림 파일명, 칸 수, { height: 배지 높이, top: 위 여백 }(생략하면 칸 너비에 맞춰 세로 가운데)] */
+const WIDE = [
+  ["carol_dx", "music_dx.png", 3],
+  ["carol_st", "music_standard.png", 3],
+  ["carol_dxe", "music_dx.png", 3, { height: 96, top: 0 }],
+  ["carol_ste", "music_standard.png", 3, { height: 96, top: 0 }],
+];
+const WIDE_DIR = path.join(ROOT, "data", "dxnet");
 
 function el(type, style, children) {
   return { type, props: { style, children } };
@@ -123,6 +136,32 @@ function tile([, text, sup, color]) {
   ]);
 }
 
+async function ensureWideSource(file) {
+  const local = path.join(WIDE_DIR, file);
+  if (!fs.existsSync(local)) {
+    const url = `https://maimaidx-eng.com/maimai-mobile/img/${file}`;
+    let res = await fetch(url).catch(() => null);
+    if (!res || !res.ok) res = await fetch(`https://web.archive.org/web/2025id_/${url}`);
+    if (!res.ok) throw new Error(`${file} HTTP ${res.status}`);
+    fs.mkdirSync(WIDE_DIR, { recursive: true });
+    fs.writeFileSync(local, Buffer.from(await res.arrayBuffer()));
+  }
+  return `data:image/png;base64,${fs.readFileSync(local).toString("base64")}`;
+}
+
+// 넓은 그림의 i 번째 칸. 그림을 칸 수만큼의 너비에 맞추고(높이를 정했으면 그 높이에 맞춰 가로 가운데)
+// 세로 가운데(또는 정한 위 여백)에 둔 뒤 viewBox 로 그 칸만 잘라 그린다.
+function wideTile(src, tiles, i, opt = {}) {
+  const total = SIZE * tiles;
+  const height = opt.height ?? Math.round(total * 32 / 113);
+  const width = opt.height ? Math.round(height * 113 / 32) : total;
+  const x = Math.round((total - width) / 2);
+  const y = opt.top ?? Math.round((SIZE - height) / 2);
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${SIZE}" height="${SIZE}" viewBox="${SIZE * i} 0 ${SIZE} ${SIZE}">`
+    + `<image xlink:href="${src}" x="${x}" y="${y}" width="${width}" height="${height}" preserveAspectRatio="none"/></svg>`;
+  return new Resvg(svg).render().asPng();
+}
+
 async function ensureFont() {
   if (!fs.existsSync(FONT_PATH)) {
     const res = await fetch(FONT_URL);
@@ -145,17 +184,31 @@ async function main() {
   for (const e of EMOJIS) {
     fs.writeFileSync(path.join(OUT, `${e[0]}.png`), await render(tile(e), SIZE, SIZE, fonts));
   }
-  // 미리보기: 원래 크기 + 디스코드에서 보이는 크기(22px)를 어두운·밝은 배경에.
-  const imgs = EMOJIS.map((e) => `data:image/png;base64,${fs.readFileSync(path.join(OUT, `${e[0]}.png`)).toString("base64")}`);
-  const row = (bg, size, gap) => el("div", { display: "flex", flexWrap: "wrap", gap, background: bg, padding: 16, borderRadius: 12, marginTop: 12 },
-    imgs.map((src) => ({ type: "img", props: { src, width: size, height: size } })));
+  const wideNames = [];
+  for (const [name, file, tiles, opt] of WIDE) {
+    const src = await ensureWideSource(file);
+    const names = [];
+    for (let i = 0; i < tiles; i++) {
+      const tileName = `${name}_${String.fromCharCode(97 + i)}`;
+      fs.writeFileSync(path.join(OUT, `${tileName}.png`), wideTile(src, tiles, i, opt));
+      names.push(tileName);
+    }
+    wideNames.push(names);
+  }
+  // 미리보기: 원래 크기 + 디스코드에서 보이는 크기(22px)를 어두운·밝은 배경에. 넓은 이모지는 칸을 붙여서.
+  const png = (name) => `data:image/png;base64,${fs.readFileSync(path.join(OUT, `${name}.png`)).toString("base64")}`;
+  const imgs = EMOJIS.map((e) => png(e[0]));
+  const row = (bg, size, gap) => el("div", { display: "flex", flexWrap: "wrap", gap, background: bg, padding: 16, borderRadius: 12, marginTop: 12 }, [
+    ...imgs.map((src) => ({ type: "img", props: { src, width: size, height: size } })),
+    ...wideNames.map((names) => el("div", { display: "flex" }, names.map((n) => ({ type: "img", props: { src: png(n), width: size, height: size } })))),
+  ]);
   const sheet = el("div", { display: "flex", flexDirection: "column", width: 1040, background: "#1a1a1c", padding: 20 }, [
     row("#1a1a1c", 96, 10),
     row("#313338", 22, 4),
     row("#ffffff", 22, 4),
   ]);
   fs.writeFileSync(path.join(OUT, "..", "emoji-preview.png"), await render(sheet, 1040, 640, fonts));
-  console.log(`emoji ${EMOJIS.length}개 → ${OUT}`);
+  console.log(`emoji ${EMOJIS.length + wideNames.flat().length}개 → ${OUT}`);
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });
