@@ -12,6 +12,7 @@ import {
 import { chartKey } from "../../scraper";
 import { msg } from "../../messages";
 import { versionPositionText } from "../utils/versionPosition";
+import { titleWithKind } from "../utils/emoji";
 
 const MAI_DIFF_COLOR: Record<string, number> = {
   BASIC: 0x16a34a, ADVANCED: 0xea580c, EXPERT: 0xdc2626,
@@ -155,7 +156,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     const ytUrl = `https://www.youtube.com/results?search_query=${ytQuery}`;
     const emb = new EmbedBuilder()
       .setColor(MAI_DIFF_COLOR[c.diff] ?? 0x9333ea)
-      .setTitle(`${displayTitle(c.title, translate)} [${c.kind}]`)
+      .setTitle(titleWithKind(displayTitle(c.title, translate), c.kind))
       .setDescription(msg("common.externalLink", { url: ytUrl }))
       .addFields(
         { name: "채보", value: `\`${c.diff}\`  ✦  상수 \`${c.level.toFixed(1)}\``, inline: true },

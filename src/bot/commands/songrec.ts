@@ -25,6 +25,7 @@ import { chartKey } from "../../scraper";
 import type { PlayRecord, MaimaiServer } from "../../scraper";
 import { msg } from "../../messages";
 import { notRegisteredNotice } from "../utils/notRegistered";
+import { titleWithKind } from "../utils/emoji";
 
 // 목표 랭크 후보 (SSS~SSS+ 비중을 높게)
 const RANKS = [
@@ -329,7 +330,7 @@ export async function execute(
     const ytUrl = `https://www.youtube.com/results?search_query=${ytQuery}`;
     const emb = new EmbedBuilder()
       .setColor(RANK_COLOR[r.targetRank] ?? 0x9333ea)
-      .setTitle(`${displayTitle(r.title, translate)} [${r.kind}]`)
+      .setTitle(titleWithKind(displayTitle(r.title, translate), r.kind))
       .setDescription(msg("common.externalLink", { url: ytUrl }))
       .addFields(
         {

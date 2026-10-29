@@ -11,7 +11,7 @@ import { resolveChart, ChartUnavailableError } from "../../simai/source";
 import { searchAllCharts, chartIndexSize } from "../../simai/chartSearch";
 import { renderPreviewGif } from "../utils/chartGif";
 import { jacketBuffer, getClearList } from "../utils/embeds";
-import { diffEmoji, rankEmoji, comboEmoji, syncEmoji, dxStarEmoji } from "../utils/emoji";
+import { diffEmoji, rankEmoji, comboEmoji, syncEmoji, dxStarEmoji, kindEmoji } from "../utils/emoji";
 import { getConstant, getJacketFile, getSongVersionName, isSongPlus, getSongGenre } from "../../constants";
 import { getScoreRank } from "../../games";
 import { dxStars } from "../../sRating";
@@ -314,7 +314,7 @@ async function reply(interaction: ChatInputCommandInteraction, x: ReplyInput): P
   ]);
 
   const heading = [
-    msg("chart.title", { title: escapeMarkdown(shownTitle || msg("chart.untitled")), kind: kind ? ` [${kind}]` : "" }),
+    msg("chart.title", { title: escapeMarkdown(shownTitle || msg("chart.untitled")), kind: kind ? ` ${kindEmoji(kind)}` : "" }),
     x.artist && msg("chart.artist", { artist: escapeMarkdown(x.artist) }),
     (version || genre) && msg("chart.version", { version: [version, genre].filter(Boolean).join(" / ") }),
     msg("chart.level", {
