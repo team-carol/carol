@@ -88,6 +88,16 @@ export function blankEmoji(): string {
   return emoji("carol_blank", "");
 }
 
+/**
+ * 여러 칸으로 잘라 이어 붙이는 이모지(넓은 배지, 칸 이름 끝이 _a, _b, _c …). 한 칸이라도 없으면 null.
+ * 칸 사이에 word joiner(U+2060)를 넣어, 긴 제목이 줄바꿈될 때 칸 사이에서 갈라지지 않게 한다(넘치면 통째로 다음 줄).
+ * 이어지는 이모지는 꼭 이 함수로 만든다.
+ */
+function tiledEmoji(base: string, count: number): string | null {
+  const tiles = Array.from({ length: count }, (_, i) => EMOJI.get(`${base}_${String.fromCharCode(97 + i)}`));
+  return tiles.every(Boolean) ? tiles.join("\u2060") : null;
+}
+
 const KIND: Record<string, string> = { DX: "carol_dx", ST: "carol_st" };
 
 /**
@@ -97,9 +107,7 @@ const KIND: Record<string, string> = { DX: "carol_dx", ST: "carol_st" };
 export function kindEmoji(kind: string, embed = false): string {
   const base = KIND[kind] && KIND[kind] + (embed ? "e" : "");
   if (!base) return kind ? `[${kind}]` : "";
-  const tiles = ["a", "b", "c"].map((t) => EMOJI.get(`${base}_${t}`));
-  // 칸 사이에 word joiner(U+2060)를 넣어, 긴 제목이 줄바꿈될 때 배지가 칸 사이에서 갈라지지 않게 한다(넘치면 통째로 다음 줄).
-  return tiles.every(Boolean) ? tiles.join("\u2060") : `[${kind}]`;
+  return tiledEmoji(base, 3) ?? `[${kind}]`;
 }
 
 /** 임베드 제목(최대 256자)의 "곡명 배지". 이모지 코드가 길어 256자를 넘으면 "[DX]" 글자로. */
