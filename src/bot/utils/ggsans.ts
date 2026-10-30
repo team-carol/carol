@@ -74,10 +74,22 @@ export function makeSpace(gapEm: number): string {
   return out + best.s;
 }
 
-/** 셀들을 가장 넓은 셀에 맞춰 앞을 공백으로 채운다(오른쪽 정렬). 잴 수 없는 글자가 있으면 null. */
-export function padColumn(cells: string[], weight: Weight = 400): string[] | null {
+/**
+ * 셀들을 가장 넓은 셀에 맞춰 공백으로 채운다. 기본은 앞을 채워 오른쪽 정렬, align "left" 면 뒤를 채워 왼쪽 정렬
+ * (뒤에 오는 글이 줄마다 같은 자리에 온다). wrap 은 셀을 감쌀 마크다운(**굵게** 등)이고 공백은 그 바깥에 둔다
+ * (** 안쪽 양끝 공백은 마크다운이 꼬인다). 잴 수 없는 글자가 있으면 null.
+ */
+export function padColumn(
+  cells: string[],
+  weight: Weight = 400,
+  opts: { align?: "left" | "right"; wrap?: (cell: string) => string } = {},
+): string[] | null {
   const widths = cells.map((c) => measureEm(c, weight));
   if (widths.some((w) => w === null)) return null;
   const target = Math.max(...(widths as number[]));
-  return cells.map((c, i) => makeSpace(target - widths[i]!) + c);
+  const wrap = opts.wrap ?? ((c: string) => c);
+  return cells.map((c, i) => {
+    const pad = makeSpace(target - widths[i]!);
+    return opts.align === "left" ? wrap(c) + pad : pad + wrap(c);
+  });
 }

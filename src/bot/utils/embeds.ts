@@ -622,6 +622,12 @@ export async function searchResultEmbeds(
       const lvs = padColumn(rows.map((x) => x.lv)) ?? rows.map((x) => padDigits(x.lv, 2, PAD_ONE));
       const played = rows.flatMap((x) => (x.achievement !== undefined ? [x.achievement] : []));
       const achs = padColumn(played, 700) ?? played.map((a) => padDigits(a, 3, PAD_ONE_BOLD));
+      // 배지 모양: 상수는 굵게 오른쪽 정렬(배지가 4칸으로 같아 한 열에 온다), 달성률은 굵게 왼쪽 정렬하고 뒤를 채워
+      // 마크가 줄마다 같은 자리에 오게 한다.
+      const bold = (c: string) => `**${c}**`;
+      const badgeLvs = padColumn(rows.map((x) => x.lv), 700, { wrap: bold })
+        ?? rows.map((x) => { const p = padDigits(x.lv, 2, PAD_ONE_BOLD); return p.slice(0, p.length - x.lv.length) + bold(x.lv); });
+      const badgeAchs = padColumn(played, 700, { align: "left", wrap: bold }) ?? played.map(bold);
       let k = 0;
       // 난이도·랭크·FC/AP·FS/FDX·DX ✦ 는 이모지로. 모바일에서 한 줄에 들어가게 코드 블록·인라인 코드는 쓰지 않는다.
       // 난이도는 DX NET 난이도 그림 배지(여러 칸)와 상수를 한 줄에 두고 달성률·마크를 다음 줄에 쓴다(배지 뒤에 다 이으면
@@ -630,13 +636,14 @@ export async function searchResultEmbeds(
       const badgeLines: string[] = [];
       const shortLines: string[] = [];
       rows.forEach((x, i) => {
+        const badge = diffBadgeEmoji(x.d, BADGE_WIDTH);
         if (x.achievement === undefined) {
-          badgeLines.push(msg("searchResult.badgeRowNotPlayed", { diff: diffBadgeEmoji(x.d, BADGE_WIDTH), constant: lvs[i] }));
+          badgeLines.push(msg("searchResult.badgeRowNotPlayed", { diff: badge, constant: badgeLvs[i] }));
           shortLines.push(msg("searchResult.rowNotPlayed", { diff: diffEmoji(x.d), constant: lvs[i] }));
         } else {
-          const achievement = achs[k++];
-          badgeLines.push(msg("searchResult.badgeRow", { diff: diffBadgeEmoji(x.d, BADGE_WIDTH), constant: lvs[i], achievement, marks: x.marks }));
-          shortLines.push(msg("searchResult.row", { diff: diffEmoji(x.d), constant: lvs[i], achievement, marks: x.marks }));
+          badgeLines.push(msg("searchResult.badgeRow", { diff: badge, constant: badgeLvs[i], achievement: badgeAchs[k], marks: x.marks }));
+          shortLines.push(msg("searchResult.row", { diff: diffEmoji(x.d), constant: lvs[i], achievement: achs[k], marks: x.marks }));
+          k++;
         }
       });
       const buf = await jacketBuffer(
@@ -693,33 +700,33 @@ export async function searchResultEmbeds(
       } else {
         container.addTextDisplayComponents((t) => t.setContent(heading));
       }
-      // 곡 정보 / 플레이 정보 / 버튼을 구분선으로 나눈다. 플레이 정보 글은 페이지 전체 글자 수를 본 뒤에 채운다.
-      const score = new TextDisplayBuilder();
-      container
-        .addSeparatorComponents((s) => s.setSpacing(SeparatorSpacingSize.Small))
-        .addTextDisplayComponents(score)
-        .addSeparatorComponents((s) => s.setSpacing(SeparatorSpacingSize.Small))
-        .addActionRowComponents(
-          new ActionRowBuilder<ButtonBuilder>().addComponents(
-            // maishift 곡 창과 같은 정보의 이미지(trk:<토큰>:<전체 결과 안 순서>).
-            new ButtonBuilder()
-              .setCustomId(`trk:${ctxToken}:${idx * PAGE_SIZE + i}`)
-              .setLabel(msg("searchResult.detailButton"))
-              .setStyle(ButtonStyle.Secondary),
-            new ButtonBuilder()
-              .setURL(ytUrl)
-              .setLabel(msg("searchResult.externalButton"))
-              .setStyle(ButtonStyle.Link),
-          ),
-        );
-      return { container, score, headingLength: heading.length, badge: badgeLines.join("\n"), short: shortLines.join("\n") };
+      // 곡 정보 / 플레이 정보 / 버튼을 구분선으로 나눈다. 플레이 정보와 버튼은 페이지 전체 글자 수를 본 뒤에 붙인다.
+      const actions = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        // maishift 곡 창과 같은 정보의 이미지(trk:<토큰>:<전체 결과 안 순서>).
+        new ButtonBuilder()
+          .setCustomId(`trk:${ctxToken}:${idx * PAGE_SIZE + i}`)
+          .setLabel(msg("searchResult.detailButton"))
+          .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setURL(ytUrl)
+          .setLabel(msg("searchResult.externalButton"))
+          .setStyle(ButtonStyle.Link),
+      );
+      return { container, actions, headingLength: heading.length, badgeLines, short: shortLines.join("\n") };
     }),
   );
   // 컴포넌트 메시지는 글이 모두 합쳐 4000자까지다(이모지는 코드 30자 남짓). 난이도 배지로 넘칠 것 같으면 이 페이지는 한 칸 약자로.
   const author = msg("searchResult.author", { query: shownQuery, type: typeLabel });
-  const badgeLength = author.length + built.reduce((n, b) => n + b.headingLength + b.badge.length, 0);
+  const badgeLength = author.length + built.reduce((n, b) => n + b.headingLength + b.badgeLines.join("\n-# \u2800\n").length, 0);
   const useBadge = badgeLength <= TEXT_LIMIT;
-  for (const b of built) b.score.setContent(useBadge ? b.badge : b.short);
+  for (const b of built) {
+    // 난이도 사이에는 보이지 않는 작은 글씨 한 줄(-# U+2800)을 넣어 칸마다 구분한다(컴포넌트를 늘리지 않는다).
+    b.container
+      .addSeparatorComponents((s) => s.setSpacing(SeparatorSpacingSize.Small))
+      .addTextDisplayComponents((t) => t.setContent(useBadge ? b.badgeLines.join("\n-# \u2800\n") : b.short))
+      .addSeparatorComponents((s) => s.setSpacing(SeparatorSpacingSize.Small))
+      .addActionRowComponents(b.actions);
+  }
   const containers = built.map((b) => b.container);
 
   const prevBtn = new ButtonBuilder()
