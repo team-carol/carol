@@ -138,13 +138,13 @@ export function dxStarEmoji(stars: number): string {
   return stars >= 1 && stars <= 5 ? emoji(`carol_star${stars}`, `✦${stars}`) : "";
 }
 
-// 기록 마크 아이콘(DX NET 기록 페이지와 같은 그림, carol_m_*·칩은 carol_m2_*). 랭크는 두 칸, 나머지는 한 칸.
+// 기록 마크 아이콘(DX NET 기록 페이지와 같은 그림, 랭크·칩은 여백을 잘라 키운 carol_m2_*, DX ✦ 는 carol_m_*). 랭크는 두 칸, 나머지는 한 칸.
 // 못 불러왔으면 위의 캐롤봇 마크로.
 const iconKey = (v: string) => v.toLowerCase().replace(/\+/g, "p"); // "SSS+" → "sssp", "FDX+" → "fdxp"
 
 /** 달성률 랭크 아이콘(두 칸). */
 export function rankIcon(rank: string): string {
-  return RANK[rank] ? tiledEmoji(`carol_m_${iconKey(rank)}`, 2) ?? rankEmoji(rank) : rank;
+  return RANK[rank] ? tiledEmoji(`carol_m2_${iconKey(rank)}`, 2) ?? rankEmoji(rank) : rank;
 }
 
 /** FC/FC+/AP/AP+ 아이콘. 없으면 "". */

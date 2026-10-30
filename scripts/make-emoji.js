@@ -84,10 +84,10 @@ const WIDE = [
   ["carol_mas", "diff_master.png", 4, { height: 108, align: "left" }],
   ["carol_rem", "diff_remaster.png", 4, { height: 108, align: "left" }],
   // 기록 마크(DX NET 기록 페이지 아이콘). 랭크(68:31)는 두 칸, FC/AP·FS/FDX·SYNC(42:47)·DX ✦(정사각형)는 한 칸.
-  // FC/AP·FS/FDX·SYNC 칩은 위아래 투명 여백이 커서 칩이 모두 들어가는 영역(가로 전체, 세로 7~41)만 잘라 칸에 맞춘다
-  // (FDX+ 의 + 가 가로 끝까지 닿아 더 자르면 잘린다). 그래서 이름이 carol_m2_*.
+  // 둘 다 둘레 투명 여백이 커서, 같은 종류 아이콘이 모두 들어가는 영역만 잘라 칸에 맞춘다(그래서 이름이 carol_m2_*).
+  // 랭크는 (4,4)~(62,28), 칩은 가로 전체·세로 7~41(FDX+ 의 + 가 가로 끝까지 닿아 더 자르면 잘린다).
   ...["sssp", "sss", "ssp", "ss", "sp", "s", "aaa", "aa", "a", "bbb", "bb", "b", "c", "d"]
-    .map((r) => [`carol_m_${r}`, `music_icon_${r}.png`, 2]),
+    .map((r) => [`carol_m2_${r}`, `music_icon_${r}.png`, 2, { crop: [4, 4, 58, 24] }]),
   ...["app", "ap", "fcp", "fc", "fdxp", "fdx", "fsp", "fs", "sync"]
     .map((m) => [`carol_m2_${m}`, `music_icon_${m}.png`, 1, { crop: [0, 7, 42, 34] }]),
   ...[1, 2, 3, 4, 5].map((n) => [`carol_m_star${n}`, `music_icon_dxstar_${n}.png`, 1, { height: 124 }]),
