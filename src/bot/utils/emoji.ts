@@ -102,10 +102,17 @@ const DIFF_BADGE: Record<string, [string, number]> = {
   BASIC: ["carol_bas", 3], ADVANCED: ["carol_adv", 4], EXPERT: ["carol_exp", 3], MASTER: ["carol_mas", 4], "Re:MASTER": ["carol_rem", 4],
 };
 
-/** 난이도 이름 배지(DX NET 난이도 그림을 여러 칸으로 이어 붙인 이모지). 못 불러왔으면 한 칸 약자(diffEmoji). */
-export function diffBadgeEmoji(diff: string): string {
+/**
+ * 난이도 이름 배지(DX NET 난이도 그림을 여러 칸으로 이어 붙인 이모지). 못 불러왔으면 한 칸 약자(diffEmoji).
+ * width: 칸 수를 이만큼으로 맞춘다(모자라면 투명 빈칸을 붙인다). 배지 뒤 글을 줄마다 같은 자리에 둘 때 쓴다.
+ */
+export function diffBadgeEmoji(diff: string, width = 0): string {
   const b = DIFF_BADGE[diff];
-  return (b && tiledEmoji(b[0], b[1])) ?? diffEmoji(diff);
+  const badge = b && tiledEmoji(b[0], b[1]);
+  if (!badge) return diffEmoji(diff);
+  const blank = blankEmoji();
+  const pad = blank ? Math.max(0, width - b[1]) : 0;
+  return [badge, ...Array<string>(pad).fill(blank)].join("\u2060");
 }
 
 const KIND: Record<string, string> = { DX: "carol_dx", ST: "carol_st" };

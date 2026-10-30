@@ -588,6 +588,8 @@ export async function searchResultEmbeds(
   const PAGE_SIZE = 2;
   // 컴포넌트 메시지 글자 수 한도(4000)에서 버튼 이름 등을 위한 여유를 뺀 값.
   const TEXT_LIMIT = 3800;
+  // 점수표 난이도 배지 칸 수(가장 넓은 ADVANCED·Re:MASTER 배지).
+  const BADGE_WIDTH = 4;
   const totalPages = Math.max(1, Math.ceil(keys.length / PAGE_SIZE));
   const idx = Math.max(0, Math.min(pageIdx, totalPages - 1));
   const pageKeys = keys.slice(idx * PAGE_SIZE, (idx + 1) * PAGE_SIZE);
@@ -622,18 +624,18 @@ export async function searchResultEmbeds(
       const achs = padColumn(played, 700) ?? played.map((a) => padDigits(a, 3, PAD_ONE_BOLD));
       let k = 0;
       // 난이도·랭크·FC/AP·FS/FDX·DX ✦ 는 이모지로. 모바일에서 한 줄에 들어가게 코드 블록·인라인 코드는 쓰지 않는다.
-      // 난이도는 DX NET 난이도 그림 배지(여러 칸)를 한 줄에 두고 기록을 다음 줄에 쓴다(배지 뒤에 이으면 모바일에서 기록이
-      // 줄바꿈된다). 기록 줄 맨 앞에 이모지가 없어 상수·달성률 칸 맞춤은 그대로다. 메시지 글자 수 한도를 넘을 페이지는
-      // 아래에서 한 칸 약자 이모지(한 줄)로 돌아간다.
+      // 난이도는 DX NET 난이도 그림 배지(여러 칸)와 상수를 한 줄에 두고 달성률·마크를 다음 줄에 쓴다(배지 뒤에 다 이으면
+      // 모바일에서 기록이 줄바꿈된다). 배지는 모두 4칸으로 맞춰(모자라면 투명 빈칸) 상수가 한 열에 온다. 메시지 글자 수
+      // 한도를 넘을 페이지는 아래에서 한 칸 약자 이모지(한 줄)로 돌아간다.
       const badgeLines: string[] = [];
       const shortLines: string[] = [];
       rows.forEach((x, i) => {
         if (x.achievement === undefined) {
-          badgeLines.push(msg("searchResult.badgeRowNotPlayed", { diff: diffBadgeEmoji(x.d), constant: lvs[i] }));
+          badgeLines.push(msg("searchResult.badgeRowNotPlayed", { diff: diffBadgeEmoji(x.d, BADGE_WIDTH), constant: lvs[i] }));
           shortLines.push(msg("searchResult.rowNotPlayed", { diff: diffEmoji(x.d), constant: lvs[i] }));
         } else {
           const achievement = achs[k++];
-          badgeLines.push(msg("searchResult.badgeRow", { diff: diffBadgeEmoji(x.d), constant: lvs[i], achievement, marks: x.marks }));
+          badgeLines.push(msg("searchResult.badgeRow", { diff: diffBadgeEmoji(x.d, BADGE_WIDTH), constant: lvs[i], achievement, marks: x.marks }));
           shortLines.push(msg("searchResult.row", { diff: diffEmoji(x.d), constant: lvs[i], achievement, marks: x.marks }));
         }
       });
