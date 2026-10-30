@@ -82,6 +82,12 @@ const WIDE = [
   ["carol_exp", "diff_expert.png", 3, { height: 108, align: "left" }],
   ["carol_mas", "diff_master.png", 4, { height: 108, align: "left" }],
   ["carol_rem", "diff_remaster.png", 4, { height: 108, align: "left" }],
+  // 기록 마크(DX NET 기록 페이지 아이콘). 랭크(68:31)는 두 칸, FC/AP·FS/FDX·SYNC(42:47)·DX ✦(정사각형)는 한 칸.
+  ...["sssp", "sss", "ssp", "ss", "sp", "s", "aaa", "aa", "a", "bbb", "bb", "b", "c", "d"]
+    .map((r) => [`carol_m_${r}`, `music_icon_${r}.png`, 2]),
+  ...["app", "ap", "fcp", "fc", "fdxp", "fdx", "fsp", "fs", "sync"]
+    .map((m) => [`carol_m_${m}`, `music_icon_${m}.png`, 1, { height: 124 }]),
+  ...[1, 2, 3, 4, 5].map((n) => [`carol_m_star${n}`, `music_icon_dxstar_${n}.png`, 1, { height: 124 }]),
 ];
 const WIDE_DIR = path.join(ROOT, "data", "dxnet");
 

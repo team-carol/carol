@@ -42,7 +42,7 @@ import { aliasMatches, normalizeQuery, displayTitle } from "../../aliases";
 import { areaDisplayName } from "../../nameTranslations";
 import { ratingColor } from "./roles";
 import { nextPlateStep } from "./ratingCard";
-import { diffEmoji, rankEmoji, comboEmoji, syncEmoji, dxStarEmoji, blankEmoji, kindEmoji, diffBadgeEmoji } from "./emoji";
+import { diffEmoji, rankEmoji, comboEmoji, syncEmoji, dxStarEmoji, blankEmoji, kindEmoji, diffBadgeEmoji, rankIcon, comboIcon, syncIcon, dxStarIcon } from "./emoji";
 import { padColumn } from "./ggsans";
 import { getScoreRank } from "../../games";
 import { dxStars } from "../../sRating";
@@ -604,19 +604,22 @@ export async function searchResultEmbeds(
       const title = group.title;
       const musicKind = group.musicKind;
       const kind = musicKind ? ` ${kindEmoji(musicKind)}` : "";
-      const rows = DIFF_ORDER.flatMap((d): { d: string; lv: string; achievement?: string; marks: string }[] => {
+      const rows = DIFF_ORDER.flatMap((d): { d: string; lv: string; achievement?: string; marks: string; icons: string }[] => {
         const r = all.find((x) => x.diff === d);
         // 검색은 이미 ST/DX로 분리돼 있으므로 exact(상호 폴백 없음)로 조회.
         // (예: ST에만 Re:MASTER가 있는 곡의 DX 카드에 Re:MASTER가 뜨는 문제 방지)
         const constant = getConstant(title, musicKind, d, p.server, true);
         if (d === "Re:MASTER" && constant === null && !r) return [];
         const lv = constant !== null ? constant.toFixed(1) : (r?.level ?? "?");
-        if (!r || r.achievementVal <= 0) return [{ d, lv, marks: "" }];
+        if (!r || r.achievementVal <= 0) return [{ d, lv, marks: "", icons: "" }];
         const stars = r.dxScoreMax ? dxStars(((r.dxScore ?? 0) / r.dxScoreMax) * 100) : 0;
         // 없는 마크 자리는 빈칸 이모지로 채워 뒤의 마크가 줄마다 같은 자리에 오게 한다(끝의 빈칸은 뺀다).
         const marks = [rankEmoji(getScoreRank(r.achievementVal)), comboEmoji(r.fc), syncEmoji(r.sync), dxStarEmoji(stars)];
         while (marks.length && !marks[marks.length - 1]) marks.pop();
-        return [{ d, lv, achievement: `${r.achievementVal.toFixed(4)}%`, marks: marks.map((m) => m || blankEmoji()).filter(Boolean).join(" ") }];
+        // 배지 모양에는 DX NET 기록 아이콘(랭크 두 칸, 나머지 한 칸). 없는 자리는 같은 방식으로 투명 빈칸.
+        const icons = [rankIcon(getScoreRank(r.achievementVal)), comboIcon(r.fc), syncIcon(r.sync), dxStarIcon(stars)];
+        while (icons.length && !icons[icons.length - 1]) icons.pop();
+        return [{ d, lv, achievement: `${r.achievementVal.toFixed(4)}%`, marks: marks.map((m) => m || blankEmoji()).filter(Boolean).join(" "), icons: icons.map((m) => m || blankEmoji()).filter(Boolean).join(" ") }];
       });
       // 상수 칸과 달성률(굵게) 칸을 따로 맞춘다. ✦ 은 줄마다 하나라 그 사이에서 폭이 상쇄된다.
       const lvs = padColumn(rows.map((x) => x.lv)) ?? rows.map((x) => padDigits(x.lv, 2, PAD_ONE));
@@ -641,7 +644,7 @@ export async function searchResultEmbeds(
           badgeLines.push(msg("searchResult.badgeRowNotPlayed", { diff: badge, constant: badgeLvs[i] }));
           shortLines.push(msg("searchResult.rowNotPlayed", { diff: diffEmoji(x.d), constant: lvs[i] }));
         } else {
-          badgeLines.push(msg("searchResult.badgeRow", { diff: badge, constant: badgeLvs[i], achievement: badgeAchs[k], marks: x.marks }));
+          badgeLines.push(msg("searchResult.badgeRow", { diff: badge, constant: badgeLvs[i], achievement: badgeAchs[k], marks: x.icons }));
           shortLines.push(msg("searchResult.row", { diff: diffEmoji(x.d), constant: lvs[i], achievement: achs[k], marks: x.marks }));
           k++;
         }

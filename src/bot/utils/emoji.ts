@@ -137,3 +137,26 @@ export function titleWithKind(title: string, kind: string): string {
 export function dxStarEmoji(stars: number): string {
   return stars >= 1 && stars <= 5 ? emoji(`carol_star${stars}`, `✦${stars}`) : "";
 }
+
+// 기록 마크 아이콘(DX NET 기록 페이지와 같은 그림, carol_m_*). 랭크는 두 칸, 나머지는 한 칸. 못 불러왔으면 위의 캐롤봇 마크로.
+const iconKey = (v: string) => v.toLowerCase().replace(/\+/g, "p"); // "SSS+" → "sssp", "FDX+" → "fdxp"
+
+/** 달성률 랭크 아이콘(두 칸). */
+export function rankIcon(rank: string): string {
+  return RANK[rank] ? tiledEmoji(`carol_m_${iconKey(rank)}`, 2) ?? rankEmoji(rank) : rank;
+}
+
+/** FC/FC+/AP/AP+ 아이콘. 없으면 "". */
+export function comboIcon(fc: string): string {
+  return fc && COMBO[fc] ? tiledEmoji(`carol_m_${iconKey(fc)}`, 1) ?? comboEmoji(fc) : fc;
+}
+
+/** SYNC/FS/FS+/FDX/FDX+ 아이콘. 없으면 "". */
+export function syncIcon(sync: string): string {
+  return sync && SYNC[sync] ? tiledEmoji(`carol_m_${iconKey(sync)}`, 1) ?? syncEmoji(sync) : sync;
+}
+
+/** DX ✦1~5 아이콘. 0 이면 "". */
+export function dxStarIcon(stars: number): string {
+  return stars >= 1 && stars <= 5 ? tiledEmoji(`carol_m_star${stars}`, 1) ?? dxStarEmoji(stars) : "";
+}

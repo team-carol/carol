@@ -11,7 +11,7 @@ import { resolveChart, ChartUnavailableError } from "../../simai/source";
 import { searchAllCharts, chartIndexSize } from "../../simai/chartSearch";
 import { renderPreviewGif } from "../utils/chartGif";
 import { jacketBuffer, getClearList } from "../utils/embeds";
-import { diffBadgeEmoji, rankEmoji, comboEmoji, syncEmoji, dxStarEmoji, kindEmoji } from "../utils/emoji";
+import { diffBadgeEmoji, rankIcon, comboIcon, syncIcon, dxStarIcon, kindEmoji } from "../utils/emoji";
 import { getConstant, getJacketFile, getSongVersionName, isSongPlus, getSongGenre } from "../../constants";
 import { getScoreRank } from "../../games";
 import { dxStars } from "../../sRating";
@@ -271,7 +271,7 @@ async function myRecordLine(userId: string, title: string, kind: string, diff: s
     const r = getClearList(p).find((c) => c.title === title && c.musicKind === kind && c.diff === diff);
     if (!r || r.achievementVal <= 0) return msg("chart.myRecordNone");
     const stars = r.dxScoreMax ? dxStars(((r.dxScore ?? 0) / r.dxScoreMax) * 100) : 0;
-    const marks = [rankEmoji(getScoreRank(r.achievementVal)), comboEmoji(r.fc), syncEmoji(r.sync), dxStarEmoji(stars)];
+    const marks = [rankIcon(getScoreRank(r.achievementVal)), comboIcon(r.fc), syncIcon(r.sync), dxStarIcon(stars)];
     return msg("chart.myRecord", { achievement: `${r.achievementVal.toFixed(4)}%`, marks: marks.filter(Boolean).join(" ") });
   } catch (e) {
     console.error("[보면] 내 기록 조회 실패:", e);
