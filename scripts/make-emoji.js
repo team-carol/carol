@@ -70,7 +70,8 @@ const EMOJIS = [
 // 난이도는 ST/DX 배지와 같은 높이로 두고 그림마다 필요한 만큼만 칸을 쓴다(왼쪽 정렬, 남는 칸 오른쪽은 투명).
 /**
  * [이모지 이름, DX NET 그림 파일명, 칸 수, 옵션]
- * 옵션: height 배지 높이(생략하면 칸 너비에 맞춤), top 위 여백(생략하면 세로 가운데), align "left"(생략하면 가로 가운데)
+ * 옵션: height 배지 높이(생략하면 칸 너비에 맞춤), top 위 여백(생략하면 세로 가운데), align "left"(생략하면 가로 가운데),
+ * crop [x, y, 너비, 높이] 원본에서 쓸 영역(생략하면 전체. 그 밖은 투명이어야 한다)
  */
 const WIDE = [
   ["carol_dx", "music_dx.png", 3],
@@ -83,10 +84,12 @@ const WIDE = [
   ["carol_mas", "diff_master.png", 4, { height: 108, align: "left" }],
   ["carol_rem", "diff_remaster.png", 4, { height: 108, align: "left" }],
   // 기록 마크(DX NET 기록 페이지 아이콘). 랭크(68:31)는 두 칸, FC/AP·FS/FDX·SYNC(42:47)·DX ✦(정사각형)는 한 칸.
+  // FC/AP·FS/FDX·SYNC 칩은 위아래 투명 여백이 커서 칩이 모두 들어가는 영역(가로 전체, 세로 7~41)만 잘라 칸에 맞춘다
+  // (FDX+ 의 + 가 가로 끝까지 닿아 더 자르면 잘린다). 그래서 이름이 carol_m2_*.
   ...["sssp", "sss", "ssp", "ss", "sp", "s", "aaa", "aa", "a", "bbb", "bb", "b", "c", "d"]
     .map((r) => [`carol_m_${r}`, `music_icon_${r}.png`, 2]),
   ...["app", "ap", "fcp", "fc", "fdxp", "fdx", "fsp", "fs", "sync"]
-    .map((m) => [`carol_m_${m}`, `music_icon_${m}.png`, 1, { height: 124 }]),
+    .map((m) => [`carol_m2_${m}`, `music_icon_${m}.png`, 1, { crop: [0, 7, 42, 34] }]),
   ...[1, 2, 3, 4, 5].map((n) => [`carol_m_star${n}`, `music_icon_dxstar_${n}.png`, 1, { height: 124 }]),
 ];
 const WIDE_DIR = path.join(ROOT, "data", "dxnet");
@@ -172,13 +175,18 @@ async function ensureWideSource(file) {
 // 세로 가운데(또는 정한 위 여백)에 둔 뒤 viewBox 로 그 칸만 잘라 그린다.
 function wideTile({ src, w, h }, tiles, i, opt = {}) {
   const total = SIZE * tiles;
-  const height = opt.height ?? Math.round(total * h / w);
-  const width = opt.height ? Math.round(height * w / h) : total;
-  if (width > total) throw new Error(`칸이 모자람: 너비 ${width} > ${total}`);
-  const x = opt.align === "left" ? 0 : Math.round((total - width) / 2);
-  const y = opt.top ?? Math.round((SIZE - height) / 2);
+  const [cx, cy, cw, ch] = opt.crop ?? [0, 0, w, h];
+  // width·height 는 쓸 영역(crop)이 그려질 크기
+  const height = opt.height ?? Math.round(total * ch / cw);
+  const width = opt.height ? Math.round(height * cw / ch) : total;
+  if (width > total || height > SIZE) throw new Error(`칸이 모자람: ${width}x${height} > ${total}x${SIZE}`);
+  // 가로·세로 배율을 따로 둬서, 자르지 않는 그림은 예전과 똑같이(반올림한 너비·높이 그대로) 그려지게 한다.
+  const sx = width / cw;
+  const sy = height / ch;
+  const x = (opt.align === "left" ? 0 : Math.round((total - width) / 2)) - cx * sx;
+  const y = (opt.top ?? Math.round((SIZE - height) / 2)) - cy * sy;
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${SIZE}" height="${SIZE}" viewBox="${SIZE * i} 0 ${SIZE} ${SIZE}">`
-    + `<image xlink:href="${src}" x="${x}" y="${y}" width="${width}" height="${height}" preserveAspectRatio="none"/></svg>`;
+    + `<image xlink:href="${src}" x="${x}" y="${y}" width="${w * sx}" height="${h * sy}" preserveAspectRatio="none"/></svg>`;
   return new Resvg(svg).render().asPng();
 }
 
