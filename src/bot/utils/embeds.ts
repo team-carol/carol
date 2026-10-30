@@ -42,7 +42,7 @@ import { aliasMatches, normalizeQuery, displayTitle } from "../../aliases";
 import { areaDisplayName } from "../../nameTranslations";
 import { ratingColor } from "./roles";
 import { nextPlateStep } from "./ratingCard";
-import { diffEmoji, rankEmoji, comboEmoji, syncEmoji, dxStarEmoji, blankEmoji, kindEmoji } from "./emoji";
+import { diffEmoji, rankEmoji, comboEmoji, syncEmoji, dxStarEmoji, blankEmoji, kindEmoji, diffBadgeEmoji } from "./emoji";
 import { padColumn } from "./ggsans";
 import { getScoreRank } from "../../games";
 import { dxStars } from "../../sRating";
@@ -586,6 +586,8 @@ export async function searchResultEmbeds(
   if (ctx) ctx.groups = keys.map((k) => { const g = byChart.get(k)!; return { title: g.title, musicKind: g.musicKind }; });
 
   const PAGE_SIZE = 2;
+  // 컴포넌트 메시지 글자 수 한도(4000)에서 버튼 이름 등을 위한 여유를 뺀 값.
+  const TEXT_LIMIT = 3800;
   const totalPages = Math.max(1, Math.ceil(keys.length / PAGE_SIZE));
   const idx = Math.max(0, Math.min(pageIdx, totalPages - 1));
   const pageKeys = keys.slice(idx * PAGE_SIZE, (idx + 1) * PAGE_SIZE);
@@ -593,7 +595,7 @@ export async function searchResultEmbeds(
 
   const DIFF_ORDER = ["BASIC", "ADVANCED", "EXPERT", "MASTER", "Re:MASTER"];
 
-  const containers = await Promise.all(
+  const built = await Promise.all(
     pageKeys.map(async (key, i) => {
       const group = byChart.get(key)!;
       const all = group.records;
@@ -620,11 +622,21 @@ export async function searchResultEmbeds(
       const achs = padColumn(played, 700) ?? played.map((a) => padDigits(a, 3, PAD_ONE_BOLD));
       let k = 0;
       // 난이도·랭크·FC/AP·FS/FDX·DX ✦ 는 이모지로. 모바일에서 한 줄에 들어가게 코드 블록·인라인 코드는 쓰지 않는다.
-      const lines = rows.map((x, i) =>
-        x.achievement === undefined
-          ? msg("searchResult.rowNotPlayed", { diff: diffEmoji(x.d), constant: lvs[i] })
-          : msg("searchResult.row", { diff: diffEmoji(x.d), constant: lvs[i], achievement: achs[k++], marks: x.marks }),
-      );
+      // 난이도는 DX NET 난이도 그림 배지(여러 칸)를 한 줄에 두고 기록을 다음 줄에 쓴다(배지 뒤에 이으면 모바일에서 기록이
+      // 줄바꿈된다). 기록 줄 맨 앞에 이모지가 없어 상수·달성률 칸 맞춤은 그대로다. 메시지 글자 수 한도를 넘을 페이지는
+      // 아래에서 한 칸 약자 이모지(한 줄)로 돌아간다.
+      const badgeLines: string[] = [];
+      const shortLines: string[] = [];
+      rows.forEach((x, i) => {
+        if (x.achievement === undefined) {
+          badgeLines.push(msg("searchResult.badgeRowNotPlayed", { diff: diffBadgeEmoji(x.d), constant: lvs[i] }));
+          shortLines.push(msg("searchResult.rowNotPlayed", { diff: diffEmoji(x.d), constant: lvs[i] }));
+        } else {
+          const achievement = achs[k++];
+          badgeLines.push(msg("searchResult.badgeRow", { diff: diffBadgeEmoji(x.d), constant: lvs[i], achievement, marks: x.marks }));
+          shortLines.push(msg("searchResult.row", { diff: diffEmoji(x.d), constant: lvs[i], achievement, marks: x.marks }));
+        }
+      });
       const buf = await jacketBuffer(
         all[0] ??
           ({
@@ -679,10 +691,11 @@ export async function searchResultEmbeds(
       } else {
         container.addTextDisplayComponents((t) => t.setContent(heading));
       }
-      // 곡 정보 / 플레이 정보 / 버튼을 구분선으로 나눈다.
-      return container
+      // 곡 정보 / 플레이 정보 / 버튼을 구분선으로 나눈다. 플레이 정보 글은 페이지 전체 글자 수를 본 뒤에 채운다.
+      const score = new TextDisplayBuilder();
+      container
         .addSeparatorComponents((s) => s.setSpacing(SeparatorSpacingSize.Small))
-        .addTextDisplayComponents((t) => t.setContent(lines.join("\n")))
+        .addTextDisplayComponents(score)
         .addSeparatorComponents((s) => s.setSpacing(SeparatorSpacingSize.Small))
         .addActionRowComponents(
           new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -697,8 +710,15 @@ export async function searchResultEmbeds(
               .setStyle(ButtonStyle.Link),
           ),
         );
+      return { container, score, headingLength: heading.length, badge: badgeLines.join("\n"), short: shortLines.join("\n") };
     }),
   );
+  // 컴포넌트 메시지는 글이 모두 합쳐 4000자까지다(이모지는 코드 30자 남짓). 난이도 배지로 넘칠 것 같으면 이 페이지는 한 칸 약자로.
+  const author = msg("searchResult.author", { query: shownQuery, type: typeLabel });
+  const badgeLength = author.length + built.reduce((n, b) => n + b.headingLength + b.badge.length, 0);
+  const useBadge = badgeLength <= TEXT_LIMIT;
+  for (const b of built) b.score.setContent(useBadge ? b.badge : b.short);
+  const containers = built.map((b) => b.container);
 
   const prevBtn = new ButtonBuilder()
     .setCustomId(`search:${ctxToken}:${idx - 1}`)
@@ -718,7 +738,7 @@ export async function searchResultEmbeds(
 
   return {
     components: [
-      new TextDisplayBuilder().setContent(msg("searchResult.author", { query: shownQuery, type: typeLabel })),
+      new TextDisplayBuilder().setContent(author),
       ...containers,
       new ActionRowBuilder<ButtonBuilder>().addComponents(prevBtn, countBtn, nextBtn),
     ],

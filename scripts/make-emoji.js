@@ -61,17 +61,27 @@ const EMOJIS = [
   ["carol_blank", "", "blank", ""],
 ];
 
-// 넓은 그림(ST/DX 배지)을 정사각형 몇 칸으로 잘라 이어 붙여 쓰는 이모지. 이름 끝에 _a, _b, _c 가 붙는다.
+// 넓은 그림(ST/DX 배지·난이도 이름)을 정사각형 몇 칸으로 잘라 이어 붙여 쓰는 이모지. 이름 끝에 _a, _b, _c 가 붙는다.
 // 봇에서는 emoji.ts 의 tiledEmoji 로 칸 사이에 word joiner(U+2060)를 넣어 잇는다(줄바꿈 때 갈라지지 않게).
-// 그림은 /성과 카드와 같은 DX NET 배지(113:32). DX NET 점검 중이면 인터넷 아카이브의 같은 주소 사본을 받는다.
+// 그림은 DX NET 것(ST/DX 는 /성과 카드와 같은 113:32 배지, 난이도는 높이 32 에 너비가 제각각). DX NET 점검 중이면
+// 인터넷 아카이브의 같은 주소 사본을 받는다(난이도 그림은 사본이 없다).
 // 디스코드는 이모지를 글줄 맨 아래에 맞추는데, 임베드 제목은 글줄이 높아 배지가 글자보다 낮게 앉는다.
 // 그래서 임베드용(e)은 배지를 조금 줄여 칸 맨 위에 붙인다(가운데보다 128 기준 16 위).
-/** [이모지 이름, DX NET 그림 파일명, 칸 수, { height: 배지 높이, top: 위 여백 }(생략하면 칸 너비에 맞춰 세로 가운데)] */
+// 난이도는 ST/DX 배지와 같은 높이로 두고 그림마다 필요한 만큼만 칸을 쓴다(왼쪽 정렬, 남는 칸 오른쪽은 투명).
+/**
+ * [이모지 이름, DX NET 그림 파일명, 칸 수, 옵션]
+ * 옵션: height 배지 높이(생략하면 칸 너비에 맞춤), top 위 여백(생략하면 세로 가운데), align "left"(생략하면 가로 가운데)
+ */
 const WIDE = [
   ["carol_dx", "music_dx.png", 3],
   ["carol_st", "music_standard.png", 3],
   ["carol_dxe", "music_dx.png", 3, { height: 96, top: 0 }],
   ["carol_ste", "music_standard.png", 3, { height: 96, top: 0 }],
+  ["carol_bas", "diff_basic.png", 3, { height: 108, align: "left" }],
+  ["carol_adv", "diff_advanced.png", 4, { height: 108, align: "left" }],
+  ["carol_exp", "diff_expert.png", 3, { height: 108, align: "left" }],
+  ["carol_mas", "diff_master.png", 4, { height: 108, align: "left" }],
+  ["carol_rem", "diff_remaster.png", 4, { height: 108, align: "left" }],
 ];
 const WIDE_DIR = path.join(ROOT, "data", "dxnet");
 
@@ -147,16 +157,19 @@ async function ensureWideSource(file) {
     fs.mkdirSync(WIDE_DIR, { recursive: true });
     fs.writeFileSync(local, Buffer.from(await res.arrayBuffer()));
   }
-  return `data:image/png;base64,${fs.readFileSync(local).toString("base64")}`;
+  const buf = fs.readFileSync(local);
+  // PNG IHDR 의 너비·높이(16~23 바이트)
+  return { src: `data:image/png;base64,${buf.toString("base64")}`, w: buf.readUInt32BE(16), h: buf.readUInt32BE(20) };
 }
 
-// 넓은 그림의 i 번째 칸. 그림을 칸 수만큼의 너비에 맞추고(높이를 정했으면 그 높이에 맞춰 가로 가운데)
+// 넓은 그림의 i 번째 칸. 그림을 칸 수만큼의 너비에 맞추고(높이를 정했으면 그 높이에 맞춰 가로 가운데 또는 왼쪽)
 // 세로 가운데(또는 정한 위 여백)에 둔 뒤 viewBox 로 그 칸만 잘라 그린다.
-function wideTile(src, tiles, i, opt = {}) {
+function wideTile({ src, w, h }, tiles, i, opt = {}) {
   const total = SIZE * tiles;
-  const height = opt.height ?? Math.round(total * 32 / 113);
-  const width = opt.height ? Math.round(height * 113 / 32) : total;
-  const x = Math.round((total - width) / 2);
+  const height = opt.height ?? Math.round(total * h / w);
+  const width = opt.height ? Math.round(height * w / h) : total;
+  if (width > total) throw new Error(`칸이 모자람: 너비 ${width} > ${total}`);
+  const x = opt.align === "left" ? 0 : Math.round((total - width) / 2);
   const y = opt.top ?? Math.round((SIZE - height) / 2);
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${SIZE}" height="${SIZE}" viewBox="${SIZE * i} 0 ${SIZE} ${SIZE}">`
     + `<image xlink:href="${src}" x="${x}" y="${y}" width="${width}" height="${height}" preserveAspectRatio="none"/></svg>`;
@@ -208,7 +221,7 @@ async function main() {
     row("#313338", 22, 4),
     row("#ffffff", 22, 4),
   ]);
-  fs.writeFileSync(path.join(OUT, "..", "emoji-preview.png"), await render(sheet, 1040, 640, fonts));
+  fs.writeFileSync(path.join(OUT, "..", "emoji-preview.png"), await render(sheet, 1040, 1000, fonts));
   console.log(`emoji ${EMOJIS.length + wideNames.flat().length}개 → ${OUT}`);
 }
 

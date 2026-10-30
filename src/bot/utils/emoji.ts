@@ -98,6 +98,16 @@ function tiledEmoji(base: string, count: number): string | null {
   return tiles.every(Boolean) ? tiles.join("\u2060") : null;
 }
 
+const DIFF_BADGE: Record<string, [string, number]> = {
+  BASIC: ["carol_bas", 3], ADVANCED: ["carol_adv", 4], EXPERT: ["carol_exp", 3], MASTER: ["carol_mas", 4], "Re:MASTER": ["carol_rem", 4],
+};
+
+/** 난이도 이름 배지(DX NET 난이도 그림을 여러 칸으로 이어 붙인 이모지). 못 불러왔으면 한 칸 약자(diffEmoji). */
+export function diffBadgeEmoji(diff: string): string {
+  const b = DIFF_BADGE[diff];
+  return (b && tiledEmoji(b[0], b[1])) ?? diffEmoji(diff);
+}
+
 const KIND: Record<string, string> = { DX: "carol_dx", ST: "carol_st" };
 
 /**

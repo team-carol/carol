@@ -11,7 +11,7 @@ import { resolveChart, ChartUnavailableError } from "../../simai/source";
 import { searchAllCharts, chartIndexSize } from "../../simai/chartSearch";
 import { renderPreviewGif } from "../utils/chartGif";
 import { jacketBuffer, getClearList } from "../utils/embeds";
-import { diffEmoji, rankEmoji, comboEmoji, syncEmoji, dxStarEmoji, kindEmoji } from "../utils/emoji";
+import { diffBadgeEmoji, rankEmoji, comboEmoji, syncEmoji, dxStarEmoji, kindEmoji } from "../utils/emoji";
 import { getConstant, getJacketFile, getSongVersionName, isSongPlus, getSongGenre } from "../../constants";
 import { getScoreRank } from "../../games";
 import { dxStars } from "../../sRating";
@@ -318,7 +318,7 @@ async function reply(interaction: ChatInputCommandInteraction, x: ReplyInput): P
     x.artist && msg("chart.artist", { artist: escapeMarkdown(x.artist) }),
     (version || genre) && msg("chart.version", { version: [version, genre].filter(Boolean).join(" / ") }),
     msg("chart.level", {
-      diff: diffName ? diffEmoji(diffName) : msg("chart.diffUnknown"),
+      diff: diffName ? diffBadgeEmoji(diffName) : msg("chart.diffUnknown"),
       level: constant !== null ? constant.toFixed(1) : x.level,
     }).trimEnd(),
     msg("chart.info", { bpm: bpmText(x.chart), length: clock(x.chart.durationMs), measures: x.chart.measures }),
