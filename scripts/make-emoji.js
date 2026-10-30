@@ -83,11 +83,11 @@ const WIDE = [
   ["carol_exp", "diff_expert.png", 3, { height: 108, align: "left" }],
   ["carol_mas", "diff_master.png", 4, { height: 108, align: "left" }],
   ["carol_rem", "diff_remaster.png", 4, { height: 108, align: "left" }],
-  // 기록 마크(DX NET 기록 페이지 아이콘). 랭크(68:31)는 두 칸, FC/AP·FS/FDX·SYNC(42:47)·DX ✦(정사각형)는 한 칸.
-  // 둘 다 둘레 투명 여백이 커서, 같은 종류 아이콘이 모두 들어가는 영역만 잘라 칸에 맞춘다(그래서 이름이 carol_m2_*).
-  // 랭크는 (4,4)~(62,28), 칩은 가로 전체·세로 7~41(FDX+ 의 + 가 가로 끝까지 닿아 더 자르면 잘린다).
+  // 기록 마크. 랭크는 플레이 기록 페이지의 큰 그림(img/playlog/*.png, 200x89. 기록 페이지 아이콘 68x31 과 같은 디자인)을
+  // 그림 영역 (9,13)~(194,77)만 잘라 세 칸에, FC/AP·FS/FDX·SYNC 는 기록 페이지 칩(42x47)을 칩이 모두 들어가는 영역
+  // (가로 전체·세로 7~41. FDX+ 의 + 가 가로 끝까지 닿아 더 자르면 잘린다)만 잘라 한 칸에, DX ✦ 는 그대로 한 칸에.
   ...["sssp", "sss", "ssp", "ss", "sp", "s", "aaa", "aa", "a", "bbb", "bb", "b", "c", "d"]
-    .map((r) => [`carol_m2_${r}`, `music_icon_${r}.png`, 2, { crop: [4, 4, 58, 24] }]),
+    .map((r) => [`carol_m3_${r}`, `playlog/${r.replace(/p$/, "plus")}.png`, 3, { crop: [9, 13, 185, 64], height: 106 }]),
   ...["app", "ap", "fcp", "fc", "fdxp", "fdx", "fsp", "fs", "sync"]
     .map((m) => [`carol_m2_${m}`, `music_icon_${m}.png`, 1, { crop: [0, 7, 42, 34] }]),
   ...[1, 2, 3, 4, 5].map((n) => [`carol_m_star${n}`, `music_icon_dxstar_${n}.png`, 1, { height: 124 }]),
@@ -163,7 +163,7 @@ async function ensureWideSource(file) {
     let res = await fetch(url).catch(() => null);
     if (!res || !res.ok) res = await fetch(`https://web.archive.org/web/2025id_/${url}`);
     if (!res.ok) throw new Error(`${file} HTTP ${res.status}`);
-    fs.mkdirSync(WIDE_DIR, { recursive: true });
+    fs.mkdirSync(path.dirname(local), { recursive: true });
     fs.writeFileSync(local, Buffer.from(await res.arrayBuffer()));
   }
   const buf = fs.readFileSync(local);
@@ -235,7 +235,7 @@ async function main() {
     row("#313338", 22, 4),
     row("#ffffff", 22, 4),
   ]);
-  fs.writeFileSync(path.join(OUT, "..", "emoji-preview.png"), await render(sheet, 1040, 1000, fonts));
+  fs.writeFileSync(path.join(OUT, "..", "emoji-preview.png"), await render(sheet, 1040, 2400, fonts));
   console.log(`emoji ${EMOJIS.length + wideNames.flat().length}개 → ${OUT}`);
 }
 

@@ -616,7 +616,7 @@ export async function searchResultEmbeds(
         // 없는 마크 자리는 빈칸 이모지로 채워 뒤의 마크가 줄마다 같은 자리에 오게 한다(끝의 빈칸은 뺀다).
         const marks = [rankEmoji(getScoreRank(r.achievementVal)), comboEmoji(r.fc), syncEmoji(r.sync), dxStarEmoji(stars)];
         while (marks.length && !marks[marks.length - 1]) marks.pop();
-        // 배지 모양에는 DX NET 기록 아이콘(랭크 두 칸, 나머지 한 칸). 없는 자리는 같은 방식으로 투명 빈칸.
+        // 배지 모양에는 DX NET 기록 아이콘(랭크 세 칸, 나머지 한 칸). 없는 자리는 같은 방식으로 투명 빈칸.
         const icons = [rankIcon(getScoreRank(r.achievementVal)), comboIcon(r.fc), syncIcon(r.sync), dxStarIcon(stars)];
         while (icons.length && !icons[icons.length - 1]) icons.pop();
         return [{ d, lv, achievement: `${r.achievementVal.toFixed(4)}%`, marks: marks.map((m) => m || blankEmoji()).filter(Boolean).join(" "), icons: icons.map((m) => m || blankEmoji()).filter(Boolean).join(" ") }];
