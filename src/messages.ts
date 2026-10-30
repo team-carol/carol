@@ -293,6 +293,8 @@ export const MESSAGES = {
   "searchResult.row": "{diff} {constant} ✦ **{achievement}** {marks}",
   // 플레이하지 않은 난이도
   "searchResult.rowNotPlayed": "{diff} {constant} ✦ —",
+  "searchResult.badgeRow": "{diff} {constant}\n{achievement} {marks}",
+  "searchResult.badgeRowNotPlayed": "{diff} {constant}\n—",
   "searchResult.externalButton": "▶ 외부출력",
   // 지역 뒤에 붙는 버전·장르. 버전은 지역과 같은 줄, 장르는 다음 줄(글 높이를 재킷 썸네일에 맞춘 줄 수)
   "searchResult.genreSuffix": "\n{genre}",
