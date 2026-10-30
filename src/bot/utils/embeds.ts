@@ -625,11 +625,10 @@ export async function searchResultEmbeds(
       const lvs = padColumn(rows.map((x) => x.lv)) ?? rows.map((x) => padDigits(x.lv, 2, PAD_ONE));
       const played = rows.flatMap((x) => (x.achievement !== undefined ? [x.achievement] : []));
       const achs = padColumn(played, 700) ?? played.map((a) => padDigits(a, 3, PAD_ONE_BOLD));
-      // 배지 모양: 상수는 굵게 오른쪽 정렬(배지가 4칸으로 같아 한 열에 온다), 달성률은 굵게 왼쪽 정렬하고 뒤를 채워
+      // 배지 모양: 상수는 굵게 왼쪽 정렬(배지가 4칸으로 같아 한 열에서 시작한다), 달성률은 굵게 왼쪽 정렬하고 뒤를 채워
       // 마크가 줄마다 같은 자리에 오게 한다.
       const bold = (c: string) => `**${c}**`;
-      const badgeLvs = padColumn(rows.map((x) => x.lv), 700, { wrap: bold })
-        ?? rows.map((x) => { const p = padDigits(x.lv, 2, PAD_ONE_BOLD); return p.slice(0, p.length - x.lv.length) + bold(x.lv); });
+      const badgeLvs = rows.map((x) => bold(x.lv));
       const badgeAchs = padColumn(played, 700, { align: "left", wrap: bold }) ?? played.map(bold);
       let k = 0;
       // 난이도·랭크·FC/AP·FS/FDX·DX ✦ 는 이모지로. 모바일에서 한 줄에 들어가게 코드 블록·인라인 코드는 쓰지 않는다.
