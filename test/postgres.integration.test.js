@@ -371,3 +371,26 @@ test("unlinkMaishift: maishift 파생 데이터만, 공유 키는 마지막 연�
     } finally { await db.close(); }
   } finally { try { await client.end(); } catch {} await pg.stop(); }
 });
+
+// /상태·/api/stats 의 등록 유저: 캐롤봇 북마클릿(친구 코드)이나 maishift 연동 중 하나라도 있으면 센다.
+// 2.0.0 부터 프로필은 maishift 에서 오므로 maishift 만 연동한 사람도 등록 유저다.
+test("getRegisteredUserCount: 친구 코드나 maishift 연동이 있는 사용자", async () => {
+  const pg = await temporaryPostgres();
+  const client = new Client({ connectionString: pg.url });
+  try {
+    const { PostgresStorage } = require("../dist/storage/postgres");
+    const db = new PostgresStorage(pg.url);
+    try {
+      await db.initialize();
+      await client.connect();
+      assert.equal(await db.getRegisteredUserCount(), 0);
+      await client.query("INSERT INTO sessions(discord_user_id,friend_code) VALUES('fc-only','intl:111'),('both','intl:222'),('none','')");
+      await db.setMaishiftHandle("ms-only", "Alice");
+      await db.setMaishiftHandle("both", "Bob");
+      // 둘 다 있는 사람은 한 번만, 아무것도 없는 세션(설정만 바꾼 사람)은 세지 않는다.
+      assert.equal(await db.getRegisteredUserCount(), 3);
+      await db.unlinkMaishift("ms-only", { handle: "Alice", server: "intl" });
+      assert.equal(await db.getRegisteredUserCount(), 2);
+    } finally { await db.close(); }
+  } finally { try { await client.end(); } catch {} await pg.stop(); }
+});
