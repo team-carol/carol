@@ -4,7 +4,7 @@ import { createHash, timingSafeEqual } from "crypto";
 import { gunzip } from "zlib";
 import { promisify } from "util";
 import { parseFriendCode as parseFC, parseRecentRecords, parsePlaylogHistory, getMaimaiBaseUrl, parseMapAreas, parsePlaylogDetail, parseUserOptions, parseCircle } from "../scraper";
-import { saveSyncExtras, getMaishiftLink, saveUserSession, findUserBySyncToken, getAvatarBlob, getSongJacket, saveSongJacket, getUserDefaultServer, setUserDefaultServer, isMaimaiServer, getMapImage, saveMapImage, backfillEventRatingUp, getAllAliases, listNameTranslations, setNameTranslation, addAlias, deleteAlias, setAliasTranslation, setMessageOverride, deleteMessageOverride, getTranslateTitles, setTranslateTitles, getDxRankDecimal, setDxRankDecimal, saveProfileCircle, getCirclePublic, setCirclePublic, getRegisteredUserCount, getAchievementMinimum, setAchievementMinimum, getPolicyAck, setPolicyAck, getSimaiChart, saveSimaiChart, listRegistryCharts, auditRegistryCharts, listOptionPresets, saveOptionPreset, deleteOptionPreset, saveOptionSnapshot, getOptionSnapshots, listPatchNotes, savePatchNote, setPatchNotePublished, deletePatchNote } from "../storage";
+import { saveSyncExtras, getMaishiftLink, saveUserSession, findUserBySyncToken, getAvatarBlob, getSongJacket, saveSongJacket, getUserDefaultServer, setUserDefaultServer, isMaimaiServer, getMapImage, saveMapImage, backfillEventRatingUp, getAllAliases, listNameTranslations, setNameTranslation, addAlias, deleteAlias, setAliasTranslation, setMessageOverride, deleteMessageOverride, getTranslateTitles, setTranslateTitles, getDxRankDecimal, setDxRankDecimal, saveProfileCircle, saveSharedCircle, getCirclePublic, setCirclePublic, getRegisteredUserCount, getAchievementMinimum, setAchievementMinimum, getPolicyAck, setPolicyAck, getSimaiChart, saveSimaiChart, listRegistryCharts, auditRegistryCharts, listOptionPresets, saveOptionPreset, deleteOptionPreset, saveOptionSnapshot, getOptionSnapshots, listPatchNotes, savePatchNote, setPatchNotePublished, deletePatchNote } from "../storage";
 import { POLICY_VERSION } from "../policy";
 import type { SongAliasRow } from "../storage/types";
 import { scheduleMaishiftCheck } from "../maishift";
@@ -1115,6 +1115,8 @@ export function startWebServer(port: number): void {
           try {
             const circle = parseCircle(circleHtml, circleMemberHtml, syncServer, circleRankingHtml);
             if (circle !== undefined) await saveProfileCircle(savedProfileKey, JSON.stringify(circle));
+            // 같은 서클원 모두가 이 동기화로 받은 서클을 본다(src/circleShare.ts).
+            if (circle) await saveSharedCircle(syncServer, circle);
           } catch (circleError) {
             console.warn("[web] 서클 정보 저장 실패:", circleError instanceof Error ? circleError.message : circleError);
           }

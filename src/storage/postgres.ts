@@ -1,7 +1,8 @@
 import { Pool, types as pgTypes, type PoolClient, type PoolConfig } from "pg";
 import * as crypto from "crypto";
 import { encrypt, decrypt } from "../crypto";
-import type { MaimaiProfile } from "../scraper";
+import type { MaimaiProfile, CircleInfo } from "../scraper";
+import { mergeCircle, type SharedCircle } from "../circleShare";
 import type * as Db from "./types";
 import { calcSongRating, getConstant, levelToNumber } from "../constants";
 
@@ -228,6 +229,9 @@ CREATE INDEX IF NOT EXISTS idx_user_goals_owner ON user_goals(discord_user_id, c
   // maishift 만 연동한 사용자(프로필 키 ms:<server>:<handle>)의 레이팅표 PNG 캐시. 이 키에는 profiles 행이 없어
   // profiles.rating_card_blob 에 저장되지 않았다. synced_at 은 maishift 업로드 시각. 연동 해제·비활성 GC 때 지운다.
   [31, `CREATE TABLE IF NOT EXISTS maishift_rating_cards (profile_key text PRIMARY KEY, blob bytea NOT NULL, synced_at bigint NOT NULL, version integer NOT NULL, updated_at bigint NOT NULL);`,],
+  // 서클 공유(src/circleShare.ts): 같은 서클(서버·서클 코드)은 한 행. 서클원 누구든 동기화하면 갱신하고 모두가 본다.
+  // data 는 CircleInfo JSON(내 서클 포인트 제외). members_at·ranking_at: 멤버 목록·서클 랭킹을 받은 시각(0=없음).
+  [32, `CREATE TABLE IF NOT EXISTS circles (server text NOT NULL, code text NOT NULL, data text NOT NULL, synced_at bigint NOT NULL, members_at bigint NOT NULL DEFAULT 0, ranking_at bigint NOT NULL DEFAULT 0, PRIMARY KEY(server, code));`,],
 ];
 
 export interface MainotesSongRow { id:string; title:string; artist:string; bpm:string; genre:string; version:string; type:string }
@@ -238,6 +242,9 @@ function* batches<T>(a:T[],n:number):Generator<T[]>{ for(let i=0;i<a.length;i+=n
 function hash(text: string): string { return crypto.createHash("sha256").update(text).digest("hex"); }
 function fcRank(v: string): number { const x=v.trim().toUpperCase().replace(/\s+/g, ""); return x === "AP+" || x === "APP" ? 4 : x === "AP" ? 3 : x === "FC+" || x === "FCP" ? 2 : x === "FC" ? 1 : 0; }
 function syncRank(v: string): number { const x=v.trim().toUpperCase().replace(/\s+/g, ""); return x === "FDX+" || x === "FDXP" ? 5 : x === "FDX" ? 4 : x === "FS+" || x === "FSP" ? 3 : x === "FS" ? 2 : x === "SYNC" || x === "S" ? 1 : 0; }
+
+/** circles 행 → SharedCircle. data 가 깨졌으면 null. */
+function sharedCircleRow(x:any):SharedCircle|null{try{return {data:JSON.parse(x.data),syncedAt:Number(x.synced_at),membersAt:Number(x.members_at),rankingAt:Number(x.ranking_at)};}catch{return null;}}
 
 function patchRow(x:any):Db.PatchNoteRow{return {id:Number(x.id),version:x.version,title:x.title,body:x.body,publishedAt:Number(x.published_at),createdAt:Number(x.created_at),updatedAt:Number(x.updated_at),seen:Number(x.seen??0)};}
 
@@ -528,6 +535,31 @@ SELECT u.chart_key AS "chartKey",u.achievement_val AS "achievementVal",u.fc,u.sy
   async getPolicyAck(id:string):Promise<number|null>{const r=await this.q<any>("SELECT policy_ack FROM sessions WHERE discord_user_id=$1",[id]);return r[0]?Number(r[0].policy_ack??0):null;}
   async setPolicyAck(id:string,v:number){await this.q("INSERT INTO sessions(discord_user_id,policy_ack) VALUES($1,$2) ON CONFLICT(discord_user_id) DO UPDATE SET policy_ack=excluded.policy_ack",[id,v]);}
   async saveProfileCircle(profileKey:string, json:string){await this.q("UPDATE profiles SET circle_json=$2 WHERE friend_code=$1",[profileKey,json]);}
+  /** 같은 서클의 공유 행. 없거나 깨졌으면 null. */
+  async getSharedCircle(server:Db.MaimaiServer, code:string):Promise<SharedCircle|null>{const r=await this.q<any>("SELECT data,synced_at,members_at,ranking_at FROM circles WHERE server=$1 AND code=$2",[server,code]);return r[0]?sharedCircleRow(r[0]):null;}
+  /** 이번 동기화에 받은 서클을 공유 행에 합친다(src/circleShare.ts mergeCircle). 동시에 동기화해도 받은 부분이 사라지지 않게 행을 잠근다. */
+  async saveSharedCircle(server:Db.MaimaiServer, circle:CircleInfo):Promise<void>{
+    if(!circle.code)return;
+    await this.tx(async c=>{
+      const r=await c.query<any>("SELECT data,synced_at,members_at,ranking_at FROM circles WHERE server=$1 AND code=$2 FOR UPDATE",[server,circle.code]);
+      const m=mergeCircle(r.rows[0]?sharedCircleRow(r.rows[0]):null,circle,Date.now());
+      await c.query("INSERT INTO circles(server,code,data,synced_at,members_at,ranking_at) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(server,code) DO UPDATE SET data=excluded.data,synced_at=excluded.synced_at,members_at=excluded.members_at,ranking_at=excluded.ranking_at",[server,circle.code,JSON.stringify(m.data),m.syncedAt,m.membersAt,m.rankingAt]);
+    });
+  }
+  /** 서클 공유 이전에 저장된 각자의 서클로 공유 행을 채운다. 이미 있는 행은 건드리지 않는다. 채운 서클 수. */
+  async backfillSharedCircles():Promise<number>{
+    const rows=await this.q<any>("SELECT COALESCE(server_region,'intl') AS server,circle_json,last_synced_at FROM profiles WHERE circle_json LIKE '{%' ORDER BY last_synced_at");
+    const byCircle=new Map<string,{server:string;code:string;shared:SharedCircle}>();
+    for(const row of rows){
+      let circle:CircleInfo;try{circle=JSON.parse(row.circle_json);}catch{continue;}
+      if(!circle?.code||!Array.isArray(circle.members))continue;
+      const k=`${row.server}|${circle.code}`;
+      byCircle.set(k,{server:row.server,code:circle.code,shared:mergeCircle(byCircle.get(k)?.shared??null,circle,Number(row.last_synced_at)||0)});
+    }
+    let added=0;
+    for(const {server,code,shared} of byCircle.values()){const r=await this.pool.query("INSERT INTO circles(server,code,data,synced_at,members_at,ranking_at) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(server,code) DO NOTHING",[server,code,JSON.stringify(shared.data),shared.syncedAt,shared.membersAt,shared.rankingAt]);added+=r.rowCount??0;}
+    return added;
+  }
   async getCirclePublic(id:string){const r=await this.q<any>("SELECT circle_public FROM sessions WHERE discord_user_id=$1",[id]);return Number(r[0]?.circle_public??1)===1;} async setCirclePublic(id:string,v:boolean){await this.q("INSERT INTO sessions(discord_user_id,circle_public) VALUES($1,$2) ON CONFLICT(discord_user_id) DO UPDATE SET circle_public=excluded.circle_public",[id,v?1:0]);}
   async getDxRankDecimal(id:string){const r=await this.q<any>("SELECT dx_rank_decimal FROM sessions WHERE discord_user_id=$1",[id]);return r[0]?.dx_rank_decimal===1;} async setDxRankDecimal(id:string,v:boolean){await this.q("INSERT INTO sessions(discord_user_id,dx_rank_decimal) VALUES($1,$2) ON CONFLICT(discord_user_id) DO UPDATE SET dx_rank_decimal=excluded.dx_rank_decimal",[id,v?1:0]);}
   async getTranslateTitles(id:string){const r=await this.q<any>("SELECT translate_titles FROM sessions WHERE discord_user_id=$1",[id]);return r[0]?.translate_titles===1;} async setTranslateTitles(id:string,v:boolean){await this.q("INSERT INTO sessions(discord_user_id,translate_titles) VALUES($1,$2) ON CONFLICT(discord_user_id) DO UPDATE SET translate_titles=excluded.translate_titles",[id,v?1:0]);}

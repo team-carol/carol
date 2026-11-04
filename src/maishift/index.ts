@@ -288,6 +288,7 @@ function toProfile(profileKey: string, link: MaishiftLink, e: Entry, extras: Cac
     gradeImg: rankImage(link.server, "class", e.classRank),
     courseImg: rankImage(link.server, "course", e.courseRank),
     circleJson: extras?.circleJson ?? "",
+    circleSyncedAt: extras?.circleSyncedAt,
     stars: String(e.stars),
     comment: "",
     playCount: e.playCount,

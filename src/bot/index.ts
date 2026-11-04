@@ -1,7 +1,7 @@
 import { Client, Events, GatewayIntentBits, ActivityType, ChatInputCommandInteraction, AutocompleteInteraction, ButtonInteraction, REST, Routes, MessageFlags, AttachmentBuilder, EmbedBuilder } from "discord.js";
 import { initEncryption } from "../crypto";
 import { startWebServer, setBaseUrl, setGuildCountProvider, setGatewayPingProvider, getBaseUrl } from "../web";
-import { closeStorage, initializeStorage, loadUserSession, getCachedProfile, clearRatingCardCacheForInactive, getTranslateTitles, getPolicyAck, setPolicyAck, getUnseenPatchNotes, setPatchAck, pruneSimaiCharts, getSimaiChart, getOrphanChartVideos, deleteChartVideo } from "../storage";
+import { closeStorage, initializeStorage, loadUserSession, getCachedProfile, clearRatingCardCacheForInactive, getTranslateTitles, getPolicyAck, setPolicyAck, getUnseenPatchNotes, setPatchAck, pruneSimaiCharts, getSimaiChart, getOrphanChartVideos, deleteChartVideo, backfillSharedCircles } from "../storage";
 import { CONFIG, PORT } from "../config";
 import { parseMaidata } from "../simai/parse";
 import { requestVideo, getReadyVideo, queueDepth } from "./utils/chartVideoQueue";
@@ -120,6 +120,10 @@ client.once(Events.ClientReady, async (c) => {
   } catch (e) {
     console.error("[names] 로드 실패:", e);
   }
+  // 서클 공유 이전에 각자 받아 둔 서클로 공유 행을 채운다(이미 있는 행은 그대로). 기다리지 않는다.
+  backfillSharedCircles()
+    .then((n) => { if (n) console.log(`[circle] 공유 서클 ${n}개 채움`); })
+    .catch((e) => console.error("[circle] 공유 서클 채우기 실패:", e));
   // maishift 연동(임시, 공식 API 전까지). 프로필 조회에 maishift 데이터를 덧씌운다.
   initMaishift();
   await loadRankImages();

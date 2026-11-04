@@ -11,7 +11,8 @@ import { getJacketFile, getTitleByJacket } from "../../constants";
 import { displayTitle } from "../../aliases";
 import { msg, cardTextSignature, type MessageKey } from "../../messages";
 import { CIRCLE_COLOR_STYLE, CIRCLE_STAGE_POINTS } from "./circleColors";
-import { extrasSyncedAt } from "./syncExtras";
+import { circleSyncedAt } from "./circle";
+import { createHash } from "crypto";
 
 // /서클 이미지 카드. /프로필 카드와 같은 부품(cardKit)·토큰을 쓴다.
 // 헤더(서클 이름·코드·소개) → 포인트·순위·보상·멤버 수 → 서클 챌린지(+다음 주 예고) → 멤버 포인트(2열).
@@ -259,9 +260,11 @@ function memberRow(m: CircleMember, rank: number): El {
 
 export async function renderCircleCard(circle: CircleInfo, profile: CachedProfile, opts: { translate?: boolean } = {}): Promise<Buffer> {
   const translate = !!opts.translate;
-  // 서클은 북마클릿 동기화 때 바뀐다(maishift 업로드 시각인 lastSyncedAt 과 따로). 동기화한 사람 이름은 maishift 값이라 둘 다 넣는다.
-  const synced = extrasSyncedAt(profile);
-  const cacheKey = [profile.profileKey, profile.lastSyncedAt, synced, translate ? 1 : 0, CIRCLE_CARD_VERSION, cardTextSignature()].join("|");
+  // 서클은 서클원 누구든 북마클릿으로 동기화하면 바뀐다(maishift 업로드 시각인 lastSyncedAt 과 따로). 초기화까지 남은 날은
+  // 볼 때마다 다시 세므로 내용의 해시도 넣는다. 카드 주인 이름은 maishift 값이라 lastSyncedAt 도 넣는다.
+  const synced = circleSyncedAt(profile);
+  const circleHash = createHash("sha1").update(JSON.stringify(circle)).digest("hex").slice(0, 16);
+  const cacheKey = [profile.profileKey, profile.lastSyncedAt, synced, circleHash, translate ? 1 : 0, CIRCLE_CARD_VERSION, cardTextSignature()].join("|");
   const memo = circleCardCache.get(cacheKey);
   if (memo) return memo;
 
@@ -316,7 +319,7 @@ export async function renderCircleCard(circle: CircleInfo, profile: CachedProfil
     membersPanel(members, month, topIcons),
     // 푸터
     el("div", { display: "flex", justifyContent: "space-between", marginTop: 14, color: MUTED, fontSize: 11 }, [
-      el("span", {}, msg("circleCard.syncedBy", { player: profile.playerName || "—" })),
+      el("span", {}, msg("circleCard.owner", { player: profile.playerName || "—" })),
       el("span", {}, msg("card.lastSynced", { time: kstStamp(synced) })),
     ]),
   ]);

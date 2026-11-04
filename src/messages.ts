@@ -556,7 +556,8 @@ export const MESSAGES = {
   "circleCard.leader": "LEADER",
   "circleCard.memberPoints": "{points} PT",
   "circleCard.memberRating": "{rating}",
-  "circleCard.syncedBy": "{player} 님의 동기화",
+  // 서클 정보는 서클원 누구든 동기화한 것이라(서클 공유) 동기화한 사람이 아니라 카드 주인을 쓴다.
+  "circleCard.owner": "{player} 님의 서클",
 
   "achievementCard.eyebrow": "DAILY ACHIEVEMENTS",
   "achievementCard.title": "오늘의 성과",
