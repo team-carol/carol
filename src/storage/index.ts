@@ -4,6 +4,8 @@
 import { DATABASE_URL } from "../config";
 import type { PostgresStorage } from "./postgres";
 import type { CachedProfile, MaimaiServer } from "./types";
+import { viewCircle } from "../circleShare";
+import type { CircleInfo } from "../scraper";
 
 type Storage = PostgresStorage;
 let adapter: Promise<Storage> | undefined;
@@ -43,9 +45,10 @@ export const saveAchievementPlayEventLogBatch = method("saveAchievementPlayEvent
 export const listOptionPresets = method("listOptionPresets"); export const saveOptionPreset = method("saveOptionPreset"); export const deleteOptionPreset = method("deleteOptionPreset"); export const saveOptionSnapshot = method("saveOptionSnapshot"); export const getOptionSnapshots = method("getOptionSnapshots");
 export const listPatchNotes = method("listPatchNotes"); export const savePatchNote = method("savePatchNote"); export const setPatchNotePublished = method("setPatchNotePublished"); export const deletePatchNote = method("deletePatchNote"); export const getUnseenPatchNotes = method("getUnseenPatchNotes"); export const setPatchAck = method("setPatchAck");
 export const saveProfileCircle = method("saveProfileCircle"); export const getCirclePublic = method("getCirclePublic"); export const setCirclePublic = method("setCirclePublic");
+export const saveSharedCircle = method("saveSharedCircle"); export const backfillSharedCircles = method("backfillSharedCircles");
 export const getTranslateTitles = method("getTranslateTitles"); export const setTranslateTitles = method("setTranslateTitles");
 export const getDxRankDecimal = method("getDxRankDecimal"); export const setDxRankDecimal = method("setDxRankDecimal");
-export const getMaishiftLink = method("getMaishiftLink"); export const getMaishiftUsers = method("getMaishiftUsers"); export const saveSyncExtras = method("saveSyncExtras"); export const hasChartClears = method("hasChartClears"); export const setMaishiftHandle = method("setMaishiftHandle"); export const unlinkMaishift = method("unlinkMaishift"); export const getKvCache = method("getKvCache"); export const saveKvCache = method("saveKvCache");
+export const getMaishiftLink = method("getMaishiftLink"); export const getMaishiftUsers = method("getMaishiftUsers"); export const saveSyncExtras = method("saveSyncExtras"); export const hasChartClears = method("hasChartClears"); export const getChartClears = method("getChartClears"); export const setMaishiftHandle = method("setMaishiftHandle"); export const unlinkMaishift = method("unlinkMaishift"); export const getKvCache = method("getKvCache"); export const saveKvCache = method("saveKvCache");
 export const getConstantsCache = method("getConstantsCache"); export const saveConstantsCache = method("saveConstantsCache");
 export const getRatingCardCache = method("getRatingCardCache"); export const saveRatingCardCache = method("saveRatingCardCache");
 export const listNameTranslations = method("listNameTranslations"); export const noteNames = method("noteNames"); export const setNameTranslation = method("setNameTranslation"); export const listStoredAreas = method("listStoredAreas");
@@ -75,11 +78,25 @@ export function parseMaishiftProfileKey(key: string): MaishiftLink | null {
 /** 캐롤봇 북마클릿이 저장한 행 그대로(부가 데이터·동기화용). 프로필 값은 비어 있을 수 있다. */
 export { getStoredProfile, getStoredFriendCode };
 
+/**
+ * 서클 공유(src/circleShare.ts): 본인이 받은 서클(가입 여부·내 서클 포인트)의 서클 코드로 공유 행을 찾아, 다른 서클원이
+ * 더 최근에 동기화한 서클 정보를 보여 준다. 가입하지 않았거나 아직 받지 않았으면 그대로.
+ */
+async function withSharedCircle(stored: CachedProfile): Promise<CachedProfile> {
+  let own: CircleInfo | null = null;
+  try { own = stored.circleJson ? JSON.parse(stored.circleJson) : null; } catch { own = null; }
+  if (!own || typeof own !== "object" || typeof own.name !== "string") return stored;
+  const shared = own.code ? await invoke("getSharedCircle", [stored.server, own.code]) : null;
+  const view = viewCircle(own, stored.lastSyncedAt, shared, Date.now());
+  return { ...stored, circleJson: JSON.stringify(view.circle), circleSyncedAt: view.syncedAt };
+}
+
 export async function getCachedProfile(key: string): Promise<CachedProfile | null> {
   if (!profileOverlay) return null;
   const ms = parseMaishiftProfileKey(key);
   if (ms) return profileOverlay(key, ms, null);
-  const extras = await getStoredProfile(key);
+  const stored = await getStoredProfile(key);
+  const extras = stored ? await withSharedCircle(stored) : null;
   const handle = await invoke("getMaishiftHandleByProfileKey", [extras?.profileKey ?? key]);
   if (!handle) return null;
   const server: MaimaiServer = extras?.server ?? (key.startsWith("jp:") ? "jp" : "intl");

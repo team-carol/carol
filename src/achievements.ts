@@ -41,3 +41,9 @@ export function recordPlayedAt(dateText: string): number {
 export function hasValidRecordDate(dateText: string): boolean {
   return parseKoreaDateText(dateText) !== null;
 }
+
+/** /성과 정렬 묶음: 0 = 레이팅이 오른 성과, 1 = AP/AP+, 2 = 나머지. 묶음 안에서는 상수 순으로 둔다. */
+export function achievementTier(ratingGain: number | null | undefined, fc: string): number {
+  if (typeof ratingGain === "number" && ratingGain > 0) return 0;
+  return fc === "AP" || fc === "AP+" ? 1 : 2;
+}

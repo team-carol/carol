@@ -1,7 +1,8 @@
 import { Pool, types as pgTypes, type PoolClient, type PoolConfig } from "pg";
 import * as crypto from "crypto";
 import { encrypt, decrypt } from "../crypto";
-import type { MaimaiProfile } from "../scraper";
+import type { MaimaiProfile, CircleInfo } from "../scraper";
+import { mergeCircle, type SharedCircle } from "../circleShare";
 import type * as Db from "./types";
 import { calcSongRating, getConstant, levelToNumber } from "../constants";
 
@@ -225,6 +226,12 @@ CREATE INDEX IF NOT EXISTS idx_user_goals_owner ON user_goals(discord_user_id, c
   // 지방 이름·스탬프 카드 이름의 한국어 번역(/관리 → 이름 번역). 봇이 본 이름을 ko='' 로 먼저 쌓아 두고 운영자가 채운다.
   // kind: area(끝 번호를 뗀 지방 이름) | stamp(스탬프 카드 이름). image_url 은 관리 화면에서 알아보기 쉽게.
   [30, `CREATE TABLE IF NOT EXISTS name_translations (kind text NOT NULL, source text NOT NULL, ko text NOT NULL DEFAULT '', image_url text NOT NULL DEFAULT '', updated_at bigint NOT NULL DEFAULT 0, PRIMARY KEY(kind, source));`,],
+  // maishift 만 연동한 사용자(프로필 키 ms:<server>:<handle>)의 레이팅표 PNG 캐시. 이 키에는 profiles 행이 없어
+  // profiles.rating_card_blob 에 저장되지 않았다. synced_at 은 maishift 업로드 시각. 연동 해제·비활성 GC 때 지운다.
+  [31, `CREATE TABLE IF NOT EXISTS maishift_rating_cards (profile_key text PRIMARY KEY, blob bytea NOT NULL, synced_at bigint NOT NULL, version integer NOT NULL, updated_at bigint NOT NULL);`,],
+  // 서클 공유(src/circleShare.ts): 같은 서클(서버·서클 코드)은 한 행. 서클원 누구든 동기화하면 갱신하고 모두가 본다.
+  // data 는 CircleInfo JSON(내 서클 포인트 제외). members_at·ranking_at: 멤버 목록·서클 랭킹을 받은 시각(0=없음).
+  [32, `CREATE TABLE IF NOT EXISTS circles (server text NOT NULL, code text NOT NULL, data text NOT NULL, synced_at bigint NOT NULL, members_at bigint NOT NULL DEFAULT 0, ranking_at bigint NOT NULL DEFAULT 0, PRIMARY KEY(server, code));`,],
 ];
 
 export interface MainotesSongRow { id:string; title:string; artist:string; bpm:string; genre:string; version:string; type:string }
@@ -235,6 +242,9 @@ function* batches<T>(a:T[],n:number):Generator<T[]>{ for(let i=0;i<a.length;i+=n
 function hash(text: string): string { return crypto.createHash("sha256").update(text).digest("hex"); }
 function fcRank(v: string): number { const x=v.trim().toUpperCase().replace(/\s+/g, ""); return x === "AP+" || x === "APP" ? 4 : x === "AP" ? 3 : x === "FC+" || x === "FCP" ? 2 : x === "FC" ? 1 : 0; }
 function syncRank(v: string): number { const x=v.trim().toUpperCase().replace(/\s+/g, ""); return x === "FDX+" || x === "FDXP" ? 5 : x === "FDX" ? 4 : x === "FS+" || x === "FSP" ? 3 : x === "FS" ? 2 : x === "SYNC" || x === "S" ? 1 : 0; }
+
+/** circles 행 → SharedCircle. data 가 깨졌으면 null. */
+function sharedCircleRow(x:any):SharedCircle|null{try{return {data:JSON.parse(x.data),syncedAt:Number(x.synced_at),membersAt:Number(x.members_at),rankingAt:Number(x.ranking_at)};}catch{return null;}}
 
 function patchRow(x:any):Db.PatchNoteRow{return {id:Number(x.id),version:x.version,title:x.title,body:x.body,publishedAt:Number(x.published_at),createdAt:Number(x.created_at),updatedAt:Number(x.updated_at),seen:Number(x.seen??0)};}
 
@@ -273,6 +283,8 @@ export class PostgresStorage {
   /** 이 프로필 키로 비교 기준(chart_clears)이 있는지. 없으면 첫 비교라 성과를 만들지 않는다. */
   /** 비교 기준(직전 기록)을 다른 프로필 키로 복사한다(있는 보면은 그대로). maishift 키 → 캐롤봇 친구 코드 키로 바뀔 때. */
   async copyChartClears(from:string,to:string){const r=await this.pool.query("INSERT INTO chart_clears(profile_key,chart_key,achievement_val,fc,sync,updated_at) SELECT $2,chart_key,achievement_val,fc,sync,updated_at FROM chart_clears WHERE profile_key=$1 ON CONFLICT(profile_key,chart_key) DO NOTHING",[from,to]);return r.rowCount??0;}
+  /** 보면별 비교 기준(지금까지의 가장 좋은 기록). */
+  async getChartClears(profileKey:string):Promise<{chartKey:string;achievementVal:number;fc:string}[]>{const r=await this.q<any>(`SELECT chart_key AS "chartKey",achievement_val AS "achievementVal",fc FROM chart_clears WHERE profile_key=$1`,[profileKey]);return r.map((x:any)=>({chartKey:x.chartKey,achievementVal:Number(x.achievementVal),fc:x.fc||""}));}
   async hasChartClears(profileKey:string){const r=await this.q<any>("SELECT 1 FROM chart_clears WHERE profile_key=$1 LIMIT 1",[profileKey]);return r.length>0;}
   async upsertChartClears(profileKey:string, records:readonly Db.ChartClearInput[]):Promise<Db.ChartClearDiff[]>{
     if(!records.length) return [];
@@ -291,7 +303,7 @@ SELECT u.chart_key AS "chartKey",u.achievement_val AS "achievementVal",u.fc,u.sy
       const fcImproved=fcRank(r.fc)>fcRank(r.oldFc);
       const syncImproved=sr>=2&&sr>oldSr;
       const scoreImproved=Number(r.achievementVal)>Number(r.achievementBefore);
-      return {chartKey:r.chartKey,achievementVal:Number(r.achievementVal),achievementBefore:Number(r.achievementBefore),fc:r.fc,sync:r.sync,fcImproved,syncImproved,scoreImproved};
+      return {chartKey:r.chartKey,achievementVal:Number(r.achievementVal),achievementBefore:Number(r.achievementBefore),fc:r.fc,sync:r.sync,fcBefore:r.oldFc,fcImproved,syncImproved,scoreImproved};
     }).filter((d:any)=>d.scoreImproved||d.fcImproved||d.syncImproved)
       .map(({scoreImproved,...d}:any)=>d);
   }
@@ -310,10 +322,10 @@ SELECT u.chart_key AS "chartKey",u.achievement_val AS "achievementVal",u.fc,u.sy
       const ordered=[...events].sort((a,b)=>a.playedAt-b.playedAt);
       for(const e of ordered){const id=e.sourcePlayId!.trim(), key=hash(`${profile}\x1f${id}`), payload=hash(JSON.stringify(e));const exists=await c.query<{event_key:string}>("SELECT event_key FROM achievement_play_event_log WHERE profile_key=$1 AND source_play_id=$2 OR event_key=$3",[profile,id,key]);if(exists.rowCount){if(e.ratingUp!=null)await c.query("UPDATE achievement_play_event_log SET rating_up=COALESCE(rating_up,$1) WHERE event_key=$2",[e.ratingUp,exists.rows[0].event_key]);continue;}
         const score=Number(e.achievementVal), before=Number(e.achievementBefore);const gain=Math.max(0,score-before);const suppliedLevelConstant=e.levelConstant==null?null:Number(e.levelConstant);const server=profile.startsWith("jp:")?"jp":"intl";const levelConstant=suppliedLevelConstant!=null&&Number.isFinite(suppliedLevelConstant)?suppliedLevelConstant:getConstant(e.title,e.musicKind,e.diff,server)??levelToNumber(e.level);
-        // 레이팅 상승은 DX NET 상세 페이지의 (+N) 파싱값(e.ratingUp)만 신뢰한다.
-        // 달성률 기반 추정치는 (a) 베스트 50 진입 여부를 알 수 없고 (b) 이전 기록이
-        // 없는 채보(achievementBefore=0)에서 곡 레이팅 전체를 상승분으로 잡아
-        // "레이팅 +300" 같은 값을 만들어내므로 사용하지 않는다. 파싱값이 없으면 0.
+        // 레이팅 상승(e.ratingUp)은 maishift 전체 기록으로 계산한 값(src/ratingGain.ts — 대상곡 50곡 합의 변화라
+        // 대상곡 진입·처음 친 채보도 맞게 잡힌다)이나 DX NET 상세 페이지의 (+N) 파싱값(지금은 수집을 꺼 둠)만 쓴다.
+        // 이 채보 하나의 달성률만으로 어림한 값은 쓰지 않는다 — 대상곡 진입 여부를 모르고, 처음 친 채보에서 곡 레이팅
+        // 전체를 상승분으로 잡아 "레이팅 +300" 같은 값이 나온다. 값이 없으면 0.
         // 宴/코스 등 다른 모드 상세 페이지에선 (+N) 이 레이팅 증가분이 아닌 값으로
         // 잘못 잡히므로, 단일 채보가 물리적으로 줄 수 있는 최대 곡 레이팅
         // (상수 불명 시 이론상 최대치 338)을 넘는 파싱값은 버린다.
@@ -343,7 +355,9 @@ SELECT u.chart_key AS "chartKey",u.achievement_val AS "achievementVal",u.fc,u.sy
   }
   async getAchievementPlayEventLog(k:string,from?:number,to?:number){const r=await this.q<any>(`SELECT event_key AS "eventKey",profile_key AS "profileKey",source_play_id AS "sourcePlayId",chart_key AS "chartKey",is_baseline AS "isBaseline",played_at AS "playedAt",source_sequence AS "sourceSequence",captured_at AS "capturedAt",source_kind AS "sourceKind",achievement_val AS "achievementVal",fc,sync,rating_up AS "ratingUp",title,diff,level,music_kind AS "musicKind",achievement_text AS "achievementText",record_json AS "recordJson",payload_hash AS "payloadHash",score_gain AS "scoreGain",is_meaningful AS "isMeaningful",level_constant AS "levelConstant",achievement_before AS "achievementBefore",rating_gain AS "ratingGain" FROM achievement_play_event_log WHERE profile_key=$1 AND ($2::bigint IS NULL OR played_at >= $2) AND ($3::bigint IS NULL OR played_at < $3) ORDER BY played_at DESC,source_sequence DESC,event_key DESC`,[k,from??null,to??null]);return r.map(x=>({...x,playedAt:Number(x.playedAt),capturedAt:Number(x.capturedAt),sourceSequence:Number(x.sourceSequence),isBaseline:Number(x.isBaseline),isMeaningful:Number(x.isMeaningful),scoreGain:Number(x.scoreGain),levelConstant:x.levelConstant==null?null:Number(x.levelConstant),achievementBefore:Number(x.achievementBefore??0),ratingGain:Math.max(0,Number(x.ratingGain)||0)}));}
   /** profileKeys 를 주면 그 키들의 성과를 합쳐 본다(maishift 키와 캐롤봇 친구 코드 키). 없으면 세션의 친구 코드로 찾는다(예전 방식). */
-  async getDailyAchievementSummaries(discordUserId:string,from:number,to:number,profileKeys?:readonly string[]){let keys=[...new Set(profileKeys??[])].filter(Boolean);if(!keys.length){const session=await this.q<any>("SELECT friend_code,default_server FROM sessions WHERE discord_user_id=$1",[discordUserId]);const stored=session[0]?.friend_code;keys=[stored?(/^(?:intl|jp):/.test(stored)?stored:`${session[0]?.default_server==='jp'?'jp':'intl'}:${stored}`):discordUserId];}const threshold=await this.getAchievementMinimum(discordUserId);const events=(await Promise.all(keys.map(k=>this.getAchievementPlayEventLog(k,from,to)))).flat().sort((a:any,b:any)=>b.playedAt-a.playedAt||b.sourceSequence-a.sourceSequence||(a.eventKey<b.eventKey?1:a.eventKey>b.eventKey?-1:0));return events.filter((x:any)=>x.isBaseline===0&&x.isMeaningful===1).reduce((a:any[],x:any)=>{const old=a.find(y=>y.chartKey===x.chartKey);if(!old&&(x.achievementVal>=threshold||fcRank(x.fc)>0||syncRank(x.sync)>=2))a.push({...x,achievementGain:Math.max(0,Number(x.achievementVal)-Number(x.achievementBefore??0)),achievementAfter:Number(x.achievementVal),ratingGain:Math.max(0,Number(x.ratingGain)||0)});return a;},[]);}
+  async getDailyAchievementSummaries(discordUserId:string,from:number,to:number,profileKeys?:readonly string[]){let keys=[...new Set(profileKeys??[])].filter(Boolean);if(!keys.length){const session=await this.q<any>("SELECT friend_code,default_server FROM sessions WHERE discord_user_id=$1",[discordUserId]);const stored=session[0]?.friend_code;keys=[stored?(/^(?:intl|jp):/.test(stored)?stored:`${session[0]?.default_server==='jp'?'jp':'intl'}:${stored}`):discordUserId];}const threshold=await this.getAchievementMinimum(discordUserId);const events=(await Promise.all(keys.map(k=>this.getAchievementPlayEventLog(k,from,to)))).flat().sort((a:any,b:any)=>b.playedAt-a.playedAt||b.sourceSequence-a.sourceSequence||(a.eventKey<b.eventKey?1:a.eventKey>b.eventKey?-1:0));// 하루에 보면마다 가장 늦은 성과 하나. 재AP(ap_repeat)는 기록 갱신 성과와 따로 센다(같은 날 둘 다 보이게).
+    const isRepeat=(e:any)=>e.sourceKind==='ap_repeat';
+    return events.filter((x:any)=>x.isBaseline===0&&x.isMeaningful===1).reduce((a:any[],x:any)=>{const old=a.find(y=>y.chartKey===x.chartKey&&isRepeat(y)===isRepeat(x));if(!old&&(x.achievementVal>=threshold||fcRank(x.fc)>0||syncRank(x.sync)>=2))a.push({...x,achievementGain:Math.max(0,Number(x.achievementVal)-Number(x.achievementBefore??0)),achievementAfter:Number(x.achievementVal),ratingGain:Math.max(0,Number(x.ratingGain)||0)});return a;},[]);}
   // 성과 로그의 보유 범위. 과거 레이팅표 역산이 가능한 하한을 안내할 때 쓴다.
   async getAchievementLogRange(profileKey:string){
     const r=await this.q<any>(`SELECT MIN(played_at) AS "first",MAX(played_at) AS "last",COUNT(*)::int AS "count" FROM achievement_play_event_log WHERE profile_key=$1`,[profileKey]);
@@ -525,6 +539,31 @@ SELECT u.chart_key AS "chartKey",u.achievement_val AS "achievementVal",u.fc,u.sy
   async getPolicyAck(id:string):Promise<number|null>{const r=await this.q<any>("SELECT policy_ack FROM sessions WHERE discord_user_id=$1",[id]);return r[0]?Number(r[0].policy_ack??0):null;}
   async setPolicyAck(id:string,v:number){await this.q("INSERT INTO sessions(discord_user_id,policy_ack) VALUES($1,$2) ON CONFLICT(discord_user_id) DO UPDATE SET policy_ack=excluded.policy_ack",[id,v]);}
   async saveProfileCircle(profileKey:string, json:string){await this.q("UPDATE profiles SET circle_json=$2 WHERE friend_code=$1",[profileKey,json]);}
+  /** 같은 서클의 공유 행. 없거나 깨졌으면 null. */
+  async getSharedCircle(server:Db.MaimaiServer, code:string):Promise<SharedCircle|null>{const r=await this.q<any>("SELECT data,synced_at,members_at,ranking_at FROM circles WHERE server=$1 AND code=$2",[server,code]);return r[0]?sharedCircleRow(r[0]):null;}
+  /** 이번 동기화에 받은 서클을 공유 행에 합친다(src/circleShare.ts mergeCircle). 동시에 동기화해도 받은 부분이 사라지지 않게 행을 잠근다. */
+  async saveSharedCircle(server:Db.MaimaiServer, circle:CircleInfo):Promise<void>{
+    if(!circle.code)return;
+    await this.tx(async c=>{
+      const r=await c.query<any>("SELECT data,synced_at,members_at,ranking_at FROM circles WHERE server=$1 AND code=$2 FOR UPDATE",[server,circle.code]);
+      const m=mergeCircle(r.rows[0]?sharedCircleRow(r.rows[0]):null,circle,Date.now());
+      await c.query("INSERT INTO circles(server,code,data,synced_at,members_at,ranking_at) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(server,code) DO UPDATE SET data=excluded.data,synced_at=excluded.synced_at,members_at=excluded.members_at,ranking_at=excluded.ranking_at",[server,circle.code,JSON.stringify(m.data),m.syncedAt,m.membersAt,m.rankingAt]);
+    });
+  }
+  /** 서클 공유 이전에 저장된 각자의 서클로 공유 행을 채운다. 이미 있는 행은 건드리지 않는다. 채운 서클 수. */
+  async backfillSharedCircles():Promise<number>{
+    const rows=await this.q<any>("SELECT COALESCE(server_region,'intl') AS server,circle_json,last_synced_at FROM profiles WHERE circle_json LIKE '{%' ORDER BY last_synced_at");
+    const byCircle=new Map<string,{server:string;code:string;shared:SharedCircle}>();
+    for(const row of rows){
+      let circle:CircleInfo;try{circle=JSON.parse(row.circle_json);}catch{continue;}
+      if(!circle?.code||!Array.isArray(circle.members))continue;
+      const k=`${row.server}|${circle.code}`;
+      byCircle.set(k,{server:row.server,code:circle.code,shared:mergeCircle(byCircle.get(k)?.shared??null,circle,Number(row.last_synced_at)||0)});
+    }
+    let added=0;
+    for(const {server,code,shared} of byCircle.values()){const r=await this.pool.query("INSERT INTO circles(server,code,data,synced_at,members_at,ranking_at) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(server,code) DO NOTHING",[server,code,JSON.stringify(shared.data),shared.syncedAt,shared.membersAt,shared.rankingAt]);added+=r.rowCount??0;}
+    return added;
+  }
   async getCirclePublic(id:string){const r=await this.q<any>("SELECT circle_public FROM sessions WHERE discord_user_id=$1",[id]);return Number(r[0]?.circle_public??1)===1;} async setCirclePublic(id:string,v:boolean){await this.q("INSERT INTO sessions(discord_user_id,circle_public) VALUES($1,$2) ON CONFLICT(discord_user_id) DO UPDATE SET circle_public=excluded.circle_public",[id,v?1:0]);}
   async getDxRankDecimal(id:string){const r=await this.q<any>("SELECT dx_rank_decimal FROM sessions WHERE discord_user_id=$1",[id]);return r[0]?.dx_rank_decimal===1;} async setDxRankDecimal(id:string,v:boolean){await this.q("INSERT INTO sessions(discord_user_id,dx_rank_decimal) VALUES($1,$2) ON CONFLICT(discord_user_id) DO UPDATE SET dx_rank_decimal=excluded.dx_rank_decimal",[id,v?1:0]);}
   async getTranslateTitles(id:string){const r=await this.q<any>("SELECT translate_titles FROM sessions WHERE discord_user_id=$1",[id]);return r[0]?.translate_titles===1;} async setTranslateTitles(id:string,v:boolean){await this.q("INSERT INTO sessions(discord_user_id,translate_titles) VALUES($1,$2) ON CONFLICT(discord_user_id) DO UPDATE SET translate_titles=excluded.translate_titles",[id,v?1:0]);}
@@ -557,7 +596,8 @@ SELECT u.chart_key AS "chartKey",u.achievement_val AS "achievementVal",u.fc,u.sy
   /** 캐롤봇 프로필 키(intl:친구코드)에 연동된 maishift 아이디. */
   /**
    * maishift 연동 해제: 아이디를 지우고, maishift 에서 받아 저장한 데이터를 지운다(maishift 개발자 약관).
-   * - maishift 키(ms:<서버>:<아이디>)는 같은 아이디를 연동한 사람이 함께 쓰므로, 해제 뒤 그 아이디·서버를 연동한 사람이 없을 때만 지운다.
+   * - maishift 키(ms:<서버>:<아이디>)는 같은 아이디를 연동한 사람이 함께 쓰므로, 해제 뒤 그 아이디·서버를 연동한 사람이 없을 때만 지운다
+   *   (비교 기준·성과·레이팅표 캐시).
    * - 캐롤봇 친구 코드 키는 이 사용자 것이므로 maishift 로 만든 성과(source_kind='maishift')·비교 기준·레이팅표 캐시를 지운다.
    *   캐롤봇 북마클릿으로 만든 예전 성과와 북마클릿 데이터(최근 플레이·서클 등)는 maishift 데이터가 아니라 남긴다.
    * - 목표는 사용자가 만든 것이라 남기고, maishift 기록으로 계산한 진행률만 비운다.
@@ -573,6 +613,7 @@ SELECT u.chart_key AS "chartKey",u.achievement_val AS "achievementVal",u.fc,u.sy
         await c.query("DELETE FROM chart_clears WHERE profile_key=$1",[ms]);
         await c.query("DELETE FROM achievement_play_event_log WHERE profile_key=$1",[ms]);
         await c.query("DELETE FROM achievement_play_event_log_state WHERE profile_key=$1",[ms]);
+        await c.query("DELETE FROM maishift_rating_cards WHERE profile_key=$1",[ms]);
       }
       const carolKeys=[s.rows[0]?.intl,s.rows[0]?.jp].filter((k:string)=>!!k);
       for(const key of carolKeys) await c.query("DELETE FROM achievement_play_event_log WHERE profile_key=$1 AND source_kind='maishift'",[key]);
@@ -587,7 +628,8 @@ SELECT u.chart_key AS "chartKey",u.achievement_val AS "achievementVal",u.fc,u.sy
   async getMaishiftHandleByProfileKey(key:string){const r=await this.q<any>("SELECT maishift_handle FROM sessions WHERE (friend_code=$1 OR friend_code_intl=$1 OR friend_code_jp=$1) AND maishift_handle<>'' LIMIT 1",[key]);return (r[0]?.maishift_handle as string|undefined)||null;}
   async getKvCache(key:string){const r=await this.q<any>("SELECT data,updated_at AS \"updatedAt\" FROM constants_cache WHERE key=$1",[key]);return r[0]?{data:r[0].data as string,updatedAt:Number(r[0].updatedAt)}:null;} async saveKvCache(key:string,d:string){await this.q("INSERT INTO constants_cache VALUES($1,$2,$3) ON CONFLICT(key) DO UPDATE SET data=excluded.data,updated_at=excluded.updated_at",[key,d,Date.now()]);}
   async getConstantsCache(){const r=await this.q<any>("SELECT data,updated_at AS \"updatedAt\" FROM constants_cache WHERE key='main'");return r[0]??null;} async saveConstantsCache(d:string){await this.q("INSERT INTO constants_cache VALUES('main',$1,$2) ON CONFLICT(key) DO UPDATE SET data=excluded.data,updated_at=excluded.updated_at",[d,Date.now()]);}
-  async getRatingCardCache(fc:string){const r=await this.q<any>("SELECT rating_card_blob AS blob,rating_card_synced_at AS \"syncedAt\",rating_card_version AS version FROM profiles WHERE friend_code=$1",[fc]);return r[0]?.blob?r[0]:null;} async saveRatingCardCache(fc:string,d:Buffer,s:number,v:number){await this.q("UPDATE profiles SET rating_card_blob=$1,rating_card_synced_at=$2,rating_card_version=$3 WHERE friend_code=$4",[d,s,v,fc]);}
+  // ms: 키(maishift 만 연동)는 profiles 행이 없어 maishift_rating_cards 에 둔다.
+  async getRatingCardCache(fc:string){const r=fc.startsWith("ms:")?await this.q<any>("SELECT blob,synced_at AS \"syncedAt\",version FROM maishift_rating_cards WHERE profile_key=$1",[fc]):await this.q<any>("SELECT rating_card_blob AS blob,rating_card_synced_at AS \"syncedAt\",rating_card_version AS version FROM profiles WHERE friend_code=$1",[fc]);return r[0]?.blob?r[0]:null;} async saveRatingCardCache(fc:string,d:Buffer,s:number,v:number){if(fc.startsWith("ms:")){await this.q("INSERT INTO maishift_rating_cards(profile_key,blob,synced_at,version,updated_at) VALUES($1,$2,$3,$4,$5) ON CONFLICT(profile_key) DO UPDATE SET blob=excluded.blob,synced_at=excluded.synced_at,version=excluded.version,updated_at=excluded.updated_at",[fc,d,s,v,Date.now()]);return;}await this.q("UPDATE profiles SET rating_card_blob=$1,rating_card_synced_at=$2,rating_card_version=$3 WHERE friend_code=$4",[d,s,v,fc]);}
   async getAllAliases(){return this.q("SELECT id,title,alias,is_translation AS \"isTranslation\" FROM song_aliases ORDER BY title,alias");} async getTranslationAliases(){return this.q("SELECT title,alias FROM song_aliases WHERE is_translation=1");} async addAlias(t:string,a:string){const r=await this.q<any>("INSERT INTO song_aliases(title,alias) VALUES($1,$2) ON CONFLICT(title,alias) DO NOTHING RETURNING id",[t,a]);return r[0]?{id:r[0].id,title:t,alias:a,isTranslation:false}:null;} async deleteAlias(id:number){const r=await this.pool.query("DELETE FROM song_aliases WHERE id=$1",[id]);return (r.rowCount??0)>0;} async setAliasTranslation(id:number,on:boolean){return this.tx(async c=>{const r=await c.query<any>("SELECT title FROM song_aliases WHERE id=$1",[id]);if(!r.rows[0])return null;if(on)await c.query("UPDATE song_aliases SET is_translation=0 WHERE title=$1",[r.rows[0].title]);await c.query("UPDATE song_aliases SET is_translation=$1 WHERE id=$2",[on?1:0,id]);return r.rows[0].title;});}
   async listNameTranslations(){return this.q<Db.NameTranslationRow>("SELECT kind,source,ko,image_url AS \"imageUrl\" FROM name_translations ORDER BY kind,source");}
   /** 봇이 본 이름을 번역 대기로 쌓는다(이미 있으면 그대로). */ async noteNames(kind:string,items:{source:string;imageUrl:string}[]){for(const b of batches(items,500)){const v:unknown[]=[];const ph=b.map((x,i)=>{v.push(kind,x.source,x.imageUrl);return `($${i*3+1},$${i*3+2},$${i*3+3})`;});await this.q(`INSERT INTO name_translations(kind,source,image_url) VALUES ${ph.join(",")} ON CONFLICT(kind,source) DO NOTHING`,v);}}
@@ -596,6 +638,6 @@ SELECT u.chart_key AS "chartKey",u.achievement_val AS "achievementVal",u.fc,u.sy
   async getMessageOverrides(){return this.q<Db.BotMessageRow>("SELECT key,text FROM bot_messages");}
   async setMessageOverride(key:string,text:string){await this.pool.query("INSERT INTO bot_messages(key,text,updated_at) VALUES($1,$2,$3) ON CONFLICT(key) DO UPDATE SET text=EXCLUDED.text, updated_at=EXCLUDED.updated_at",[key,text,Date.now()]);}
   async deleteMessageOverride(key:string){const r=await this.pool.query("DELETE FROM bot_messages WHERE key=$1",[key]);return (r.rowCount??0)>0;}
-  async getRegisteredUserCount(){const r=await this.q<any>("SELECT count(*) n FROM sessions WHERE friend_code<>'' OR maishift_handle<>''");return Number(r[0]?.n??0);} async getLastSyncTime(){const r=await this.q<any>("SELECT max(last_synced_at) t FROM profiles");return r[0]?.t??null;} async getInactiveProfileFriendCodes(t:number){const r=await this.q<any>("SELECT friend_code AS \"friendCode\" FROM profiles WHERE last_synced_at<$1 AND rating_card_blob IS NOT NULL",[Date.now()-t]);return r.map((x:any)=>x.friendCode);} async clearRatingCardCacheForInactive(t:number){const r=await this.pool.query("UPDATE profiles SET rating_card_blob=NULL,rating_card_synced_at=0 WHERE last_synced_at<$1 AND rating_card_blob IS NOT NULL",[Date.now()-t]);return r.rowCount??0;}
+  async getRegisteredUserCount(){const r=await this.q<any>("SELECT count(*) n FROM sessions WHERE friend_code<>'' OR maishift_handle<>''");return Number(r[0]?.n??0);} async getLastSyncTime(){const r=await this.q<any>("SELECT max(last_synced_at) t FROM profiles");return r[0]?.t??null;} async getInactiveProfileFriendCodes(t:number){const r=await this.q<any>("SELECT friend_code AS \"friendCode\" FROM profiles WHERE last_synced_at<$1 AND rating_card_blob IS NOT NULL",[Date.now()-t]);return r.map((x:any)=>x.friendCode);} async clearRatingCardCacheForInactive(t:number){const r=await this.pool.query("UPDATE profiles SET rating_card_blob=NULL,rating_card_synced_at=0 WHERE last_synced_at<$1 AND rating_card_blob IS NOT NULL",[Date.now()-t]);const m=await this.pool.query("DELETE FROM maishift_rating_cards WHERE synced_at<$1",[Date.now()-t]);return (r.rowCount??0)+(m.rowCount??0);}
 }
 export function createPostgresStorage(config:string|PoolConfig){return new PostgresStorage(config);} export async function initializePostgresStorage(config:string|PoolConfig){const s=createPostgresStorage(config);await s.initialize();return s;}

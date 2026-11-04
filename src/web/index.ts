@@ -4,10 +4,11 @@ import { createHash, timingSafeEqual } from "crypto";
 import { gunzip } from "zlib";
 import { promisify } from "util";
 import { parseFriendCode as parseFC, parseRecentRecords, parsePlaylogHistory, getMaimaiBaseUrl, parseMapAreas, parsePlaylogDetail, parseUserOptions, parseCircle } from "../scraper";
-import { saveSyncExtras, getMaishiftLink, saveUserSession, findUserBySyncToken, getAvatarBlob, getSongJacket, saveSongJacket, getUserDefaultServer, setUserDefaultServer, isMaimaiServer, getMapImage, saveMapImage, backfillEventRatingUp, getAllAliases, listNameTranslations, setNameTranslation, addAlias, deleteAlias, setAliasTranslation, setMessageOverride, deleteMessageOverride, getTranslateTitles, setTranslateTitles, getDxRankDecimal, setDxRankDecimal, saveProfileCircle, getCirclePublic, setCirclePublic, getRegisteredUserCount, getAchievementMinimum, setAchievementMinimum, getPolicyAck, setPolicyAck, getSimaiChart, saveSimaiChart, listRegistryCharts, auditRegistryCharts, listOptionPresets, saveOptionPreset, deleteOptionPreset, saveOptionSnapshot, getOptionSnapshots, listPatchNotes, savePatchNote, setPatchNotePublished, deletePatchNote } from "../storage";
+import { saveSyncExtras, getMaishiftLink, achievementProfileKeys, saveUserSession, findUserBySyncToken, getAvatarBlob, getSongJacket, saveSongJacket, getUserDefaultServer, setUserDefaultServer, isMaimaiServer, getMapImage, saveMapImage, backfillEventRatingUp, getAllAliases, listNameTranslations, setNameTranslation, addAlias, deleteAlias, setAliasTranslation, setMessageOverride, deleteMessageOverride, getTranslateTitles, setTranslateTitles, getDxRankDecimal, setDxRankDecimal, saveProfileCircle, saveSharedCircle, getCirclePublic, setCirclePublic, getRegisteredUserCount, getAchievementMinimum, setAchievementMinimum, getPolicyAck, setPolicyAck, getSimaiChart, saveSimaiChart, listRegistryCharts, auditRegistryCharts, listOptionPresets, saveOptionPreset, deleteOptionPreset, saveOptionSnapshot, getOptionSnapshots, listPatchNotes, savePatchNote, setPatchNotePublished, deletePatchNote } from "../storage";
 import { POLICY_VERSION } from "../policy";
 import type { SongAliasRow } from "../storage/types";
 import { scheduleMaishiftCheck } from "../maishift";
+import { saveRepeatApEvents } from "../apRepeat";
 import { saveRankImages, knownRankImageFiles } from "../rankImages";
 import { buildBookmarkletJs, setBaseUrl, getBaseUrl, buildBookmarklet, MAISHIFT_BOOKMARKLET } from "./bookmarklet";
 import { OPTION_CLIENT_JS, OPTION_PRESET_MAX, buildOptionBookmarklet, sanitizeOptionPreset } from "./optionPreset";
@@ -1097,7 +1098,16 @@ export function startWebServer(port: number): void {
         // 함께 실행된 maishift 북마클릿의 업로드가 끝났을 즈음 확인한다.
         if (userId) {
           const link = await getMaishiftLink(userId).catch(() => null);
-          if (link) scheduleMaishiftCheck(link);
+          if (link) {
+            scheduleMaishiftCheck(link);
+            // 다시 한 AP: 기록을 갱신하지 않아 maishift 기록이 그대로라 위 경로로는 성과가 생기지 않는다(src/apRepeat.ts).
+            try {
+              const added = await saveRepeatApEvents(savedProfileKey, enrichedHistoryRecords, await achievementProfileKeys(userId));
+              if (added) console.log(`[web] 재AP 성과 ${added}건`);
+            } catch (apError) {
+              console.error("[web] 재AP 성과 실패 (동기화는 계속 진행):", apError);
+            }
+          }
         }
 
         // 게임 옵션 스냅샷(/options 페이지·프리셋 편집용). 부가 기능이라 실패해도 동기화는 계속.
@@ -1115,6 +1125,8 @@ export function startWebServer(port: number): void {
           try {
             const circle = parseCircle(circleHtml, circleMemberHtml, syncServer, circleRankingHtml);
             if (circle !== undefined) await saveProfileCircle(savedProfileKey, JSON.stringify(circle));
+            // 같은 서클원 모두가 이 동기화로 받은 서클을 본다(src/circleShare.ts).
+            if (circle) await saveSharedCircle(syncServer, circle);
           } catch (circleError) {
             console.warn("[web] 서클 정보 저장 실패:", circleError instanceof Error ? circleError.message : circleError);
           }

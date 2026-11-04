@@ -22,7 +22,7 @@ import {
 } from "../../storage";
 import { getMaimaiBaseUrl } from "../../scraper";
 import type { CachedProfile } from "../../storage/types";
-import { hasCarolSync } from "./syncExtras";
+import { hasCarolSync, extrasSyncedAt } from "./syncExtras";
 import {
   getConstant,
   getJacketFile,
@@ -403,7 +403,7 @@ function buildMapAreaCard(
     .setAuthor({ name: areaKindLabel(area.kind) })
     .setDescription(mapAreaDescription(area))
     .setFooter({
-      text: msg("map.footer", { server: p.server === "jp" ? "JP" : "INTERNATIONAL", index: absoluteIdx + 1, total: totalAreas, synced: new Date(p.lastSyncedAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }) }),
+      text: msg("map.footer", { server: p.server === "jp" ? "JP" : "INTERNATIONAL", index: absoluteIdx + 1, total: totalAreas, synced: new Date(extrasSyncedAt(p)).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }) }),
     });
   if (imageRef) emb.setThumbnail(imageRef);
   return emb;
