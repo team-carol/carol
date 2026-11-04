@@ -1,10 +1,14 @@
 /**
  * maishift 연동. 프로필·기록·이전 기록은 공식 API(api.ts), API 에 없는 것(히스토리·미래시)은 서버 함수(serverFn.ts).
  *
- * 프로필·기록은 캐롤봇 DB에 저장하지 않고 메모리에만 잠깐 둔다. 이용 한도(앱마다 분당 120단위)를 아끼려고:
- * - 프로필(5단위)과 업로드 목록(2, 받아 둔 게 있으면 첫 쪽만)은 아이디마다 PROFILE_TTL_MS 에 한 번만 확인한다.
- *   업로드 목록은 이전 기록 공개 여부·레이팅 히스토리를 알려 주므로, 업로드 없이 설정만 바꿔도 다음 확인 때 반영된다.
+ * 프로필·기록은 캐롤봇 DB에 저장하지 않고 메모리에만 잠깐 둔다. 이용 한도(앱마다 120단위, 초당 2단위씩 찬다)를 아끼려고:
+ * - 이전 기록을 공개한 사용자는 LIGHT_TTL_MS 마다 업로드 목록 첫 쪽(2단위)만 보고, 마지막 업로드가 그대로면 프로필을
+ *   받지 않는다. 업로드 목록의 마지막 업로드 시각은 프로필의 syncedAt 과 같다. 남은 한도가 LOW_BUDGET_UNITS 보다 적으면
+ *   PROFILE_TTL_MS 로 돌아간다.
+ * - 프로필(5)과 업로드 목록(2, 받아 둔 게 있으면 첫 쪽만)은 PROFILE_TTL_MS 마다 한 번은 함께 확인한다. 업로드 없이 바꾼
+ *   설정(프로필·이전 기록 공개 여부, 친구 코드)도 그때 반영된다. 이전 기록을 공개하지 않은 사용자는 이 간격으로만 확인한다.
  * - 전체 기록(10)은 프로필의 syncedAt(maishift 업로드 시각)이 바뀌었을 때만 다시 받는다.
+ * - 오류 응답도 한도를 쓰므로 비공개·지역 없음·없는 아이디는 NEGATIVE_TTL_MS 동안 다시 묻지 않는다.
  * - 모든 요청은 api.ts / serverFn.ts 에서 한 줄로 세워 간격을 둔다.
  */
 import { registerProfileOverlay, type MaishiftLink } from "../storage";
@@ -12,7 +16,7 @@ import type { CachedProfile, MaishiftHistoryPoint } from "../storage/types";
 import { applyMaishiftUpdate } from "./sync";
 import { rankImage } from "../rankImages";
 import { callServerFn, FN, MaishiftError, type MaishiftRegion } from "./serverFn";
-import { callApi } from "./api";
+import { callApi, estimatedBudget } from "./api";
 import { PENDING_FEATURES } from "./features";
 import { ratingTargets, ratingTargetSum, trophyClassOf, uploadHistory, apiAllRecords, apiRatingTargets, classRankNumber, courseRankNumber, type MsProfileResult, type MsUpload, type ApiProfileResult, type ApiRecordsResult, type ApiSnapshotsResult } from "./convert";
 import { getRegionVersions, regionLatestVersion } from "../constants";
@@ -24,12 +28,21 @@ import { koreaPlayDayKey } from "../achievements";
 export { MaishiftError } from "./serverFn";
 
 const PROFILE_TTL_MS = 5 * 60 * 1000;
+/** 업로드 목록 첫 쪽(2단위)으로 새 업로드만 확인하는 간격. */
+const LIGHT_TTL_MS = 60 * 1000;
+/** 남은 한도가 이보다 적으면 가벼운 확인을 멈추고 PROFILE_TTL_MS 마다만 확인한다. */
+const LOW_BUDGET_UNITS = 40;
+/** 비공개·지역 없음·없는 아이디로 확인된 결과를 기억하는 시간. */
+const NEGATIVE_TTL_MS = PROFILE_TTL_MS;
 const MAX_ENTRIES = 200;
 /** 캐시가 오래됐을 때 새 값을 이만큼만 기다리고, 늦으면 가진 값으로 답한다. */
 const WAIT_BUDGET_MS = 2_500;
 
 interface Entry {
+  /** 마지막 확인(가벼운 확인 포함) 시각 */
   checkedAt: number;
+  /** 프로필까지 받아 확인한 시각 */
+  profileCheckedAt: number;
   /** maishift 업로드 시각(원문). 바뀌면 전체 기록을 다시 받는다. */
   updatedAt: string;
   handle: string;
@@ -58,6 +71,8 @@ const cache = new Map<string, Entry>();
 const regionMissing = new Set<string>();
 /** maishift 에서 프로필을 비공개로 한 연동. 확인되면 받아 둔 기록을 모두 지우고 보여 주지 않는다. */
 const privateProfiles = new Set<string>();
+/** 프로필 요청이 비공개·지역 없음·없는 아이디로 끝난 연동. NEGATIVE_TTL_MS 동안 getEntry 가 다시 묻지 않는다. */
+const negative = new Map<string, { error: MaishiftError; at: number }>();
 const inflight = new Map<string, Promise<Entry>>();
 /** 새로 받은 전체 기록으로 성과·스냅샷·목표를 갱신하는 중인 작업. /성과 가 끝나길 기다린다. */
 const applying = new Map<string, Promise<void>>();
@@ -69,6 +84,21 @@ function remember(key: string, e: Entry): void {
   cache.delete(key);
   cache.set(key, e);
   while (cache.size > MAX_ENTRIES) cache.delete(cache.keys().next().value!);
+}
+
+function rememberNegative(key: string, error: MaishiftError): void {
+  negative.delete(key);
+  negative.set(key, { error, at: Date.now() });
+  while (negative.size > MAX_ENTRIES) negative.delete(negative.keys().next().value!);
+}
+
+/** 아직 기억하고 있는 부정 결과(비공개·지역 없음·없는 아이디). 없거나 지났으면 null. */
+function negativeOf(key: string): MaishiftError | null {
+  const n = negative.get(key);
+  if (!n) return null;
+  if (Date.now() - n.at < NEGATIVE_TTL_MS) return n.error;
+  negative.delete(key);
+  return null;
 }
 
 const apiPath = (link: MaishiftLink, rest = "") => `/profiles/${encodeURIComponent(link.handle)}${rest}`;
@@ -85,9 +115,22 @@ async function refresh(link: MaishiftLink): Promise<Entry> {
   const region = link.server;
   const prev = cache.get(key);
   const fetchRecords = () => callApi<ApiRecordsResult>(apiPath(link, "/records"), { region });
+  // 가벼운 확인(2단위): 프로필을 확인한 지 PROFILE_TTL_MS 가 안 됐으면 업로드 목록 첫 쪽만 보고, 마지막 업로드가
+  // 가진 프로필의 업로드 시각과 같으면 확인 시각만 갱신한다. 새 업로드가 있거나 못 받았으면 아래에서 프로필부터 받는다.
+  let uploadsSync: Promise<Uploads> | null = null;
+  if (prev && prev.pastRecordsVisible && Date.now() - prev.profileCheckedAt < PROFILE_TTL_MS) {
+    uploadsSync = syncUploads(link);
+    const up = await uploadsSync.catch(() => null);
+    if (up?.list[0] && up.list[0].at === Date.parse(prev.updatedAt)) {
+      const entry: Entry = { ...prev, checkedAt: Date.now() };
+      remember(key, entry);
+      return entry;
+    }
+  }
   // 업로드 목록: 이전 기록 공개 여부, 레이팅 히스토리(그래프), 과거 레이팅표·/사진관 날짜 목록이 모두 이것을 쓴다.
   // 그래프용 부가 데이터라 못 받아도 프로필은 보여 준다(다음 확인 때 다시 시도). 비공개면 히스토리도 없다.
-  const fetchUploads = (): Promise<{ visible: boolean; history: MaishiftHistoryPoint[] }> => syncUploads(link)
+  // 가벼운 확인에서 이미 받았으면 그 결과를 쓴다.
+  const fetchUploads = (): Promise<{ visible: boolean; history: MaishiftHistoryPoint[] }> => (uploadsSync ?? syncUploads(link))
     .then((up) => ({ visible: true, history: uploadHistory(up.list) }))
     .catch((e) => {
       if (e instanceof MaishiftError && e.kind === "private") {
@@ -104,11 +147,12 @@ async function refresh(link: MaishiftLink): Promise<Entry> {
       if (e.kind === "private") forgetUser(link);
       // 요청한 지역에 기록이 없음. 다른 지역 기록을 보여 주지 않는다.
       if (e.kind === "region_missing") { regionMissing.add(key); cache.delete(key); }
+      if (e.kind === "private" || e.kind === "region_missing" || e.kind === "not_found") rememberNegative(key, e);
     }
     throw e;
   });
-  // 업로드 목록(2단위)은 확인할 때마다 프로필과 함께 받는다. 업로드 없이 이전 기록 공개 설정만 바꿔도 다음 확인 때
-  // 반영되게 하려는 것이다(받아 둔 목록이 있으면 첫 쪽만 받는다).
+  // 업로드 목록(2단위)은 프로필을 확인할 때마다 함께 받는다. 업로드 없이 이전 기록 공개 설정만 바꿔도 반영되게
+  // 하려는 것이다(받아 둔 목록이 있으면 첫 쪽만 받는다).
   // 전체 기록(10단위)은 캐시가 없을 때(재시작 직후·첫 조회)는 함께 요청하고, 있으면 업로드 시각이 바뀌었을 때만 받는다.
   const uploadsReq = fetchUploads();
   const cold = prev ? null : { records: fetchRecords() };
@@ -116,8 +160,13 @@ async function refresh(link: MaishiftLink): Promise<Entry> {
   const res = await profileReq;
   regionMissing.delete(key);
   privateProfiles.delete(key);
+  negative.delete(key);
   const p = res.profile;
-  if (!p) throw new MaishiftError("no record for region", "not_found");
+  if (!p) {
+    const e = new MaishiftError("no record for region", "not_found");
+    rememberNegative(key, e);
+    throw e;
+  }
   const same = prev && prev.updatedAt === p.syncedAt ? prev : null;
   let topJson = same?.topJson ?? "";
   let clearJson = same?.clearJson ?? "";
@@ -136,6 +185,7 @@ async function refresh(link: MaishiftLink): Promise<Entry> {
   const uploads = await uploadsReq;
   const entry: Entry = {
     checkedAt: Date.now(),
+    profileCheckedAt: Date.now(),
     updatedAt: p.syncedAt,
     handle: res.handle || link.handle,
     name: p.name,
@@ -169,13 +219,25 @@ function refreshOnce(link: MaishiftLink): Promise<Entry> {
   return p;
 }
 
+/** 다음 확인까지 기다릴 시간. 업로드 목록을 볼 수 있고(이전 기록 공개) 한도가 넉넉하면 가벼운 확인 간격. */
+function ttlOf(e: Entry): number {
+  const budget = estimatedBudget();
+  return e.pastRecordsVisible && (budget === null || budget >= LOW_BUDGET_UNITS) ? LIGHT_TTL_MS : PROFILE_TTL_MS;
+}
+
 /**
  * 캐시가 신선하면 그대로. 오래됐으면 새로 받되 WAIT_BUDGET_MS 안에 안 오면 가진 값으로 답한다(새로 받는 일은 뒤에서 계속).
  * 캐시가 없으면 받을 때까지 기다린다 — 명령은 프로필을 읽기 전에 응답을 미뤄(defer) 둔다.
+ * 비공개·지역 없음·없는 아이디로 확인된 지 NEGATIVE_TTL_MS 가 안 됐으면 묻지 않는다(가진 값이 있으면 그것으로).
  */
 async function getEntry(link: MaishiftLink): Promise<Entry> {
   const have = cache.get(keyOf(link)) ?? null;
-  if (have && Date.now() - have.checkedAt < PROFILE_TTL_MS) return have;
+  const known = negativeOf(keyOf(link));
+  if (known) {
+    if (have) return have;
+    throw known;
+  }
+  if (have && Date.now() - have.checkedAt < ttlOf(have)) return have;
   const pending = refreshOnce(link);
   if (!have) return pending;
   pending.catch(() => {});
@@ -189,6 +251,7 @@ async function getEntry(link: MaishiftLink): Promise<Entry> {
  */
 export async function settleMaishiftRecords(link: MaishiftLink, maxAgeMs = 60_000, budgetMs = 8_000): Promise<void> {
   const key = keyOf(link);
+  if (negativeOf(key)) return;
   const have = cache.get(key);
   const pending: Promise<unknown> | undefined = inflight.get(key)
     ?? (!have || Date.now() - have.checkedAt > maxAgeMs ? refreshOnce(link) : undefined);
@@ -285,6 +348,7 @@ export function dropMaishiftCache(link: MaishiftLink): void {
   for (const server of ["intl", "jp"] as const) {
     const key = keyOf({ handle: link.handle, server });
     cache.delete(key);
+    negative.delete(key);
     uploadsCache.delete(key);
     for (const k of [...futureCache.keys()]) if (k.startsWith(`${key}:`)) futureCache.delete(k);
   }
