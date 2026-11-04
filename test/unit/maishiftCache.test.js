@@ -11,6 +11,8 @@ const maishift = require("../../dist/maishift");
 maishift.initMaishift();
 
 const MIN = 60 * 1000;
+/** src/maishift/index.ts LIGHT_TTL_MS */
+const LIGHT = 15 * 1000;
 mock.timers.enable({ apis: ["Date"], now: Date.UTC(2026, 10, 4, 3, 0, 0) });
 
 /** handle → { syncedAt, snapshots, profileStatus, snapshotsStatus } */
@@ -51,16 +53,16 @@ globalThis.fetch = async (url) => {
 
 const lookup = (handle) => storage.getCachedProfile(`ms:intl:${handle}`);
 
-test("이전 기록 공개: 1분마다 업로드 목록만 보고, 그대로면 프로필·전체 기록을 받지 않는다", async () => {
+test("이전 기록 공개: 15초마다 업로드 목록만 보고, 그대로면 프로필·전체 기록을 받지 않는다", async () => {
   player("alice");
   assert.equal((await lookup("alice")).playerName, "ALICE");
   assert.deepEqual([count("alice", "profile"), count("alice", "snapshots"), count("alice", "records")], [1, 1, 1]);
 
-  mock.timers.tick(30 * 1000);
+  mock.timers.tick(LIGHT - 5000);
   await lookup("alice");
-  assert.equal(calls.filter((c) => c.handle === "alice").length, 3, "1분 안에는 묻지 않는다");
+  assert.equal(calls.filter((c) => c.handle === "alice").length, 3, "간격 안에는 묻지 않는다");
 
-  mock.timers.tick(31 * 1000);
+  mock.timers.tick(6000);
   await lookup("alice");
   assert.deepEqual([count("alice", "profile"), count("alice", "snapshots"), count("alice", "records")], [1, 2, 1]);
 });

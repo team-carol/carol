@@ -28,8 +28,8 @@ import { koreaPlayDayKey } from "../achievements";
 export { MaishiftError } from "./serverFn";
 
 const PROFILE_TTL_MS = 5 * 60 * 1000;
-/** 업로드 목록 첫 쪽(2단위)으로 새 업로드만 확인하는 간격. */
-const LIGHT_TTL_MS = 60 * 1000;
+/** 업로드 목록 첫 쪽(2단위)으로 새 업로드만 확인하는 간격. 한 사람이 쉬지 않고 써도 1분에 8단위다. */
+const LIGHT_TTL_MS = 15 * 1000;
 /** 남은 한도가 이보다 적으면 가벼운 확인을 멈추고 PROFILE_TTL_MS 마다만 확인한다. */
 const LOW_BUDGET_UNITS = 40;
 /** 비공개·지역 없음·없는 아이디로 확인된 결과를 기억하는 시간. */
