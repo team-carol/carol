@@ -7,10 +7,14 @@ import { displayTitle } from "../../aliases";
 import {
   getChartsInConstantRange, getJacketFile, isIntlAvailable,
   getSongGenre, GENRES, getSongVersionName, VERSION_NAMES, isSongPlus,
-  jacketFileUrl,
+  jacketFileUrl, getConstant, type ChartInfo,
 } from "../../constants";
 import { chartKey } from "../../scraper";
 import { msg } from "../../messages";
+import { getPlaylist, parsePlaylistId, type Playlist } from "../../maishift/stats";
+import { titleOf } from "../../maishift/convert";
+import { MaishiftError } from "../../maishift/serverFn";
+import { maishiftErrorText } from "../utils/notRegistered";
 import { versionPositionText } from "../utils/versionPosition";
 import { titleWithKind } from "../utils/emoji";
 
@@ -75,7 +79,34 @@ export const data = new SlashCommandBuilder()
   )
   .addUserOption((o) =>
     o.setName("user").setDescription("플레이여부 조회 대상 (생략 시 본인)").setRequired(false),
+  )
+  .addStringOption((o) =>
+    o.setName("플레이리스트").setDescription("maishift 공개 플레이리스트 번호나 주소. 고르면 그 목록 안에서 뽑기 (Optional)").setRequired(false).setMaxLength(200),
   );
+
+const DIFF_NAME: Record<string, string> = { BASIC: "BASIC", ADVANCED: "ADVANCED", EXPERT: "EXPERT", MASTER: "MASTER", RE_MASTER: "Re:MASTER" };
+
+/** 플레이리스트 보면 → 후보. 그 플레이리스트 지역의 상수(카탈로그에 있으면 그 값)를 쓴다. */
+function playlistCharts(list: Playlist): ChartInfo[] {
+  const seen = new Set<string>();
+  const out: ChartInfo[] = [];
+  for (const it of list.items) {
+    const title = titleOf(it.title);
+    const kind = it.type === "DX" ? "DX" : "ST";
+    const diff = DIFF_NAME[it.difficulty] ?? it.difficulty;
+    const key = `${title}|${kind}|${diff}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ title, kind, diff, level: getConstant(title, kind, diff, list.region === "jp" ? "jp" : "intl") ?? it.internalLevel / 10 });
+  }
+  return out;
+}
+
+/** 플레이리스트 오류 → 안내 문구. */
+export function playlistErrorText(e: unknown): string {
+  if (e instanceof MaishiftError && (e.kind === "not_found" || e.kind === "private")) return msg("playlist.notFound");
+  return maishiftErrorText(e) ?? msg("playlist.unavailable");
+}
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   const minC = interaction.options.getNumber("범위최소");
@@ -88,6 +119,21 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   const plusOpt = verOpt ? (interaction.options.getString("plus") ?? "base") : null;
   const playOpt = interaction.options.getString("플레이여부");
   const count = interaction.options.getInteger("개수") ?? 3;
+  const playlistOpt = interaction.options.getString("플레이리스트");
+  let playlist: Playlist | null = null;
+  if (playlistOpt) {
+    const id = parsePlaylistId(playlistOpt);
+    if (!id) {
+      await interaction.reply({ content: msg("playlist.badId"), flags: MessageFlags.Ephemeral });
+      return;
+    }
+    try {
+      playlist = await getPlaylist(id);
+    } catch (e) {
+      await interaction.reply({ content: playlistErrorText(e), flags: MessageFlags.Ephemeral });
+      return;
+    }
+  }
 
   // 상수 범위. 하한/상한 미지정 시 각각 제한 없음.
   let lo = minC ?? 0;
@@ -115,9 +161,10 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     clearMap = new Map(getClearList(cached).map((r) => [chartKey(r), r]));
   }
 
-  // 후보 = 상수 범위 · 국제판 수록 · 타입/장르/플레이여부 필터
-  const candidates = getChartsInConstantRange(lo, hi).filter((c) => {
-    if (!isIntlAvailable(c.title, c.kind)) return false;
+  // 후보 = 상수 범위 · 국제판 수록 · 타입/장르/플레이여부 필터. 플레이리스트를 골랐으면 그 목록(지역은 플레이리스트 것).
+  const pool = playlist ? playlistCharts(playlist).filter((c) => c.level >= lo && c.level <= hi) : getChartsInConstantRange(lo, hi);
+  const candidates = pool.filter((c) => {
+    if (!playlist && !isIntlAvailable(c.title, c.kind)) return false;
     if (typeOpt && c.kind !== typeOpt) return false;
     if (diffOpt && c.diff !== diffOpt) return false;
     if (genreOpt && getSongGenre(c.title) !== genreOpt) return false;
@@ -141,6 +188,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   const picks = shuffle(candidates).slice(0, count);
   const header = [
     msg("random.label"),
+    playlist ? msg("random.playlistLabel", { title: playlist.title }) : undefined,
     rangeLabel === "전체" ? "전 상수" : `상수 ${rangeLabel}`,
     typeOpt || undefined,
     diffOpt || undefined,
@@ -180,6 +228,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       emb.addFields({ name: "내 기록", value: `${ach}${rec.fc ? "  ✦  " + rec.fc : ""}`, inline: true });
     }
     if (i === 0) emb.setAuthor({ name: header });
+    if (playlist && i === picks.length - 1) emb.setFooter({ text: `${msg("random.playlistFooter", { owner: playlist.owner.handle, count: playlist.items.length })}  ✦  ${msg("maishift.credit")}` });
     const jacket = getJacketFile(c.title);
     if (jacket) emb.setThumbnail(jacketFileUrl(jacket));
     return emb;

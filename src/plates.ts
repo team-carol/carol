@@ -1,0 +1,124 @@
+/**
+ * 버전 플레이트(極·将·神·舞舞·覇者) 진행도. maishift 곡 목록(지역별 보면, src/constants.ts getRegionCharts)과
+ * 사용자의 전체 기록(clearJson)으로 계산한다.
+ *
+ * - 대상 보면: 그 버전에 추가된 곡(ST·DX 따로)의 BASIC~MASTER. 真 은 maimai·maimai PLUS 두 버전,
+ *   舞 는 maimai~FiNALE 모든 옛 버전이고 Re:MASTER 도 들어간다. 覇者 는 舞 에만, 将 는 真 에 없다.
+ * - 아직 플레이트가 없는 그 지역 최신 버전은 뺀다(국제판 CiRCLE PLUS 처럼, 다음 버전에서 생긴다).
+ * - 플레이트 대상에서 빠지는 곡은 PLATE_EXCLUDED 에 둔다. maishift 의 대상 보면 수(stats/plate-difficulty 의 charts)와
+ *   견줘 확인한 것만 넣었다. 아직 몇 플레이트는 maishift 와 수가 다르다(빠지는 곡이 공개돼 있지 않음) — 카드가 차이를 적는다.
+ */
+import type { PlayRecord } from "./scraper";
+import type { RegionChart } from "./constants";
+
+export type PlateType = "極" | "将" | "神" | "舞舞" | "覇者";
+export const PLATE_TYPES: PlateType[] = ["極", "将", "神", "舞舞", "覇者"];
+
+/** 세대 번호 → 플레이트 한자(maishift 개발자 문서의 표). 0(maimai)의 舞 는 옛 버전 전체 플레이트 이름이다. */
+export const VERSION_KANJI = ["舞", "真", "超", "檄", "橙", "暁", "桃", "櫻", "紫", "菫", "白", "雪", "輝", "熊", "華", "爽", "煌", "宙", "星", "祭", "祝", "双", "宴", "鏡", "彩", "丸", "廻"];
+const LAST_OLD_VERSION = 12; // FiNALE
+
+/** 플레이트 대상에서 빠지는 곡("제목|ST/DX"). */
+const PLATE_EXCLUDED = new Set([
+  "ジングルベル|ST", // 계절 곡
+  "全世界共通リズム感テスト|ST",
+]);
+
+export interface PlateDef {
+  /** 플레이트 한자(예: "祭") */
+  prefix: string;
+  /** 대상 곡이 추가된 세대 번호들 */
+  versions: number[];
+  types: PlateType[];
+  /** Re:MASTER 도 대상인지(舞) */
+  reMaster: boolean;
+  /** stats/plates firstGaps 의 version(真 1, 舞 0, 나머지는 그 버전) */
+  statVersion: number;
+}
+
+/** 그 지역에 있는 플레이트(최신 버전 제외). 真 → 輝, 舞, 熊 → 최신 직전 순. */
+export function plateDefs(latestVersion: number | null): PlateDef[] {
+  const defs: PlateDef[] = [{ prefix: "真", versions: [0, 1], types: ["極", "神", "舞舞"], reMaster: false, statVersion: 1 }];
+  for (let v = 2; v <= LAST_OLD_VERSION; v++) defs.push({ prefix: VERSION_KANJI[v], versions: [v], types: ["極", "将", "神", "舞舞"], reMaster: false, statVersion: v });
+  defs.push({ prefix: "舞", versions: Array.from({ length: LAST_OLD_VERSION + 1 }, (_, i) => i), types: ["極", "将", "神", "舞舞", "覇者"], reMaster: true, statVersion: 0 });
+  const last = latestVersion ?? VERSION_KANJI.length;
+  for (let v = LAST_OLD_VERSION + 1; v < last && v < VERSION_KANJI.length; v++) defs.push({ prefix: VERSION_KANJI[v], versions: [v], types: ["極", "将", "神", "舞舞"], reMaster: false, statVersion: v });
+  return defs;
+}
+
+export function findPlate(defs: PlateDef[], prefix: string): PlateDef | null {
+  return defs.find((d) => d.prefix === prefix) ?? null;
+}
+
+/** 그 플레이트의 대상 보면. */
+export function plateCharts(def: PlateDef, charts: RegionChart[]): RegionChart[] {
+  return charts.filter((c) => def.versions.includes(c.version) && (def.reMaster || c.diff !== "Re:MASTER") && !PLATE_EXCLUDED.has(`${c.title}|${c.kind}`));
+}
+
+const FC_OK = new Set(["FC", "FC+", "AP", "AP+"]);
+const AP_OK = new Set(["AP", "AP+"]);
+const FDX_OK = new Set(["FDX", "FDX+"]);
+
+/** 기록이 그 플레이트 조건을 넘었는지. 極 FC 이상, 将 SSS(100%) 이상, 神 AP 이상, 舞舞 FDX 이상, 覇者 클리어(80%) 이상. */
+export function meetsPlate(type: PlateType, r: PlayRecord | undefined): boolean {
+  if (!r || !(r.achievementVal > 0)) return false;
+  switch (type) {
+    case "極": return FC_OK.has(r.fc);
+    case "将": return r.achievementVal >= 100;
+    case "神": return AP_OK.has(r.fc);
+    case "舞舞": return FDX_OK.has(r.sync);
+    case "覇者": return r.achievementVal >= 80;
+  }
+}
+
+export interface PlateChartState { chart: RegionChart; record: PlayRecord | undefined }
+export interface PlateProgress {
+  def: PlateDef;
+  total: number;
+  /** 종류별 조건을 넘은 보면 수(그 플레이트에 없는 종류는 없음) */
+  done: Partial<Record<PlateType, number>>;
+  /** 종류별 아직 못 넘은 보면. 가까운 것부터(친 보면은 달성률 높은 순, 안 친 보면은 상수 낮은 순). */
+  remaining: Partial<Record<PlateType, PlateChartState[]>>;
+}
+
+const keyOf = (c: { title: string; kind: string; diff: string }) => `${c.title}|${c.kind}|${c.diff}`;
+
+export function recordMap(records: PlayRecord[]): Map<string, PlayRecord> {
+  return new Map(records.map((r) => [`${r.title}|${r.musicKind === "DX" ? "DX" : "ST"}|${r.diff}`, r]));
+}
+
+function closestFirst(a: PlateChartState, b: PlateChartState): number {
+  const pa = a.record?.achievementVal ?? 0, pb = b.record?.achievementVal ?? 0;
+  if ((pa > 0) !== (pb > 0)) return pa > 0 ? -1 : 1;
+  if (pa > 0) return pb - pa || a.chart.constant - b.chart.constant;
+  return a.chart.constant - b.chart.constant || a.chart.title.localeCompare(b.chart.title);
+}
+
+export function plateProgress(def: PlateDef, charts: RegionChart[], records: Map<string, PlayRecord>): PlateProgress {
+  const targets = plateCharts(def, charts);
+  const done: Partial<Record<PlateType, number>> = {};
+  const remaining: Partial<Record<PlateType, PlateChartState[]>> = {};
+  for (const type of def.types) {
+    const left: PlateChartState[] = [];
+    for (const chart of targets) {
+      const record = records.get(keyOf(chart));
+      if (!meetsPlate(type, record)) left.push({ chart, record });
+    }
+    left.sort(closestFirst);
+    done[type] = targets.length - left.length;
+    remaining[type] = left;
+  }
+  return { def, total: targets.length, done, remaining };
+}
+
+/** 다 채운 플레이트 종류 수(대상 보면이 없는 플레이트는 세지 않는다). */
+export function heldPlates(list: PlateProgress[]): number {
+  return list.reduce((n, p) => n + (p.total > 0 ? p.def.types.filter((t) => p.done[t] === p.total).length : 0), 0);
+}
+
+/** 상세 카드에 기본으로 보여 줄 종류: 남은 보면이 가장 적은(0 은 빼고) 종류. 다 채웠으면 첫 종류. */
+export function defaultPlateType(p: PlateProgress): PlateType {
+  const open = p.def.types.filter((t) => (p.remaining[t]?.length ?? 0) > 0);
+  if (!open.length) return p.def.types[0];
+  return open.reduce((best, t) => ((p.remaining[t]!.length < p.remaining[best]!.length) ? t : best));
+}

@@ -262,6 +262,8 @@ export const MESSAGES = {
   "embed.nextTierField": "다음 단계",
   "embed.nextTierValue": "{tier}까지 {left}",
   "embed.circleField": "서클",
+  "embed.rankField": "레이팅 순위",
+  "embed.rankValue": "상위 {percent}% (최근 {days}일 maishift 이용자 {players}명 중)",
   "embed.prev": "◀ 이전",
   "embed.next": "다음 ▶",
   "embed.share": "#{index} 공유",
@@ -344,6 +346,8 @@ export const MESSAGES = {
   "random.label": "랜덤",
   "random.fieldGenre": "장르",
   "random.fieldVersion": "버전",
+  "random.playlistLabel": "플레이리스트 「{title}」",
+  "random.playlistFooter": "{owner} 님의 플레이리스트 ✦ {count}보면",
 
   // ── /곡추천 ─────────────────────────────────────────────────────────────
   "songrec.noRecords": "기록이 없습니다. maishift에 기록을 올린 뒤 다시 시도해 주세요.",
@@ -351,6 +355,42 @@ export const MESSAGES = {
   "songrec.notPlayed": "미플레이",
   "songrec.newSong": "신곡",
   "songrec.oldSong": "구곡",
+  "songrec.author": "레이팅 대상곡에 따른 곡 추천",
+  "songrec.authorPeer": "레이팅 대상곡과 같은 레이팅대 기록에 따른 곡 추천",
+  "songrec.fieldChart": "채보",
+  "songrec.chartValue": "`{diff}`  ✦  상수 `{constant}`  ✦  {pool}",
+  "songrec.fieldTarget": "목표",
+  "songrec.targetValue": "`{rank}` ({ach}%+)",
+  "songrec.fieldSongRating": "곡 점수",
+  "songrec.fieldRating": "예상 레이팅",
+  "songrec.deltaValue": "{from} → **{to}** (+{delta})",
+  "songrec.fieldCurrent": "현재",
+  "songrec.fieldPeer": "같은 레이팅대",
+  "songrec.peerValue": "{band} 플레이어의 {share}%가 {rank} 이상",
+  "songrec.criterionNeedsLevel": "`기준` 은 `레벨` 을 함께 고를 때만 씁니다.",
+  "songrec.nextAuthor": "{level} {criterion} 다음 곡 추천 ✦ 지금 {cleared}/{total}보면 달성",
+  "songrec.nextChartValue": "`{diff}`  ✦  상수 `{constant}`",
+  "songrec.fieldCriterion": "기준",
+  "songrec.fieldNextPeer": "같은 단계 플레이어",
+  "songrec.nextPeerValue": "{share}%가 달성",
+  "songrec.nextFooter": "이 레벨을 {from}~{to}% 달성한 {players}명 기준",
+  "songrec.nextAllCleared": "{level} 레벨은 모두 {criterion} 이상입니다.",
+  "songrec.nextNoStats": "지금은 maishift 통계를 받을 수 없습니다. 잠시 뒤에 다시 시도해 주세요.",
+  "songrec.nextSuppressed": "비슷한 단계의 플레이어가 적어 통계가 없습니다.",
+  "songrec.nextNoCandidates": "조건에 맞는, 아직 달성하지 못한 보면이 없습니다.",
+
+  // ── /플레이트 ───────────────────────────────────────────────────────────
+  "plate.typeNeedsVersion": "`종류` 는 `버전` 을 함께 고를 때만 씁니다.",
+  "plate.noCatalog": "곡 목록을 아직 받지 못했습니다. 잠시 뒤에 다시 시도해 주세요.",
+  "plate.unknownVersion": "`{version}` 플레이트를 찾지 못했습니다. 목록에서 골라 주세요.",
+  "plate.failed": "플레이트 이미지를 만들지 못했습니다. 잠시 뒤에 다시 시도해 주세요.",
+
+  // ── /플레이리스트 ───────────────────────────────────────────────────────
+  "playlist.badId": "플레이리스트 번호나 maishift 플레이리스트 주소를 입력해 주세요.",
+  "playlist.notFound": "플레이리스트를 찾지 못했습니다. 번호를 확인하고, 공개된 플레이리스트인지 확인해 주세요.",
+  "playlist.unavailable": "지금은 maishift 플레이리스트를 받을 수 없습니다. 잠시 뒤에 다시 시도해 주세요.",
+  "playlist.empty": "보면이 없는 플레이리스트입니다.",
+  "playlist.failed": "플레이리스트 이미지를 만들지 못했습니다. 잠시 뒤에 다시 시도해 주세요.",
 
   // ── 공통 (외부 링크) ────────────────────────────────────────────────────
   "common.externalLink": "[▶ 외부출력]({url})",
@@ -484,6 +524,37 @@ export const MESSAGES = {
   "stampCard.remaining": "완료까지 {days}일 출석 남음 ({duo}{daysDuo}일)",
   "stampCard.songsRemaining": "전체 완료까지 {total}일, 새 채보 완료까지 {latest}일 출석 남음 ({duo}{totalDuo}일, {latestDuo}일)",
   "stampCard.newChart": "새 채보",
+  "plateCard.eyebrow": "VERSION PLATES ✦ {server}",
+  "plateCard.summary": "플레이트 {held}개 획득 ✦ {plates}개 버전",
+  "plateCard.versionColumn": "버전",
+  "plateCard.overviewTitle": "버전 플레이트",
+  "plateCard.overviewMeta": "조건을 넘은 보면 / 대상 보면",
+  "plateCard.overviewNote": "極 FC ✦ 将 SSS ✦ 神 AP ✦ 舞舞 FDX ✦ 覇者 CLEAR 이상",
+  "plateCard.complete": "완료",
+  "plateCard.detailEyebrow": "VERSION PLATE ✦ {server}",
+  "plateCard.detailSummary": "{prefix} ✦ {versions} ✦ 대상 {total}보면",
+  "plateCard.tileDone": "획득",
+  "plateCard.tileLeft": "{left}보면 남음",
+  "plateCard.tilePlays": "약 {plays}회 플레이",
+  "plateCard.playsNote": "예상 플레이 수: 레이팅 {band} 플레이어 기준 (maishift 제공)",
+  "plateCard.remainingTitle": "남은 보면 ✦ {type} {label}",
+  "plateCard.remainingMeta": "{count}보면 ✦ 가까운 순",
+  "plateCard.allDone": "모든 보면을 달성했습니다.",
+  "plateCard.notPlayed": "미플레이",
+  "plateCard.more": "외 {count}보면은 생략했습니다.",
+  "plateCard.firstRating": "이 플레이트를 처음 얻은 사람들의 그날 레이팅(중앙값)은 약 {rating}입니다.",
+  "plateCard.totalMismatch": "maishift 는 대상을 {total}보면으로 셉니다. 대상에서 빠지는 곡 정보가 달라 차이가 날 수 있습니다.",
+  "playlistCard.eyebrow": "PLAYLIST ✦ {server}",
+  "playlistCard.summary": "{owner} 님의 플레이리스트",
+  "playlistCard.meta": "{count}보면 ✦ {updated} 수정",
+  "playlistCard.played": "플레이",
+  "playlistCard.sss": "SSS 이상",
+  "playlistCard.sssPlus": "SSS+ 이상",
+  "playlistCard.fc": "FC 이상",
+  "playlistCard.ap": "AP 이상",
+  "playlistCard.notPlayed": "미플레이",
+  "playlistCard.more": "외 {count}보면은 생략했습니다.",
+  "playlistCard.source": "maishift 공개 플레이리스트",
   "trackCard.versionPosition": "{order}/{total}",
   "trackCard.player": "{name} 님의 기록",
   "trackCard.myRecord": "내 기록",
@@ -513,6 +584,8 @@ export const MESSAGES = {
   "profileCard.recentMeta": "최근 {count}곡",
   "profileCard.recentEmpty": "최근 플레이 기록이 없습니다.",
   "profileCard.friendCode": "친구 코드 {code}",
+  "profileCard.topPercent": "레이팅 상위",
+  "profileCard.topPercentSub": "최근 {days}일 maishift {players}명 중",
 
   "circleCard.eyebrow": "CIRCLE ✦ {server}",
   "circleCard.code": "{code}",
@@ -623,7 +696,7 @@ export function applyMessageOverrides(rows: { key: string; text: string }[]): vo
 }
 
 // 이미지 카드 문구의 서명. 카드 캐시 키(메모리)와 레이팅표 DB 캐시 버전에 섞어, 문구를 바꾸면 다시 그리게 한다.
-const CARD_KEY_PREFIXES = ["card.", "profileCard.", "circleCard.", "circleColor.", "achievementCard.", "ratingCard.", "trackCard.", "stampCard."];
+const CARD_KEY_PREFIXES = ["card.", "profileCard.", "circleCard.", "circleColor.", "achievementCard.", "ratingCard.", "trackCard.", "stampCard.", "plateCard.", "playlistCard."];
 let cardSignature: number | null = null;
 
 function fnv1a(text: string): number {

@@ -48,6 +48,8 @@ import * as history      from "./commands/history";
 import * as stamp        from "./commands/stamp";
 import { PENDING_FEATURES } from "../maishift/features";
 import * as photo        from "./commands/photo";
+import * as plate        from "./commands/plate";
+import * as playlist     from "./commands/playlist";
 import { initMaishift } from "../maishift";
 import { guardSlowAck } from "./utils/slowAck";
 import { handleTrackButton } from "./utils/trackDetail";
@@ -56,7 +58,7 @@ import { loadRankImages } from "../rankImages";
 type Command = { data: { toJSON(): object; name: string }; execute: (i: ChatInputCommandInteraction) => Promise<void>; autocomplete?: (i: AutocompleteInteraction) => Promise<void> };
 
 // 스탬프는 maishift 공식 API 엔드포인트가 나올 때까지 등록하지 않는다(src/maishift/features.ts).
-const COMMANDS: Command[] = [profile, circle, bookmarklet, ratingimage, achievement, fortune, settings, gameOptions, newsSettings, search, status, songrec, random, areaMap, report, admin, goal, chart, ratingcalc, maishift, history, ...(PENDING_FEATURES.stamps ? [stamp] : []), photo];
+const COMMANDS: Command[] = [profile, circle, bookmarklet, ratingimage, achievement, fortune, settings, gameOptions, newsSettings, search, status, songrec, random, areaMap, report, admin, goal, chart, ratingcalc, maishift, history, ...(PENDING_FEATURES.stamps ? [stamp] : []), photo, plate, playlist];
 const EPHEMERAL_REPLY = { flags: MessageFlags.Ephemeral } as const;
 
 // mai-notes 메타데이터 동기화. 운영자 조건이 "대량 통신 금지" 라서 manifest.json 한 개를
