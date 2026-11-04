@@ -301,7 +301,7 @@ SELECT u.chart_key AS "chartKey",u.achievement_val AS "achievementVal",u.fc,u.sy
       const fcImproved=fcRank(r.fc)>fcRank(r.oldFc);
       const syncImproved=sr>=2&&sr>oldSr;
       const scoreImproved=Number(r.achievementVal)>Number(r.achievementBefore);
-      return {chartKey:r.chartKey,achievementVal:Number(r.achievementVal),achievementBefore:Number(r.achievementBefore),fc:r.fc,sync:r.sync,fcImproved,syncImproved,scoreImproved};
+      return {chartKey:r.chartKey,achievementVal:Number(r.achievementVal),achievementBefore:Number(r.achievementBefore),fc:r.fc,sync:r.sync,fcBefore:r.oldFc,fcImproved,syncImproved,scoreImproved};
     }).filter((d:any)=>d.scoreImproved||d.fcImproved||d.syncImproved)
       .map(({scoreImproved,...d}:any)=>d);
   }
@@ -320,10 +320,10 @@ SELECT u.chart_key AS "chartKey",u.achievement_val AS "achievementVal",u.fc,u.sy
       const ordered=[...events].sort((a,b)=>a.playedAt-b.playedAt);
       for(const e of ordered){const id=e.sourcePlayId!.trim(), key=hash(`${profile}\x1f${id}`), payload=hash(JSON.stringify(e));const exists=await c.query<{event_key:string}>("SELECT event_key FROM achievement_play_event_log WHERE profile_key=$1 AND source_play_id=$2 OR event_key=$3",[profile,id,key]);if(exists.rowCount){if(e.ratingUp!=null)await c.query("UPDATE achievement_play_event_log SET rating_up=COALESCE(rating_up,$1) WHERE event_key=$2",[e.ratingUp,exists.rows[0].event_key]);continue;}
         const score=Number(e.achievementVal), before=Number(e.achievementBefore);const gain=Math.max(0,score-before);const suppliedLevelConstant=e.levelConstant==null?null:Number(e.levelConstant);const server=profile.startsWith("jp:")?"jp":"intl";const levelConstant=suppliedLevelConstant!=null&&Number.isFinite(suppliedLevelConstant)?suppliedLevelConstant:getConstant(e.title,e.musicKind,e.diff,server)??levelToNumber(e.level);
-        // 레이팅 상승은 DX NET 상세 페이지의 (+N) 파싱값(e.ratingUp)만 신뢰한다.
-        // 달성률 기반 추정치는 (a) 베스트 50 진입 여부를 알 수 없고 (b) 이전 기록이
-        // 없는 채보(achievementBefore=0)에서 곡 레이팅 전체를 상승분으로 잡아
-        // "레이팅 +300" 같은 값을 만들어내므로 사용하지 않는다. 파싱값이 없으면 0.
+        // 레이팅 상승(e.ratingUp)은 maishift 전체 기록으로 계산한 값(src/ratingGain.ts — 대상곡 50곡 합의 변화라
+        // 대상곡 진입·처음 친 채보도 맞게 잡힌다)이나 DX NET 상세 페이지의 (+N) 파싱값(지금은 수집을 꺼 둠)만 쓴다.
+        // 이 채보 하나의 달성률만으로 어림한 값은 쓰지 않는다 — 대상곡 진입 여부를 모르고, 처음 친 채보에서 곡 레이팅
+        // 전체를 상승분으로 잡아 "레이팅 +300" 같은 값이 나온다. 값이 없으면 0.
         // 宴/코스 등 다른 모드 상세 페이지에선 (+N) 이 레이팅 증가분이 아닌 값으로
         // 잘못 잡히므로, 단일 채보가 물리적으로 줄 수 있는 최대 곡 레이팅
         // (상수 불명 시 이론상 최대치 338)을 넘는 파싱값은 버린다.

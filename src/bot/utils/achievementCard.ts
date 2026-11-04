@@ -132,9 +132,9 @@ function chartConstant(record: PlayRecord, profile: CachedProfile): number | nul
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-// 레이팅 상승은 DX NET 상세 페이지의 (+N) 파싱값만 신뢰한다. 예전엔 파싱값이 없으면
-// 달성률 기반 추정치로 메웠지만, 이전 기록이 없는 채보에서 곡 레이팅 전체(+300 등)가
-// 상승분으로 잡히는 오류가 있었다. 파싱값이 없으면 "알 수 없음"(null)으로 둔다.
+// 레이팅 상승은 성과를 만들 때 넣은 값(maishift 전체 기록으로 계산한 상승분 src/ratingGain.ts, 또는 DX NET 상세의 (+N))만
+// 쓴다. 카드에서 달성률로 어림하지 않는다 — 이전 기록이 없는 채보에서 곡 레이팅 전체(+300 등)가 상승분으로 잡히는 오류가
+// 있었다. 값이 없으면(계산 이전에 만든 성과) "알 수 없음"(null)으로 둔다.
 function ratingGain(record: PlayRecord): number | null {
   if (typeof record.ratingUp !== "number" || !Number.isFinite(record.ratingUp)) return null;
   const value = details(record).ratingGain;
