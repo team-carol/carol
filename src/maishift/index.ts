@@ -3,12 +3,13 @@
  *
  * 프로필·기록은 캐롤봇 DB에 저장하지 않고 메모리에만 잠깐 둔다. 이용 한도(앱마다 120단위, 초당 2단위씩 찬다)를 아끼려고:
  * - 이전 기록을 공개한 사용자는 LIGHT_TTL_MS 마다 업로드 목록 첫 쪽(2단위)만 보고, 마지막 업로드가 그대로면 프로필을
- *   받지 않는다. 업로드 목록의 마지막 업로드 시각은 프로필의 syncedAt 과 같다. 남은 한도가 LOW_BUDGET_UNITS 보다 적으면
- *   PROFILE_TTL_MS 로 돌아간다.
+ *   받지 않는다. 업로드 목록의 마지막 업로드 시각은 프로필의 syncedAt 과 같다.
  * - 프로필(5)과 업로드 목록(2, 받아 둔 게 있으면 첫 쪽만)은 PROFILE_TTL_MS 마다 한 번은 함께 확인한다. 업로드 없이 바꾼
  *   설정(프로필·이전 기록 공개 여부, 친구 코드)도 그때 반영된다. 이전 기록을 공개하지 않은 사용자는 이 간격으로만 확인한다.
+ * - 남은 한도가 LOW_BUDGET_UNITS 보다 적으면 누구든 LOW_BUDGET_TTL_MS 마다만 확인한다.
  * - 전체 기록(10)은 프로필의 syncedAt(maishift 업로드 시각)이 바뀌었을 때만 다시 받는다.
- * - 오류 응답도 한도를 쓰므로 비공개·지역 없음·없는 아이디는 NEGATIVE_TTL_MS 동안 다시 묻지 않는다.
+ * - 오류 응답도 한도를 쓰므로 비공개·지역 없음·없는 아이디는 NEGATIVE_TTL_MS 동안 다시 묻지 않고, 그 뒤 다시 물을 때도
+ *   프로필이 받아들여진 다음에만 업로드 목록·전체 기록을 받는다.
  * - 모든 요청은 api.ts / serverFn.ts 에서 한 줄로 세워 간격을 둔다.
  */
 import { registerProfileOverlay, type MaishiftLink } from "../storage";
@@ -27,11 +28,13 @@ import { koreaPlayDayKey } from "../achievements";
 
 export { MaishiftError } from "./serverFn";
 
-const PROFILE_TTL_MS = 5 * 60 * 1000;
-/** 업로드 목록 첫 쪽(2단위)으로 새 업로드만 확인하는 간격. 한 사람이 쉬지 않고 써도 1분에 8단위다. */
+/** 프로필까지 확인하는 간격(5+2단위). 이전 기록을 공개하지 않은 사용자는 이 간격으로만 확인한다. */
+const PROFILE_TTL_MS = 60 * 1000;
+/** 업로드 목록 첫 쪽(2단위)으로 새 업로드만 확인하는 간격. 한 사람이 쉬지 않고 써도 1분에 13단위다(가벼운 확인 3번 + 프로필 확인 1번). */
 const LIGHT_TTL_MS = 15 * 1000;
-/** 남은 한도가 이보다 적으면 가벼운 확인을 멈추고 PROFILE_TTL_MS 마다만 확인한다. */
+/** 남은 한도가 이보다 적으면 LOW_BUDGET_TTL_MS 마다만 확인한다. */
 const LOW_BUDGET_UNITS = 40;
+const LOW_BUDGET_TTL_MS = 5 * 60 * 1000;
 /** 비공개·지역 없음·없는 아이디로 확인된 결과를 기억하는 시간. */
 const NEGATIVE_TTL_MS = PROFILE_TTL_MS;
 const MAX_ENTRIES = 200;
@@ -92,13 +95,13 @@ function rememberNegative(key: string, error: MaishiftError): void {
   while (negative.size > MAX_ENTRIES) negative.delete(negative.keys().next().value!);
 }
 
-/** 아직 기억하고 있는 부정 결과(비공개·지역 없음·없는 아이디). 없거나 지났으면 null. */
+/**
+ * 아직 기억하고 있는 부정 결과(비공개·지역 없음·없는 아이디). 없거나 지났으면 null.
+ * 지난 것도 지우지 않는다 — refresh 가 다시 묻는 중임을 알고 프로필부터 확인하게. 프로필이 받아들여지면 지운다.
+ */
 function negativeOf(key: string): MaishiftError | null {
   const n = negative.get(key);
-  if (!n) return null;
-  if (Date.now() - n.at < NEGATIVE_TTL_MS) return n.error;
-  negative.delete(key);
-  return null;
+  return n && Date.now() - n.at < NEGATIVE_TTL_MS ? n.error : null;
 }
 
 const apiPath = (link: MaishiftLink, rest = "") => `/profiles/${encodeURIComponent(link.handle)}${rest}`;
@@ -151,11 +154,15 @@ async function refresh(link: MaishiftLink): Promise<Entry> {
     }
     throw e;
   });
+  // 비공개·지역 없음·없는 아이디로 기억했던 연동을 다시 물을 때는 프로필이 받아들여진 다음에 나머지를 받는다
+  // (아직 그대로면 프로필 5단위만 쓰고 끝난다).
+  const recheck = negative.has(key);
+  if (recheck) await profileReq;
   // 업로드 목록(2단위)은 프로필을 확인할 때마다 함께 받는다. 업로드 없이 이전 기록 공개 설정만 바꿔도 반영되게
   // 하려는 것이다(받아 둔 목록이 있으면 첫 쪽만 받는다).
   // 전체 기록(10단위)은 캐시가 없을 때(재시작 직후·첫 조회)는 함께 요청하고, 있으면 업로드 시각이 바뀌었을 때만 받는다.
   const uploadsReq = fetchUploads();
-  const cold = prev ? null : { records: fetchRecords() };
+  const cold = prev || recheck ? null : { records: fetchRecords() };
   cold?.records.catch(() => {});
   const res = await profileReq;
   regionMissing.delete(key);
@@ -219,10 +226,11 @@ function refreshOnce(link: MaishiftLink): Promise<Entry> {
   return p;
 }
 
-/** 다음 확인까지 기다릴 시간. 업로드 목록을 볼 수 있고(이전 기록 공개) 한도가 넉넉하면 가벼운 확인 간격. */
+/** 다음 확인까지 기다릴 시간. 한도가 모자라면 길게, 업로드 목록을 볼 수 있으면(이전 기록 공개) 가벼운 확인 간격. */
 function ttlOf(e: Entry): number {
   const budget = estimatedBudget();
-  return e.pastRecordsVisible && (budget === null || budget >= LOW_BUDGET_UNITS) ? LIGHT_TTL_MS : PROFILE_TTL_MS;
+  if (budget !== null && budget < LOW_BUDGET_UNITS) return LOW_BUDGET_TTL_MS;
+  return e.pastRecordsVisible ? LIGHT_TTL_MS : PROFILE_TTL_MS;
 }
 
 /**

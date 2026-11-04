@@ -70,7 +70,7 @@ test("이전 기록 공개: 15초마다 업로드 목록만 보고, 그대로면
 test("새 업로드: 업로드 목록이 바뀌면 프로필·전체 기록을 받고, 업로드 목록은 다시 받지 않는다", async () => {
   const p = player("bob");
   await lookup("bob");
-  mock.timers.tick(MIN + 1000);
+  mock.timers.tick(LIGHT + 1000);
   p.syncedAt = "2026-11-04T03:00:30.000Z";
   p.snapshots = [{ id: 2, syncedAt: p.syncedAt, rating: 15010, version: 25 }, ...p.snapshots];
   const profile = await lookup("bob");
@@ -78,28 +78,28 @@ test("새 업로드: 업로드 목록이 바뀌면 프로필·전체 기록을 �
   assert.deepEqual([count("bob", "profile"), count("bob", "snapshots"), count("bob", "records")], [2, 2, 2]);
 });
 
-test("프로필은 5분마다 한 번은 확인한다(업로드 없이 바꾼 설정 반영)", async () => {
+test("프로필은 1분마다 한 번은 확인한다(업로드 없이 바꾼 설정 반영)", async () => {
   player("carol");
   await lookup("carol");
-  mock.timers.tick(5 * MIN + 1000);
+  mock.timers.tick(MIN + 1000);
   await lookup("carol");
   // 업로드 시각이 그대로라 전체 기록은 다시 받지 않는다.
   assert.deepEqual([count("carol", "profile"), count("carol", "snapshots"), count("carol", "records")], [2, 2, 1]);
 });
 
-test("이전 기록 비공개: 업로드 목록을 못 보므로 5분마다만 확인한다", async () => {
+test("이전 기록 비공개: 업로드 목록을 못 보므로 1분마다만 확인한다", async () => {
   player("dave", { snapshotsStatus: 403 });
   const profile = await lookup("dave");
   assert.equal(profile.maishiftPastPublic, false);
-  mock.timers.tick(MIN + 1000);
+  mock.timers.tick(LIGHT + 1000);
   await lookup("dave");
-  assert.equal(count("dave", "profile"), 1, "1분 뒤에는 묻지 않는다");
-  mock.timers.tick(4 * MIN);
+  assert.equal(count("dave", "profile"), 1, "가벼운 확인 간격으로는 묻지 않는다");
+  mock.timers.tick(MIN);
   await lookup("dave");
   assert.equal(count("dave", "profile"), 2);
 });
 
-test("비공개·없는 아이디: 5분 동안 다시 묻지 않고, 연동 확인(lookupMaishift)은 바로 묻는다", async () => {
+test("비공개·없는 아이디: 1분 동안 다시 묻지 않고, 다시 물을 때는 프로필만, 연동 확인(lookupMaishift)은 바로 묻는다", async () => {
   player("erin", { profileStatus: 403, snapshotsStatus: 403 });
   assert.equal(await lookup("erin"), null);
   const first = calls.filter((c) => c.handle === "erin").length;
@@ -115,9 +115,20 @@ test("비공개·없는 아이디: 5분 동안 다시 묻지 않고, 연동 확�
   assert.equal(await lookup("nobody"), null);
   assert.equal(count("nobody", "profile"), 1);
 
-  mock.timers.tick(5 * MIN + 1000);
+  mock.timers.tick(MIN + 1000);
   assert.equal(await lookup("erin"), null);
   assert.equal(count("erin", "profile"), 3, "기억이 지나면 다시 묻는다");
+  // 처음 조회 때만 업로드 목록·전체 기록을 함께 보냈고, 다시 물을 때는 프로필(5단위)만.
+  assert.deepEqual([count("erin", "snapshots"), count("erin", "records")], [1, 1]);
+
+  // 다시 공개하면 다음 확인에서 나머지도 받는다.
+  const erin = players.get("erin");
+  erin.profileStatus = 200;
+  erin.snapshotsStatus = 200;
+  mock.timers.tick(MIN + 1000);
+  assert.equal((await lookup("erin")).playerName, "ERIN");
+  assert.deepEqual([count("erin", "profile"), count("erin", "snapshots"), count("erin", "records")], [4, 2, 2]);
+  assert.equal(maishift.isProfilePrivate({ handle: "erin", server: "intl" }), false);
 });
 
 test("남은 한도가 적으면 가벼운 확인을 멈추고 5분마다만 확인한다", async () => {
