@@ -394,3 +394,49 @@ test("getRegisteredUserCount: 친구 코드나 maishift 연동이 있는 사용�
     } finally { await db.close(); }
   } finally { try { await client.end(); } catch {} await pg.stop(); }
 });
+
+// 레이팅표 PNG 캐시: maishift 만 연동한 사용자(ms: 키)는 profiles 행이 없어 maishift_rating_cards 에 둔다.
+// 같은 아이디의 마지막 연동자가 해제할 때와 비활성 GC 때 지운다. 친구 코드 키는 예전처럼 profiles 에 둔다.
+test("rating card cache: ms: 키는 maishift_rating_cards, 해제·GC 때 지움", async () => {
+  const pg = await temporaryPostgres();
+  const client = new Client({ connectionString: pg.url });
+  try {
+    const { PostgresStorage } = require("../dist/storage/postgres");
+    const db = new PostgresStorage(pg.url);
+    try {
+      await db.initialize();
+      await client.connect();
+      const MS = "ms:intl:Alice", FC = "intl:111";
+      const png = Buffer.from("png-1");
+      assert.equal(await db.getRatingCardCache(MS), null);
+      await db.saveRatingCardCache(MS, png, 1000, 7);
+      const got = await db.getRatingCardCache(MS);
+      assert.deepEqual([Buffer.from(got.blob).toString(), got.syncedAt, got.version], ["png-1", 1000, 7]);
+      // 다시 그리면 덮어쓴다.
+      await db.saveRatingCardCache(MS, Buffer.from("png-2"), 2000, 7);
+      assert.equal((await db.getRatingCardCache(MS)).syncedAt, 2000);
+
+      // 친구 코드 키는 profiles 행에 둔다.
+      await client.query("INSERT INTO profiles(friend_code,player_name) VALUES($1,'')", [FC]);
+      await db.saveRatingCardCache(FC, png, 1000, 7);
+      assert.equal((await db.getRatingCardCache(FC)).syncedAt, 1000);
+      assert.equal(Number((await client.query("SELECT count(*) n FROM maishift_rating_cards")).rows[0].n), 1);
+
+      // 같은 아이디를 연동한 사람이 남아 있으면 ms: 캐시는 남고, 마지막 연동자가 해제하면 지운다.
+      await db.setMaishiftHandle("u1", "Alice");
+      await db.setMaishiftHandle("u2", "Alice");
+      await db.unlinkMaishift("u1", { handle: "Alice", server: "intl" });
+      assert.notEqual(await db.getRatingCardCache(MS), null);
+      await db.unlinkMaishift("u2", { handle: "Alice", server: "intl" });
+      assert.equal(await db.getRatingCardCache(MS), null);
+
+      // 비활성 GC: 업로드 시각(synced_at)이 기준보다 오래된 것만.
+      const now = Date.now(), DAY = 24 * 60 * 60 * 1000;
+      await db.saveRatingCardCache("ms:intl:Old", png, now - 8 * DAY, 7);
+      await db.saveRatingCardCache("ms:intl:New", png, now - DAY, 7);
+      await db.clearRatingCardCacheForInactive(7 * DAY);
+      assert.equal(await db.getRatingCardCache("ms:intl:Old"), null);
+      assert.notEqual(await db.getRatingCardCache("ms:intl:New"), null);
+    } finally { await db.close(); }
+  } finally { try { await client.end(); } catch {} await pg.stop(); }
+});

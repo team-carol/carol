@@ -58,7 +58,7 @@ Key entry points:
 - `src/auth.ts` is a full login/session client but is **not** wired into the current bookmarklet sync flow — don't rely on it.
 - **Never store SEGA credentials.** Bookmarklet-pushed HTML/cookies are the only sync path.
 - DX NET selectors are not stable. On scraping breakage, inspect the dev-artifact `debug_*.html` files written to repo root (`debug_home.html`, `debug_pd.html`, `debug_fc.html`, `debug_record.html`, `debug_rating_target.html`).
-- Don't re-render rating cards unnecessarily; `rating_card_blob` is cached until `lastSyncedAt` or the card version changes.
+- Don't re-render rating cards unnecessarily; `rating_card_blob` is cached until `lastSyncedAt` or the card version changes. maishift 만 연동한 사용자(`ms:` 프로필 키)는 `profiles` 행이 없어 `maishift_rating_cards` 에 둔다(마지막 연동자 해제·비활성 GC 때 삭제).
 
 ## Deploy
 
