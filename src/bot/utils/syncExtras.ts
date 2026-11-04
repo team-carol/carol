@@ -9,3 +9,11 @@ import type { CachedProfile } from "../../storage/types";
 export function hasCarolSync(profile: Pick<CachedProfile, "profileKey">): boolean {
   return !profile.profileKey.startsWith("ms:");
 }
+
+/**
+ * 이 데이터(서클·최근 플레이·지방)를 동기화한 시각. 프로필의 lastSyncedAt 은 maishift 업로드 시각이라
+ * 북마클릿만 다시 실행하면 바뀌지 않는다 — 이 데이터를 그린 카드의 캐시 키와 "마지막 동기화" 표시는 이것을 쓴다.
+ */
+export function extrasSyncedAt(profile: Pick<CachedProfile, "lastSyncedAt" | "extrasSyncedAt">): number {
+  return profile.extrasSyncedAt || profile.lastSyncedAt;
+}

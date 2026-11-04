@@ -293,6 +293,7 @@ function toProfile(profileKey: string, link: MaishiftLink, e: Entry, extras: Cac
     playCount: e.playCount,
     totalPlayCount: e.totalPlayCount,
     lastSyncedAt: Date.parse(e.updatedAt) || 0,
+    extrasSyncedAt: extras?.lastSyncedAt || undefined,
     recentJson: extras?.recentJson ?? "[]",
     topJson: e.topJson,
     clearJson: e.clearJson,

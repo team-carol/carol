@@ -5,6 +5,7 @@ import { msg } from "../../messages";
 import { displayTitle } from "../../aliases";
 import { getTitleByJacket } from "../../constants";
 import { CIRCLE_COLOR_STYLE } from "./circleColors";
+import { extrasSyncedAt } from "./syncExtras";
 
 /**
  * profiles.circle_json 해석.
@@ -30,13 +31,13 @@ function footerOf(profile: CachedProfile): { text: string } {
     text: msg("circle.footer", {
       player: profile.playerName || msg("embed.noName"),
       server: profile.server === "jp" ? "JP" : "INTERNATIONAL",
-      synced: new Date(profile.lastSyncedAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }),
+      synced: new Date(extrasSyncedAt(profile)).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }),
     }),
   };
 }
 
 export function circleEmbed(circle: CircleInfo, profile: CachedProfile, translate = false): EmbedBuilder {
-  const synced = new Date(profile.lastSyncedAt);
+  const synced = new Date(extrasSyncedAt(profile));
   const month = Number(synced.toLocaleString("en-US", { timeZone: "Asia/Seoul", month: "numeric" }));
   const emb = new EmbedBuilder()
     // 서클 프로필 색상이 있으면 임베드 테두리도 그 색으로.
