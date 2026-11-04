@@ -7,6 +7,7 @@ import { renderAchievementCard } from "../utils/achievementCard";
 import { loadAvatar } from "../utils/embeds";
 import { msg } from "../../messages";
 import { notRegisteredNotice } from "../utils/notRegistered";
+import { AP_REPEAT_KIND } from "../../apRepeat";
 
 export const data = new SlashCommandBuilder()
   .setName("성과")
@@ -68,8 +69,8 @@ export async function show(interaction: RepliableInteraction, targetId: string, 
       await settleMaishiftRecords(link);
       cached = (friendCode ? await getCachedProfile(friendCode) : null) ?? cached;
     }
-    // 캐롤봇 추가 북마클릿을 실행하지 않았으면 maishift 로 알 수 있는 것(달성률 변화·FC/FS)만 보여 준다.
-    // 플레이 시각과 레이팅 상승분은 추가 북마클릿이 모은 DX NET 최근 플레이 기록에서만 온다.
+    // 캐롤봇 추가 북마클릿을 실행하지 않았으면 플레이 시각을 모른다(추가 북마클릿이 모은 DX NET 최근 플레이 기록에서만 온다).
+    // 레이팅 상승분은 maishift 전체 기록으로 계산하므로(src/ratingGain.ts) 그래도 보여 준다.
     const limited = !hasCarolSync(cached);
     const playDay = requestedDay && isPlayDayKey(requestedDay)
       ? requestedDay
@@ -83,7 +84,9 @@ export async function show(interaction: RepliableInteraction, targetId: string, 
       // 플레이 기록(최근 50곡)에서 찾은 성과만 실제 플레이 시각을 안다. 못 찾은 것(sourcePlayId 가
       // "clear:…")은 playedAt 이 동기화 시각이라 시각 대신 그 사실을 적는다.
       const date = limited ? "" : String(e.sourcePlayId ?? "").startsWith("clear:") ? msg("achievement.unknownPlayTime") : kstTime(Number(e.playedAt));
-      return { title:e.title, achievement:e.achievementAfter.toFixed(4)+"%", diff:e.diff, level:e.level, date, jacketUrl, musicKind:e.musicKind, achievementVal:Number(e.achievementAfter), track:0, fc:e.fc, sync:e.sync, ratingUp:limited ? undefined : e.ratingUp ?? undefined, playedAt:Number(e.playedAt), achievementGain:e.achievementGain, ratingGain:limited ? undefined : e.ratingGain, achievementBefore:e.achievementBefore, achievementAfter:e.achievementAfter, levelConstant:e.levelConstant ?? undefined };
+      // 재AP(기록을 갱신하지 않은 AP)는 달성률이 오른 게 아니라 (+0.0000%) 를 붙이지 않는다.
+      const repeatAp = e.sourceKind === AP_REPEAT_KIND;
+      return { title:e.title, achievement:e.achievementAfter.toFixed(4)+"%", diff:e.diff, level:e.level, date, jacketUrl, musicKind:e.musicKind, achievementVal:Number(e.achievementAfter), track:0, fc:e.fc, sync:e.sync, ratingUp:e.ratingUp ?? undefined, playedAt:Number(e.playedAt), achievementGain:e.achievementGain, ratingGain:e.ratingGain, achievementBefore:repeatAp ? undefined : e.achievementBefore, achievementAfter:e.achievementAfter, levelConstant:e.levelConstant ?? undefined };
     });
     console.log(`[성과] 데이터 summaries=${summaries.length} records=${records.length}`);
     if (records.length === 0) {

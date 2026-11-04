@@ -480,3 +480,37 @@ test("circles: 서클원 동기화를 합치고, 공유 이전 데이터로 빈 
     } finally { await db.close(); }
   } finally { try { await client.end(); } catch {} await pg.stop(); }
 });
+
+// 재AP(ap_repeat) 성과는 하루 보면별 중복 제거에서 기록 갱신 성과와 따로 센다(같은 날 둘 다 보인다).
+// getChartClears 는 비교 기준을 돌려주고, upsertChartClears 는 직전 FC 표시(fcBefore)를 함께 돌려준다.
+test("ap_repeat: 같은 날 같은 보면의 기록 갱신 성과와 재AP 가 함께 보이고, 재AP 끼리는 하나", async () => {
+  const pg = await temporaryPostgres();
+  try {
+    const { PostgresStorage } = require("../dist/storage/postgres");
+    const db = new PostgresStorage(pg.url);
+    try {
+      await db.initialize();
+      const KEY = "intl:aprepeat";
+      const first = await db.upsertChartClears(KEY, [{ chartKey: "A|DX|MASTER", achievementVal: 100.5, fc: "FC+", sync: "" }]);
+      assert.equal(first[0].fcBefore, "");
+      const up = await db.upsertChartClears(KEY, [{ chartKey: "A|DX|MASTER", achievementVal: 100.9, fc: "AP", sync: "" }]);
+      assert.deepEqual([up[0].achievementBefore, up[0].fcBefore, up[0].fc], [100.5, "FC+", "AP"]);
+      assert.deepEqual(await db.getChartClears(KEY), [{ chartKey: "A|DX|MASTER", achievementVal: 100.9, fc: "AP" }]);
+
+      const DAY0 = Date.UTC(2026, 10, 3, 19); // 2026-11-04 04:00 KST
+      const ev = (id, at, ach, kind, extra = {}) => ({
+        profileKey: KEY, sourcePlayId: id, chartKey: "A|DX|MASTER", playedAt: DAY0 + at, sourceSequence: 1, recordJson: "{}",
+        achievementVal: ach, achievementBefore: extra.before ?? ach, fc: "AP", sync: "", ratingUp: extra.ratingUp ?? 0,
+        title: "A", diff: "MASTER", level: "14", musicKind: "DX", achievementText: `${ach}%`, sourceKind: kind,
+      });
+      await db.saveAchievementPlayEventLogBatch([
+        ev("improve", 1000, 100.9, "maishift", { before: 100.5, ratingUp: 3 }),
+        ev("re1", 2000, 100.6, "ap_repeat"),
+        ev("re2", 3000, 100.7, "ap_repeat"),
+      ]);
+      const s = await db.getDailyAchievementSummaries("nobody", DAY0, DAY0 + 24 * 60 * 60 * 1000, [KEY]);
+      assert.deepEqual(s.map((x) => [x.sourcePlayId, x.sourceKind]).sort(), [["improve", "maishift"], ["re2", "ap_repeat"]]);
+      assert.equal(s.find((x) => x.sourcePlayId === "improve").ratingGain, 3);
+    } finally { await db.close(); }
+  } finally { await pg.stop(); }
+});

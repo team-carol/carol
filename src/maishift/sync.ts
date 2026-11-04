@@ -8,10 +8,11 @@
  */
 import { chartKey, type PlayRecord } from "../scraper";
 import { ratingGains } from "../ratingGain";
+import { saveRepeatApEvents } from "../apRepeat";
 import { isNewSong } from "../constants";
 import {
   getMaishiftUsers, getStoredProfile, hasChartClears, copyChartClears, upsertChartClears, saveAchievementPlayEventLogBatch,
-  listGoals, updateGoalProgress, maishiftProfileKey, type MaishiftLink,
+  listGoals, updateGoalProgress, maishiftProfileKey, achievementProfileKeys, type MaishiftLink,
 } from "../storage";
 import { hasValidRecordDate, recordPlayedAt, koreaPlayDayKey } from "../achievements";
 import { evaluateGoal, GOAL_KINDS, type GoalKind } from "../goals";
@@ -88,6 +89,14 @@ async function applyForUser(u: MaishiftUpdate, discordUserId: string, profileKey
     });
     await saveAchievementPlayEventLogBatch(events, now);
     console.log(`[maishift] 성과 ${events.length}건 key=${profileKey}`);
+  }
+  // 다시 한 AP: 이번 반영으로 막 AP 가 된 보면을 그 뒤 더 낮게 다시 AP 한 판처럼, 기록 비교로는 생기지 않는 성과
+  // (src/apRepeat.ts). 판마다의 결과는 캐롤봇 최근 플레이 기록에만 있다. 첫 비교(기준만 채움)에서는 하지 않는다.
+  if (had && !profileKey.startsWith("ms:")) {
+    const stored = await getStoredProfile(profileKey);
+    const best = new Map(u.records.map((r) => [chartKey(r), { achievementVal: r.achievementVal, fc: r.fc }]));
+    const added = await saveRepeatApEvents(profileKey, playHistoryOf(stored?.recentJson), await achievementProfileKeys(discordUserId), best);
+    if (added) console.log(`[maishift] 재AP 성과 ${added}건 key=${profileKey}`);
   }
 
   const goals = await listGoals(discordUserId);
