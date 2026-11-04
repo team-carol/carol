@@ -1,14 +1,18 @@
 /**
  * maishift 전체 기록을 새로 받았을 때(업로드 시각이 바뀌었거나 처음 받았을 때) 캐롤봇 쪽 파생 데이터를 갱신한다.
  * - 성과: chart_clears(직전 기록)와 비교해 오른 보면만 이벤트로 남긴다. 비교 기준이 없으면(첫 비교) 기준만 채운다.
- *   플레이 시각·레이팅 상승분(+N)은 캐롤봇 북마클릿이 모은 최근 플레이 기록에서 같은 보면을 찾아 붙인다.
- * - 레이팅 스냅샷(/레이팅이미지 날짜 조회용), 목표 진행률.
+ *   플레이 시각은 캐롤봇 북마클릿이 모은 최근 플레이 기록에서 같은 보면을 찾아 붙인다(없으면 업로드 시각).
+ *   레이팅 상승분(+N)은 전체 기록으로 계산한다(src/ratingGain.ts) — 플레이 시각 순서대로 나눈다.
+ * - 목표 진행률.
  * chart_clears 비교는 DB 기준이라 같은 기록을 다시 받아도 이벤트가 두 번 생기지 않는다.
  */
 import { chartKey, type PlayRecord } from "../scraper";
+import { ratingGains } from "../ratingGain";
+import { saveRepeatApEvents } from "../apRepeat";
+import { isNewSong } from "../constants";
 import {
   getMaishiftUsers, getStoredProfile, hasChartClears, copyChartClears, upsertChartClears, saveAchievementPlayEventLogBatch,
-  listGoals, updateGoalProgress, maishiftProfileKey, type MaishiftLink,
+  listGoals, updateGoalProgress, maishiftProfileKey, achievementProfileKeys, type MaishiftLink,
 } from "../storage";
 import { hasValidRecordDate, recordPlayedAt, koreaPlayDayKey } from "../achievements";
 import { evaluateGoal, GOAL_KINDS, type GoalKind } from "../goals";
@@ -54,12 +58,22 @@ async function applyForUser(u: MaishiftUpdate, discordUserId: string, profileKey
       if (list) list.push(r); else historyByChart.set(k, [r]);
     }
     const byChart = new Map(u.records.map((r) => [chartKey(r), r]));
-    const events = diffs.map((d, idx) => {
+    const matched = diffs.map((d, idx) => {
       const candidates = historyByChart.get(d.chartKey) ?? [];
       const match = candidates.find((r) => Math.abs(r.achievementVal - d.achievementVal) < 0.00005)
         ?? candidates.reduce<PlayRecord | undefined>((best, r) => (!best || r.achievementVal > best.achievementVal ? r : best), undefined);
       // 최근 플레이에서 못 찾으면 maishift 업로드 시각을 플레이 시각으로 쓴다.
       const playedAt = match && hasValidRecordDate(match.date) ? recordPlayedAt(match.date) : u.uploadedAt;
+      return { d, idx, match, playedAt };
+    });
+    const server = u.link.server;
+    const gains = ratingGains(
+      u.records,
+      [...matched].sort((a, b) => a.playedAt - b.playedAt || a.idx - b.idx).map(({ d }) => ({ chartKey: d.chartKey, achievementBefore: d.achievementBefore, fcBefore: d.fcBefore })),
+      server,
+      (r) => isNewSong(r.title, server, undefined, r.musicKind),
+    );
+    const events = matched.map(({ d, idx, match, playedAt }) => {
       const source = byChart.get(d.chartKey)!;
       return {
         profileKey,
@@ -67,7 +81,7 @@ async function applyForUser(u: MaishiftUpdate, discordUserId: string, profileKey
         chartKey: d.chartKey, playedAt, sourceSequence: idx, capturedAt: now,
         recordJson: JSON.stringify(match ?? source), achievementVal: d.achievementVal, achievementBefore: d.achievementBefore,
         // 이번에 새로 얻은 마크만 기록한다. 달성률만 오른 날엔 예전 FC/FS 를 붙이지 않음.
-        fc: d.fcImproved ? d.fc : "", sync: d.syncImproved ? d.sync : "", ratingUp: match?.ratingUp,
+        fc: d.fcImproved ? d.fc : "", sync: d.syncImproved ? d.sync : "", ratingUp: gains.get(d.chartKey),
         title: source.title, diff: source.diff, level: source.level, musicKind: source.musicKind,
         achievementText: match?.achievement ?? `${d.achievementVal.toFixed(4)}%`,
         sourceKind: "maishift",
@@ -75,6 +89,14 @@ async function applyForUser(u: MaishiftUpdate, discordUserId: string, profileKey
     });
     await saveAchievementPlayEventLogBatch(events, now);
     console.log(`[maishift] 성과 ${events.length}건 key=${profileKey}`);
+  }
+  // 다시 한 AP: 이번 반영으로 막 AP 가 된 보면을 그 뒤 더 낮게 다시 AP 한 판처럼, 기록 비교로는 생기지 않는 성과
+  // (src/apRepeat.ts). 판마다의 결과는 캐롤봇 최근 플레이 기록에만 있다. 첫 비교(기준만 채움)에서는 하지 않는다.
+  if (had && !profileKey.startsWith("ms:")) {
+    const stored = await getStoredProfile(profileKey);
+    const best = new Map(u.records.map((r) => [chartKey(r), { achievementVal: r.achievementVal, fc: r.fc }]));
+    const added = await saveRepeatApEvents(profileKey, playHistoryOf(stored?.recentJson), await achievementProfileKeys(discordUserId), best);
+    if (added) console.log(`[maishift] 재AP 성과 ${added}건 key=${profileKey}`);
   }
 
   const goals = await listGoals(discordUserId);

@@ -244,7 +244,8 @@ export const MESSAGES = {
   "achievement.renderFailed": "성과 이미지 생성에 실패했습니다.",
   "achievement.loadFailed": "성과 데이터를 불러오지 못했습니다.",
   // 최근 플레이 기록(50곡)에서 찾지 못한 성과 — 동기화 전에 50곡 넘게 플레이한 경우
-  "achievement.unknownPlayTime": "플레이 시각 알 수 없음",
+  // 플레이 시각을 모르는 성과(캐롤봇 추가 북마클릿 기록에 없음)는 maishift 업로드 시각으로 적는다.
+  "achievement.uploadedAt": "{time} 업로드",
 
   // ── /북마클릿 ───────────────────────────────────────────────────────────
   "bookmarklet.title": "🔖 캐롤봇 추가 북마클릿 설치",
@@ -556,7 +557,8 @@ export const MESSAGES = {
   "circleCard.leader": "LEADER",
   "circleCard.memberPoints": "{points} PT",
   "circleCard.memberRating": "{rating}",
-  "circleCard.syncedBy": "{player} 님의 동기화",
+  // 서클 정보는 서클원 누구든 동기화한 것이라(서클 공유) 동기화한 사람이 아니라 카드 주인을 쓴다.
+  "circleCard.owner": "{player} 님의 서클",
 
   "achievementCard.eyebrow": "DAILY ACHIEVEMENTS",
   "achievementCard.title": "오늘의 성과",

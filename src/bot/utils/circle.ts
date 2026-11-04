@@ -5,6 +5,7 @@ import { msg } from "../../messages";
 import { displayTitle } from "../../aliases";
 import { getTitleByJacket } from "../../constants";
 import { CIRCLE_COLOR_STYLE } from "./circleColors";
+import { extrasSyncedAt } from "./syncExtras";
 
 /**
  * profiles.circle_json 해석.
@@ -25,18 +26,23 @@ export function circleOf(profile: Pick<CachedProfile, "circleJson">): CircleInfo
 
 const fmt = (n: number) => n.toLocaleString("en-US");
 
+/** 보여 주는 서클 정보를 동기화한 시각. 서클 공유로 다른 서클원이 더 최근에 동기화했으면 그 시각. */
+export function circleSyncedAt(profile: Pick<CachedProfile, "lastSyncedAt" | "extrasSyncedAt" | "circleSyncedAt">): number {
+  return profile.circleSyncedAt || extrasSyncedAt(profile);
+}
+
 function footerOf(profile: CachedProfile): { text: string } {
   return {
     text: msg("circle.footer", {
       player: profile.playerName || msg("embed.noName"),
       server: profile.server === "jp" ? "JP" : "INTERNATIONAL",
-      synced: new Date(profile.lastSyncedAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }),
+      synced: new Date(circleSyncedAt(profile)).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }),
     }),
   };
 }
 
 export function circleEmbed(circle: CircleInfo, profile: CachedProfile, translate = false): EmbedBuilder {
-  const synced = new Date(profile.lastSyncedAt);
+  const synced = new Date(circleSyncedAt(profile));
   const month = Number(synced.toLocaleString("en-US", { timeZone: "Asia/Seoul", month: "numeric" }));
   const emb = new EmbedBuilder()
     // 서클 프로필 색상이 있으면 임베드 테두리도 그 색으로.

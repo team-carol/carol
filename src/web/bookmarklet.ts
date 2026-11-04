@@ -99,6 +99,13 @@ function withAchievementInitUi(script: string): string {
     );
 }
 
+/**
+ * 최근 플레이 상세(DX NET 플레이 기록 상세 페이지의 레이팅 상승분 (+N)) 수집. 레이팅 상승분은 이제 maishift 전체 기록으로
+ * 계산하므로(src/ratingGain.ts) 끈다 — 판마다 상세 페이지를 받느라 동기화가 오래 걸렸다. 수집 코드(collectDetails)와
+ * /sync 의 상세 처리는 남겨 두었다. 다시 켜도 계산한 상승분은 덮어쓰지 않는다(backfillEventRatingUp 은 빈 값만 채운다).
+ */
+const COLLECT_PLAY_DETAILS = false;
+
 export const bookmarkletJs = `(async()=>{
 var h=location.hostname,server=h==='maimaidx.jp'?'jp':(h==='maimaidx-eng.com'?'intl':'');if(!server){alert('maimai DX NET 페이지에서 실행해주세요.');return;}
 var doc=document,cur=doc.currentScript,s=cur.src,u=new URL(s),c=u.searchParams.get('code')||'',v=u.origin;if(cur&&cur.parentNode)cur.parentNode.removeChild(cur);try{if(performance&&performance.clearResourceTimings)performance.clearResourceTimings();}catch(_pe){}
@@ -129,8 +136,8 @@ addRow('uo','\uAC8C\uC784 \uC124\uC815');
 addSection('CIRCLE');
 addRow('ci','\uC11C\uD074 \uC815\uBCF4');addRow('cm','\uC11C\uD074 \uBA64\uBC84');addRow('cr','\uC11C\uD074 \uB7AD\uD0B9');
 
-addSection('PLAY DETAIL');
-addRow('dt','\uD50C\uB808\uC774 \uAE30\uB85D \uC0C1\uC138');
+if(${COLLECT_PLAY_DETAILS}){addSection('PLAY DETAIL');
+addRow('dt','\uD50C\uB808\uC774 \uAE30\uB85D \uC0C1\uC138');}
 addSection('SERVER');
 addRow('sv','\uC11C\uBC84 \uC800\uC7A5');
 var MAX_ATTEMPTS=3,REQUEST_TIMEOUT=15000,SYNC_UPLOAD_TIMEOUT=60000,PAGE_CONCURRENCY=3,DETAIL_CONCURRENCY=1,DETAIL_GAP=250,DETAIL_ATTEMPTS=4,BUSY_BACKOFF=2000;
@@ -150,7 +157,7 @@ async function collectDetails(){var reqs=collectDetailRequests(rd),out=[];var do
 async function postSync(){var payload=JSON.stringify({server:server,r:rd,f:f,dt:dt,m:m,em:em,uo:uo,ci:ci,cm:cm,cr:cr,ri:ri}),body=payload,headers={'Content-Type':'application/json'};if(typeof CompressionStream!=='undefined'){try{body=await new Response(new Blob([payload]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer();headers['Content-Encoding']='gzip';}catch(_ce){body=payload;}}for(var attempt=1;attempt<=MAX_ATTEMPTS;attempt++){try{var resp=await fetchWithTimeout(v+'/sync?code='+c,{method:'POST',headers:headers,body:body},SYNC_UPLOAD_TIMEOUT);if(resp.ok){svText=await resp.text();if(svText==='no_change'){skipRow('sv','\uC774\uBBF8 \uCD5C\uC2E0 \uC0C1\uD0DC');}else{okRow('sv');}return true;}var errText=await resp.text();if(attempt<MAX_ATTEMPTS){setRow('sv','\u21BB','#facc15','\uC7AC\uC2DC\uB3C4 '+(attempt+1)+'/'+MAX_ATTEMPTS);await sleep(jitter(800*attempt));}else{failRow('sv','HTTP '+resp.status+(errText?': '+errText.slice(0,40):''));}}catch(e4){if(attempt<MAX_ATTEMPTS){setRow('sv','\u21BB','#facc15','\uC7AC\uC2DC\uB3C4 '+(attempt+1)+'/'+MAX_ATTEMPTS);await sleep(jitter(800*attempt));}else{failRow('sv',e4&&e4.name==='AbortError'?'\uC11C\uBC84 \uC751\uB2F5 \uC2DC\uAC04 \uCD08\uACFC':'\uC5F0\uACB0 \uC2E4\uD328');}}}return false;}
 var coreOk=await collectCore();
 if(coreOk){
-try{dt=await collectDetails();}catch(e2){console.warn('[carol] detail collection failed',e2&&e2.message?e2.message:String(e2));dt=[];}
+if(${COLLECT_PLAY_DETAILS}){try{dt=await collectDetails();}catch(e2){console.warn('[carol] detail collection failed',e2&&e2.message?e2.message:String(e2));dt=[];}}
 try{var _kn=(typeof _rkKnown!=='undefined'&&_rkKnown[server])||[],_hr=await fetchWithTimeout('/maimai-mobile/home/'),_ht=_hr.ok?await _hr.text():'',_urls=[],_rx=new RegExp('src="(https:[^"]*/img/(?:course/course_rank_|class/class_rank_s_)[^"]*[.]png)"','g'),_mm;while((_mm=_rx.exec(_ht))){var _fn=_mm[1].split('/').pop();if(_kn.indexOf(_fn)<0&&_urls.indexOf(_mm[1])<0)_urls.push(_mm[1]);}if(!_urls.length){okRow('ri','저장됨');}else{for(var _k=0;_k<_urls.length&&_k<4;_k++){var _bl=await fetchWithTimeout(_urls[_k]).then(function(r){return r.blob();});var _du=await new Promise(function(res){var fr=new FileReader();fr.onload=function(){res(fr.result);};fr.readAsDataURL(_bl);});ri.push({url:_urls[_k],data:_du});}okRow('ri',ri.length+'개');}}catch(_e4){skipRow('ri','건너뜀');}
 await postSync();}else{skipRow('sv','\uC218\uC9D1 \uC2E4\uD328');}
 var fin=doc.createElement('div');fin.style.cssText='display:flex;align-items:center;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid #2e2e33;font-weight:700;font-size:13px;letter-spacing:.2px';if(typeof svText!=='undefined'&&svText==='no_change'&&!hadErr){fin.style.color='#b3a8ad';fin.innerHTML='<span style="font-size:14px">\u2728</span><span>\uC774\uBBF8 \uCD5C\uC2E0 \uC0C1\uD0DC</span>';stEl.appendChild(fin);setTimeout(function(){ov.style.transition='opacity .3s';ov.style.opacity='0';setTimeout(function(){ov.remove();},300);},2500);}else if(!hadErr){fin.style.color='#4ade80';fin.innerHTML='<span style="font-size:14px">\u2713</span><span>\uB3D9\uAE30\uD654 \uC644\uB8CC</span>';stEl.appendChild(fin);setTimeout(function(){ov.style.transition='opacity .3s';ov.style.opacity='0';setTimeout(function(){ov.remove();},300);},2500);}else{fin.style.color='#f87171';fin.innerHTML='<span style="font-size:14px">\u26A0</span><span>\uC77C\uBD80 \uD56D\uBAA9 \uC2E4\uD328</span>';stEl.appendChild(fin);}

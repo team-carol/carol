@@ -14,7 +14,7 @@ import { musicKindIcons, KIND_ICON_RATIO } from "./dxnetAssets";
 import { alignLeftMargin } from "./textMetrics";
 import type { RatingPoint, PlayCountPoint } from "../../ratingHistory";
 import { lineChart, lineSwatch, dashedSwatch, CHART_W } from "./historyChart";
-import { hasCarolSync } from "./syncExtras";
+import { hasCarolSync, extrasSyncedAt } from "./syncExtras";
 import { msg, cardTextSignature } from "../../messages";
 
 // /프로필 이미지 카드. 레이아웃·색은 /성과 카드와 같은 랜딩(carol-web) 토큰(src/brand.ts)을 따른다.
@@ -240,7 +240,8 @@ export async function renderProfileCard(
   const circleName = opts.circleName ?? null;
   const history = opts.ratingHistory;
   // 그래프 기간은 오늘을 끝으로 움직이므로 마지막 날짜도 키에 넣는다.
-  const cacheKey = [profile.profileKey, profile.lastSyncedAt, translate ? 1 : 0, friendCode ?? "", circleName ?? "", avatarBuf?.length ?? 0, history ? history.days[history.days.length - 1] : "-", PROFILE_CARD_VERSION, profile.source ?? "", cardTextSignature()].join("|");
+  // 최근 플레이 패널·서클 이름은 북마클릿 데이터라 maishift 업로드 시각(lastSyncedAt)과 따로 바뀐다.
+  const cacheKey = [profile.profileKey, profile.lastSyncedAt, extrasSyncedAt(profile), translate ? 1 : 0, friendCode ?? "", circleName ?? "", avatarBuf?.length ?? 0, history ? history.days[history.days.length - 1] : "-", PROFILE_CARD_VERSION, profile.source ?? "", cardTextSignature()].join("|");
   const memo = profileCardCache.get(cacheKey);
   if (memo) return memo;
 

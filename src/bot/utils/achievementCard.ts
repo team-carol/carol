@@ -9,6 +9,8 @@ import { alignLeftMargin } from "./textMetrics";
 import { displayTitle } from "../../aliases";
 import { getScoreRank, MAI_CM_COLOR } from "../../games";
 import { msg, cardTextSignature } from "../../messages";
+import { achievementTier } from "../../achievements";
+import { createHash } from "crypto";
 
 // 색은 랜딩과 같은 src/brand.ts 팔레트. 난이도·FC/AP 색은 게임 고유라 아래에 따로 둔다.
 const ACCENT = BRAND.accent;
@@ -51,7 +53,7 @@ const jacketCache = new Map<string, string | null>();
 // 반복 호출하거나 다른 사람이 조회할 때마다 satori+resvg 전체를 다시 돌린다.
 // (유저·날짜·마지막 동기화 시각·번역여부·페이지) 키로 PNG 를 재사용한다.
 // lastSyncedAt 이 키에 들어가므로 새 동기화 후에는 자연스럽게 무효화된다.
-const ACH_CARD_VERSION = 11;
+const ACH_CARD_VERSION = 13;
 const ACH_CARD_CACHE_MAX = 48;
 const achCardCache = new Map<string, Buffer>();
 
@@ -132,9 +134,9 @@ function chartConstant(record: PlayRecord, profile: CachedProfile): number | nul
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-// 레이팅 상승은 DX NET 상세 페이지의 (+N) 파싱값만 신뢰한다. 예전엔 파싱값이 없으면
-// 달성률 기반 추정치로 메웠지만, 이전 기록이 없는 채보에서 곡 레이팅 전체(+300 등)가
-// 상승분으로 잡히는 오류가 있었다. 파싱값이 없으면 "알 수 없음"(null)으로 둔다.
+// 레이팅 상승은 성과를 만들 때 넣은 값(maishift 전체 기록으로 계산한 상승분 src/ratingGain.ts, 또는 DX NET 상세의 (+N))만
+// 쓴다. 카드에서 달성률로 어림하지 않는다 — 이전 기록이 없는 채보에서 곡 레이팅 전체(+300 등)가 상승분으로 잡히는 오류가
+// 있었다. 값이 없으면(계산 이전에 만든 성과) "알 수 없음"(null)으로 둔다.
 function ratingGain(record: PlayRecord): number | null {
   if (typeof record.ratingUp !== "number" || !Number.isFinite(record.ratingUp)) return null;
   const value = details(record).ratingGain;
@@ -161,8 +163,8 @@ function kindMark(kind: string, icons: KindIcons, height: number): El {
     : el("span", { color: MUTED, fontSize: 10, flexShrink: 0 }, kind || "?");
 }
 
-// limited: 캐롤봇 추가 북마클릿을 실행하지 않은 사용자. 플레이 시각과 레이팅 칸을 빼고 maishift 로 알 수 있는 것만 그린다.
-function recordRow(record: PlayRecord, rankNo: number, profile: CachedProfile, jacket: string | null, playDay: string, translate = false, kindIcons: KindIcons = {}, limited = false): El {
+// limited: 캐롤봇 추가 북마클릿을 실행하지 않은 사용자(시각은 업로드 시각으로 온다). showRating: 레이팅 칸을 그릴지.
+function recordRow(record: PlayRecord, rankNo: number, profile: CachedProfile, jacket: string | null, playDay: string, translate = false, kindIcons: KindIcons = {}, limited = false, showRating = !limited): El {
   const diffColor = DIFF_COLOR[record.diff] ?? MUTED;
   const marks = [record.fc, record.sync].filter((mark) => mark.length > 0);
   const gain = ratingGain(record);
@@ -214,7 +216,7 @@ function recordRow(record: PlayRecord, rankNo: number, profile: CachedProfile, j
           el("div", { display: "flex", alignItems: "center", gap: 7, marginTop: 5, minWidth: 0 }, [
             pill(`${record.diff} ${constantLabel}`, { color: "#fff", background: diffColor, fontSize: 9, padding: "2px 8px" }),
             kindMark(record.musicKind, kindIcons, 15),
-            ...(limited ? [] : [el("span", { color: MUTED, fontSize: 10, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, record.date || playDay)]),
+            el("span", { color: MUTED, fontSize: 10, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, record.date || playDay),
           ]),
           el("span", { color: INK, fontSize: 15, fontWeight: 700, lineHeight: 1, marginTop: 9 }, achievementLabel),
         ],
@@ -228,7 +230,7 @@ function recordRow(record: PlayRecord, rankNo: number, profile: CachedProfile, j
             ))]
           : []),
       ]),
-      ...(limited ? [] : [
+      ...(!showRating ? [] : [
         el("div", { width: 1, height: 58, background: BORDER, flexShrink: 0 }),
         // 오른쪽 섹션: 레이팅 변화 (오른쪽 끝 정렬)
         el("div", { display: "flex", justifyContent: "flex-end", alignItems: "center", width: 92, flexShrink: 0 }, [
@@ -279,11 +281,16 @@ export async function renderAchievementCard(
   pageSize = 5,
   limited = false,
 ): Promise<Buffer> {
+  // 레이팅이 오른 성과 → AP/AP+ → 나머지 순으로 묶고, 묶음 안에서는 상수(같으면 달성률) 순.
   const sortedRecords = records.slice().sort((a, b) => {
+    const tier = achievementTier(ratingGain(a), a.fc) - achievementTier(ratingGain(b), b.fc);
+    if (tier) return tier;
     const aScore = (chartConstant(a, profile) ?? 0) + achievementAfter(a) / 100;
     const bScore = (chartConstant(b, profile) ?? 0) + achievementAfter(b) / 100;
     return bScore - aScore || (ratingGain(b) ?? 0) - (ratingGain(a) ?? 0) || (b.playedAt ?? 0) - (a.playedAt ?? 0);
   });
+  // 레이팅 칸: 추가 북마클릿을 실행하지 않은 사용자도 상승분을 계산한 성과가 있으면 보인다(그 전에 만든 성과만 있으면 뺀다).
+  const showRating = !limited || sortedRecords.some((r) => ratingGain(r) !== null);
   const totalPages = Math.max(1, Math.ceil(sortedRecords.length / pageSize));
   const clampedPage = Math.min(Math.max(0, pageIndex), totalPages - 1);
   const rankOffset = clampedPage * pageSize;
@@ -291,7 +298,9 @@ export async function renderAchievementCard(
 
   const cacheKey = [
     profile.profileKey, playDay, profile.lastSyncedAt, translate ? 1 : 0,
-    clampedPage, pageSize, sortedRecords.length, avatarBuf?.length ?? 0, limited ? 1 : 0, ACH_CARD_VERSION, cardTextSignature(),
+    clampedPage, pageSize, sortedRecords.length, avatarBuf?.length ?? 0, limited ? 1 : 0, showRating ? 1 : 0, ACH_CARD_VERSION, cardTextSignature(),
+    // 개수가 같아도 내용(재AP·상승분)이 바뀔 수 있다.
+    createHash("sha1").update(sortedRecords.map((r) => `${r.title}|${r.musicKind}|${r.diff}|${r.achievementVal}|${r.fc}|${r.sync}|${ratingGain(r)}`).join("\n")).digest("hex").slice(0, 16),
   ].join("|");
   const memo = achCardCache.get(cacheKey);
   if (memo) return memo;
@@ -346,7 +355,7 @@ export async function renderAchievementCard(
         ]),
         el("div", { display: "flex", gap: 30 }, [
           stat(msg("achievementCard.count"), String(sortedRecords.length), ACCENT),
-          ...(limited ? [] : [stat(msg("achievementCard.ratingGain"), `+${sortedRecords.reduce((sum, record) => sum + Math.max(0, ratingGain(record) ?? 0), 0).toFixed(0)}`, ACCENT)]),
+          ...(!showRating ? [] : [stat(msg("achievementCard.ratingGain"), `+${sortedRecords.reduce((sum, record) => sum + Math.max(0, ratingGain(record) ?? 0), 0).toFixed(0)}`, ACCENT)]),
         ]),
       ]),
       el(
@@ -359,7 +368,7 @@ export async function renderAchievementCard(
         },
         topRecords.length > 0
           ? topRecords.map((record, index) =>
-              recordRow(record, rankOffset + index + 1, profile, jackets.get(record) ?? null, playDay, translate, kindIcons, limited),
+              recordRow(record, rankOffset + index + 1, profile, jackets.get(record) ?? null, playDay, translate, kindIcons, limited, showRating),
             )
           : emptyState(),
       ),

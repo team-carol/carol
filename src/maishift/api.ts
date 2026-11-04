@@ -38,13 +38,22 @@ let queue: Promise<unknown> = Promise.resolve();
 let lastAt = 0;
 /** 마지막 응답의 남은 한도와 그 시각. 모르면 null. */
 let remaining: { units: number; at: number } | null = null;
+/** 한도 크기(X-RateLimit-Limit). 모르면 null. */
+let bucketSize: number | null = null;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** 지금 남은 한도(단위) 추정. 아직 응답을 받지 않아 모르면 null. */
+export function estimatedBudget(): number | null {
+  if (!remaining) return null;
+  const now = remaining.units + ((Date.now() - remaining.at) / 1000) * REFILL_PER_SEC;
+  return bucketSize !== null ? Math.min(bucketSize, now) : now;
+}
+
 /** 남은 한도가 cost 보다 적으면 찰 때까지 기다릴 시간(ms). */
 function waitForBudget(cost: number): number {
-  if (!remaining) return 0;
-  const now = remaining.units + ((Date.now() - remaining.at) / 1000) * REFILL_PER_SEC;
+  const now = estimatedBudget();
+  if (now === null) return 0;
   return now >= cost ? 0 : Math.ceil(((cost - now) / REFILL_PER_SEC) * 1000);
 }
 
@@ -91,6 +100,8 @@ export async function callApi<T>(path: string, query: Record<string, string | nu
       }
       const left = Number(res.headers.get("x-ratelimit-remaining"));
       if (Number.isFinite(left)) remaining = { units: left, at: Date.now() };
+      const size = Number(res.headers.get("x-ratelimit-limit"));
+      if (Number.isFinite(size) && size > 0) bucketSize = size;
       if (res.status === 429) {
         const raw = Number(res.headers.get("retry-after"));
         const after = Number.isFinite(raw) && raw > 0 ? raw : 60;
