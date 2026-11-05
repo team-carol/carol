@@ -1,9 +1,9 @@
 // /플레이트 이미지 카드. 다른 사용자 카드(/스탬프·/히스토리)와 같은 머리(cardHeader)·패널(cardKit)·랜딩 토큰을 쓴다.
 // - 전체: 버전마다 한 줄, 極·将·神·舞舞·覇者 칸에 진행 막대(다 채우면 완료 칩).
-// - 상세: 그 플레이트의 종류별 진행(같은 레이팅대 예상 플레이 수)과, 고른 종류의 남은 보면(가까운 순).
+// - 상세: 그 플레이트의 종류별 이름표 그림·진행(같은 레이팅대 예상 플레이 수)과, 고른 종류의 남은 보면(가까운 순).
 import {
   SURFACE, SURFACE2, BORDER, TEXT, MUTED, CANVAS, INK, FAINT, NUM_FONT,
-  type El, el, pill, panel, kstStamp,
+  type El, el, image, pill, panel, kstStamp,
 } from "./cardKit";
 import { userCardHeader, avatarDataUrl } from "./cardHeader";
 import { renderInWorker } from "./renderPool";
@@ -124,12 +124,32 @@ export interface PlateDetailExtras {
   firstRating?: Partial<Record<PlateType, number>>;
   /** maishift 가 센 대상 보면 수. 캐롤봇 계산과 다를 때만 */
   maishiftTotal?: number | null;
+  /** 종류별 이름표 그림(data URL, src/plateImages.ts). 없는 종류는 이름 글자로 그린다. */
+  images?: Partial<Record<PlateType, string>>;
   translate: boolean;
 }
 
 const LIST_LIMIT = 60;
+// 이름표 원본은 720x116. 카드는 2배로 그리므로 330 이면 원본 해상도와 거의 같다.
+const PLATE_IMG_W = 330;
+const PLATE_IMG_H = Math.round((PLATE_IMG_W * 116) / 720);
 
-function typeTile(p: PlateProgress, type: PlateType, selected: boolean, extras: PlateDetailExtras): El {
+/** 게임 안 이름표 이름(祭極, 舞舞舞, 覇者). */
+export function plateName(prefix: string, type: PlateType): string {
+  return type === "覇者" ? type : `${prefix}${type}`;
+}
+
+function plateImage(prefix: string, type: PlateType, src: string | undefined): El {
+  if (src) return image(src, { width: PLATE_IMG_W, height: PLATE_IMG_H, flexShrink: 0 });
+  const color = PLATE_TYPE_COLOR[type];
+  return el("div", {
+    display: "flex", alignItems: "center", justifyContent: "center", width: PLATE_IMG_W, height: PLATE_IMG_H, flexShrink: 0,
+    borderRadius: 8, background: SURFACE2, border: `1px solid ${alpha(color, 0.35)}`,
+  }, [el("span", { color, fontSize: 24, fontWeight: 800, letterSpacing: 2, lineHeight: 1 }, plateName(prefix, type))]);
+}
+
+/** 종류 한 줄: 이름표 그림 + 진행. 아래 목록에 보이는 종류는 테두리로 표시한다. */
+function plateRow(p: PlateProgress, type: PlateType, selected: boolean, extras: PlateDetailExtras): El {
   const color = PLATE_TYPE_COLOR[type];
   const done = p.done[type] ?? 0;
   const complete = done >= p.total && p.total > 0;
@@ -138,19 +158,24 @@ function typeTile(p: PlateProgress, type: PlateType, selected: boolean, extras: 
     : plays ? msg("plateCard.tilePlays", { plays: plays.toLocaleString("en-US") })
     : msg("plateCard.tileLeft", { left: p.total - done });
   return el("div", {
-    display: "flex", flexDirection: "column", flex: 1, minWidth: 0, gap: 8, padding: "12px 12px 11px",
-    background: SURFACE, borderRadius: 14, border: `1px solid ${selected ? alpha(color, 0.7) : BORDER}`,
+    display: "flex", alignItems: "center", gap: 16, padding: "8px 10px", borderRadius: 12,
+    background: selected ? alpha(color, 0.08) : "transparent", border: `1px solid ${selected ? alpha(color, 0.6) : "transparent"}`,
   }, [
-    el("div", { display: "flex", alignItems: "baseline", gap: 6 }, [
-      el("span", { color, fontSize: 20, fontWeight: 800, lineHeight: 1 }, type),
-      el("span", { color: MUTED, fontSize: 10, fontWeight: 700, letterSpacing: 0.4, lineHeight: 1 }, PLATE_TYPE_LABEL[type]),
+    plateImage(p.def.prefix, type, extras.images?.[type]),
+    el("div", { display: "flex", flexDirection: "column", flex: 1, minWidth: 0, gap: 7 }, [
+      el("div", { display: "flex", alignItems: "baseline", justifyContent: "space-between" }, [
+        el("div", { display: "flex", alignItems: "baseline", gap: 6 }, [
+          el("span", { color, fontSize: 18, fontWeight: 800, lineHeight: 1 }, type),
+          el("span", { color: MUTED, fontSize: 10, fontWeight: 700, letterSpacing: 0.4, lineHeight: 1 }, PLATE_TYPE_LABEL[type]),
+        ]),
+        el("div", { display: "flex", alignItems: "baseline", gap: 3 }, [
+          el("span", { color: INK, fontFamily: NUM_FONT, fontSize: 17, fontWeight: 700, lineHeight: 1 }, String(done)),
+          el("span", { color: FAINT, fontFamily: NUM_FONT, fontSize: 11, lineHeight: 1 }, `/ ${p.total}`),
+        ]),
+      ]),
+      bar(p.total ? done / p.total : 0, color, 6),
+      el("span", { color: complete ? color : MUTED, fontSize: 10, lineHeight: 1.2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, sub),
     ]),
-    el("div", { display: "flex", alignItems: "baseline", gap: 3 }, [
-      el("span", { color: INK, fontFamily: NUM_FONT, fontSize: 18, fontWeight: 700, lineHeight: 1 }, String(done)),
-      el("span", { color: FAINT, fontFamily: NUM_FONT, fontSize: 11, lineHeight: 1 }, `/ ${p.total}`),
-    ]),
-    complete ? doneChip(type, 6) : bar(p.total ? done / p.total : 0, color, 6),
-    el("span", { color: complete ? color : MUTED, fontSize: 10, lineHeight: 1.2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, sub),
   ]);
 }
 
@@ -201,14 +226,12 @@ export async function renderPlateDetail(profile: CachedProfile, avatarBuf: Buffe
 
   const root = el("div", { display: "flex", flexDirection: "column", width: WIDTH, background: CANVAS, padding: 24, color: TEXT, fontFamily: "Noto Sans JP" }, [
     head,
-    el("div", { display: "flex", alignItems: "center", gap: 14, marginTop: 16 }, [
-      kanjiBadge(p.def.prefix, 64),
-      el("div", { display: "flex", gap: 10, flex: 1, minWidth: 0 }, p.def.types.map((t) => typeTile(p, t, t === type, extras))),
+    panel(msg("plateCard.platesTitle"), extras.band ? msg("plateCard.playsNote", { band: extras.band }) : "", [
+      el("div", { display: "flex", flexDirection: "column", gap: 4, margin: "0 -10px" }, p.def.types.map((t) => plateRow(p, t, t === type, extras))),
     ]),
-    ...(extras.band ? [el("span", { color: FAINT, fontSize: 10, marginTop: 8, display: "flex", justifyContent: "flex-end" }, msg("plateCard.playsNote", { band: extras.band }))] : []),
     listPanel,
     ...(notes.length ? [el("div", { display: "flex", flexDirection: "column", gap: 4, marginTop: 10 }, notes.map((n) => el("span", { color: MUTED, fontSize: 10 }, n)))] : []),
-    footer(profile),
+    footer(profile, Object.keys(extras.images ?? {}).length ? msg("plateCard.imageCredit") : undefined),
   ]);
   return renderInWorker(root, WIDTH);
 }

@@ -117,6 +117,30 @@ export function heldPlates(list: PlateProgress[]): number {
 }
 
 /** 상세 카드에 기본으로 보여 줄 종류: 남은 보면이 가장 적은(0 은 빼고) 종류. 다 채웠으면 첫 종류. */
+const OLD_OFFSET: Partial<Record<PlateType, number>> = { 極: 0, 将: 1, 神: 2, 舞舞: 3 };
+const DX_OFFSET: Partial<Record<PlateType, number>> = { 極: 101, 将: 102, 神: 103, 舞舞: 104 };
+
+/**
+ * 게임 안 이름표 번호(LXNS 자원 번호와 같다, src/plateImages.ts). 없는 조합(真将, 舞 밖의 覇者)은 null.
+ * - 舞: 覇者 6148, 極 6149, 将 6150, 神 6151, 舞舞 6152 / 真: 極 6101, 神 6102, 舞舞 6103
+ * - 超(2)~輝(12): 6104 부터 버전마다 極·将·神·舞舞 네 개씩
+ * - 熊(13) 55xxx, 華(14) 109xxx, 爽(15) 159xxx 부터 버전마다 +50 (祭 359101 = 祭極). 새 버전도 같은 규칙을 따른다고 본다.
+ */
+export function plateImageId(prefix: string, type: PlateType): number | null {
+  const v = VERSION_KANJI.indexOf(prefix);
+  if (v < 0) return null;
+  if (v === 0) return ({ 覇者: 6148, 極: 6149, 将: 6150, 神: 6151, 舞舞: 6152 } as Record<PlateType, number>)[type] ?? null;
+  if (v === 1) return ({ 極: 6101, 神: 6102, 舞舞: 6103 } as Partial<Record<PlateType, number>>)[type] ?? null;
+  if (v <= LAST_OLD_VERSION) {
+    const o = OLD_OFFSET[type];
+    return o === undefined ? null : 6104 + (v - 2) * 4 + o;
+  }
+  const o = DX_OFFSET[type];
+  if (o === undefined) return null;
+  const series = v === 13 ? 55 : v === 14 ? 109 : 159 + (v - 15) * 50;
+  return series * 1000 + o;
+}
+
 export function defaultPlateType(p: PlateProgress): PlateType {
   const open = p.def.types.filter((t) => (p.remaining[t]?.length ?? 0) > 0);
   if (!open.length) return p.def.types[0];

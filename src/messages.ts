@@ -533,6 +533,8 @@ export const MESSAGES = {
   "plateCard.complete": "완료",
   "plateCard.detailEyebrow": "VERSION PLATE ✦ {server}",
   "plateCard.detailSummary": "{prefix} ✦ {versions} ✦ 대상 {total}보면",
+  "plateCard.platesTitle": "플레이트",
+  "plateCard.imageCredit": "플레이트 그림: LXNS",
   "plateCard.tileDone": "획득",
   "plateCard.tileLeft": "{left}보면 남음",
   "plateCard.tilePlays": "약 {plays}회 플레이",

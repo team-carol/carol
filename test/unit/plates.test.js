@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { plateDefs, findPlate, plateCharts, meetsPlate, plateProgress, recordMap, heldPlates, defaultPlateType } = require("../../dist/plates.js");
+const { plateDefs, findPlate, plateCharts, meetsPlate, plateProgress, recordMap, heldPlates, defaultPlateType, plateImageId } = require("../../dist/plates.js");
 
 let nextId = 1;
 const chart = (title, version, diff = "MASTER", kind = "DX", constant = 13) => ({ id: nextId++, title, kind, diff, level: String(Math.floor(constant)), constant, version });
@@ -59,4 +59,15 @@ test("plateProgress: 종류별 달성 수와 가까운 순 남은 보면, 기본
   assert.equal(heldPlates([p]), 0);
   const all = plateProgress(def, charts.slice(0, 1), records);
   assert.equal(heldPlates([all]), 2); // P 하나뿐인 플레이트: 極·将 완료
+});
+
+test("plateImageId: 게임 이름표 번호(LXNS 자원 번호)", () => {
+  const cases = [
+    ["真", "極", 6101], ["真", "舞舞", 6103], ["真", "将", null],
+    ["超", "将", 6105], ["菫", "極", 6132], ["輝", "舞舞", 6147],
+    ["舞", "覇者", 6148], ["舞", "極", 6149], ["舞", "舞舞", 6152],
+    ["熊", "極", 55101], ["華", "神", 109103], ["爽", "将", 159102], ["祭", "極", 359101], ["鏡", "舞舞", 559104], ["廻", "極", 709101],
+    ["祭", "覇者", null], ["?", "極", null],
+  ];
+  for (const [prefix, type, id] of cases) assert.equal(plateImageId(prefix, type), id, `${prefix}${type}`);
 });

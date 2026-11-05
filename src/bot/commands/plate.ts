@@ -6,6 +6,7 @@ import { renderPlateOverview, renderPlateDetail, plateVersionLabel } from "../ut
 import { getRegionCharts, regionLatestVersion } from "../../constants";
 import { plateDefs, findPlate, plateProgress, recordMap, heldPlates, defaultPlateType, PLATE_TYPES, type PlateType } from "../../plates";
 import { ratingBandOf, getPlateDifficulty, getPlateStats, expectedPlays, type PlateDifficulty } from "../../maishift/stats";
+import { getPlateImages } from "../../plateImages";
 import { normalizeQuery } from "../../aliases";
 import { msg } from "../../messages";
 
@@ -86,10 +87,12 @@ export async function show(interaction: RepliableInteraction, targetId: string, 
     const progress = plateProgress(def, charts, records);
     const shownType = type && def.types.includes(type) ? type : defaultPlateType(progress);
     // 같은 레이팅대 예상 플레이 수(30단위)·처음 얻은 레이팅(6단위)은 모두에게 같은 통계라 기억해 두고 쓴다. 없으면 빼고 그린다.
+    // 이름표 그림은 처음 볼 때만 LXNS 에서 받고 그 뒤로는 DB 에서 꺼낸다(src/plateImages.ts). 못 받으면 글자로 그린다.
     const band = ratingBandOf(cached.rating || 0);
-    const [difficulty, plateStats] = await Promise.all([
+    const [difficulty, plateStats, images] = await Promise.all([
       band ? getPlateDifficulty(cached.server, band).catch(() => null) : Promise.resolve(null),
       getPlateStats(cached.server).catch(() => null),
+      getPlateImages(def.prefix, def.types).catch(() => ({})),
     ]);
     const est: PlateDifficulty | undefined = difficulty?.get(def.prefix);
     const plays: Partial<Record<PlateType, number | null>> = {};
@@ -108,6 +111,7 @@ export async function show(interaction: RepliableInteraction, targetId: string, 
       band: band && Object.values(plays).some((v) => v) ? band.split("-").map((n) => Number(n).toLocaleString("en-US")).join("~") : null,
       firstRating,
       maishiftTotal: est?.charts ?? null,
+      images,
       translate,
     });
     await interaction.editReply({ files: [new AttachmentBuilder(png, { name: "plate.png" })] });
