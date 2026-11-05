@@ -232,6 +232,8 @@ CREATE INDEX IF NOT EXISTS idx_user_goals_owner ON user_goals(discord_user_id, c
   // 서클 공유(src/circleShare.ts): 같은 서클(서버·서클 코드)은 한 행. 서클원 누구든 동기화하면 갱신하고 모두가 본다.
   // data 는 CircleInfo JSON(내 서클 포인트 제외). members_at·ranking_at: 멤버 목록·서클 랭킹을 받은 시각(0=없음).
   [32, `CREATE TABLE IF NOT EXISTS circles (server text NOT NULL, code text NOT NULL, data text NOT NULL, synced_at bigint NOT NULL, members_at bigint NOT NULL DEFAULT 0, ranking_at bigint NOT NULL DEFAULT 0, PRIMARY KEY(server, code));`,],
+  // /곡추천·/랜덤 조건 창에서 마지막으로 뽑은 조건(명령 → customId 조건 문자열 JSON). 다음 실행 때 그 조건으로 창을 연다.
+  [33, `ALTER TABLE sessions ADD COLUMN IF NOT EXISTS command_presets text NOT NULL DEFAULT '{}';`,],
 ];
 
 export interface MainotesSongRow { id:string; title:string; artist:string; bpm:string; genre:string; version:string; type:string }
@@ -566,6 +568,7 @@ SELECT u.chart_key AS "chartKey",u.achievement_val AS "achievementVal",u.fc,u.sy
   }
   async getCirclePublic(id:string){const r=await this.q<any>("SELECT circle_public FROM sessions WHERE discord_user_id=$1",[id]);return Number(r[0]?.circle_public??1)===1;} async setCirclePublic(id:string,v:boolean){await this.q("INSERT INTO sessions(discord_user_id,circle_public) VALUES($1,$2) ON CONFLICT(discord_user_id) DO UPDATE SET circle_public=excluded.circle_public",[id,v?1:0]);}
   async getDxRankDecimal(id:string){const r=await this.q<any>("SELECT dx_rank_decimal FROM sessions WHERE discord_user_id=$1",[id]);return r[0]?.dx_rank_decimal===1;} async setDxRankDecimal(id:string,v:boolean){await this.q("INSERT INTO sessions(discord_user_id,dx_rank_decimal) VALUES($1,$2) ON CONFLICT(discord_user_id) DO UPDATE SET dx_rank_decimal=excluded.dx_rank_decimal",[id,v?1:0]);}
+  async getCommandPreset(id:string,cmd:string):Promise<string|null>{const r=await this.q<any>("SELECT command_presets FROM sessions WHERE discord_user_id=$1",[id]);try{const m=JSON.parse(r[0]?.command_presets||"{}");return typeof m[cmd]==="string"?m[cmd]:null;}catch{return null;}} async setCommandPreset(id:string,cmd:string,value:string){await this.q("INSERT INTO sessions(discord_user_id,command_presets) VALUES($1,jsonb_build_object($2::text,$3::text)::text) ON CONFLICT(discord_user_id) DO UPDATE SET command_presets=(COALESCE(NULLIF(sessions.command_presets,'')::jsonb,'{}'::jsonb) || jsonb_build_object($2::text,$3::text))::text",[id,cmd,value]);}
   async getTranslateTitles(id:string){const r=await this.q<any>("SELECT translate_titles FROM sessions WHERE discord_user_id=$1",[id]);return r[0]?.translate_titles===1;} async setTranslateTitles(id:string,v:boolean){await this.q("INSERT INTO sessions(discord_user_id,translate_titles) VALUES($1,$2) ON CONFLICT(discord_user_id) DO UPDATE SET translate_titles=excluded.translate_titles",[id,v?1:0]);}
   async listOptionPresets(id:string):Promise<Db.OptionPresetRow[]>{const r=await this.q<any>("SELECT id,name,server,values_json,labels_json,updated_at FROM option_presets WHERE discord_user_id=$1 ORDER BY created_at,id",[id]);const parse=(t:string)=>{try{const x=JSON.parse(t);return x&&typeof x==="object"?x:{};}catch{return {};}};return r.map((x:any)=>({id:Number(x.id),name:x.name,server:x.server==="jp"?"jp":"intl",values:parse(x.values_json),labels:parse(x.labels_json),updatedAt:Number(x.updated_at)}));}
   /**

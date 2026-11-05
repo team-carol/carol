@@ -1,8 +1,8 @@
 // /플레이리스트 이미지 카드. maishift 공개 플레이리스트의 보면을 순서대로, 각 보면의 내 기록과 함께 보여 준다.
 // 다른 사용자 카드와 같은 머리(cardHeader)·패널·숫자 칸(cardKit)을 쓴다.
 import {
-  SURFACE2, BORDER, TEXT, MUTED, CANVAS, INK, FAINT, NUM_FONT,
-  type El, el, pill, panel, statsPanel, kstStamp,
+  ACCENT, SURFACE, SURFACE2, BORDER, TEXT, MUTED, CANVAS, INK, FAINT, NUM_FONT,
+  type El, el, pill, panel, kstStamp,
 } from "./cardKit";
 import { userCardHeader, avatarDataUrl } from "./cardHeader";
 import { renderInWorker } from "./renderPool";
@@ -47,6 +47,39 @@ export function summarize(entries: PlaylistEntry[]): PlaylistSummary {
   return s;
 }
 
+function bar(ratio: number, color: string, height: number): El {
+  return el("div", { display: "flex", width: "100%", height, borderRadius: height, background: BORDER }, [
+    el("div", { display: "flex", width: `${Math.max(0, Math.min(1, ratio)) * 100}%`, height, borderRadius: height, background: color }),
+  ]);
+}
+
+/** 위쪽 요약: 칸마다 달성 수 / 보면 수와 비율 막대(플레이·SSS·SSS+·FC·AP). */
+function summaryGraph(s: PlaylistSummary): El {
+  const items = [
+    { n: s.played, label: msg("playlistCard.played"), color: ACCENT },
+    { n: s.sss, label: msg("playlistCard.sss"), color: RANK_COLOR.SSS },
+    { n: s.sssPlus, label: msg("playlistCard.sssPlus"), color: RANK_COLOR["SSS+"] },
+    { n: s.fc, label: msg("playlistCard.fc"), color: MARK_COLOR.FC },
+    { n: s.ap, label: msg("playlistCard.ap"), color: MARK_COLOR.AP },
+  ];
+  return el("div", {
+    display: "flex", gap: 18, marginTop: 16, background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 16, padding: "16px 18px",
+  }, items.map((it) => {
+    const ratio = s.total ? it.n / s.total : 0;
+    return el("div", { display: "flex", flexDirection: "column", flex: 1, minWidth: 0, gap: 8 }, [
+      el("div", { display: "flex", justifyContent: "space-between", alignItems: "baseline" }, [
+        el("span", { color: MUTED, fontSize: 11, fontWeight: 700, lineHeight: 1 }, it.label),
+        el("span", { color: FAINT, fontFamily: NUM_FONT, fontSize: 10, lineHeight: 1 }, `${Math.round(ratio * 100)}%`),
+      ]),
+      el("div", { display: "flex", alignItems: "baseline", gap: 3 }, [
+        el("span", { color: INK, fontFamily: NUM_FONT, fontSize: 22, fontWeight: 700, lineHeight: 1 }, String(it.n)),
+        el("span", { color: FAINT, fontFamily: NUM_FONT, fontSize: 11, lineHeight: 1 }, `/ ${s.total}`),
+      ]),
+      bar(ratio, it.color, 6),
+    ]);
+  }));
+}
+
 function markChip(mark: string): El {
   return el("span", { color: MARK_COLOR[mark] ?? MUTED, fontSize: 9, fontWeight: 800, lineHeight: 1, width: 28, display: "flex", justifyContent: "flex-end" }, mark);
 }
@@ -89,13 +122,7 @@ export async function renderPlaylistCard(
   const updated = Date.parse(list.updatedAt);
   const root = el("div", { display: "flex", flexDirection: "column", width: WIDTH, background: CANVAS, padding: 24, color: TEXT, fontFamily: "Noto Sans JP" }, [
     head,
-    statsPanel([
-      { value: `${s.played}/${s.total}`, label: msg("playlistCard.played") },
-      { value: `${s.sss}`, label: msg("playlistCard.sss") },
-      { value: `${s.sssPlus}`, label: msg("playlistCard.sssPlus") },
-      { value: `${s.fc}`, label: msg("playlistCard.fc") },
-      { value: `${s.ap}`, label: msg("playlistCard.ap") },
-    ]),
+    summaryGraph(s),
     panel(list.title, msg("playlistCard.meta", { count: entries.length, updated: Number.isFinite(updated) ? kstStamp(updated).slice(0, 10) : "-" }), [
       el("div", { display: "flex", flexDirection: "column" }, shown.map((e, i) => row(e, i, translate, i === shown.length - 1))),
       ...(entries.length > shown.length ? [el("span", { color: MUTED, fontSize: 10, marginTop: 8 }, msg("playlistCard.more", { count: entries.length - shown.length }))] : []),

@@ -110,11 +110,27 @@ export function getRatingStats(server: MaimaiServer): Promise<RatingStats | null
 }
 
 /**
- * 활동 중인 플레이어 가운데 레이팅이 rating 이상인 사람의 비율(%, 상위 N%). 히스토그램 구간 안은 고르게 퍼져 있다고 본다.
- * 5명이 안 되는 구간(인원이 null)은 0명으로 센다.
+ * 활동 중인 플레이어 가운데 레이팅이 rating 이상인 사람의 비율(%, 상위 N%).
+ * - maishift 가 공개한 기준점(상위 75·50·25·10·5·3·2·1% 의 최저 레이팅) 사이면 그 점들을 잇는다. 맨 위 구간(16600~16700 처럼
+ *   사람이 최고점 근처에 몰린 구간)을 고르게 나누면 상위 1% 를 2% 로 세는 식으로 어긋나서다.
+ * - 상위 1% 기준점보다 높으면 그 점과 최고 레이팅(maxPossibleRating, 0%) 사이를 잇는다.
+ * - 그 밖(기준점보다 낮거나 기준점이 없을 때)은 히스토그램으로, 구간 안은 고르게 퍼졌다고 본다. 5명이 안 되는 구간(인원 null)은 0명.
  */
-export function topPercentOf(stats: Pick<RatingStats, "activePlayers" | "histogram">, rating: number): number | null {
+export function topPercentOf(
+  stats: Pick<RatingStats, "activePlayers" | "histogram"> & Partial<Pick<RatingStats, "topPercentiles" | "maxPossibleRating">>,
+  rating: number,
+): number | null {
   if (!(stats.activePlayers > 0) || !stats.histogram?.bands?.length) return null;
+  const pts = (stats.topPercentiles ?? []).filter((t): t is { percent: number; players: number; rating: number } => t.rating != null).sort((a, b) => a.rating - b.rating);
+  if (pts.length >= 2 && rating >= pts[0].rating) {
+    for (let k = 0; k < pts.length - 1; k++) {
+      const a = pts[k], b = pts[k + 1];
+      if (rating <= b.rating) return b.rating === a.rating ? b.percent : a.percent + ((b.percent - a.percent) * (rating - a.rating)) / (b.rating - a.rating);
+    }
+    const top = pts[pts.length - 1];
+    const max = stats.maxPossibleRating ?? 0;
+    if (max > top.rating) return Math.max(0, (top.percent * (max - rating)) / (max - top.rating));
+  }
   let above = 0;
   for (const b of stats.histogram.bands) {
     const n = b.players ?? 0;
@@ -209,16 +225,16 @@ export interface PlateEstimate { value: number | null; unreachable: boolean }
 export interface PlateDifficulty { plateId: number; prefix: string; charts: number; fsd: PlateEstimate | null; ap: PlateEstimate | null; sss: PlateEstimate | null; fc: PlateEstimate | null }
 interface PlateDifficultyResult { region: string; version: number; band: { from: number; to: number }; plates: PlateDifficulty[] }
 
-/** 그 레이팅 구간 플레이어 기준 플레이트마다 필요한 플레이 수 추정. 한자(prefix) → 추정. */
+/**
+ * 그 레이팅 구간 플레이어 기준 플레이트 난이도(0~10). 한자(prefix) → 추정.
+ * API 는 "log₂(예상 플레이 수) − 1" 이라 하지만, 그 플레이 수는 상수 11.0 이상 보면만 (1/달성 비율 − 1) 을 레벨별로 줄여 더한 값이라
+ * 플레이트를 다 깨는 데 드는 실제 플레이 수가 아니다(쉬운 보면은 0 에 가깝다). 그래서 플레이 수로 바꾸지 않고 난이도 값 그대로 보여 준다.
+ */
 export async function getPlateDifficulty(server: MaimaiServer, band: string): Promise<Map<string, PlateDifficulty> | null> {
   const res = await cached<PlateDifficultyResult>("/stats/plate-difficulty", { region: regionOf(server), rating: band });
   return res ? new Map(res.plates.map((p) => [p.prefix, p])) : null;
 }
 
-/** 추정값(log₂(플레이 수) − 1) → 플레이 수. 아무도 다 만나지 못했거나 없으면 null. */
-export function expectedPlays(e: PlateEstimate | null | undefined): number | null {
-  return e && e.value !== null && Number.isFinite(e.value) ? Math.max(1, Math.round(2 ** (e.value + 1))) : null;
-}
 
 export type PlateTypeName = "覇者" | "舞舞" | "神" | "将" | "極";
 export interface PlateFirstGap { plateId: number; version: number; type: PlateTypeName; players: number; suppressed: boolean; percentiles: { p10: number; p25: number; p50: number; p75: number; p90: number } | null }

@@ -1,16 +1,28 @@
 import {
   SlashCommandBuilder,
   ChatInputCommandInteraction,
-  EmbedBuilder,
+  AttachmentBuilder,
+  TextDisplayBuilder,
   MessageFlags,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  ContainerBuilder,
+  SeparatorSpacingSize,
+  StringSelectMenuBuilder,
+  UserSelectMenuBuilder,
+  type ButtonInteraction,
+  type StringSelectMenuInteraction,
+  type UserSelectMenuInteraction,
 } from "discord.js";
 import {
   getCachedProfile,
   getUserFriendCode,
   getTranslateTitles,
+  getCommandPreset,
+  setCommandPreset,
 } from "../../storage";
 import { getClearList } from "../utils/embeds";
-import { displayTitle } from "../../aliases";
 import {
   calcSongRating,
   getConstant,
@@ -19,15 +31,17 @@ import {
   getChartsUnderConstant,
   isNewSong,
   isIntlAvailable,
-  jacketFileUrl,
   getRegionChartByKey,
   getRegionCharts,
 } from "../../constants";
 import { chartKey } from "../../scraper";
 import type { PlayRecord, MaimaiServer } from "../../scraper";
-import { msg } from "../../messages";
+import { msg, type MessageKey } from "../../messages";
 import { notRegisteredNotice } from "../utils/notRegistered";
-import { titleWithKind } from "../utils/emoji";
+import { rankIcon, comboIcon } from "../utils/emoji";
+import { songContainer, jacketAttachment } from "../utils/songCard";
+import { getScoreRank } from "../../games";
+import { rerollRow, rerollInPlace, postFromMenu, type V2Payload } from "../utils/reroll";
 import {
   ratingBandOf, getLevelCharts, shareAtLeast, getClearRatios, clearBandOf,
   CLEAR_CRITERIA, type ChartStat, type ClearCriterion,
@@ -368,216 +382,136 @@ export function nextClears(
   return out.slice(0, count);
 }
 
+const DIFFS = ["BASIC", "ADVANCED", "EXPERT", "MASTER", "Re:MASTER"];
+const MAX_COUNT = 5;
+
+// 옵션 없이 실행하면 조건 창(본인에게만 보임)이 먼저 뜬다. 고르고 "추천받기" 를 누르면 채널에 결과가 올라간다.
 export const data = new SlashCommandBuilder()
   .setName("곡추천")
-  .setDescription("레이팅 대상곡 기반으로 점수 올리기 좋은 채보 3개 추천")
-  .addStringOption((opt) =>
-    opt
-      .setName("type")
-      .setDescription("채보 타입 (Optional)")
-      .setRequired(false)
-      .addChoices(
-        { name: "STANDARD", value: "ST" },
-        { name: "DX", value: "DX" },
-      ),
-  )
-  .addStringOption((opt) =>
-    opt
-      .setName("플레이여부")
-      .setDescription("플레이한 곡 / 미플레이 곡만 (Optional)")
-      .setRequired(false)
-      .addChoices(
-        { name: "플레이", value: "played" },
-        { name: "미플레이", value: "unplayed" },
-      ),
-  )
-  .addStringOption((opt) =>
-    opt
-      .setName("난이도")
-      .setDescription("난이도 (Optional)")
-      .setRequired(false)
-      .addChoices(
-        { name: "BASIC", value: "BASIC" },
-        { name: "ADVANCED", value: "ADVANCED" },
-        { name: "EXPERT", value: "EXPERT" },
-        { name: "MASTER", value: "MASTER" },
-        { name: "Re:MASTER", value: "Re:MASTER" },
-      ),
-  )
-  .addStringOption((opt) =>
-    opt
-      .setName("곡분류")
-      .setDescription("신곡 / 구곡만 (Optional)")
-      .setRequired(false)
-      .addChoices(
-        { name: "신곡", value: "new" },
-        { name: "구곡", value: "others" },
-      ),
-  )
-  .addUserOption((opt) =>
-    opt
-      .setName("user")
-      .setDescription("조회할 유저 (생략 시 본인)")
-      .setRequired(false),
-  )
-  .addStringOption((opt) =>
-    opt
-      .setName("레벨")
-      .setDescription("고르면 이 레벨을 나만큼 깬 사람들이 많이 깬 곡 중 아직 못 깬 곡을 추천 (Optional)")
-      .setRequired(false)
-      .addChoices(...LEVEL_CHOICES.map((l) => ({ name: l, value: l }))),
-  )
-  .addStringOption((opt) =>
-    opt
-      .setName("기준")
-      .setDescription("레벨을 고를 때 깼다고 볼 기준 (기본: SSS)")
-      .setRequired(false)
-      .addChoices(...CLEAR_CRITERIA.map((c) => ({ name: CRITERION_LABEL[c], value: c }))),
-  );
+  .setDescription("조건을 골라 레이팅 올리기 좋은 채보 추천 (다시 뽑기·조건 바꾸기 버튼)");
 
-function ytLink(title: string, kind: string, diff: string): string {
-  // 유튜브 외부출력 검색: "maimai {곡명} {ST/DX} {난이도} 外部出力"
-  const q = encodeURIComponent(`maimai ${title} ${kind} ${diff} 外部出力`.replace(/\s+/g, " ").trim());
-  return msg("common.externalLink", { url: `https://www.youtube.com/results?search_query=${q}` });
+// ─── 조건(customId 에 담는다) ─────────────────────────────────────────────────
+// "<모드 r|l>.<레벨 번호>.<기준 번호>.<난이도 번호>.<S|D>.<n|o>.<p|u>.<개수>.<대상>" — 비어 있으면 전체.
+export interface RecState {
+  mode: "r" | "l";
+  level: string;
+  criterion: ClearCriterion;
+  diff: string;
+  kind: "" | "ST" | "DX";
+  category: "" | "new" | "others";
+  play: "" | "played" | "unplayed";
+  count: number;
+  target: string;
 }
 
-export async function execute(
-  interaction: ChatInputCommandInteraction,
-): Promise<void> {
-  const target = interaction.options.getUser("user") ?? interaction.user;
-  const userId = target.id;
-  const friendCode = await getUserFriendCode(userId);
-  const cached = friendCode ? await getCachedProfile(friendCode) : null;
-  if (!cached) {
-    const notice = await notRegisteredNotice(target.id, target.id === interaction.user.id);
-    await interaction.reply({ content: notice, flags: MessageFlags.Ephemeral });
-    return;
-  }
+export function encodeRecState(s: RecState): string {
+  const idx = (list: readonly string[], v: string) => (list.includes(v) ? String(list.indexOf(v)) : "");
+  return [
+    s.mode, idx(LEVEL_CHOICES, s.level), idx(CLEAR_CRITERIA, s.criterion), idx(DIFFS, s.diff),
+    s.kind === "ST" ? "S" : s.kind === "DX" ? "D" : "", s.category === "new" ? "n" : s.category === "others" ? "o" : "",
+    s.play === "played" ? "p" : s.play === "unplayed" ? "u" : "", String(s.count), s.target,
+  ].join(".");
+}
 
-  const clearRecords = getClearList(cached);
-  if (clearRecords.length === 0) {
-    await interaction.reply({
-      content: msg("songrec.noRecords"),
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
-  }
-
-  const kindOpt = interaction.options.getString("type");
-  const playOpt = interaction.options.getString("플레이여부");
-  const diffOpt = interaction.options.getString("난이도");
-  const catOpt = interaction.options.getString("곡분류");
-  const levelOpt = interaction.options.getString("레벨");
-  const criterionOpt = interaction.options.getString("기준") as ClearCriterion | null;
-  const opts: RecommendOptions = {
-    kind: kindOpt === "ST" || kindOpt === "DX" ? kindOpt : undefined,
-    play: playOpt === "played" || playOpt === "unplayed" ? playOpt : undefined,
-    diff: diffOpt ?? undefined,
-    category: catOpt === "new" || catOpt === "others" ? catOpt : undefined,
+export function decodeRecState(raw: string): RecState | null {
+  const [mode, lv, cr, df, ty, ca, pl, n, target] = raw.split(".");
+  if ((mode !== "r" && mode !== "l") || !/^\d{5,25}$/.test(target ?? "")) return null;
+  const at = <T>(list: readonly T[], v: string | undefined): T | undefined => (v ? list[Number(v)] : undefined);
+  const level = at(LEVEL_CHOICES, lv) ?? "";
+  return {
+    mode: mode === "l" && level ? "l" : "r",
+    level,
+    criterion: at(CLEAR_CRITERIA, cr) ?? "SSS",
+    diff: at(DIFFS, df) ?? "",
+    kind: ty === "S" ? "ST" : ty === "D" ? "DX" : "",
+    category: ca === "n" ? "new" : ca === "o" ? "others" : "",
+    play: pl === "p" ? "played" : pl === "u" ? "unplayed" : "",
+    count: Math.min(MAX_COUNT, Math.max(1, Number(n) || 3)),
+    target: target!,
   };
-  const translate = await getTranslateTitles(interaction.user.id);
+}
 
-  if (criterionOpt && !levelOpt) {
-    await interaction.reply({ content: msg("songrec.criterionNeedsLevel"), flags: MessageFlags.Ephemeral });
-    return;
-  }
-  if (levelOpt) {
-    await replyNextClears(interaction, cached.server, clearRecords, levelOpt, criterionOpt && CLEAR_CRITERIA.includes(criterionOpt) ? criterionOpt : "SSS", opts, translate);
-    return;
-  }
+// ─── 결과 ────────────────────────────────────────────────────────────────────
+/** 조건으로 추천 결과(Components V2)를 만든다. 보여 줄 수 없으면 안내 문구. ownerId: 버튼 주인(번역 설정도 그 사람 것). */
+export async function buildRecommendation(state: RecState, ownerId: string): Promise<V2Payload | string> {
+  const friendCode = await getUserFriendCode(state.target);
+  const cached = friendCode ? await getCachedProfile(friendCode) : null;
+  if (!cached) return await notRegisteredNotice(state.target, state.target === ownerId);
+  const clearRecords = getClearList(cached);
+  if (clearRecords.length === 0) return msg("songrec.noRecords");
+  const opts: RecommendOptions = {
+    kind: state.kind || undefined,
+    play: state.play || undefined,
+    diff: state.diff || undefined,
+    category: state.category || undefined,
+  };
+  const translate = await getTranslateTitles(ownerId);
+  const tail = rerollRow("rec", ownerId, encodeRecState(state));
+  // 곡 하나가 컴포넌트 8개(작은 글 위 구분선 포함)라 5곡이면 구분선을 빼야 한도(40) 안에 든다.
+  const separator = state.count < MAX_COUNT;
+  if (state.mode === "l") return nextClearsPayload(cached.server, clearRecords, state.level, state.criterion, opts, translate, state.count, separator, tail);
 
   const pool = collectCandidates(clearRecords, opts, cached.server);
   // 같은 레이팅대 기록(maishift 통계)이 있으면 그 사람들이 흔히 달성한 보면을 더 자주 뽑는다.
   const peer = pool.candidates.length ? await peerShareFor(cached.server, cached.rating || 0, pool.candidates).catch(() => null) : null;
-  const recs = pickRecommendations(pool, 3, peer ? { ...opts, peerShare: peer.share } : opts);
-  if (recs.length === 0) {
-    await interaction.reply({
-      content: msg("songrec.noCandidates"),
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
-  }
+  const recs = pickRecommendations(pool, state.count, peer ? { ...opts, peerShare: peer.share } : opts);
+  if (recs.length === 0) return msg("songrec.noCandidates");
 
-  const embeds = recs.map((r, i) => {
-    const chartDelta = r.targetRS - r.currentRS;
-    const cur = r.currentAch > 0 ? `${r.currentAch.toFixed(4)}%` : msg("songrec.notPlayed");
-    const newRating = cached.rating + r.ratingDelta;
-    const emb = new EmbedBuilder()
-      .setColor(RANK_COLOR[r.targetRank] ?? 0x9333ea)
-      .setTitle(titleWithKind(displayTitle(r.title, translate), r.kind))
-      .setDescription(ytLink(r.title, r.kind, r.diff))
-      .addFields(
-        {
-          name: msg("songrec.fieldChart"),
-          value: msg("songrec.chartValue", { diff: r.diff, constant: r.level.toFixed(1), pool: r.isNew ? msg("songrec.newSong") : msg("songrec.oldSong") }),
-          inline: true,
-        },
-        {
-          name: msg("songrec.fieldTarget"),
-          value: msg("songrec.targetValue", { rank: r.targetRank, ach: r.targetAch.toFixed(1) }),
-          inline: true,
-        },
-        { name: "​", value: "​", inline: true },
-        {
-          name: msg("songrec.fieldSongRating"),
-          value: msg("songrec.deltaValue", { from: r.currentRS, to: r.targetRS, delta: chartDelta }),
-          inline: true,
-        },
-        {
-          name: msg("songrec.fieldRating"),
-          value: msg("songrec.deltaValue", { from: cached.rating, to: newRating, delta: r.ratingDelta }),
-          inline: true,
-        },
-        { name: "​", value: "​", inline: true },
-        { name: msg("songrec.fieldCurrent"), value: cur, inline: true },
-      );
-    if (peer && r.peerShare !== undefined) {
-      emb.addFields({ name: msg("songrec.fieldPeer"), value: msg("songrec.peerValue", { band: bandLabel(peer.band), share: Math.round(r.peerShare * 100), rank: r.targetRank }), inline: true });
-    }
-    if (i === 0) emb.setAuthor({ name: peer ? msg("songrec.authorPeer") : msg("songrec.author") });
-    if (peer && i === recs.length - 1) emb.setFooter({ text: msg("maishift.credit") });
-    const jacket = r.jacketFile;
-    if (jacket)
-      emb.setThumbnail(jacketFileUrl(jacket));
-    return emb;
+  // Components V2: 머리글 → 곡마다 컨테이너(곡·목표·레이팅 상승, 구분선 아래 곡 점수·같은 레이팅대 비율, 외부 출력) → 출처 → 버튼.
+  const jackets = await Promise.all(recs.map((r, i) => jacketAttachment(r.title, r.kind, `rec${i}.png`)));
+  const containers = recs.map((r, i) => {
+    const cur = r.currentAch > 0 ? `${rankIcon(getScoreRank(r.currentAch))} ${r.currentAch.toFixed(4)}%` : msg("songrec.notPlayed");
+    // 모바일 폭에 맞게 한 줄에 하나씩: (빈 줄) / 목표 / 현재 / 레이팅. 작은 글도 줄마다 하나.
+    const foot = [msg("songrec.cardSongRating", { pool: r.isNew ? msg("songrec.newSong") : msg("songrec.oldSong"), from: r.currentRS, to: r.targetRS })];
+    if (peer && r.peerShare !== undefined) foot.push(msg("songrec.cardPeer", { share: Math.round(r.peerShare * 100), rank: r.targetRank }));
+    return songContainer({
+      title: r.title, kind: r.kind, diff: r.diff, constant: r.level, translate,
+      lines: [
+        "",
+        msg("songrec.cardTarget", { rank: rankIcon(r.targetRank), ach: r.targetAch.toFixed(1) }),
+        msg("songrec.cardNow", { current: cur }),
+        msg("songrec.cardRating", { delta: r.ratingDelta, from: cached.rating, to: cached.rating + r.ratingDelta }),
+      ],
+      foot,
+      accent: RANK_COLOR[r.targetRank],
+      separator,
+    }, jackets[i]);
   });
-
-  await interaction.reply({ embeds });
+  return {
+    components: [
+      new TextDisplayBuilder().setContent(peer ? msg("songrec.headerPeer", { band: bandLabel(peer.band) }) : msg("songrec.header")),
+      ...containers,
+      ...(peer ? [new TextDisplayBuilder().setContent(msg("songrec.footer", { text: msg("maishift.credit") }))] : []),
+      tail,
+    ],
+    files: jackets.filter((j): j is AttachmentBuilder => !!j),
+    flags: MessageFlags.IsComponentsV2,
+  };
 }
 
-/** /곡추천 레벨: — 같은 단계 플레이어들이 많이 깬, 아직 못 깬 보면 3개. */
-async function replyNextClears(
-  interaction: ChatInputCommandInteraction,
+/** /곡추천 레벨: — 같은 단계 플레이어들이 많이 깬, 아직 못 깬 보면. */
+async function nextClearsPayload(
   server: MaimaiServer,
   clearRecords: PlayRecord[],
   level: string,
   criterion: ClearCriterion,
   opts: RecommendOptions,
   translate: boolean,
-): Promise<void> {
+  count: number,
+  separator: boolean,
+  tail: ActionRowBuilder<ButtonBuilder>,
+): Promise<V2Payload | string> {
   const clearMap = new Map(clearRecords.map((r) => [chartKey(r), r] as [string, PlayRecord]));
   const levelCharts = getRegionCharts(server).filter((c) => c.level === level);
-  if (levelCharts.length === 0) {
-    await interaction.reply({ content: msg("songrec.nextNoCandidates"), flags: MessageFlags.Ephemeral });
-    return;
-  }
+  if (levelCharts.length === 0) return msg("songrec.nextNoCandidates");
   // 단계(0~4)는 그 레벨 전체 보면 중 기준을 넘은 비율로 정한다(필터와 상관없이).
   const cleared = levelCharts.filter((c) => meetsCriterion(clearMap.get(`${c.title}|${c.kind}|${c.diff}`), criterion)).length;
   const band = clearBandOf(cleared, levelCharts.length);
   const label = CRITERION_LABEL[criterion];
-  if (cleared >= levelCharts.length) {
-    await interaction.reply({ content: msg("songrec.nextAllCleared", { level, criterion: label }), flags: MessageFlags.Ephemeral });
-    return;
-  }
+  if (cleared >= levelCharts.length) return msg("songrec.nextAllCleared", { level, criterion: label });
   const stats = await getClearRatios(server, level, criterion, band).catch(() => null);
-  if (!stats) {
-    await interaction.reply({ content: msg("songrec.nextNoStats"), flags: MessageFlags.Ephemeral });
-    return;
-  }
-  if (stats.suppressed || !stats.charts.length) {
-    await interaction.reply({ content: msg("songrec.nextSuppressed"), flags: MessageFlags.Ephemeral });
-    return;
-  }
+  if (!stats) return msg("songrec.nextNoStats");
+  if (stats.suppressed || !stats.charts.length) return msg("songrec.nextSuppressed");
   const filtered = levelCharts.filter((c) => {
     if (opts.kind && c.kind !== opts.kind) return false;
     if (opts.diff && c.diff !== opts.diff) return false;
@@ -591,37 +525,182 @@ async function replyNextClears(
     }
     return true;
   });
-  const picks = nextClears(filtered, clearMap, criterion, stats, 3);
-  if (picks.length === 0) {
-    await interaction.reply({ content: msg("songrec.nextNoCandidates"), flags: MessageFlags.Ephemeral });
+  // 많이 깬 순이라 다시 뽑기를 해도 같은 곡이 나오지 않게, 위쪽 후보(개수의 3배) 안에서 무작위로 고른다.
+  const ranked = nextClears(filtered, clearMap, criterion, stats, count * 3);
+  const picks = shuffleTake(ranked, count).sort((a, b) => b.share - a.share || a.constant - b.constant);
+  if (picks.length === 0) return msg("songrec.nextNoCandidates");
+  const jackets = await Promise.all(picks.map((p, i) => jacketAttachment(p.title, p.kind, `next${i}.png`)));
+  const containers = picks.map((p, i) => {
+    const constant = getConstant(p.title, p.kind, p.diff, server) ?? p.constant;
+    const r = p.current;
+    const cur = r && r.achievementVal > 0
+      ? `${rankIcon(getScoreRank(r.achievementVal))} **${r.achievementVal.toFixed(4)}%** ${comboIcon(r.fc)}`.trim()
+      : msg("songrec.notPlayed");
+    return songContainer({
+      title: p.title, kind: p.kind, diff: p.diff, constant, translate,
+      lines: ["", msg("songrec.cardNow", { current: cur })],
+      foot: [msg("songrec.cardNextPeer", { share: Math.round(p.share * 100), criterion: label })],
+      separator,
+    }, jackets[i]);
+  });
+  const footer = `${msg("songrec.nextFooter", { from: band * 20, to: band * 20 + 20, players: stats.players.toLocaleString("en-US") })}  ✦  ${msg("maishift.credit")}`;
+  return {
+    components: [
+      new TextDisplayBuilder().setContent(msg("songrec.nextHeader", { level, criterion: label, cleared, total: levelCharts.length })),
+      ...containers,
+      new TextDisplayBuilder().setContent(msg("songrec.footer", { text: footer })),
+      tail,
+    ],
+    files: jackets.filter((j): j is AttachmentBuilder => !!j),
+    flags: MessageFlags.IsComponentsV2,
+  };
+}
+
+function shuffleTake<T>(list: T[], n: number): T[] {
+  const a = list.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a.slice(0, n);
+}
+
+// ─── 명령 ────────────────────────────────────────────────────────────────────
+export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+  // 직전에 뽑은 조건이 있으면 그 조건으로 연다(대상은 늘 본인부터).
+  const saved = await getCommandPreset(interaction.user.id, "rec").catch(() => null);
+  const restored = saved ? decodeRecState(saved) : null;
+  const state: RecState = restored
+    ? { ...restored, target: interaction.user.id }
+    : { mode: "r", level: "", criterion: "SSS", diff: "", kind: "", category: "", play: "", count: 3, target: interaction.user.id };
+  await interaction.reply({ components: [buildRecMenu(state, interaction.user.id, "-")], flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral });
+}
+
+/** 뽑은 조건을 그 사람의 다음 실행 기본값으로 둔다(sessions.command_presets). 실패해도 넘어간다. */
+function rememberRec(ownerId: string, state: RecState): void {
+  setCommandPreset(ownerId, "rec", encodeRecState({ ...state, target: ownerId })).catch((e: unknown) => console.warn("[곡추천] 조건 저장 실패:", (e as Error).message));
+}
+
+// ─── 조건 바꾸기 메뉴(본인에게만 보임) ────────────────────────────────────────
+// customId — 선택 rec:s:<칸>:<주인>:<결과 메시지>:<조건>, 유저 rec:u:<주인>:<결과 메시지>:<조건>, 뽑기 rec:go:<주인>:<결과 메시지>:<조건>.
+// 결과 메시지는 뽑을 때 지울 예전 결과("-" 면 없음).
+type RecField = "m" | "lv" | "cr" | "df" | "ty" | "ca" | "pl" | "n";
+
+function fieldSelect(field: RecField, ownerId: string, msgId: string, code: string, options: { label: string; value: string; on: boolean }[]): ActionRowBuilder<StringSelectMenuBuilder> {
+  return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId(`rec:s:${field}:${ownerId}:${msgId}:${code}`)
+      .addOptions(options.map((o) => ({ label: o.label, value: o.value, default: o.on }))),
+  );
+}
+
+export function buildRecMenu(state: RecState, ownerId: string, msgId: string): ContainerBuilder {
+  const code = encodeRecState(state);
+  const f = (field: string, value: string) => msg("songrec.menuOption", { field: msg(`songrec.field.${field}` as MessageKey), value });
+  const all = msg("songrec.valueAll");
+  const container = new ContainerBuilder()
+    .setAccentColor(RANK_COLOR.SSS)
+    .addTextDisplayComponents((t) => t.setContent(msg("songrec.menuTitle", { user: `<@${state.target}>` })))
+    .addSeparatorComponents((s) => s.setSpacing(SeparatorSpacingSize.Small));
+  const rows: ActionRowBuilder<StringSelectMenuBuilder>[] = [
+    fieldSelect("m", ownerId, msgId, code, [
+      { label: f("mode", msg("songrec.modeRating")), value: "r", on: state.mode === "r" },
+      { label: f("mode", msg("songrec.modeNext")), value: "l", on: state.mode === "l" },
+    ]),
+  ];
+  if (state.mode === "l") {
+    rows.push(
+      fieldSelect("lv", ownerId, msgId, code, [...LEVEL_CHOICES].reverse().map((l) => ({ label: f("level", l), value: l, on: l === state.level }))),
+      fieldSelect("cr", ownerId, msgId, code, CLEAR_CRITERIA.map((c) => ({ label: f("criterion", CRITERION_LABEL[c]), value: c, on: c === state.criterion }))),
+    );
+  }
+  rows.push(
+    fieldSelect("df", ownerId, msgId, code, [{ label: f("diff", all), value: "-", on: !state.diff }, ...DIFFS.map((d) => ({ label: f("diff", d), value: d, on: d === state.diff }))]),
+    fieldSelect("ty", ownerId, msgId, code, [
+      { label: f("kind", all), value: "-", on: !state.kind },
+      { label: f("kind", "STANDARD"), value: "ST", on: state.kind === "ST" },
+      { label: f("kind", "DX"), value: "DX", on: state.kind === "DX" },
+    ]),
+    fieldSelect("ca", ownerId, msgId, code, [
+      { label: f("category", all), value: "-", on: !state.category },
+      { label: f("category", msg("songrec.newSong")), value: "new", on: state.category === "new" },
+      { label: f("category", msg("songrec.oldSong")), value: "others", on: state.category === "others" },
+    ]),
+    fieldSelect("pl", ownerId, msgId, code, [
+      { label: f("play", all), value: "-", on: !state.play },
+      { label: f("play", msg("songrec.played")), value: "played", on: state.play === "played" },
+      { label: f("play", msg("songrec.notPlayed")), value: "unplayed", on: state.play === "unplayed" },
+    ]),
+    fieldSelect("n", ownerId, msgId, code, Array.from({ length: MAX_COUNT }, (_, k) => k + 1).map((n) => ({ label: f("count", msg("songrec.countValue", { count: n })), value: String(n), on: n === state.count }))),
+  );
+  for (const row of rows) container.addActionRowComponents(row);
+  return container
+    .addActionRowComponents(
+      new ActionRowBuilder<UserSelectMenuBuilder>().addComponents(
+        new UserSelectMenuBuilder().setCustomId(`rec:u:${ownerId}:${msgId}:${code}`).setDefaultUsers(state.target),
+      ),
+    )
+    .addSeparatorComponents((s) => s.setSpacing(SeparatorSpacingSize.Small))
+    .addActionRowComponents(
+      new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder().setCustomId(`rec:go:${ownerId}:${msgId}:${code}`).setLabel(msg("songrec.menuGo")).setStyle(ButtonStyle.Primary),
+      ),
+    );
+}
+
+/** rec: 로 시작하는 버튼·선택 메뉴. */
+export async function handleComponent(i: ButtonInteraction | StringSelectMenuInteraction | UserSelectMenuInteraction): Promise<void> {
+  const parts = i.customId.split(":");
+  const action = parts[1];
+  if (i.isButton() && (action === "re" || action === "menu")) {
+    const [, , ownerId = "", raw = ""] = parts;
+    const state = decodeRecState(raw);
+    if (!state) { await i.reply({ content: msg("reroll.expired"), flags: MessageFlags.Ephemeral }); return; }
+    if (action === "re") {
+      if (i.user.id === ownerId) rememberRec(ownerId, state);
+      await rerollInPlace(i, ownerId, () => buildRecommendation(state, ownerId));
+      return;
+    }
+    // 메뉴는 누른 사람 것. 결과 주인이 열었을 때만 그 결과를 다음 뽑기 때 지운다.
+    const msgId = i.user.id === ownerId ? i.message.id : "-";
+    await i.reply({ components: [buildRecMenu(state, i.user.id, msgId)], flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral });
     return;
   }
-  const embeds = picks.map((p, i) => {
-    const constant = getConstant(p.title, p.kind, p.diff, server) ?? p.constant;
-    const cur = p.current && p.current.achievementVal > 0
-      ? `${p.current.achievementVal.toFixed(4)}%${p.current.fc ? `  ✦  ${p.current.fc}` : ""}`
-      : msg("songrec.notPlayed");
-    const emb = new EmbedBuilder()
-      .setColor(RANK_COLOR.SSS)
-      .setTitle(titleWithKind(displayTitle(p.title, translate), p.kind))
-      .setDescription(ytLink(p.title, p.kind, p.diff))
-      .addFields(
-        { name: msg("songrec.fieldChart"), value: msg("songrec.nextChartValue", { diff: p.diff, constant: constant.toFixed(1) }), inline: true },
-        { name: msg("songrec.fieldCriterion"), value: `\`${label}\``, inline: true },
-        { name: "​", value: "​", inline: true },
-        { name: msg("songrec.fieldNextPeer"), value: msg("songrec.nextPeerValue", { share: Math.round(p.share * 100) }), inline: true },
-        { name: msg("songrec.fieldCurrent"), value: cur, inline: true },
-        { name: "​", value: "​", inline: true },
-      );
-    if (i === 0) {
-      emb.setAuthor({ name: msg("songrec.nextAuthor", { level, criterion: label, cleared, total: levelCharts.length }) });
+  if (i.isStringSelectMenu() && action === "s") {
+    const [, , field, ownerId = "", msgId = "-", raw = ""] = parts;
+    const state = decodeRecState(raw);
+    const value = i.values[0];
+    if (!state || value === undefined) { await i.deferUpdate(); return; }
+    const v = value === "-" ? "" : value;
+    switch (field as RecField) {
+      case "m": state.mode = v === "l" ? "l" : "r"; if (state.mode === "l" && !state.level) state.level = "14"; break;
+      case "lv": state.level = v; break;
+      case "cr": state.criterion = (CLEAR_CRITERIA as readonly string[]).includes(v) ? v as ClearCriterion : "SSS"; break;
+      case "df": state.diff = v; break;
+      case "ty": state.kind = v === "ST" || v === "DX" ? v : ""; break;
+      case "ca": state.category = v === "new" || v === "others" ? v : ""; break;
+      case "pl": state.play = v === "played" || v === "unplayed" ? v : ""; break;
+      case "n": state.count = Math.min(MAX_COUNT, Math.max(1, Number(v) || 3)); break;
     }
-    if (i === picks.length - 1) {
-      emb.setFooter({ text: `${msg("songrec.nextFooter", { from: band * 20, to: band * 20 + 20, players: stats.players.toLocaleString("en-US") })}  ✦  ${msg("maishift.credit")}` });
-    }
-    const jacket = getJacketFile(p.title);
-    if (jacket) emb.setThumbnail(jacketFileUrl(jacket));
-    return emb;
-  });
-  await interaction.reply({ embeds });
+    await i.update({ components: [buildRecMenu(state, ownerId, msgId)], flags: MessageFlags.IsComponentsV2 });
+    return;
+  }
+  if (i.isUserSelectMenu() && action === "u") {
+    const [, , ownerId = "", msgId = "-", raw = ""] = parts;
+    const state = decodeRecState(raw);
+    const picked = i.values[0];
+    if (!state || !picked) { await i.deferUpdate(); return; }
+    state.target = picked;
+    await i.update({ components: [buildRecMenu(state, ownerId, msgId)], flags: MessageFlags.IsComponentsV2 });
+    return;
+  }
+  if (i.isButton() && action === "go") {
+    const [, , ownerId = "", msgId = "-", raw = ""] = parts;
+    const state = decodeRecState(raw);
+    if (!state) { await i.reply({ content: msg("reroll.expired"), flags: MessageFlags.Ephemeral }); return; }
+    rememberRec(ownerId, state);
+    const sent = await postFromMenu(i, msgId, () => buildRecommendation(state, ownerId));
+    // 다음 뽑기 때는 방금 올린 결과를 지우도록 메뉴를 고친다.
+    if (sent) await i.editReply({ components: [buildRecMenu(state, ownerId, sent)], flags: MessageFlags.IsComponentsV2 }).catch(() => {});
+  }
 }

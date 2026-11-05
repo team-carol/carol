@@ -29,6 +29,8 @@ import { renderChartGifAsync } from "../bot/utils/chartGif";
 import { getReadyVideo } from "../bot/utils/chartVideoQueue";
 import type { Chart } from "../simai/types";
 import { messagesAdminPage, type MessageRowVM } from "./messagesAdminPage";
+import { commandsAdminPage, type CommandRowVM } from "./commandsAdminPage";
+import { getCommandDefinitions, getCommandOverride, applyOverride, validateOverride as validateCommandOverride, saveCommandOverride, syncCommandsNow, type CommandJson } from "../commandOverrides";
 import { BASE_CSS, pageHead, topbar, siteFooter, BRAND_AVATAR_PATH, userNav } from "./theme";
 import { privacyPage, termsPage } from "./legalPages";
 import { BRAND_AVATAR_PNG } from "./brandAvatar";
@@ -70,6 +72,32 @@ function secretsMatch(a: string, b: string): boolean {
   const digestA = createHash("sha256").update(a).digest();
   const digestB = createHash("sha256").update(b).digest();
   return timingSafeEqual(digestA, digestB);
+}
+
+const OPTION_TYPE_LABEL: Record<number, string> = {
+  1: "하위 명령", 2: "명령 묶음", 3: "글", 4: "정수", 5: "예/아니오", 6: "유저", 7: "채널", 8: "역할", 9: "멘션", 10: "숫자", 11: "파일",
+};
+
+/** 명령어 관리 페이지의 한 줄: 기본값과 지금 덮어쓴 값(src/commandOverrides.ts). */
+function commandRowVM(key: string, json: CommandJson): CommandRowVM {
+  const o = getCommandOverride(key);
+  const shown = applyOverride(json, o);
+  return {
+    key,
+    defName: json.name,
+    name: shown.name,
+    defDescription: json.description,
+    description: shown.description,
+    options: (json.options ?? []).map((op) => ({
+      name: op.name,
+      type: OPTION_TYPE_LABEL[op.type] ?? String(op.type),
+      required: !!op.required,
+      defDescription: op.description,
+      description: o?.optionDescriptions?.[op.name] ?? op.description,
+    })),
+    order: (shown.options ?? []).map((op) => op.name),
+    changed: !!o,
+  };
 }
 
 function discordInviteUrl(): string | null {
@@ -568,6 +596,55 @@ export function startWebServer(port: number): void {
         const badBody = e instanceof SyntaxError;
         res.writeHead(badBody ? 400 : 500, { "content-type": "application/json" });
         res.end(JSON.stringify({ ok: false, error: badBody ? "invalid_body" : "서버 오류가 발생했습니다" }));
+      }
+      return;
+    }
+
+    // ─── 슬래시 명령어 이름·설명·옵션 순서 (commandsAdminPage.ts, src/commandOverrides.ts) ─────
+    if (req.method === "GET" && url.pathname === "/admin/commands") {
+      const token = url.searchParams.get("code") || "";
+      if (!isValidAdminToken(token)) { res.writeHead(403); res.end("expired"); return; }
+      const defs = getCommandDefinitions();
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      res.end(commandsAdminPage(token, defs.map((d) => commandRowVM(d.key, d.json)), defs.length > 0));
+      return;
+    }
+
+    if (req.method === "POST" && (url.pathname === "/api/admin/commands" || url.pathname === "/api/admin/commands/sync")) {
+      const token = url.searchParams.get("code") || "";
+      const json = (status: number, body: unknown) => { res.writeHead(status, { "content-type": "application/json" }); res.end(JSON.stringify(body)); };
+      if (!isValidAdminToken(token)) { json(403, { ok: false, error: "expired" }); return; }
+      try {
+        if (url.pathname.endsWith("/sync")) {
+          const synced = await syncCommandsNow();
+          json(200, synced ? { ok: true } : { ok: false, error: "봇이 실행 중이 아니라 다음 시작 때 반영됩니다" });
+          return;
+        }
+        const body = JSON.parse(await readBody(req));
+        const key = typeof body.key === "string" ? body.key : "";
+        const def = getCommandDefinitions().find((d) => d.key === key);
+        if (!def) { json(400, { ok: false, error: "알 수 없는 명령어입니다" }); return; }
+        if (body.reset === true) {
+          await saveCommandOverride(key, null);
+        } else {
+          const str = (v: unknown) => (typeof v === "string" ? v.trim() : undefined);
+          const override = {
+            name: str(body.name),
+            description: str(body.description),
+            order: Array.isArray(body.order) ? body.order.filter((n: unknown): n is string => typeof n === "string") : undefined,
+            optionDescriptions: body.optionDescriptions && typeof body.optionDescriptions === "object"
+              ? Object.fromEntries(Object.entries(body.optionDescriptions as Record<string, unknown>).filter(([, v]) => typeof v === "string").map(([k, v]) => [k, (v as string).trim()]))
+              : undefined,
+          };
+          const bad = validateCommandOverride(key, override);
+          if (bad) { json(400, { ok: false, error: bad }); return; }
+          await saveCommandOverride(key, override);
+        }
+        json(200, { ok: true, row: commandRowVM(key, def.json) });
+      } catch (e) {
+        console.error("[admin] 명령어 저장 실패:", e);
+        const badBody = e instanceof SyntaxError;
+        json(badBody ? 400 : 500, { ok: false, error: badBody ? "invalid_body" : `서버 오류가 발생했습니다${e instanceof Error && e.message ? `: ${e.message.slice(0, 120)}` : ""}` });
       }
       return;
     }

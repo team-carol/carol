@@ -95,3 +95,30 @@ test("pickRecommendations: 같은 레이팅대 비율을 주면 비율을 결과
   // 통계가 없으면(peerShare 미지정) 비율을 붙이지 않는다.
   assert.equal(pickRecommendations(pool, 1)[0].peerShare, undefined);
 });
+
+test("matchPlaylists: 이름·주인·번호로 찾고, 많이 연 것부터", () => {
+  const { matchPlaylists } = require("../../dist/maishift/playlistIndex.js");
+  const list = [
+    { id: 1, title: "카페밀크가 좋아요", owner: "shiftpsh", region: "ASIA", count: 4, seenAt: 100, uses: 1 },
+    { id: 7, title: "14+ 연습", owner: "roena", region: "ASIA", count: 30, seenAt: 300, uses: 5 },
+    { id: 12, title: "Cafe Milk 모음", owner: "someone", region: "JAPAN", count: 10, seenAt: 200, uses: 5 },
+  ];
+  assert.deepEqual(matchPlaylists(list, "").map((p) => p.id), [7, 12, 1]); // 많이 연 순, 같으면 최근 순
+  assert.deepEqual(matchPlaylists(list, "카페 밀크").map((p) => p.id), [1]); // 띄어쓰기 무시
+  assert.deepEqual(matchPlaylists(list, "ROENA").map((p) => p.id), [7]); // 주인
+  assert.deepEqual(matchPlaylists(list, "#12").map((p) => p.id), [12]);
+  assert.deepEqual(matchPlaylists(list, "https://maimai.shiftpsh.com/playlists/1").map((p) => p.id), [1]);
+});
+
+test("topPercentOf: 공개된 기준점 사이는 그 점들로 잇고, 상위 1% 위는 최고 레이팅까지 잇는다", () => {
+  const s = {
+    activePlayers: 1000, maxPossibleRating: 16700,
+    histogram: { width: 100, bands: [{ from: 16600, to: 16700, players: 80, suppressed: false }] },
+    topPercentiles: [{ percent: 10, players: 100, rating: 16300 }, { percent: 5, players: 50, rating: 16500 }, { percent: 1, players: 10, rating: 16600 }],
+  };
+  assert.equal(stats.topPercentOf(s, 16500), 5);
+  assert.equal(stats.topPercentOf(s, 16400), 7.5);
+  assert.equal(stats.topPercentOf(s, 16600), 1);
+  assert.equal(stats.topPercentOf(s, 16650), 0.5);
+  assert.equal(stats.topPercentOf(s, 16700), 0);
+});

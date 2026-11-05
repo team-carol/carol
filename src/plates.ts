@@ -5,11 +5,13 @@
  * - 대상 보면: 그 버전에 추가된 곡(ST·DX 따로)의 BASIC~MASTER. 真 은 maimai·maimai PLUS 두 버전,
  *   舞 는 maimai~FiNALE 모든 옛 버전이고 Re:MASTER 도 들어간다. 覇者 는 舞 에만, 将 는 真 에 없다.
  * - 아직 플레이트가 없는 그 지역 최신 버전은 뺀다(국제판 CiRCLE PLUS 처럼, 다음 버전에서 생긴다).
- * - 플레이트 대상에서 빠지는 곡은 PLATE_EXCLUDED 에 둔다. maishift 의 대상 보면 수(stats/plate-difficulty 의 charts)와
- *   견줘 확인한 것만 넣었다. 아직 몇 플레이트는 maishift 와 수가 다르다(빠지는 곡이 공개돼 있지 않음) — 카드가 차이를 적는다.
+ * - 대상에서 빠지는 보면은 아래 목록에 둔다. maishift 순회 데이터(보면마다 붙은 플레이트 번호)와 두 지역 모두 보면 단위로
+ *   맞췄다(2026-11-05). 대부분 지역마다 수록 시기가 다른 곡(부활·늦은 수록)이다. 옛 버전(真~輝, 舞) 플레이트는 대상이
+ *   더 바뀌지 않아 고정 목록으로 두고, 熊 이후 플레이트는 "그 버전에 추가된 곡" 그대로 maishift 와 같다.
  */
 import type { PlayRecord } from "./scraper";
 import type { RegionChart } from "./constants";
+import type { MaimaiServer } from "./storage/types";
 
 export type PlateType = "極" | "将" | "神" | "舞舞" | "覇者";
 export const PLATE_TYPES: PlateType[] = ["極", "将", "神", "舞舞", "覇者"];
@@ -18,15 +20,33 @@ export const PLATE_TYPES: PlateType[] = ["極", "将", "神", "舞舞", "覇者"
 export const VERSION_KANJI = ["舞", "真", "超", "檄", "橙", "暁", "桃", "櫻", "紫", "菫", "白", "雪", "輝", "熊", "華", "爽", "煌", "宙", "星", "祭", "祝", "双", "宴", "鏡", "彩", "丸", "廻"];
 const LAST_OLD_VERSION = 12; // FiNALE
 
-/** 플레이트 대상에서 빠지는 곡("제목|ST/DX"). */
-const PLATE_EXCLUDED = new Set([
-  "ジングルベル|ST", // 계절 곡
-  "全世界共通リズム感テスト|ST",
-]);
+/** 모든 플레이트에서 빠지는 곡("제목|ST/DX"). */
+const ALWAYS_EXCLUDED = new Set(["全世界共通リズム感テスト|ST"]);
+/** 버전 플레이트(真)에서는 빠지고 舞 에는 드는 곡. 계절 곡이다. */
+const SEASONAL = "ジングルベル|ST";
+/** 그 지역에서 빠지는 곡(그 곡의 버전 플레이트와 舞 모두). 지역마다 수록 시기가 다르다. */
+const REGION_EXCLUDED: Record<MaimaiServer, Set<string>> = {
+  intl: new Set([
+    "ハッピーシンセサイザ|ST", "39|ST", // 真
+    "＊ハロー、プラネット。|ST", // 超
+    "前前前世|ST", // 菫
+  ]),
+  jp: new Set(["前前前世|ST"]), // 菫
+};
+/** 舞: FiNALE 뒤에 추가된 옛 곡 Re:MASTER 는 세지 않는다(두 지역 같음). */
+const MAI_LATE_REMASTER = new Set([
+  "Backyun! －悪い女－", "Beat of getting entangled", "DADDY MULK -Groove remix-", "Death Scythe", "Dragoon",
+  "D✪N’T  ST✪P  R✪CKIN’", "FEEL the BEATS", "FLOWER", "JACKY [Remix]", "LUCIA", "Limit Break", "Link", "Night Fly",
+  "Revive The Rave", "SPILL OVER COLORS", "Sky High [Reborn]", "System “Z”", "We Gonna Party", "YA･DA･YO [Reborn]",
+  "air's gravity", "planet dancer", "みんなのマイマイマー", "アージェントシンメトリー", "泣き虫O'clock", "源平大戦絵巻テーマソング",
+  "言ノ葉カルマ", "記憶、記録",
+].map((t) => `${t}|ST`));
 
 export interface PlateDef {
   /** 플레이트 한자(예: "祭") */
   prefix: string;
+  /** 지역. 지역마다 빠지는 곡이 달라 대상 보면을 셀 때 쓴다(자동완성처럼 모르면 없음). */
+  server?: MaimaiServer;
   /** 대상 곡이 추가된 세대 번호들 */
   versions: number[];
   types: PlateType[];
@@ -37,12 +57,12 @@ export interface PlateDef {
 }
 
 /** 그 지역에 있는 플레이트(최신 버전 제외). 真 → 輝, 舞, 熊 → 최신 직전 순. */
-export function plateDefs(latestVersion: number | null): PlateDef[] {
-  const defs: PlateDef[] = [{ prefix: "真", versions: [0, 1], types: ["極", "神", "舞舞"], reMaster: false, statVersion: 1 }];
-  for (let v = 2; v <= LAST_OLD_VERSION; v++) defs.push({ prefix: VERSION_KANJI[v], versions: [v], types: ["極", "将", "神", "舞舞"], reMaster: false, statVersion: v });
-  defs.push({ prefix: "舞", versions: Array.from({ length: LAST_OLD_VERSION + 1 }, (_, i) => i), types: ["極", "将", "神", "舞舞", "覇者"], reMaster: true, statVersion: 0 });
+export function plateDefs(latestVersion: number | null, server?: MaimaiServer): PlateDef[] {
+  const defs: PlateDef[] = [{ prefix: "真", server, versions: [0, 1], types: ["極", "神", "舞舞"], reMaster: false, statVersion: 1 }];
+  for (let v = 2; v <= LAST_OLD_VERSION; v++) defs.push({ prefix: VERSION_KANJI[v], server, versions: [v], types: ["極", "将", "神", "舞舞"], reMaster: false, statVersion: v });
+  defs.push({ prefix: "舞", server, versions: Array.from({ length: LAST_OLD_VERSION + 1 }, (_, i) => i), types: ["極", "将", "神", "舞舞", "覇者"], reMaster: true, statVersion: 0 });
   const last = latestVersion ?? VERSION_KANJI.length;
-  for (let v = LAST_OLD_VERSION + 1; v < last && v < VERSION_KANJI.length; v++) defs.push({ prefix: VERSION_KANJI[v], versions: [v], types: ["極", "将", "神", "舞舞"], reMaster: false, statVersion: v });
+  for (let v = LAST_OLD_VERSION + 1; v < last && v < VERSION_KANJI.length; v++) defs.push({ prefix: VERSION_KANJI[v], server, versions: [v], types: ["極", "将", "神", "舞舞"], reMaster: false, statVersion: v });
   return defs;
 }
 
@@ -52,7 +72,14 @@ export function findPlate(defs: PlateDef[], prefix: string): PlateDef | null {
 
 /** 그 플레이트의 대상 보면. */
 export function plateCharts(def: PlateDef, charts: RegionChart[]): RegionChart[] {
-  return charts.filter((c) => def.versions.includes(c.version) && (def.reMaster || c.diff !== "Re:MASTER") && !PLATE_EXCLUDED.has(`${c.title}|${c.kind}`));
+  const region = def.server ? REGION_EXCLUDED[def.server] : null;
+  return charts.filter((c) => {
+    if (!def.versions.includes(c.version)) return false;
+    const song = `${c.title}|${c.kind}`;
+    if (ALWAYS_EXCLUDED.has(song) || region?.has(song)) return false;
+    if (def.reMaster) return c.diff !== "Re:MASTER" || !MAI_LATE_REMASTER.has(song);
+    return c.diff !== "Re:MASTER" && song !== SEASONAL;
+  });
 }
 
 const FC_OK = new Set(["FC", "FC+", "AP", "AP+"]);

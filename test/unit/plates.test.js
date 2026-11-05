@@ -29,8 +29,24 @@ test("plateCharts: 버전 플레이트는 BASIC~MASTER, 舞 는 Re:MASTER 까지
     chart("ジングルベル", 0, "MASTER", "ST"), chart("Plus", 1, "BASIC", "ST"),
   ];
   assert.deepEqual(plateCharts(findPlate(defs, "祭"), charts).map((c) => `${c.title}/${c.diff}`), ["A/MASTER"]);
-  assert.deepEqual(plateCharts(findPlate(defs, "舞"), charts).map((c) => `${c.title}/${c.diff}`), ["Old/EXPERT", "Old/Re:MASTER", "Plus/BASIC"]);
+  // ジングルベル 은 真 에서만 빠지고 舞 에는 든다(maishift 와 같음).
+  assert.deepEqual(plateCharts(findPlate(defs, "舞"), charts).map((c) => `${c.title}/${c.diff}`), ["Old/EXPERT", "Old/Re:MASTER", "ジングルベル/MASTER", "Plus/BASIC"]);
   assert.deepEqual(plateCharts(findPlate(defs, "真"), charts).map((c) => c.title), ["Plus"]);
+});
+
+test("plateCharts: 지역마다 수록 시기가 다른 곡과 FiNALE 뒤에 생긴 Re:MASTER 는 maishift 처럼 뺀다", () => {
+  const charts = [
+    chart("39", 1, "MASTER", "ST"), chart("39", 1, "Re:MASTER", "ST"), chart("前前前世", 9, "MASTER", "ST"),
+    chart("Link", 4, "MASTER", "ST"), chart("Link", 4, "Re:MASTER", "ST"), chart("Old", 4, "Re:MASTER", "ST"),
+    chart("全世界共通リズム感テスト", 0, "MASTER", "ST"),
+  ];
+  const names = (server, prefix) => plateCharts(findPlate(plateDefs(26, server), prefix), charts).map((c) => `${c.title}/${c.diff}`);
+  assert.deepEqual(names("intl", "真"), []); // 국제판 真 에는 39 가 없다
+  assert.deepEqual(names("jp", "真"), ["39/MASTER"]);
+  assert.deepEqual(names("intl", "菫"), []);
+  assert.deepEqual(names("jp", "菫"), []); // 前前前世 는 두 지역 모두 빠진다
+  assert.deepEqual(names("intl", "舞"), ["Link/MASTER", "Old/Re:MASTER"]);
+  assert.deepEqual(names("jp", "舞"), ["39/MASTER", "39/Re:MASTER", "Link/MASTER", "Old/Re:MASTER"]);
 });
 
 test("meetsPlate: 極 FC 이상, 将 SSS 이상, 神 AP 이상, 舞舞 FDX 이상, 覇者 80% 이상", () => {

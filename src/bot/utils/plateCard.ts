@@ -116,12 +116,14 @@ export async function renderPlateOverview(profile: CachedProfile, avatarBuf: Buf
 }
 
 export interface PlateDetailExtras {
-  /** 종류별 같은 레이팅대 예상 플레이 수(모르면 없음) */
-  plays?: Partial<Record<PlateType, number | null>>;
+  /** 종류별 같은 레이팅대 플레이트 난이도(maishift, 0~10). 모르면 없음 */
+  difficulty?: Partial<Record<PlateType, { value: number | null; unreachable: boolean }>>;
   /** 같은 레이팅대 구간 이름(예: "16,250~16,500") */
   band?: string | null;
   /** 이 플레이트를 처음 얻은 날 레이팅(중앙값), 종류별 */
-  firstRating?: Partial<Record<PlateType, number>>;
+  firstGap?: Partial<Record<PlateType, number>>;
+  /** 지금 최고 레이팅 이론값 − 내 레이팅 */
+  myGap?: number | null;
   /** maishift 가 센 대상 보면 수. 캐롤봇 계산과 다를 때만 */
   maishiftTotal?: number | null;
   /** 종류별 이름표 그림(data URL, src/plateImages.ts). 없는 종류는 이름 글자로 그린다. */
@@ -153,10 +155,12 @@ function plateRow(p: PlateProgress, type: PlateType, selected: boolean, extras: 
   const color = PLATE_TYPE_COLOR[type];
   const done = p.done[type] ?? 0;
   const complete = done >= p.total && p.total > 0;
-  const plays = extras.plays?.[type];
+  const d = extras.difficulty?.[type];
+  const left = p.total - done;
   const sub = complete ? msg("plateCard.tileDone")
-    : plays ? msg("plateCard.tilePlays", { plays: plays.toLocaleString("en-US") })
-    : msg("plateCard.tileLeft", { left: p.total - done });
+    : d?.value != null ? msg("plateCard.tileLeftDifficulty", { left, value: d.value.toFixed(1) })
+    : d?.unreachable ? msg("plateCard.tileLeftUnreachable", { left })
+    : msg("plateCard.tileLeft", { left });
   return el("div", {
     display: "flex", alignItems: "center", gap: 16, padding: "8px 10px", borderRadius: 12,
     background: selected ? alpha(color, 0.08) : "transparent", border: `1px solid ${selected ? alpha(color, 0.6) : "transparent"}`,
@@ -212,8 +216,8 @@ export async function renderPlateDetail(profile: CachedProfile, avatarBuf: Buffe
   const column = (items: PlateChartState[]) => el("div", { display: "flex", flexDirection: "column", flex: 1, minWidth: 0 }, items.map((s) => remainingRow(type, s, extras.translate)));
   const notes: string[] = [];
   if (left.length > shown.length) notes.push(msg("plateCard.more", { count: left.length - shown.length }));
-  const first = extras.firstRating?.[type];
-  if (first) notes.push(msg("plateCard.firstRating", { rating: first.toLocaleString("en-US") }));
+  const gap = extras.firstGap?.[type];
+  if (gap !== undefined && extras.myGap != null) notes.push(msg("plateCard.firstRating", { gap: gap.toLocaleString("en-US"), name: profile.playerName || "-", mine: extras.myGap.toLocaleString("en-US") }));
   if (extras.maishiftTotal && extras.maishiftTotal !== p.total) notes.push(msg("plateCard.totalMismatch", { total: extras.maishiftTotal }));
 
   const listPanel = left.length
@@ -226,7 +230,7 @@ export async function renderPlateDetail(profile: CachedProfile, avatarBuf: Buffe
 
   const root = el("div", { display: "flex", flexDirection: "column", width: WIDTH, background: CANVAS, padding: 24, color: TEXT, fontFamily: "Noto Sans JP" }, [
     head,
-    panel(msg("plateCard.platesTitle"), extras.band ? msg("plateCard.playsNote", { band: extras.band }) : "", [
+    panel(msg("plateCard.platesTitle"), extras.band ? msg("plateCard.difficultyNote", { band: extras.band }) : "", [
       el("div", { display: "flex", flexDirection: "column", gap: 4, margin: "0 -10px" }, p.def.types.map((t) => plateRow(p, t, t === type, extras))),
     ]),
     listPanel,
