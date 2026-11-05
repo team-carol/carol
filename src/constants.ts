@@ -1,7 +1,7 @@
 import { createHash } from "crypto";
 import { getConstantsCache, saveConstantsCache } from "./storage";
 import { setExternalTranslations } from "./aliases";
-import { fetchCatalog, setMaishiftVersionNames, versionCode, versionName as msVersionName, type CatalogSong, type RegionVersion } from "./maishift/catalog";
+import { fetchCatalog, setMaishiftVersionNames, versionCode, versionName as msVersionName, type CatalogSong, type RegionVersion, type RegionChartRow } from "./maishift/catalog";
 import type { PlayRecord, MaimaiServer } from "./scraper";
 
 // 곡·상수 카탈로그는 maishift 곡 목록(국제판 ASIA, 내수판 JAPAN)에서 받는다(예전엔 otoge-db).
@@ -113,6 +113,44 @@ function setRegionVersions(intl: RegionVersion[], jp: RegionVersion[]): void {
   setMaishiftVersionNames([...intl, ...jp]);
   windowsIntl = windowsFromVersions(intl);
   windowsJp = windowsFromVersions(jp);
+}
+
+/** 그 지역 보면 하나(maishift 곡 목록 그대로). 보면 번호는 지역마다 따로다. */
+export interface RegionChart { id: number; title: string; kind: "ST" | "DX"; diff: string; level: string; constant: number; version: number }
+// 지역별 보면 목록. 통계·플레이리스트의 보면 번호를 보면으로 바꾸고, 플레이트 대상 보면을 고르는 데 쓴다.
+let chartRowsIntl: RegionChartRow[] = [];
+let chartRowsJp: RegionChartRow[] = [];
+let chartsIntl: RegionChart[] = [];
+let chartsJp: RegionChart[] = [];
+let chartByIdIntl = new Map<number, RegionChart>();
+let chartByIdJp = new Map<number, RegionChart>();
+let chartByKeyIntl = new Map<string, RegionChart>();
+let chartByKeyJp = new Map<string, RegionChart>();
+function setRegionCharts(intl: RegionChartRow[], jp: RegionChartRow[]): void {
+  const toChart = ([id, title, kind, diff, level, internal, version]: RegionChartRow): RegionChart => ({ id, title, kind, diff, level, constant: internal / 10, version });
+  chartRowsIntl = intl;
+  chartRowsJp = jp;
+  chartsIntl = intl.map(toChart);
+  chartsJp = jp.map(toChart);
+  chartByIdIntl = new Map(chartsIntl.map((c) => [c.id, c]));
+  chartByIdJp = new Map(chartsJp.map((c) => [c.id, c]));
+  chartByKeyIntl = new Map(chartsIntl.map((c) => [`${c.title}|${c.kind}|${c.diff}`, c]));
+  chartByKeyJp = new Map(chartsJp.map((c) => [`${c.title}|${c.kind}|${c.diff}`, c]));
+}
+
+/** "제목|ST/DX|난이도"(chartKey) → 그 지역 보면. 그 지역에 없으면 null. */
+export function getRegionChartByKey(server: MaimaiServer, key: string): RegionChart | null {
+  return (server === "jp" ? chartByKeyJp : chartByKeyIntl).get(key) ?? null;
+}
+
+/** 그 지역 보면 전부. 곡 목록을 받기 전이면 빈 배열. */
+export function getRegionCharts(server: MaimaiServer): RegionChart[] {
+  return server === "jp" ? chartsJp : chartsIntl;
+}
+
+/** maishift 보면 번호(그 지역) → 보면. 모르면 null. */
+export function getRegionChart(server: MaimaiServer, id: number): RegionChart | null {
+  return (server === "jp" ? chartByIdJp : chartByIdIntl).get(id) ?? null;
 }
 
 /** 그 지역 버전 목록(세대 번호·이름·출시 시각 ms, 오래된 순). 곡 목록을 받기 전이면 빈 배열. */
@@ -237,6 +275,8 @@ interface ConstantsCache {
   folderJp?: FolderData;
   versionsIntl?: RegionVersion[];
   versionsJp?: RegionVersion[];
+  chartsIntl?: RegionChartRow[];
+  chartsJp?: RegionChartRow[];
 }
 
 // 캐시 복원. maishift 에서 받은 캐시가 아니면 fresh=false 반환.
@@ -258,9 +298,10 @@ function applyCache(data: string): { fresh: boolean } {
   artistMap = new Map(parsed.artists ?? []);
   setFolders(parsed.folderIntl ?? null, parsed.folderJp ?? null);
   setRegionVersions(parsed.versionsIntl ?? [], parsed.versionsJp ?? []);
+  setRegionCharts(parsed.chartsIntl ?? [], parsed.chartsJp ?? []);
   rebuildDailyFortuneSongs();
-  // 보면 번호·버전 폴더 순서·버전 목록·보면 종류별 버전이 없는 옛 캐시면 새로 받는다.
-  return { fresh: parsed.source === "maishift-api" && !!parsed.trackIds && !!parsed.folderIntl && !!parsed.versionsIntl?.length && !!parsed.jpKindVersions };
+  // 보면 번호·버전 폴더 순서·버전 목록·보면 종류별 버전·지역별 보면 목록이 없는 옛 캐시면 새로 받는다.
+  return { fresh: parsed.source === "maishift-api" && !!parsed.trackIds && !!parsed.folderIntl && !!parsed.versionsIntl?.length && !!parsed.jpKindVersions && !!parsed.chartsIntl?.length };
 }
 
 export async function loadConstants(): Promise<void> {
@@ -284,6 +325,7 @@ export async function loadConstants(): Promise<void> {
     const fIntl = folderDataOf(intlRes.songs, intlRes.latestVersion), fJp = folderDataOf(jpRes.songs, jpRes.latestVersion);
     setFolders(fIntl, fJp);
     setRegionVersions(intlRes.versions, jpRes.versions);
+    setRegionCharts(intlRes.charts, jpRes.charts);
     constantMap = new Map();
     jacketMap = new Map();
     jacketUrlMap = new Map();
@@ -325,6 +367,8 @@ export async function loadConstants(): Promise<void> {
       folderJp: fJp,
       versionsIntl: intlRes.versions,
       versionsJp: jpRes.versions,
+      chartsIntl: chartRowsIntl,
+      chartsJp: chartRowsJp,
     } satisfies ConstantsCache));
     rebuildDailyFortuneSongs();
   } catch (e) {

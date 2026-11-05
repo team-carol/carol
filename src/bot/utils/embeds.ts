@@ -49,6 +49,7 @@ import { dxStars } from "../../sRating";
 import { renderProfileCard } from "./profileCard";
 import { circleOf } from "./circle";
 import { versionName } from "../../maishift/catalog";
+import { getRatingRank, formatTopPercent, type RatingRank } from "../../maishift/stats";
 import { maishiftDays, maishiftSeries } from "../../ratingHistory";
 import { koreaPlayDayKey } from "../../achievements";
 import { buildMarkMap, buildKindResolver, chartKey } from "../../scraper";
@@ -187,6 +188,7 @@ export function profileEmb(
   p: NonNullable<Awaited<ReturnType<typeof getCachedProfile>>>,
   hasAvatar: boolean,
   circleName: string | null = null,
+  rank: RatingRank | null = null,
 ) {
   const stars = p.stars && p.stars !== "0" ? " ✦ ★×" + p.stars : "";
   const serverLabel = p.server === "jp" ? "JP" : "INTERNATIONAL";
@@ -209,6 +211,7 @@ export function profileEmb(
   if (hasAvatar) emb.setThumbnail("attachment://avatar.png");
   const next = nextPlateStep(p.rating || 0);
   if (next) emb.addFields({ name: msg("embed.nextTierField"), value: msg("embed.nextTierValue", { tier: next.label, left: next.left.toLocaleString("ko-KR") }), inline: true });
+  if (rank) emb.addFields({ name: msg("embed.rankField"), value: msg("embed.rankValue", { percent: formatTopPercent(rank.percent), players: rank.activePlayers.toLocaleString("ko-KR"), days: rank.activeDays }), inline: true });
   const friendCode = publicFriendCode(p) ?? undefined;
   if (friendCode) emb.addFields({ name: msg("embed.friendCodeField"), value: `\`${friendCode}\``, inline: true });
   // 서클 이름은 /설정 의 서클 공개(기본 공개)가 켜져 있을 때만.
@@ -878,7 +881,12 @@ export async function buildProfileReply(
   format: "image" | "embed" = "embed",
   viewerId?: string,
 ) {
-  const [avatar, circlePublic] = await Promise.all([buildAvatarAttachment(userId, cached), getCirclePublic(userId)]);
+  // 레이팅 순위(maishift 레이팅 분포)는 모두에게 같은 통계라 하루 반나절 기억한다. 못 받으면 순위 없이 보여 준다.
+  const [avatar, circlePublic, rank] = await Promise.all([
+    buildAvatarAttachment(userId, cached),
+    getCirclePublic(userId),
+    getRatingRank(cached.server, cached.rating || 0).catch(() => null),
+  ]);
   // 서클·최근 플레이·지방은 캐롤봇 추가 북마클릿 데이터라, 그 북마클릿을 실행한 사용자에게만 보인다.
   const synced = hasCarolSync(cached);
   const circleName = synced && circlePublic ? circleOf(cached)?.name ?? null : null;
@@ -901,11 +909,11 @@ export async function buildProfileReply(
     const [avatarBuf, translate] = await Promise.all([loadAvatar(userId, cached), getTranslateTitles(viewerId ?? userId)]);
     const friendCode = publicFriendCode(cached);
     const ratingHistory = loadRatingHistory(cached);
-    const png = await renderProfileCard(cached, avatarBuf, { translate, friendCode, circleName, ratingHistory });
+    const png = await renderProfileCard(cached, avatarBuf, { translate, friendCode, circleName, ratingHistory, ratingRank: rank });
     return { embeds: [], files: [new AttachmentBuilder(png, { name: "profile.png" })], components: [row] };
   }
   return {
-    embeds: [profileEmb(cached, !!avatar, circleName)],
+    embeds: [profileEmb(cached, !!avatar, circleName, rank)],
     files: avatar ? [avatar] : [],
     components: [row],
   };

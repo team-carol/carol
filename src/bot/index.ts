@@ -48,15 +48,18 @@ import * as history      from "./commands/history";
 import * as stamp        from "./commands/stamp";
 import { PENDING_FEATURES } from "../maishift/features";
 import * as photo        from "./commands/photo";
+import * as plate        from "./commands/plate";
+import * as playlist     from "./commands/playlist";
 import { initMaishift } from "../maishift";
 import { guardSlowAck } from "./utils/slowAck";
 import { handleTrackButton } from "./utils/trackDetail";
 import { loadRankImages } from "../rankImages";
+import { loadCommandOverrides, getCommandOverride, applyOverride, setCommandDefinitions, setLiveCommandNames, keyForName, type CommandJson } from "../commandOverrides";
 
 type Command = { data: { toJSON(): object; name: string }; execute: (i: ChatInputCommandInteraction) => Promise<void>; autocomplete?: (i: AutocompleteInteraction) => Promise<void> };
 
 // 스탬프는 maishift 공식 API 엔드포인트가 나올 때까지 등록하지 않는다(src/maishift/features.ts).
-const COMMANDS: Command[] = [profile, circle, bookmarklet, ratingimage, achievement, fortune, settings, gameOptions, newsSettings, search, status, songrec, random, areaMap, report, admin, goal, chart, ratingcalc, maishift, history, ...(PENDING_FEATURES.stamps ? [stamp] : []), photo];
+const COMMANDS: Command[] = [profile, circle, bookmarklet, ratingimage, achievement, fortune, settings, gameOptions, newsSettings, search, status, songrec, random, areaMap, report, admin, goal, chart, ratingcalc, maishift, history, ...(PENDING_FEATURES.stamps ? [stamp] : []), photo, plate, playlist];
 const EPHEMERAL_REPLY = { flags: MessageFlags.Ephemeral } as const;
 
 // mai-notes 메타데이터 동기화. 운영자 조건이 "대량 통신 금지" 라서 manifest.json 한 개를
@@ -95,14 +98,32 @@ const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 client.on(Events.Error, (error) => console.error("[discord] client error:", error));
 client.on(Events.ShardError, (error) => console.error("[discord] shard error:", error));
 
+/**
+ * 슬래시 명령을 디스코드에 등록한다. /관리 → 명령어 탭에서 바꾼 이름·설명·옵션 순서를 입혀 올리고(src/commandOverrides.ts),
+ * 올린 이름 → 명령 키 표를 라우팅에 쓴다. 관리 페이지의 "디스코드에 반영" 도 이 함수를 부른다.
+ */
+async function syncCommands(): Promise<void> {
+  const rest = new REST({ version: "10" }).setToken(CONFIG.token);
+  const route = CONFIG.guildId
+    ? Routes.applicationGuildCommands(CONFIG.clientId, CONFIG.guildId)
+    : Routes.applicationCommands(CONFIG.clientId);
+  const body = COMMANDS.map((cmd) => applyOverride(cmd.data.toJSON() as CommandJson, getCommandOverride(cmd.data.name)));
+  await rest.put(route, { body: [...body, report.contextData.toJSON()] });
+  setLiveCommandNames(new Map(body.map((b, k) => [b.name, COMMANDS[k].data.name])));
+}
+
+/** 들어온 명령 이름(바꾼 이름일 수 있다) → 명령. */
+function findCommand(name: string): Command | undefined {
+  const key = keyForName(name);
+  return COMMANDS.find((c) => c.data.name === key);
+}
+
 client.once(Events.ClientReady, async (c) => {
   console.log(`[maimai] ${c.user.tag}`);
   try {
-    const rest = new REST({ version: "10" }).setToken(CONFIG.token);
-    const route = CONFIG.guildId
-      ? Routes.applicationGuildCommands(CONFIG.clientId, CONFIG.guildId)
-      : Routes.applicationCommands(CONFIG.clientId);
-    await rest.put(route, { body: [...COMMANDS.map((cmd) => cmd.data.toJSON()), report.contextData.toJSON()] });
+    await loadCommandOverrides();
+    setCommandDefinitions(COMMANDS.map((cmd) => ({ key: cmd.data.name, json: cmd.data.toJSON() as CommandJson })), syncCommands);
+    await syncCommands();
   } catch (e) {
     console.error("[maimai] 명령어 등록 실패:", e);
   }
@@ -295,13 +316,13 @@ async function maybeSendPatchNotes(i: ChatInputCommandInteraction): Promise<void
 client.on(Events.InteractionCreate, async (i) => {
   // 자동완성은 3초 안에 답해야 하고 deferReply 가 없다. 제일 먼저 처리한다.
   if (i.isAutocomplete()) {
-    const cmd = COMMANDS.find((c) => c.data.name === i.commandName);
+    const cmd = findCommand(i.commandName);
     if (!cmd?.autocomplete) { try { await i.respond([]); } catch { /* 이미 만료 */ } return; }
     try { await cmd.autocomplete(i); } catch (e) { console.error(`[autocomplete:${i.commandName}]`, e); }
     return;
   }
   if (i.isChatInputCommand()) {
-    const cmd = COMMANDS.find((c) => c.data.name === i.commandName);
+    const cmd = findCommand(i.commandName);
     if (!cmd) return;
     // maishift 프로필을 처음 받을 때처럼 늦어지면 3초 한도 전에 대신 defer 한다. /문의 는 모달을 띄워야 해서 제외.
     if (cmd !== report) guardSlowAck(i);
@@ -325,6 +346,15 @@ client.on(Events.InteractionCreate, async (i) => {
       try { await photo.handleModal(i); } catch (e) { console.error("[photo-modal]", e); }
       return;
     }
+    // /랜덤 조건 창의 상수·플레이리스트 입력, /목표 추가 입력 창
+    if (i.customId.startsWith("rnd:")) {
+      try { await random.handleModal(i); } catch (e) { console.error("[random-modal]", e); }
+      return;
+    }
+    if (i.customId.startsWith("goal:am:")) {
+      try { await goal.handleModal(i); } catch (e) { console.error("[goal-modal]", e); }
+      return;
+    }
     if (i.customId.startsWith("report:modal:")) {
       try { await report.handleModal(i); } catch (e) { console.error("[report-modal]", e); }
     }
@@ -333,6 +363,18 @@ client.on(Events.InteractionCreate, async (i) => {
   // /사진관 사진 종류·이용자 선택(핸들러가 바로 defer 한다)
   if ((i.isStringSelectMenu() || i.isUserSelectMenu()) && i.customId.startsWith("photo:")) {
     try { await photo.handleComponent(i); } catch (e) { console.error("[photo-select]", e); }
+    return;
+  }
+  // /곡추천·/랜덤 조건 메뉴, /목표 추가·삭제 메뉴, /플레이트 버전 전환(핸들러가 바로 응답한다)
+  if (i.isStringSelectMenu() || i.isUserSelectMenu()) {
+    try {
+      if (i.customId.startsWith("rec:")) await songrec.handleComponent(i);
+      else if (i.customId.startsWith("rnd:")) await random.handleComponent(i);
+      else if (i.isStringSelectMenu() && i.customId.startsWith("goal:")) await goal.handleSelect(i);
+      else if (i.isStringSelectMenu() && i.customId.startsWith("plate:")) await plate.handleComponent(i);
+    } catch (e) {
+      console.error("[select]", i.customId.split(":")[0], e);
+    }
     return;
   }
   if (i.isButton()) {
@@ -352,6 +394,23 @@ client.on(Events.InteractionCreate, async (i) => {
     }
     if (i.customId.startsWith("photo:")) {
       try { await photo.handleComponent(i); } catch (e) { console.error("[photo-btn]", e); }
+      return;
+    }
+    // /곡추천·/랜덤 다시 뽑기·조건 바꾸기·뽑기, /플레이트 종류·전체 보기, /보면 난이도
+    if (i.customId.startsWith("rec:")) {
+      try { await songrec.handleComponent(i); } catch (e) { console.error("[songrec-btn]", e); }
+      return;
+    }
+    if (i.customId.startsWith("rnd:")) {
+      try { await random.handleComponent(i); } catch (e) { console.error("[random-btn]", e); }
+      return;
+    }
+    if (i.customId.startsWith("plate:")) {
+      try { await plate.handleComponent(i); } catch (e) { console.error("[plate-btn]", e); }
+      return;
+    }
+    if (i.customId.startsWith("chartd:")) {
+      try { await chart.handleDifficultyButton(i); } catch (e) { console.error("[chart-diff-btn]", e); }
       return;
     }
     if (i.customId.startsWith("circle:")) {

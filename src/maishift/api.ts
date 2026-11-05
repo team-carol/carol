@@ -26,11 +26,13 @@ const RETRY_AFTER_MAX_SEC = 3;
 export type ApiRegion = "intl" | "jp";
 
 /** 엔드포인트별 한도 소모량(문서의 표). 모르는 경로는 10 으로 본다. */
-function costOf(path: string): number {
+export function costOf(path: string): number {
   if (path === "/versions") return 1;
   if (/^\/profiles\/[^/]+\/snapshots$/.test(path)) return 2;
-  if (/^\/profiles\/[^/]+$/.test(path)) return 5;
-  if (/^\/charts\/\d+\/distribution$/.test(path)) return 6;
+  if (/^\/profiles\/[^/]+$/.test(path) || /^\/playlists\/\d+$/.test(path)) return 5;
+  if (/^\/charts\/\d+\/distribution$/.test(path) || /^\/stats\/(ratings|options|plates|levels\/\d+)$/.test(path)) return 6;
+  if (path === "/stats/level-charts" || path === "/stats/clear-ratios") return 15;
+  if (path === "/stats/plate-difficulty") return 30;
   return 10;
 }
 
@@ -98,7 +100,9 @@ export async function callApi<T>(path: string, query: Record<string, string | nu
       } catch (e) {
         throw new MaishiftError(`request failed: ${(e as Error).message}`, "unavailable");
       }
-      const left = Number(res.headers.get("x-ratelimit-remaining"));
+      // 헤더가 없으면(Number(null) = 0) 모르는 것으로 둔다.
+      const leftRaw = res.headers.get("x-ratelimit-remaining");
+      const left = leftRaw === null || leftRaw.trim() === "" ? NaN : Number(leftRaw);
       if (Number.isFinite(left)) remaining = { units: left, at: Date.now() };
       const size = Number(res.headers.get("x-ratelimit-limit"));
       if (Number.isFinite(size) && size > 0) bucketSize = size;

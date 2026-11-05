@@ -16,6 +16,7 @@ import type { RatingPoint, PlayCountPoint } from "../../ratingHistory";
 import { lineChart, lineSwatch, dashedSwatch, CHART_W } from "./historyChart";
 import { hasCarolSync, extrasSyncedAt } from "./syncExtras";
 import { msg, cardTextSignature } from "../../messages";
+import { formatTopPercent, type RatingRank } from "../../maishift/stats";
 
 // /프로필 이미지 카드. 레이아웃·색은 /성과 카드와 같은 랜딩(carol-web) 토큰(src/brand.ts)을 따른다.
 // 헤더(아바타·이름·칭호·클래스·레이팅 플레이트) → 레이팅 구성 → 클리어 현황 → 최근 플레이 5곡.
@@ -46,7 +47,7 @@ const MARK_COLOR: Record<string, string> = {
   "FDX+": "#10b981", FDX: "#34d399", "FS+": "#22c55e", FS: "#4ade80",
 };
 
-const PROFILE_CARD_VERSION = 21;
+const PROFILE_CARD_VERSION = 22;
 const PROFILE_CARD_CACHE_MAX = 64;
 const profileCardCache = new Map<string, Buffer>();
 
@@ -233,15 +234,18 @@ function playCountPanel(plays: PlayCountPoint[], days: string[], updates: { day:
 export async function renderProfileCard(
   profile: CachedProfile,
   avatarBuf: Buffer | null,
-  opts: { translate?: boolean; friendCode?: string | null; circleName?: string | null; ratingHistory?: { points: RatingPoint[]; days: string[]; updates?: { day: string; label: string }[]; plays?: PlayCountPoint[] } } = {},
+  opts: { translate?: boolean; friendCode?: string | null; circleName?: string | null; ratingHistory?: { points: RatingPoint[]; days: string[]; updates?: { day: string; label: string }[]; plays?: PlayCountPoint[] }; ratingRank?: RatingRank | null } = {},
 ): Promise<Buffer> {
   const translate = !!opts.translate;
   const friendCode = opts.friendCode ?? null;
   const circleName = opts.circleName ?? null;
   const history = opts.ratingHistory;
+  const rank = opts.ratingRank ?? null;
+  const rankText = rank ? formatTopPercent(rank.percent) : "";
   // 그래프 기간은 오늘을 끝으로 움직이므로 마지막 날짜도 키에 넣는다.
   // 최근 플레이 패널·서클 이름은 북마클릿 데이터라 maishift 업로드 시각(lastSyncedAt)과 따로 바뀐다.
-  const cacheKey = [profile.profileKey, profile.lastSyncedAt, extrasSyncedAt(profile), translate ? 1 : 0, friendCode ?? "", circleName ?? "", avatarBuf?.length ?? 0, history ? history.days[history.days.length - 1] : "-", PROFILE_CARD_VERSION, profile.source ?? "", cardTextSignature()].join("|");
+  // 레이팅 순위는 maishift 통계가 다시 계산될 때 바뀐다.
+  const cacheKey = [profile.profileKey, profile.lastSyncedAt, extrasSyncedAt(profile), translate ? 1 : 0, friendCode ?? "", circleName ?? "", avatarBuf?.length ?? 0, history ? history.days[history.days.length - 1] : "-", rankText, rank?.activePlayers ?? "", PROFILE_CARD_VERSION, profile.source ?? "", cardTextSignature()].join("|");
   const memo = profileCardCache.get(cacheKey);
   if (memo) return memo;
 
@@ -312,6 +316,8 @@ export async function renderProfileCard(
       { value: String(Math.round(breakdown.oldSum)), label: msg("profileCard.oldSum", { count: breakdown.oldCount }), sub: avg(breakdown.oldSum, breakdown.oldCount) },
       { value: String(profile.playCount || 0), label: msg("profileCard.playCount") },
       { value: String(profile.totalPlayCount || profile.playCount || 0), label: msg("profileCard.totalPlayCount") },
+      // maishift 레이팅 분포(활동 플레이어)에서의 위치. 통계를 못 받았으면 칸을 빼고 4칸으로.
+      ...(rank ? [{ value: `${rankText}%`, label: msg("profileCard.topPercent"), sub: msg("profileCard.topPercentSub", { players: rank.activePlayers.toLocaleString("en-US"), days: rank.activeDays }) }] : []),
     ]),
     clearPanel(clears),
     ...(history ? [ratingChartPanel(history.points, history.days, history.updates, profile.rating || 0)] : []),

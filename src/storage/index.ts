@@ -47,6 +47,7 @@ export const listPatchNotes = method("listPatchNotes"); export const savePatchNo
 export const saveProfileCircle = method("saveProfileCircle"); export const getCirclePublic = method("getCirclePublic"); export const setCirclePublic = method("setCirclePublic");
 export const saveSharedCircle = method("saveSharedCircle"); export const backfillSharedCircles = method("backfillSharedCircles");
 export const getTranslateTitles = method("getTranslateTitles"); export const setTranslateTitles = method("setTranslateTitles");
+export const getCommandPreset = method("getCommandPreset"); export const setCommandPreset = method("setCommandPreset");
 export const getDxRankDecimal = method("getDxRankDecimal"); export const setDxRankDecimal = method("setDxRankDecimal");
 export const getMaishiftLink = method("getMaishiftLink"); export const getMaishiftUsers = method("getMaishiftUsers"); export const saveSyncExtras = method("saveSyncExtras"); export const hasChartClears = method("hasChartClears"); export const getChartClears = method("getChartClears"); export const setMaishiftHandle = method("setMaishiftHandle"); export const unlinkMaishift = method("unlinkMaishift"); export const getKvCache = method("getKvCache"); export const saveKvCache = method("saveKvCache");
 export const getConstantsCache = method("getConstantsCache"); export const saveConstantsCache = method("saveConstantsCache");
