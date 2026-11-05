@@ -1,7 +1,8 @@
-import { SlashCommandBuilder, ChatInputCommandInteraction, EmbedBuilder, AttachmentBuilder, MessageFlags } from "discord.js";
-import { getDailyFortuneSong, getJacketFile, jacketFileUrl } from "../../constants";
+import { SlashCommandBuilder, ChatInputCommandInteraction, AttachmentBuilder, TextDisplayBuilder, MessageFlags } from "discord.js";
+import { getDailyFortuneSong } from "../../constants";
 import { getTranslateTitles } from "../../storage";
-import { displayTitle, normalizeQuery } from "../../aliases";
+import { normalizeQuery } from "../../aliases";
+import { songContainer, jacketAttachment } from "../utils/songCard";
 import { searchAllCharts } from "../../simai/chartSearch";
 import { resolveChart } from "../../simai/source";
 import { parseMaidata } from "../../simai/parse";
@@ -81,32 +82,30 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   const chart = fortune.charts[0];
   const style = constantStyle(chart.level);
   const dateText = formatSeoulDate(new Date());
-  const emb = new EmbedBuilder()
-    .setTitle(msg("fortune.title"))
-    .setColor(style.color)
-    .setDescription(msg("fortune.body", { title: displayTitle(fortune.title, await getTranslateTitles(interaction.user.id)) }))
-    .addFields(
-      { name: msg("fortune.chartField"), value: `\`${chart.kind} ${chart.diff}\``, inline: true },
-      { name: msg("fortune.constantField"), value: `\`${chart.level.toFixed(1)}\``, inline: true },
-    )
-    .setFooter({ text: msg("fortune.footer", { date: dateText }) });
+  const translate = await getTranslateTitles(interaction.user.id);
 
-  const jacketFile = getJacketFile(fortune.title);
-  if (jacketFile) {
-    emb.setThumbnail(jacketFileUrl(jacketFile));
-  }
-
-  // 등록 채보가 있으면 /보면 과 같은 미리보기 GIF 를 붙인다(부가 기능, 실패해도 임베드는 나감).
+  // 재킷은 첨부 파일로(DX NET 주소는 디스코드가 못 불러온다). 보면이 있으면 /보면 과 같은 미리보기 GIF 를 곡 아래에 붙인다
+  // (부가 기능, 실패해도 메시지는 나감).
   const files: AttachmentBuilder[] = [];
-  try {
-    const gif = await fortunePreviewGif(fortune.title, chart.kind, chart.diff);
-    if (gif) {
-      files.push(new AttachmentBuilder(gif, { name: "preview.gif" }));
-      emb.setImage("attachment://preview.gif");
-    }
-  } catch (e) {
-    console.error("[운세] 미리보기 생성 실패:", e);
-  }
+  const [jacket, gif] = await Promise.all([
+    jacketAttachment(fortune.title, chart.kind, "jacket.png"),
+    fortunePreviewGif(fortune.title, chart.kind, chart.diff).catch((e) => {
+      console.error("[운세] 미리보기 생성 실패:", e);
+      return null;
+    }),
+  ]);
+  if (jacket) files.push(jacket);
+  if (gif) files.push(new AttachmentBuilder(gif, { name: "preview.gif" }));
 
-  await interaction.editReply({ embeds: [emb], files });
+  // Components V2: 머리글(오늘 날짜) → 곡 컨테이너(곡·난이도·상수, 재킷, 미리보기, 외부 출력). 띠 색은 상수 구간 색.
+  const container = songContainer({
+    title: fortune.title, kind: chart.kind, diff: chart.diff, constant: chart.level, translate,
+    accent: style.color,
+    ...(gif ? { image: "preview.gif" } : {}),
+  }, jacket);
+  await interaction.editReply({
+    components: [new TextDisplayBuilder().setContent(msg("fortune.header", { date: dateText })), container],
+    files,
+    flags: MessageFlags.IsComponentsV2,
+  });
 }

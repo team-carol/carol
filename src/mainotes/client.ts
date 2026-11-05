@@ -20,8 +20,8 @@ const TIMEOUT_MS = 30_000;
 /** 응답이 비정상적으로 크면 파싱하지 않는다. 실측 약 3.9MB. */
 const MAX_BYTES = 32 * 1024 * 1024;
 
-/** 상대 로그에서 캐롤봇을 식별할 수 있게 한다. 문의와 연결되는 연락처를 같이 적는다. */
-function userAgent(): string {
+/** 상대 로그에서 캐롤봇을 식별할 수 있게 한다. 문의와 연결되는 연락처를 같이 적는다. (LXNS 플레이트 그림도 같이 쓴다) */
+export function userAgent(): string {
   let version = "0.0.0";
   try { version = require("../../package.json").version ?? version; } catch { /* 빌드 위치에 따라 없을 수 있다 */ }
   return `Carolbot/${version} (maimai Discord bot; contact: @roena_smoooch)`;

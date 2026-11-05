@@ -26,8 +26,28 @@ export interface CatalogSong {
 
 /** 그 지역 버전(세대 번호·이름·출시 시각 ms). maishift 곡 목록의 availableVersions. */
 export interface RegionVersion { index: number; name: string; releasedAt: number }
+/**
+ * 그 지역 보면 한 줄: [maishift 보면 번호, 제목, 종류, 난이도, 표시 레벨(예: "13+"), 상수×10, 곡이 추가된 세대 번호].
+ * 보면 번호는 지역마다 따로라(같은 보면도 intl·jp 번호가 다르다) 통계·플레이리스트의 chartId 를 보면으로 바꿀 때 쓴다.
+ * 상수를 모르는 보면도 넣는다(플레이트 대상 보면 수를 세야 한다).
+ */
+export type RegionChartRow = [number, string, "ST" | "DX", string, string, number, number];
+
+export function chartRowsOf(songs: ApiSong[]): RegionChartRow[] {
+  const rows: RegionChartRow[] = [];
+  for (const song of songs) {
+    const kind = song.type === "DX" ? "DX" : "ST";
+    for (const c of song.charts) {
+      const diff = DIFF[c.difficulty];
+      if (diff) rows.push([c.id, song.title || "　", kind, diff, c.level, c.internalLevel, song.version]);
+    }
+  }
+  return rows;
+}
+
 export interface RegionCatalog {
   songs: CatalogSong[];
+  charts: RegionChartRow[];
   /** 그 지역 최신 세대 번호(이 세대 곡은 순서가 아직 바뀔 수 있다) */
   latestVersion: number;
   versions: RegionVersion[];
@@ -115,6 +135,7 @@ export async function fetchCatalog(region: ApiRegion): Promise<RegionCatalog> {
   if (!songs?.songs?.length) throw new Error(`maishift ${region} 곡 목록이 비어 있음`);
   return {
     songs: toCatalog(songs.songs),
+    charts: chartRowsOf(songs.songs),
     latestVersion: versions.latestVersion,
     versions: versions.versions
       .map((v) => ({ index: v.id, name: v.name, releasedAt: v.releasedAt ? Date.parse(v.releasedAt) : NaN }))

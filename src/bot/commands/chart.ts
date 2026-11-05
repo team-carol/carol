@@ -2,13 +2,14 @@ import {
   SlashCommandBuilder, ChatInputCommandInteraction, AutocompleteInteraction,
   ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, AttachmentBuilder,
   ContainerBuilder, SectionBuilder, SeparatorSpacingSize, TextDisplayBuilder, escapeMarkdown,
+  type ButtonInteraction,
 } from "discord.js";
 import { randomBytes } from "crypto";
 import { saveSimaiChart, countSimaiChartsByOwner, getTranslateTitles, getUserFriendCode, getCachedProfile } from "../../storage";
-import { displayTitle } from "../../aliases";
+import { displayTitle, normalizeQuery } from "../../aliases";
 import { parseMaidata, UNKNOWN_DIFFICULTY } from "../../simai/parse";
 import { resolveChart, ChartUnavailableError } from "../../simai/source";
-import { searchAllCharts, chartIndexSize } from "../../simai/chartSearch";
+import { searchAllCharts, chartIndexSize, type ChartHit } from "../../simai/chartSearch";
 import { renderPreviewGif } from "../utils/chartGif";
 import { jacketBuffer, getClearList } from "../utils/embeds";
 import { diffBadgeEmoji, rankIcon, comboIcon, syncIcon, dxStarIcon, kindEmoji } from "../utils/emoji";
@@ -86,45 +87,12 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   // ── 곡 이름으로 고른 경우 ────────────────────────────────────────────────
   if (pick) {
     await interaction.deferReply();
-    try {
-      const found = await resolveChart(pick);
-      const parsed = parseMaidata(found.maidata);
-      const available = Object.keys(parsed.charts).map(Number).sort((a, b) => a - b);
-      const key = parsed.charts[found.difficulty] ? found.difficulty : available[available.length - 1];
-      const chart: Chart = parsed.charts[key];
-      if (!chart || chart.notes.length === 0) {
-        await interaction.editReply({ content: msg("chart.emptyChart") });
-        return;
-      }
-      // mai-notes 본문은 헤더가 없어 파서 키(key)가 0(미상)이지만, 메타데이터에
-      // 실제 난이도가 있다. 표시·저장에는 그 실제 난이도를 쓴다.
-      const diff = found.difficulty || key;
-      let id = found.storedId;
-      if (!id) {
-        id = randomBytes(12).toString("base64url");
-        await saveSimaiChart({
-          id, ownerId: "", source: "registry",
-          title: found.title.slice(0, 200), artist: found.artist.slice(0, 200),
-          designer: found.designer.slice(0, 200), level: found.level.slice(0, 20),
-          difficulty: diff, maidata: found.maidata, chartJson: JSON.stringify(chart),
-        });
-      }
-      await reply(interaction, {
-        id, title: found.title, artist: found.artist,
-        designer: found.designer, level: found.level, diff, chart,
-        sourceUrl: found.sourceUrl, chartType: found.chartType,
-        footer: found.attribution && found.sourceUrl
-          ? msg("chart.footerSource", { source: found.attribution, url: found.sourceUrl })
-          : msg("chart.footerRegistry"),
-      });
-    } catch (e) {
-      if (e instanceof ChartUnavailableError) {
-        await interaction.editReply({ content: msg(`chart.unavailable.${e.reason}`) });
-        return;
-      }
-      console.error("[보면] 채보 조회 실패:", e);
-      await interaction.editReply({ content: msg("chart.parseFailed") });
+    const x = await chartFromKey(pick);
+    if (typeof x === "string") {
+      await interaction.editReply({ content: x });
+      return;
     }
+    await interaction.editReply(await chartPayload(interaction.user.id, interaction.options.getNumber("시작"), x));
     return;
   }
 
@@ -215,11 +183,11 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     return;
   }
 
-  await reply(interaction, {
+  await interaction.editReply(await chartPayload(interaction.user.id, interaction.options.getNumber("시작"), {
     id, title: parsed.title, artist: parsed.artist,
     designer: parsed.designers[key] ?? "", level: parsed.levels[key] ?? "",
     diff, chart, footer: msg("chart.footer", { user: interaction.user.username }),
-  });
+  }));
 }
 
 interface ReplyInput {
@@ -229,6 +197,90 @@ interface ReplyInput {
   sourceUrl?: string;
   /** "standard" | "deluxe" | "" — 제목 옆 [ST]/[DX] 구분. */
   chartType?: string;
+  /** 곡 이름으로 고른 채보 키. 있으면 같은 곡의 다른 난이도 버튼을 단다. */
+  key?: string;
+}
+
+/** 곡 이름으로 고른 채보(검색 키) → 응답 재료. 처음 보는 채보는 저장한다. 못 보여 주면 안내 문구. */
+async function chartFromKey(pick: string): Promise<ReplyInput | string> {
+  try {
+    const found = await resolveChart(pick);
+    const parsed = parseMaidata(found.maidata);
+    const available = Object.keys(parsed.charts).map(Number).sort((a, b) => a - b);
+    const key = parsed.charts[found.difficulty] ? found.difficulty : available[available.length - 1];
+    const chart: Chart = parsed.charts[key];
+    if (!chart || chart.notes.length === 0) return msg("chart.emptyChart");
+    // mai-notes 본문은 헤더가 없어 파서 키(key)가 0(미상)이지만, 메타데이터에
+    // 실제 난이도가 있다. 표시·저장에는 그 실제 난이도를 쓴다.
+    const diff = found.difficulty || key;
+    let id = found.storedId;
+    if (!id) {
+      id = randomBytes(12).toString("base64url");
+      await saveSimaiChart({
+        id, ownerId: "", source: "registry",
+        title: found.title.slice(0, 200), artist: found.artist.slice(0, 200),
+        designer: found.designer.slice(0, 200), level: found.level.slice(0, 20),
+        difficulty: diff, maidata: found.maidata, chartJson: JSON.stringify(chart),
+      });
+    }
+    return {
+      id, title: found.title, artist: found.artist,
+      designer: found.designer, level: found.level, diff, chart,
+      sourceUrl: found.sourceUrl, chartType: found.chartType, key: pick,
+      footer: found.attribution && found.sourceUrl
+        ? msg("chart.footerSource", { source: found.attribution, url: found.sourceUrl })
+        : msg("chart.footerRegistry"),
+    };
+  } catch (e) {
+    if (e instanceof ChartUnavailableError) return msg(`chart.unavailable.${e.reason}`);
+    console.error("[보면] 채보 조회 실패:", e);
+    return msg("chart.parseFailed");
+  }
+}
+
+/**
+ * 같은 곡·종류의 다른 난이도 버튼(chartd:<누른 사람>:<검색 키>). 지금 난이도는 눌린 모양으로 끈다.
+ * 검색 인덱스에 본문이 있는 보면만 나온다(mai-notes 는 처음 고를 때 본문을 한 번 받는다).
+ */
+function difficultyRow(userId: string, x: ReplyInput): ActionRowBuilder<ButtonBuilder> | null {
+  if (!x.key) return null;
+  const nt = normalizeQuery(x.title);
+  const byDiff = new Map<number, ChartHit>();
+  for (const h of searchAllCharts(x.title, 25)) {
+    if (normalizeQuery(h.title) !== nt || !(h.difficulty >= 1 && h.difficulty <= 5)) continue;
+    if (x.chartType && h.type && h.type !== x.chartType) continue;
+    const have = byDiff.get(h.difficulty);
+    // 같은 종류(ST/DX)를 먼저
+    if (!have || (have.type !== x.chartType && h.type === x.chartType)) byDiff.set(h.difficulty, h);
+  }
+  if (byDiff.size < 2) return null;
+  return new ActionRowBuilder<ButtonBuilder>().addComponents(
+    [...byDiff.entries()].sort((a, b) => a[0] - b[0]).map(([d, h]) => {
+      const current = d === x.diff;
+      return new ButtonBuilder()
+        .setCustomId(`chartd:${userId}:${current ? x.key : h.key}`)
+        .setLabel(DIFF_LABEL[d] ?? String(d))
+        .setStyle(current ? ButtonStyle.Primary : ButtonStyle.Secondary)
+        .setDisabled(current);
+    }),
+  );
+}
+
+/** 난이도 버튼(chartd:<주인>:<검색 키>). 주인이면 그 자리에서 바꾸고, 아니면 그 사람에게만 새로 보여 준다. */
+export async function handleDifficultyButton(i: ButtonInteraction): Promise<void> {
+  const rest = i.customId.slice("chartd:".length);
+  const at = rest.indexOf(":");
+  const ownerId = rest.slice(0, at);
+  const key = rest.slice(at + 1);
+  const own = i.user.id === ownerId;
+  if (own) await i.deferUpdate();
+  else await i.deferReply({ flags: MessageFlags.Ephemeral });
+  const x = await chartFromKey(key);
+  if (typeof x === "string") {
+    await i.followUp({ content: x, flags: MessageFlags.Ephemeral });
+    return;
+  }
+  await i.editReply({ ...(await chartPayload(i.user.id, null, x)), attachments: [] });
 }
 
 /** 보면 제작자(원본 페이지 링크). 출처 사이트는 아래 출처 줄에 링크로 걸리므로, 제작자를 모르면 줄을 뺀다. */
@@ -279,13 +331,16 @@ async function myRecordLine(userId: string, title: string, kind: string, diff: s
   }
 }
 
-/** 곡 정보·노트 수·내 기록·미리보기 GIF 를 Components V2 컨테이너로 응답한다. 파일/곡 어느 쪽으로 왔든 같다. */
-async function reply(interaction: ChatInputCommandInteraction, x: ReplyInput): Promise<void> {
+/**
+ * 곡 정보·노트 수·내 기록·미리보기 GIF 를 Components V2 컨테이너로 만든다. 파일/곡 어느 쪽으로 왔든 같다.
+ * userId: 보는 사람(번역 설정·내 기록·난이도 버튼 주인). asked: 미리보기 시작 시각(초).
+ */
+async function chartPayload(userId: string, asked: number | null, x: ReplyInput): Promise<{ components: ContainerBuilder[]; files: AttachmentBuilder[]; flags: MessageFlags.IsComponentsV2 }> {
   const url = `${getBaseUrl(PORT)}/chart?id=${x.id}`;
   const s = x.chart.stats;
   // 곡명 한국어 번역: 실행 유저의 표시 설정(translate_titles)이 켜져 있고 번역 별명이
   // 있으면 치환. 다른 임베드(검색·최근)와 같은 방식.
-  const translate = await getTranslateTitles(interaction.user.id);
+  const translate = await getTranslateTitles(userId);
   const shownTitle = displayTitle(x.title, translate);
   const kind = x.chartType === "deluxe" ? "DX" : x.chartType === "standard" ? "ST" : "";
   const diffName: string | undefined = DIFF_LABEL[x.diff];
@@ -298,10 +353,9 @@ async function reply(interaction: ChatInputCommandInteraction, x: ReplyInput): P
   const genre = inCatalog ? getSongGenre(x.title) : null;
 
   // 미리보기 GIF 는 웹 플레이어와 같은 렌더러를 워커에서 돌려 몇 초치를 잘라낸다. 재킷·내 기록과 같이 기다린다.
-  const asked = interaction.options.getNumber("시작");
   const [jacket, mine, preview] = await Promise.all([
     inCatalog ? jacketBuffer({ title: x.title, jacketUrl: "" } as PlayRecord) : Promise.resolve(null),
-    inCatalog && diffName && kind ? myRecordLine(interaction.user.id, x.title, kind, diffName) : Promise.resolve(null),
+    inCatalog && diffName && kind ? myRecordLine(userId, x.title, kind, diffName) : Promise.resolve(null),
     renderPreviewGif(
       { id: x.id, title: x.title, artist: x.artist, designer: x.designer,
         level: x.level, difficulty: x.diff, chart: x.chart },
@@ -386,6 +440,9 @@ async function reply(interaction: ChatInputCommandInteraction, x: ReplyInput): P
   container
     .addSeparatorComponents((sp) => sp.setSpacing(SeparatorSpacingSize.Small))
     .addActionRowComponents(row);
+  // 같은 곡의 다른 난이도로 바로 바꾸기(곡 이름으로 골랐을 때만).
+  const diffs = difficultyRow(userId, x);
+  if (diffs) container.addActionRowComponents(diffs);
 
-  await interaction.editReply({ components: [container], files, flags: MessageFlags.IsComponentsV2 });
+  return { components: [container], files, flags: MessageFlags.IsComponentsV2 };
 }
