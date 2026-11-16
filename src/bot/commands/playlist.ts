@@ -9,6 +9,7 @@ import { openPlaylist, playlistChoices, resolvePlaylistInput } from "../../maish
 import { titleOf } from "../../maishift/convert";
 import { playlistErrorText } from "./random";
 import { msg } from "../../messages";
+import { withTarget } from "../utils/targetLine";
 
 // /플레이리스트: maishift 공개 플레이리스트의 보면을 순서대로, 내 기록과 함께 한 장으로.
 // 공개 목록을 나열하는 API 가 없어, 자동완성은 캐롤봇에서 한 번 연 목록을 이름으로 보여 준다(playlistIndex).
@@ -69,7 +70,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     });
     const [avatarBuf, translate] = await Promise.all([loadAvatar(targetId, cached), getTranslateTitles(interaction.user.id)]);
     const png = await renderPlaylistCard(cached, avatarBuf, { title: list.title, owner: list.owner.handle, updatedAt: list.updatedAt }, entries, translate);
-    await interaction.editReply({ files: [new AttachmentBuilder(png, { name: "playlist.png" })] });
+    await interaction.editReply({ ...withTarget(targetId), files: [new AttachmentBuilder(png, { name: "playlist.png" })] });
   } catch (e) {
     console.error("[playlist]", e);
     await interaction.editReply({ content: msg("playlist.failed") }).catch(() => {});

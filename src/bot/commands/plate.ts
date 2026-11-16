@@ -13,6 +13,7 @@ import { ratingBandOf, getPlateDifficulty, getPlateStats, type PlateDifficulty, 
 import { getPlateImages } from "../../plateImages";
 import { normalizeQuery } from "../../aliases";
 import { msg } from "../../messages";
+import { withTarget } from "../utils/targetLine";
 
 // /플레이트: 버전 플레이트(極·将·神·舞舞·覇者) 진행도. 버전을 고르면 그 플레이트의 남은 보면까지.
 export const data = new SlashCommandBuilder()
@@ -158,7 +159,8 @@ export async function show(interaction: RepliableInteraction, targetId: string, 
   }
   await interaction.deferReply();
   try {
-    await interaction.editReply(await platePayload(targetId, interaction.user.id, prefix, type));
+    const payload = await platePayload(targetId, interaction.user.id, prefix, type);
+    await interaction.editReply("content" in payload ? payload : { ...payload, ...withTarget(targetId) });
   } catch (e) {
     console.error("[plate]", e);
     await interaction.editReply({ content: msg("plate.failed") }).catch(() => {});
@@ -199,7 +201,7 @@ export async function handleComponent(i: ButtonInteraction | StringSelectMenuInt
       await i.followUp({ content: payload.content, flags: MessageFlags.Ephemeral });
       return;
     }
-    await i.editReply({ ...payload, attachments: [] });
+    await i.editReply({ ...payload, ...withTarget(targetId), attachments: [] });
   } catch (e) {
     console.error("[plate-switch]", e);
     await i.followUp({ content: msg("plate.failed"), flags: MessageFlags.Ephemeral }).catch(() => {});

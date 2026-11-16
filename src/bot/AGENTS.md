@@ -54,6 +54,7 @@ src/bot/
 - Button routing is centralized in `src/bot/index.ts`, prefix-based, and load-bearing.
 - Privacy and bookmarklet preset management are web settings now; Discord `/설정` should remain a link-only 안내 command.
 - Use `MessageFlags.Ephemeral` for private setup/settings/error replies.
+- Public record results (images, `/검색`, `/곡추천`·`/랜덤`, search detail, shares) start with a small "@target 님의 기록" line from `utils/targetLine.ts` (`withTarget` for content, `targetLine` inside V2 headers) with `NO_PING`; the command user is not shown.
 - Rating-card cache is invalidated by `lastSyncedAt` and `CARD_VERSION`; bump version when layout/calculation changes.
 
 ## CUSTOM ID NAMESPACES

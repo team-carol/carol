@@ -20,6 +20,7 @@ import { mainotesSource } from "../mainotes/source";
 import { registerChartSource } from "../simai/source";
 import { loadAppEmojis } from "./utils/emoji";
 import { loadMessages, msg, onMessagesReloaded } from "../messages";
+import { withTarget } from "./utils/targetLine";
 import { color as BRAND, toInt } from "@team-carol/design-system";
 import { appVersion } from "../version";
 import { loadFonts } from "../fonts";
@@ -457,7 +458,7 @@ client.on(Events.InteractionCreate, async (i) => {
         if (!emb) { await (i as ButtonInteraction).reply({ content: msg("button.songNotFound"), ...EPHEMERAL_REPLY }); return; }
         emb.setFooter({ text: msg("button.shareFooter", { name: cached.playerName, sharer: i.user.username }) });
         const file = result.files.find((f) => f.name === `jacket${songIdx}.png`);
-        await (i as ButtonInteraction).reply({ embeds: [emb], files: file ? [file] : [] });
+        await (i as ButtonInteraction).reply({ ...withTarget(targetUserId), embeds: [emb], files: file ? [file] : [] });
       } catch (e) {
         console.error("[share-btn]", e);
       }
@@ -524,9 +525,9 @@ client.on(Events.InteractionCreate, async (i) => {
         const result = await mapAreaEmbed(cached, userId, Math.floor(areaIdx / 5));
         const emb = result.embeds[areaIdx % 5];
         if (!emb) { await (i as ButtonInteraction).reply({ content: msg("button.mapNotFound"), ...EPHEMERAL_REPLY }); return; }
-        emb.setFooter({ text: `${cached.playerName}의 지방 진행도  ✦  공유: ${i.user.username}` });
+        emb.setFooter({ text: msg("button.mapShareFooter", { name: cached.playerName, sharer: i.user.username }) });
         const file = result.files.find((f) => f.name === `map${areaIdx}.png`);
-        await (i as ButtonInteraction).editReply({ embeds: [emb], files: file ? [file] : [] });
+        await (i as ButtonInteraction).editReply({ ...withTarget(userId), embeds: [emb], files: file ? [file] : [] });
       } catch (e) {
         console.error("[mapshare-btn]", e);
       }

@@ -24,6 +24,7 @@ import { songContainer, jacketAttachment } from "../utils/songCard";
 import { color as BRAND, toInt } from "@team-carol/design-system";
 import { getScoreRank } from "../../games";
 import { rerollRow, rerollInPlace, postFromMenu, type V2Payload } from "../utils/reroll";
+import { targetLine, NO_PING } from "../utils/targetLine";
 
 function shuffle<T>(arr: T[]): T[] {
   const a = arr.slice();
@@ -223,7 +224,8 @@ export async function buildRandom(state: RandomState, ownerId: string): Promise<
     }
     return songContainer({ title: c.title, kind: c.kind, diff: c.diff, constant: c.level, translate, lines }, jackets[i]);
   }));
-  const header = filters.length ? msg("random.headerFilters", { filters: filters.join("  ✦  ") }) : msg("random.header");
+  const baseHeader = filters.length ? msg("random.headerFilters", { filters: filters.join("  ✦  ") }) : msg("random.header");
+  const header = clearMap ? `${baseHeader}\n${targetLine(state.target)}` : baseHeader;
   const footer = playlist
     ? msg("random.footer", { text: `${msg("random.playlistFooter", { owner: playlist.owner.handle, count: playlist.items.length })}  ✦  ${msg("maishift.credit")}` })
     : null;
@@ -236,6 +238,7 @@ export async function buildRandom(state: RandomState, ownerId: string): Promise<
     ],
     files: jackets.filter((j): j is AttachmentBuilder => !!j),
     flags: MessageFlags.IsComponentsV2,
+    ...NO_PING,
   };
 }
 
