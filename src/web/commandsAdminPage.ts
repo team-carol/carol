@@ -22,43 +22,34 @@ export function commandsAdminPage(token: string, rows: CommandRowVM[], botRunnin
 ${BASE_CSS}
 ${ADMIN_CSS}
 .bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
-#q{flex:1;min-width:180px;background:var(--canvas-alt);border:1px solid var(--border);border-radius:12px;padding:11px 14px;color:var(--ink);font-size:15px;outline:none;transition:border-color .15s}
-#q::placeholder{color:var(--faint)}
-#q:focus{border-color:var(--accent)}
-.note{font-size:13px;color:var(--dim);line-height:1.6;margin:0 0 18px}
-.card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:14px 16px;margin-bottom:10px}
-.card.on{border-color:rgba(255,146,148,.55)}
+#q{flex:1;width:auto;min-width:180px;font-size:15px}
+.note{font-size:13px;color:var(--crl-dim);line-height:1.6;margin:0 0 18px}
+.page .card{padding:14px 16px;margin-bottom:10px}
 .head{display:flex;gap:8px;align-items:baseline;justify-content:space-between;flex-wrap:wrap}
-.key{font-size:12px;color:var(--faint)}
+.key{font-size:12px;color:var(--crl-faint)}
 .field{display:flex;gap:8px;align-items:center;margin-top:8px}
-.field label{width:46px;flex-shrink:0;font-size:12.5px;color:var(--dim)}
-.field input{flex:1;min-width:0;background:var(--canvas-alt);border:1px solid var(--border);border-radius:10px;padding:8px 11px;color:var(--ink);font-size:14px;outline:none;transition:border-color .15s}
-.field input:focus{border-color:var(--accent)}
-.opts{margin-top:10px;border-top:1px solid var(--border);padding-top:8px}
+.field label{width:46px;flex-shrink:0;font-size:12.5px;color:var(--crl-dim)}
+.field .crl-input{flex:1;min-width:0}
+.opts{margin-top:10px;border-top:1px solid var(--crl-border);padding-top:8px}
 .opt{display:flex;gap:6px;align-items:center;padding:4px 0}
-.opt .nm{width:96px;flex-shrink:0;font-size:13.5px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.opt .ty{font-size:11px;color:var(--faint);width:60px;flex-shrink:0}
-.opt .req{font-size:11px;color:var(--accent)}
-.opt input{flex:1;min-width:0;background:var(--canvas-alt);border:1px solid var(--border);border-radius:9px;padding:6px 9px;color:var(--ink);font-size:13px;outline:none}
-.opt input:focus{border-color:var(--accent)}
-.mv{background:var(--surface-2);border:1px solid var(--border);color:var(--muted);border-radius:8px;width:28px;height:28px;cursor:pointer;flex-shrink:0}
+.opt .nm{width:96px;flex-shrink:0;font-size:13.5px;color:var(--crl-ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.opt .ty{font-size:11px;color:var(--crl-faint);width:60px;flex-shrink:0}
+.opt .req{font-size:11px;color:var(--crl-accent)}
+.opt .crl-input{flex:1;min-width:0;padding:6px 9px;font-size:13px}
+.mv{background:var(--crl-surface-2);border:1px solid var(--crl-border);color:var(--crl-muted);border-radius:var(--crl-radius-small);width:28px;height:28px;cursor:pointer;flex-shrink:0}
 .mv:disabled{opacity:.35;cursor:default}
 .acts{display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap}
-.acts .btn{padding:7px 14px;font-size:13.5px}
-.st{font-size:12.5px;color:var(--dim)}
-.st.ok{color:var(--ok)}
-.st.err{color:var(--err)}
 @media (max-width:560px){.opt{flex-wrap:wrap}.opt .nm{width:auto}.opt input{flex-basis:100%}}
 </style></head><body>
 ${topbar(ADMIN_BADGE)}
 <main class="page">
 ${adminTabs(token, "commands")}
-<h1 class="admin-title">명령어</h1>
+<h1 class="crl-heading-2 page-title">명령어</h1>
 <p class="admin-sub">슬래시 명령어의 이름·설명·옵션 순서·옵션 설명을 바꿉니다. 저장한 뒤 <b>디스코드에 반영</b>을 누르거나 봇을 다시 시작하면 디스코드에 올라갑니다.</p>
 <p class="note">· 디스코드 명령 목록은 이름 순으로 보여서 명령어끼리의 순서는 정할 수 없습니다. 이름을 바꾸면 목록 위치도 바뀝니다.<br>· 옵션 이름은 봇이 그 이름으로 값을 읽어서 바꿀 수 없습니다. 필수 옵션은 디스코드 규칙상 늘 앞에 옵니다.<br>· 다른 문구에 적힌 명령어 이름(예: <code>/마이시프트 연동</code>)은 <b>봇 문구</b> 탭에서 같이 고쳐 주세요.</p>
 <div class="bar">
-<input id="q" placeholder="명령어 검색">
-<button class="btn btn-primary" id="sync"${botRunning ? "" : " disabled"}>디스코드에 반영</button>
+<input class="crl-input" id="q" placeholder="명령어 검색">
+<button class="crl-btn crl-btn--primary" id="sync"${botRunning ? "" : " disabled"}>디스코드에 반영</button>
 <span class="st" id="syncst">${botRunning ? "" : "봇이 실행 중이 아니라 다음 시작 때 반영됩니다"}</span>
 </div>
 <div id="list"></div>
@@ -72,14 +63,14 @@ function optRow(r,name,k,n){
   const o=r.options.find(x=>x.name===name);
   return '<div class="opt" data-n="'+esc(name)+'"><button class="mv up"'+(k===0?' disabled':'')+'>↑</button><button class="mv down"'+(k===n-1?' disabled':'')+'>↓</button>'
     +'<span class="nm" title="'+esc(name)+'">'+esc(name)+'</span><span class="ty">'+esc(o.type)+(o.required?' <span class="req">필수</span>':'')+'</span>'
-    +'<input class="od" maxlength="100" value="'+esc(o.description)+'" placeholder="'+esc(o.defDescription)+'"></div>';
+    +'<input class="crl-input od" maxlength="100" value="'+esc(o.description)+'" placeholder="'+esc(o.defDescription)+'"></div>';
 }
 function card(r,i){
-  return '<div class="card'+(r.changed?' on':'')+'" data-i="'+i+'"><div class="head"><b>/'+esc(r.name)+'</b><span class="key">기본 이름 /'+esc(r.defName)+'</span></div>'
-    +'<div class="field"><label>이름</label><input class="nmi" maxlength="32" value="'+esc(r.name)+'" placeholder="'+esc(r.defName)+'"></div>'
-    +'<div class="field"><label>설명</label><input class="dsi" maxlength="100" value="'+esc(r.description)+'" placeholder="'+esc(r.defDescription)+'"></div>'
+  return '<div class="crl-card card'+(r.changed?' is-on':'')+'" data-i="'+i+'"><div class="head"><b>/'+esc(r.name)+'</b><span class="key">기본 이름 /'+esc(r.defName)+'</span></div>'
+    +'<div class="field"><label>이름</label><input class="crl-input nmi" maxlength="32" value="'+esc(r.name)+'" placeholder="'+esc(r.defName)+'"></div>'
+    +'<div class="field"><label>설명</label><input class="crl-input dsi" maxlength="100" value="'+esc(r.description)+'" placeholder="'+esc(r.defDescription)+'"></div>'
     +(r.order.length?'<div class="opts">'+r.order.map((n,k)=>optRow(r,n,k,r.order.length)).join("")+'</div>':'')
-    +'<div class="acts"><button class="btn btn-primary save">저장</button><button class="btn reset">기본값으로</button><span class="st"></span></div></div>';
+    +'<div class="acts"><button class="crl-btn crl-btn--primary crl-btn--sm save">저장</button><button class="crl-btn crl-btn--secondary crl-btn--sm reset">기본값으로</button><span class="st"></span></div></div>';
 }
 function render(){
   const q=$("q").value.trim().toLowerCase();

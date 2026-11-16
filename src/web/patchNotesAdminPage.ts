@@ -13,19 +13,15 @@ export function patchNotesAdminPage(token: string, notes: PatchNoteRow[], versio
 <style>
 ${BASE_CSS}
 ${ADMIN_CSS}
-.card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:22px 24px;margin-bottom:14px}
-.ed-title{font-size:17px;font-weight:500;color:var(--ink);margin-bottom:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.dirty{font-size:12.5px;font-weight:500;color:var(--warn)}
+.ed-title{font-size:17px;font-weight:500;color:var(--crl-ink);margin-bottom:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.dirty{font-size:12.5px;font-weight:500;color:var(--crl-warning)}
 .row2{display:grid;grid-template-columns:140px 1fr;gap:10px;margin-bottom:10px}
-.field label{display:block;font-size:12.5px;font-weight:500;color:var(--dim);margin-bottom:5px}
-.field input,.field textarea{width:100%;background:var(--canvas-alt);border:1px solid var(--border);border-radius:12px;padding:10px 13px;color:var(--ink);font-size:14.5px;outline:none;transition:border-color .15s}
-.field input:focus,.field textarea:focus{border-color:var(--accent)}
-.field input::placeholder,.field textarea::placeholder{color:var(--faint)}
-.field textarea{min-height:220px;resize:vertical;line-height:1.6;font-family:var(--font-sans)}
-.hint{display:flex;justify-content:space-between;gap:12px;font-size:12px;color:var(--dim);margin-top:5px}
-.hint .over{color:var(--err)}
-.pv-label{font-size:12.5px;font-weight:500;color:var(--dim);margin:16px 0 6px}
-.pv{background:#2b2d31;border-radius:6px;border-left:4px solid #ff9294;padding:10px 14px 12px;font-family:"gg sans","Noto Sans KR",var(--font-sans);color:#dbdee1;font-size:14px;line-height:1.45}
+.field label{display:block;font-size:12.5px;font-weight:500;color:var(--crl-dim);margin-bottom:5px}
+.field textarea.crl-input{min-height:220px;line-height:1.6}
+.hint{display:flex;justify-content:space-between;gap:12px;font-size:12px;color:var(--crl-dim);margin-top:5px}
+.hint .over{color:var(--crl-danger)}
+.pv-label{font-size:12.5px;font-weight:500;color:var(--crl-dim);margin:16px 0 6px}
+.pv{background:#2b2d31;border-radius:6px;border-left:4px solid var(--crl-accent);padding:10px 14px 12px;font-family:"gg sans","Noto Sans KR",var(--crl-font-sans);color:#dbdee1;font-size:14px;line-height:1.45}
 .pv-t{font-weight:700;color:#f2f3f5;font-size:15px;margin-bottom:6px}
 .pv-b{white-space:normal;word-break:break-word}
 .pv-b h1{font-size:19px;margin:6px 0 4px;color:#f2f3f5}.pv-b h2{font-size:17px;margin:6px 0 4px;color:#f2f3f5}.pv-b h3{font-size:15px;margin:6px 0 4px;color:#f2f3f5}
@@ -37,32 +33,22 @@ ${ADMIN_CSS}
 .pv-f{font-size:12px;color:#949ba4;margin-top:8px}
 .acts{display:flex;gap:8px;align-items:center;margin-top:16px;flex-wrap:wrap}
 .acts .sp{flex:1}
-.acts .btn{padding:9px 18px;font-size:14px}
-.st{font-size:13px;color:var(--dim)}.st.ok{color:var(--ok)}.st.err{color:var(--err)}
-.list-title{font-size:13px;font-weight:500;color:var(--dim);margin:26px 0 10px}
-.note{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:16px 18px;margin-bottom:10px}
-.note.editing{border-color:rgba(255,146,148,.55)}
+.list-title{font-size:13px;font-weight:500;color:var(--crl-dim);margin:26px 0 10px}
+.page .note{padding:16px 18px;margin-bottom:10px}
 .n-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.badge{font-size:11.5px;font-weight:600;border-radius:999px;padding:2px 9px}
-.badge.pub{background:rgba(74,222,128,.14);color:var(--ok)}
-.badge.draft{background:var(--surface-2);color:var(--muted)}
-.badge.old{background:var(--surface-2);color:var(--faint)}
-.n-name{flex:1;min-width:0;color:var(--ink);font-size:15.5px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.n-meta{font-size:12.5px;color:var(--dim);margin-top:4px}
-.n-body{font-size:13px;color:var(--muted);margin-top:6px;white-space:pre-wrap;max-height:3.2em;overflow:hidden}
+.crl-tag.old{color:var(--crl-faint)}
+.n-name{flex:1;min-width:0;color:var(--crl-ink);font-size:15.5px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.n-meta{font-size:12.5px;color:var(--crl-dim);margin-top:4px}
+.n-body{font-size:13px;color:var(--crl-muted);margin-top:6px;white-space:pre-wrap;max-height:3.2em;overflow:hidden}
 .n-acts{display:flex;gap:6px;flex-shrink:0}
-.sm{background:none;border:1px solid var(--border-2);color:var(--muted);border-radius:10px;padding:5px 12px;font-size:13px;cursor:pointer;transition:border-color .15s,color .15s}
-.sm:hover{border-color:var(--ink-soft);color:var(--ink)}
-.sm.del:hover{border-color:var(--err);color:var(--err)}
-.empty{color:var(--faint);font-size:14px;text-align:center;padding:18px 0}
-@media(max-width:560px){.row2{grid-template-columns:1fr}.card{padding:18px}}
+@media(max-width:560px){.row2{grid-template-columns:1fr}}
 </style></head><body>
 ${topbar(ADMIN_BADGE)}
 <main class="page">
   ${adminTabs(token, "patch-notes")}
-  <h1 class="admin-title">패치노트</h1>
+  <h1 class="crl-heading-2 page-title">패치노트</h1>
   <p class="admin-sub" id="sub"></p>
-  <div class="card" id="editor"></div>
+  <div class="crl-card" id="editor"></div>
   <div class="list-title" id="listTitle"></div>
   <div id="list"></div>
 </main>
@@ -115,14 +101,14 @@ const PATCH_ADMIN_JS = String.raw`
   function renderEditor(){
     var c=cur(),pub=c&&c.publishedAt>0;
     var h='<div class="ed-title">'+(ed.id===null?'새 패치노트':'패치노트 편집')+'<span class="dirty" id="dirty"></span></div>'
-      +'<div class="row2"><div class="field"><label>버전</label><input id="fVer" maxlength="30" placeholder="예: 1.10.0"></div>'
-      +'<div class="field"><label>제목</label><input id="fTitle" maxlength="200"></div></div>'
-      +'<div class="field"><label>본문 (Discord 마크다운)</label><textarea id="fBody" placeholder="예:\n## 새 기능\n- /게임설정 명령어가 추가되었습니다."></textarea>'
+      +'<div class="row2"><div class="field"><label>버전</label><input class="crl-input" id="fVer" maxlength="30" placeholder="예: 1.10.0"></div>'
+      +'<div class="field"><label>제목</label><input class="crl-input" id="fTitle" maxlength="200"></div></div>'
+      +'<div class="field"><label>본문 (Discord 마크다운)</label><textarea class="crl-input" id="fBody" placeholder="예:\n## 새 기능\n- /게임설정 명령어가 추가되었습니다."></textarea>'
       +'<div class="hint"><span>**굵게**, *기울임*, - 목록, ## 제목, [링크](https://…) 를 쓸 수 있습니다.</span><span id="cnt"></span></div></div>'
       +'<div class="pv-label">미리보기</div><div class="pv"><div class="pv-t" id="pvT"></div><div class="pv-b" id="pvB"></div><div class="pv-f">이 안내는 한 번만 표시됩니다.</div></div>'
-      +'<div class="acts">'+(ed.id!==null?'<button class="btn btn-secondary" id="bNew">새로 작성</button>':'')+'<span class="st" id="st"></span><span class="sp"></span>'
-      +(pub?'<button class="btn btn-primary" id="bSave">저장</button>'
-           :'<button class="btn btn-secondary" id="bSave">초안 저장</button><button class="btn btn-primary" id="bPub">게시</button>')
+      +'<div class="acts">'+(ed.id!==null?'<button class="crl-btn crl-btn--secondary" id="bNew">새로 작성</button>':'')+'<span class="st" id="st"></span><span class="sp"></span>'
+      +(pub?'<button class="crl-btn crl-btn--primary" id="bSave">저장</button>'
+           :'<button class="crl-btn crl-btn--secondary" id="bSave">초안 저장</button><button class="crl-btn crl-btn--primary" id="bPub">게시</button>')
       +'</div>';
     $('editor').innerHTML=h;
     $('fVer').value=ed.version;$('fTitle').value=ed.title;$('fBody').value=ed.body;
@@ -150,12 +136,12 @@ const PATCH_ADMIN_JS = String.raw`
     var now=Date.now();
     $('list').innerHTML=D.notes.map(function(n){
       var pub=n.publishedAt>0, expired=pub&&now-n.publishedAt>D.windowDays*DAY;
-      var badge=pub?(expired?'<span class="badge old">표시 기간 끝남</span>':'<span class="badge pub">게시됨</span>'):'<span class="badge draft">초안</span>';
+      var badge=pub?(expired?'<span class="crl-tag old">표시 기간 끝남</span>':'<span class="crl-tag crl-tag--success">게시됨</span>'):'<span class="crl-tag">초안</span>';
       var meta=pub?fmt(n.publishedAt)+' 게시 · '+n.seen+'명에게 표시됨':fmt(n.updatedAt)+' 저장';
-      return '<div class="note'+(ed.id===n.id?' editing':'')+'"><div class="n-top">'+badge+'<div class="n-name">'+esc(n.title||defaultTitle(n.version))+'</div>'
-        +'<div class="n-acts"><button class="sm" data-edit="'+n.id+'">편집</button>'
-        +(pub?'<button class="sm" data-pub="'+n.id+'" data-v="0">게시 취소</button>':'<button class="sm" data-pub="'+n.id+'" data-v="1">게시</button>')
-        +'<button class="sm del" data-del="'+n.id+'">삭제</button></div></div>'
+      return '<div class="crl-card note'+(ed.id===n.id?' is-on':'')+'"><div class="n-top">'+badge+'<div class="n-name">'+esc(n.title||defaultTitle(n.version))+'</div>'
+        +'<div class="n-acts"><button class="crl-btn crl-btn--secondary crl-btn--sm" data-edit="'+n.id+'">편집</button>'
+        +(pub?'<button class="crl-btn crl-btn--secondary crl-btn--sm" data-pub="'+n.id+'" data-v="0">게시 취소</button>':'<button class="crl-btn crl-btn--secondary crl-btn--sm" data-pub="'+n.id+'" data-v="1">게시</button>')
+        +'<button class="crl-btn crl-btn--secondary crl-btn--sm crl-btn--danger" data-del="'+n.id+'">삭제</button></div></div>'
         +'<div class="n-meta">'+(n.version?'v'+esc(n.version)+' · ':'')+meta+'</div><div class="n-body">'+esc(n.body)+'</div></div>';
     }).join('');
     document.querySelectorAll('[data-edit]').forEach(function(b){b.onclick=function(){

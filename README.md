@@ -101,6 +101,7 @@ npm start
 
 - `npm run dev` — `ts-node`로 봇 + 웹 서버를 함께 실행 (빌드 없이 바로 확인)
 - `npm run dev:web` — 웹 서버만 실행 (Discord 토큰/로그인 없이 `/sync`, `/settings` 등 로컬 확인용)
+- `npm run preview` — 디자인 미리보기 (DB·config 없이 가짜 데이터로 모든 웹 페이지와 북마클릿 오버레이, http://localhost:3457/)
 - `npm run test:integration` — `npm run build` 후 PostgreSQL 통합 테스트 실행 (`DATABASE_URL` 필요)
 
 ### Docker Compose (권장 — Postgres까지 한 번에)

@@ -1,28 +1,27 @@
 // 개인정보처리방침(/privacy)·이용약관(/terms). 내용을 실질적으로 바꾸면 src/policy.ts 의 POLICY_VERSION 을 올린다(최종 수정일도 그 값).
-// 디자인 토큰은 theme.ts(캐롤봇 랜딩 디자인 시스템)를 따른다.
+// 디자인 토큰은 theme.ts(@team-carol/design-system)를 따른다.
 
 import { BASE_CSS, pageHead, topbar, siteFooter } from "./theme";
 import { policyDateText } from "../policy";
 
 const LEGAL_CSS = `${BASE_CSS}
 .page{max-width:760px}
-h1{font-size:clamp(32px,4.4vw,44px);font-weight:500;color:var(--ink);line-height:1.2;letter-spacing:-.01em;padding-bottom:18px;margin-bottom:8px;border-bottom:1px solid var(--border)}
-h1+p{font-size:13.5px;color:var(--dim);margin-bottom:12px}
-h2{font-size:20px;font-weight:500;color:var(--ink);margin:36px 0 10px}
-h3{font-size:16.5px;font-weight:500;color:var(--ink);margin:22px 0 6px}
-p,li{font-size:15.5px;line-height:1.75;color:var(--ink-soft)}
+h1{padding-bottom:18px;margin-bottom:8px;border-bottom:1px solid var(--crl-border)}
+h1+p{margin-bottom:12px}
+h2{font-size:20px;font-weight:500;color:var(--crl-ink);margin:36px 0 10px}
+h3{font-size:16.5px;font-weight:500;color:var(--crl-ink);margin:22px 0 6px}
+p,li{font-size:15.5px;line-height:1.75;color:var(--crl-ink-soft)}
 p{margin:8px 0}
 ul{margin:6px 0 10px;padding-left:22px}
-li{margin:3px 0}
-a{color:var(--accent-soft)}`;
+li{margin:3px 0}`;
 
 function legalPage(title: string, body: string): string {
   return `<!DOCTYPE html><html lang="ko"><head>${pageHead(`${title} · 캐롤봇`)}
 <style>${LEGAL_CSS}</style></head><body>
 ${topbar()}
 <main class="page">
-<h1>${title}</h1>
-<p>최종 수정일: ${policyDateText()}</p>
+<h1 class="crl-heading-2">${title}</h1>
+<p class="crl-caption">최종 수정일: ${policyDateText()}</p>
 ${body}
 </main>
 ${siteFooter()}

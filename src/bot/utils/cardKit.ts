@@ -1,7 +1,8 @@
-import { BRAND } from "../../brand";
+import { color as BRAND } from "@team-carol/design-system";
+import { trophy } from "@team-carol/design-system/game";
 import { msg } from "../../messages";
 
-// PNG 카드(/프로필, /서클) 공용 부품. 색은 랜딩(carol-web) 토큰(src/brand.ts)을 따른다.
+// PNG 카드(/프로필, /서클) 공용 부품. 색은 랜딩(carol-web) 토큰(@team-carol/design-system)을 따른다.
 
 export const ACCENT = BRAND.accent;
 export const SURFACE = BRAND.surface;
@@ -13,12 +14,10 @@ export const CANVAS = BRAND.canvas;
 export const INK = BRAND.ink;
 
 // DX NET 칭호 등급(trophy_*) 색. 레인보우는 그라디언트.
+// satori 는 그라디언트를 background 가 아닌 backgroundImage 로 받는다.
 export const TROPHY_STYLE: Record<string, Record<string, unknown>> = {
-  normal: { background: SURFACE2, color: TEXT },
-  bronze: { background: "#c77d43", color: "#1a1a1c" },
-  silver: { background: "#c3ccd4", color: "#1a1a1c" },
-  gold: { background: "#f2c94c", color: "#1a1a1c" },
-  rainbow: { backgroundImage: "linear-gradient(90deg, #ff9294, #fbbf24, #4ade80, #60a5fa, #c084fc)", color: "#1a1a1c" },
+  ...trophy,
+  rainbow: { backgroundImage: trophy.rainbow.background, color: trophy.rainbow.color },
 };
 
 export const SOFT = BRAND.accentSoft;

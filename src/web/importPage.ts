@@ -23,31 +23,26 @@ export function importBookmarkletPage(baseUrl: string, pageToken: string, bmToke
 <style>
 ${BASE_CSS}
 ${ADMIN_CSS}
-.card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:24px;margin:0 0 14px}
-.card-title{display:block;font-size:17px;font-weight:500;color:var(--ink);margin-bottom:6px}
-.bm{cursor:grab}
-.bm:active{cursor:grabbing}
+.card-title{display:block;font-size:17px;font-weight:500;color:var(--crl-ink);margin-bottom:6px}
 ol{padding-left:22px;margin-top:6px}li{margin:8px 0;font-size:15px}
-a.link{color:var(--accent-soft)}
-.warn{color:var(--warn);font-size:13.5px}
-.muted{color:var(--dim);font-size:13.5px}
+.warn{color:var(--crl-warning);font-size:13.5px}
+.muted{color:var(--crl-dim);font-size:13.5px}
 .audit-btns{display:flex;gap:8px;flex-wrap:wrap}
-.audit-btns .btn{padding:9px 18px;font-size:14px}
 </style></head>
 <body>
 ${topbar(ADMIN_BADGE)}
 <main class="page">
   ${adminTabs(pageToken, "import")}
-  <h1 class="admin-title">채보 등록</h1>
+  <h1 class="crl-heading-2 page-title">채보 등록</h1>
   <p class="admin-sub">simai wiki 채보를 캐롤봇 DB로 가져옵니다.</p>
 
-  <div class="card">
+  <div class="crl-card">
     <p style="margin:0 0 14px">아래 버튼을 <b>북마크바로 드래그</b>해서 설치하세요.</p>
-    <a class="btn btn-primary bm" href="${esc(bm)}" onclick="return false">📥 채보 등록 (캐롤봇)</a>
+    <a class="crl-btn crl-btn--primary bm" href="${esc(bm)}" onclick="return false">📥 채보 등록 (캐롤봇)</a>
     <p class="muted" style="margin:14px 0 0">모바일은 이 버튼을 북마크에 추가한 뒤 주소를 편집해 넣으세요. PC 권장.</p>
   </div>
 
-  <div class="card">
+  <div class="crl-card">
     <b class="card-title">사용법</b>
     <ol>
       <li>simai wiki 목록 페이지를 엽니다 —
@@ -62,13 +57,13 @@ ${topbar(ADMIN_BADGE)}
     <p class="muted">· 이 북마클릿의 토큰은 12시간 뒤 만료됩니다. 만료되면 이 탭을 새로고침해 다시 드래그하세요.</p>
   </div>
 
-  <div class="card">
+  <div class="crl-card">
     <b class="card-title">채보 점검</b>
     <p class="muted" style="margin:6px 0 12px">잘린 채보는 재생 길이가 비정상적으로 짧습니다.
       <b>의심 채보</b>는 짧거나 빈 것만, <b>전체 검사</b>는 등록된 모든 채보의 상태를 보여줍니다.
       잘린 채보는 위 북마클릿에서 <b>「이미 등록된 곡도 다시 가져오기」</b>로 재수집하면 교체됩니다.</p>
-    <div class="audit-btns"><button class="btn btn-primary" id="auditBtn">의심 채보 점검</button>
-    <button class="btn btn-secondary" id="auditAllBtn">전체 검사</button></div>
+    <div class="audit-btns"><button class="crl-btn crl-btn--primary" id="auditBtn">의심 채보 점검</button>
+    <button class="crl-btn crl-btn--secondary" id="auditAllBtn">전체 검사</button></div>
     <div id="auditOut" style="margin-top:14px"></div>
   </div>
   <script>
@@ -77,9 +72,9 @@ ${topbar(ADMIN_BADGE)}
       var DIFF = {1:"BASIC",2:"ADVANCED",3:"EXPERT",4:"MASTER",5:"Re:MASTER"};
       var btn = document.getElementById("auditBtn"), btnAll = document.getElementById("auditAllBtn"), out = document.getElementById("auditOut");
       function flagLabel(s){
-        if(s.flags.indexOf("empty")>=0) return ["노트 없음","var(--err)"];
-        if(s.flags.indexOf("short")>=0) return [(s.durationMs/1000).toFixed(1)+"초","var(--warn)"];
-        return [(s.durationMs/1000).toFixed(0)+"초","var(--ok)"];
+        if(s.flags.indexOf("empty")>=0) return ["노트 없음","var(--crl-danger)"];
+        if(s.flags.indexOf("short")>=0) return [(s.durationMs/1000).toFixed(1)+"초","var(--crl-warning)"];
+        return [(s.durationMs/1000).toFixed(0)+"초","var(--crl-success)"];
       }
       function run(full){
         btn.disabled = btnAll.disabled = true; out.textContent = "점검 중… (곡이 많으면 몇 초 걸립니다)";
@@ -90,17 +85,17 @@ ${topbar(ADMIN_BADGE)}
             if(!j || !j.ok){ out.textContent = "점검 실패 (토큰 만료 시 이 탭을 새로고침)"; return; }
             var c = j.counts;
             var summary = "<div style='margin-bottom:8px'>등록 <b>" + c.total + "</b>곡 · "
-              + "<span style='color:var(--ok)'>정상 " + c.ok + "</span> · "
-              + "<span style='color:var(--warn)'>짧음 " + c.short + "</span> · "
-              + "<span style='color:var(--err)'>빈 채보 " + c.empty + "</span></div>";
-            if(!j.list.length){ out.innerHTML = summary + "<span style='color:var(--ok)'>표시할 항목이 없습니다.</span>"; return; }
+              + "<span style='color:var(--crl-success)'>정상 " + c.ok + "</span> · "
+              + "<span style='color:var(--crl-warning)'>짧음 " + c.short + "</span> · "
+              + "<span style='color:var(--crl-danger)'>빈 채보 " + c.empty + "</span></div>";
+            if(!j.list.length){ out.innerHTML = summary + "<span style='color:var(--crl-success)'>표시할 항목이 없습니다.</span>"; return; }
             var rows = j.list.map(function(s){
               var fl = flagLabel(s);
               return "<tr><td style='padding:4px 10px 4px 0'><a href='/chart?id=" + encodeURIComponent(s.id) + "' target='_blank'>" + (s.title||"(제목 없음)") + "</a></td>"
-                + "<td style='padding:4px 10px;color:var(--muted)'>" + (DIFF[s.difficulty]||s.difficulty) + (s.level?(" "+s.level):"") + "</td>"
+                + "<td style='padding:4px 10px;color:var(--crl-muted)'>" + (DIFF[s.difficulty]||s.difficulty) + (s.level?(" "+s.level):"") + "</td>"
                 + "<td style='padding:4px 10px;color:" + fl[1] + "'>" + fl[0] + "</td>"
-                + "<td style='padding:4px 10px;color:var(--dim)'>" + (s.notes||0) + "노트</td>"
-                + "<td style='padding:4px 0;color:var(--dim)'>p." + (s.page||"?") + "</td></tr>";
+                + "<td style='padding:4px 10px;color:var(--crl-dim)'>" + (s.notes||0) + "노트</td>"
+                + "<td style='padding:4px 0;color:var(--crl-dim)'>p." + (s.page||"?") + "</td></tr>";
             }).join("");
             out.innerHTML = summary + "<div style='overflow:auto;max-height:360px'><table style='border-collapse:collapse;font-size:13px'>" + rows + "</table></div>";
           })
