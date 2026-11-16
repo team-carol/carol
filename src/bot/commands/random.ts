@@ -24,7 +24,7 @@ import { songContainer, jacketAttachment } from "../utils/songCard";
 import { color as BRAND, toInt } from "@team-carol/design-system";
 import { getScoreRank } from "../../games";
 import { rerollRow, rerollInPlace, postFromMenu, type V2Payload } from "../utils/reroll";
-import { targetLine, NO_PING } from "../utils/targetLine";
+import { headerWithTarget, NO_PING } from "../utils/targetLine";
 
 function shuffle<T>(arr: T[]): T[] {
   const a = arr.slice();
@@ -225,7 +225,8 @@ export async function buildRandom(state: RandomState, ownerId: string): Promise<
     return songContainer({ title: c.title, kind: c.kind, diff: c.diff, constant: c.level, translate, lines }, jackets[i]);
   }));
   const baseHeader = filters.length ? msg("random.headerFilters", { filters: filters.join("  ✦  ") }) : msg("random.header");
-  const header = clearMap ? `${baseHeader}\n${targetLine(state.target)}` : baseHeader;
+  // 곡마다 기록 줄은 플레이여부를 고른 유저의 것이라, 그때만 제목 오른쪽에 그 유저를 붙인다.
+  const header = headerWithTarget(baseHeader, clearMap ? state.target : null);
   const footer = playlist
     ? msg("random.footer", { text: `${msg("random.playlistFooter", { owner: playlist.owner.handle, count: playlist.items.length })}  ✦  ${msg("maishift.credit")}` })
     : null;
