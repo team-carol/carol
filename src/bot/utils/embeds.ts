@@ -527,7 +527,7 @@ export async function searchResultEmbeds(
   flags: MessageFlags.IsComponentsV2;
   allowedMentions?: typeof NO_PING.allowedMentions;
 }> {
-  // Components V2: 검색어 한 줄 → 곡마다 컨테이너(제목·재킷·지역/장르/버전, 코드 블록 점수표, 상세·외부 출력 버튼) → 페이지 버튼.
+  // Components V2: 곡마다 컨테이너(첫 카드 맨 위에 검색어·대상 줄, 제목·재킷·지역/장르/버전, 코드 블록 점수표, 상세·외부 출력 버튼) → 페이지 버튼.
   const records = getClearList(p);
   // 자동완성 목록에서 고른 곡이면 그 곡·종류만, 아니면 검색어로 찾는다(예전과 같이).
   const picked = resolveSongPick(query);
@@ -602,6 +602,8 @@ export async function searchResultEmbeds(
   const files: AttachmentBuilder[] = [];
 
   const DIFF_ORDER = ["BASIC", "ADVANCED", "EXPERT", "MASTER", "Re:MASTER"];
+  // 검색어 줄(+ "@대상 님의 기록")은 첫 카드 안 맨 위에 둔다(예전 임베드 author 자리).
+  const author = `${msg("searchResult.author", { query: shownQuery, type: typeLabel })}\n${targetLine(userId)}`;
 
   const built = await Promise.all(
     pageKeys.map(async (key, i) => {
@@ -697,6 +699,7 @@ export async function searchResultEmbeds(
         + (artist ? "\n" + msg("searchResult.artist", { artist: escapeMarkdown(artist) }) : "")
         + "\n" + regionLine.trimEnd();
       const container = new ContainerBuilder().setAccentColor(toInt(musicKind === "DX" ? MAI_KIND_COLOR.DX : musicKind === "ST" ? MAI_KIND_COLOR.ST : BRAND.dim));
+      if (i === 0) container.addTextDisplayComponents((t) => t.setContent(author));
       if (buf) {
         const name = `sjacket${i}.png`;
         files.push(new AttachmentBuilder(buf, { name }));
@@ -724,7 +727,6 @@ export async function searchResultEmbeds(
     }),
   );
   // 컴포넌트 메시지는 글이 모두 합쳐 4000자까지다(이모지는 코드 30자 남짓). 난이도 배지로 넘칠 것 같으면 이 페이지는 한 칸 약자로.
-  const author = `${msg("searchResult.author", { query: shownQuery, type: typeLabel })}\n${targetLine(userId)}`;
   const badgeLength = author.length + built.reduce((n, b) => n + b.headingLength + b.badgeLines.join("\n-# \u2800\n").length, 0);
   const useBadge = badgeLength <= TEXT_LIMIT;
   for (const b of built) {
@@ -755,7 +757,6 @@ export async function searchResultEmbeds(
 
   return {
     components: [
-      new TextDisplayBuilder().setContent(author),
       ...containers,
       new ActionRowBuilder<ButtonBuilder>().addComponents(prevBtn, countBtn, nextBtn),
     ],
