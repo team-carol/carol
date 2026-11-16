@@ -13,6 +13,17 @@ export function targetLine(userId: string, key: MessageKey = "common.targetLine"
   return msg(key, { user: `<@${userId}>` });
 }
 
+/**
+ * 제목 머리글("## 곡 추천\n-# 설명")의 첫 줄 오른쪽에 "@대상" 멘션만 붙인다(/곡추천·/랜덤).
+ * 문구를 /관리에서 바꿔도 되도록 첫 줄 끝에 끼운다. userId 가 없으면 그대로.
+ */
+export function headerWithTarget(header: string, userId: string | null | undefined): string {
+  if (!userId) return header;
+  const mention = `<@${userId}>`;
+  const nl = header.indexOf("\n");
+  return nl < 0 ? `${header} ${mention}` : `${header.slice(0, nl)} ${mention}${header.slice(nl)}`;
+}
+
 /** 메시지 글(content) 맨 앞에 대상 줄을 붙인다. 기존 글(안내 등)이 있으면 그 위에. */
 export function withTarget(userId: string, content?: string | null, key?: MessageKey): { content: string; allowedMentions: MessageMentionOptions } {
   const line = targetLine(userId, key);
