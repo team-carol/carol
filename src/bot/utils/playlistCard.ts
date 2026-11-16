@@ -6,7 +6,7 @@ import {
 } from "./cardKit";
 import { userCardHeader, avatarDataUrl } from "./cardHeader";
 import { renderInWorker } from "./renderPool";
-import { MAI_DIFF_COLOR, getScoreRank } from "../../games";
+import { MAI_DIFF_COLOR, MAI_CM_COLOR, MAI_MARK_COLOR, MAI_KIND_COLOR, getScoreRank } from "../../games";
 import { displayTitle } from "../../aliases";
 import type { CachedProfile } from "../../storage/types";
 import type { PlayRecord } from "../../scraper";
@@ -14,12 +14,6 @@ import { msg } from "../../messages";
 
 const WIDTH = 760;
 const LIMIT = 80;
-const KIND_COLOR = { DX: "#f97316", ST: "#3b82f6" };
-const MARK_COLOR: Record<string, string> = {
-  "AP+": "#d946ef", AP: "#d946ef", "FC+": "#3b82f6", FC: "#60a5fa",
-  "FDX+": "#10b981", FDX: "#34d399", "FS+": "#22c55e", FS: "#4ade80",
-};
-const RANK_COLOR: Record<string, string> = { "SSS+": "#d97706", SSS: "#f59e0b", "SS+": "#fbbf24", SS: "#fcd34d", "S+": "#fde68a", S: "#fef3c7" };
 
 export interface PlaylistEntry {
   title: string;
@@ -57,10 +51,10 @@ function bar(ratio: number, color: string, height: number): El {
 function summaryGraph(s: PlaylistSummary): El {
   const items = [
     { n: s.played, label: msg("playlistCard.played"), color: ACCENT },
-    { n: s.sss, label: msg("playlistCard.sss"), color: RANK_COLOR.SSS },
-    { n: s.sssPlus, label: msg("playlistCard.sssPlus"), color: RANK_COLOR["SSS+"] },
-    { n: s.fc, label: msg("playlistCard.fc"), color: MARK_COLOR.FC },
-    { n: s.ap, label: msg("playlistCard.ap"), color: MARK_COLOR.AP },
+    { n: s.sss, label: msg("playlistCard.sss"), color: MAI_CM_COLOR.SSS },
+    { n: s.sssPlus, label: msg("playlistCard.sssPlus"), color: MAI_CM_COLOR["SSS+"] },
+    { n: s.fc, label: msg("playlistCard.fc"), color: MAI_MARK_COLOR.FC },
+    { n: s.ap, label: msg("playlistCard.ap"), color: MAI_MARK_COLOR.AP },
   ];
   return el("div", {
     display: "flex", gap: 18, marginTop: 16, background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 16, padding: "16px 18px",
@@ -81,7 +75,7 @@ function summaryGraph(s: PlaylistSummary): El {
 }
 
 function markChip(mark: string): El {
-  return el("span", { color: MARK_COLOR[mark] ?? MUTED, fontSize: 9, fontWeight: 800, lineHeight: 1, width: 28, display: "flex", justifyContent: "flex-end" }, mark);
+  return el("span", { color: MAI_MARK_COLOR[mark] ?? MUTED, fontSize: 9, fontWeight: 800, lineHeight: 1, width: 28, display: "flex", justifyContent: "flex-end" }, mark);
 }
 
 function row(e: PlaylistEntry, index: number, translate: boolean, last: boolean): El {
@@ -93,14 +87,14 @@ function row(e: PlaylistEntry, index: number, translate: boolean, last: boolean)
     el("div", { display: "flex", alignItems: "center", justifyContent: "center", width: 40, height: 22, borderRadius: 6, background: MAI_DIFF_COLOR[e.diff] ?? SURFACE2, flexShrink: 0 }, [
       el("span", { color: "#fff", fontSize: 11, fontWeight: 800, lineHeight: 1 }, e.constant > 0 ? e.constant.toFixed(1) : e.level),
     ]),
-    pill(e.kind, { background: KIND_COLOR[e.kind], color: "#fff", fontSize: 8, padding: "2px 6px" }),
+    pill(e.kind, { background: MAI_KIND_COLOR[e.kind], color: "#fff", fontSize: 8, padding: "2px 6px" }),
     el("div", { display: "flex", flexDirection: "column", flex: 1, minWidth: 0, gap: 3 }, [
       el("span", { color: INK, fontSize: 12, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, displayTitle(e.title, translate)),
       ...(e.comment ? [el("span", { color: MUTED, fontSize: 9, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, e.comment)] : []),
     ]),
     el("div", { display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }, [
       el("span", { color: played ? TEXT : FAINT, fontFamily: NUM_FONT, fontSize: 11, lineHeight: 1, width: 64, display: "flex", justifyContent: "flex-end" }, played ? `${r!.achievementVal.toFixed(4)}%` : msg("playlistCard.notPlayed")),
-      el("span", { color: RANK_COLOR[rank] ?? MUTED, fontSize: 10, fontWeight: 800, lineHeight: 1, width: 30, display: "flex", justifyContent: "flex-end" }, rank),
+      el("span", { color: MAI_CM_COLOR[rank] ?? MUTED, fontSize: 10, fontWeight: 800, lineHeight: 1, width: 30, display: "flex", justifyContent: "flex-end" }, rank),
       markChip(played ? r!.fc : ""),
       markChip(played ? r!.sync : ""),
     ]),

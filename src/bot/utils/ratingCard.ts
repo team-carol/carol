@@ -54,6 +54,7 @@ import {
   MAI_CM_COLOR,
   RS_DEFAULT_COLOR,
   RS_DOUBLE_COLOR,
+  MAI_KIND_COLOR,
 } from "../../games";
 
 // S-레이팅 ✦ 색: ✦5 밝은 노랑(✦3 SS 색과 구분), ✦4·3·2 는 레이팅표의 SSS·SS·S 랭크 색, ✦1 흰색.
@@ -191,8 +192,8 @@ function toVM(
   const diffLabel = game === "maimai" ? r.diff : convertDiff(game, r.diff, version);
   const diffColor =
     game === "maimai"
-      ? (MAI_DIFF_COLOR[r.diff] ?? "#888")
-      : (GAME_DIFF_COLOR[game][diffLabel] ?? "#888");
+      ? (MAI_DIFF_COLOR[r.diff] ?? BRAND.dim)
+      : (GAME_DIFF_COLOR[game][diffLabel] ?? BRAND.dim);
 
   return {
     title: displayTitle(r.title, translate),
@@ -411,7 +412,7 @@ function jacketCard(
               {
                 fontSize: 7,
                 fontWeight: 800,
-                color: vm.isDx ? "#f97316" : "rgba(255,255,255,0.65)",
+                color: vm.isDx ? MAI_KIND_COLOR.DX : "rgba(255,255,255,0.65)",
                 marginLeft: "auto",
               },
               vm.isDx ? "DX" : "ST",

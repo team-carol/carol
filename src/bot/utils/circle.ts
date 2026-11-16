@@ -2,6 +2,7 @@ import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, escapeMarkd
 import type { CircleInfo } from "../../scraper";
 import type { CachedProfile } from "../../storage/types";
 import { msg } from "../../messages";
+import { color as BRAND, toInt } from "@team-carol/design-system";
 import { displayTitle } from "../../aliases";
 import { getTitleByJacket } from "../../constants";
 import { CIRCLE_COLOR_STYLE } from "./circleColors";
@@ -46,7 +47,7 @@ export function circleEmbed(circle: CircleInfo, profile: CachedProfile, translat
   const month = Number(synced.toLocaleString("en-US", { timeZone: "Asia/Seoul", month: "numeric" }));
   const emb = new EmbedBuilder()
     // 서클 프로필 색상이 있으면 임베드 테두리도 그 색으로.
-    .setColor(circle.color ? CIRCLE_COLOR_STYLE[circle.color].main : 0xff9294)
+    .setColor(circle.color ? CIRCLE_COLOR_STYLE[circle.color].main : toInt(BRAND.accent))
     .setTitle(circle.name)
     .setFooter(footerOf(profile));
   if (circle.comment) emb.setDescription(escapeMarkdown(circle.comment));
@@ -109,7 +110,7 @@ export function circleButtonsRow(circle: CircleInfo, targetUserId: string, withM
 /** 멤버 포인트(이번 달 포인트 순). 최대 20명이라 본 임베드와 나눠 버튼으로 띄운다. */
 export function circleMembersEmbed(circle: CircleInfo, profile: CachedProfile): EmbedBuilder {
   const emb = new EmbedBuilder()
-    .setColor(0xff9294)
+    .setColor(toInt(BRAND.accent))
     .setTitle(msg("circle.membersTitle", { name: circle.name }))
     .setFooter(footerOf(profile));
   // 동점이면 DX NET 순서(리더가 맨 앞)를 유지한다.

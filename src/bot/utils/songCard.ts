@@ -14,6 +14,7 @@ import {
 import { jacketBuffer } from "./embeds";
 import { kindEmoji, diffBadgeEmoji } from "./emoji";
 import { displayTitle } from "../../aliases";
+import { toInt } from "@team-carol/design-system";
 import { MAI_DIFF_COLOR } from "../../games";
 import { msg } from "../../messages";
 import type { PlayRecord } from "../../scraper";
@@ -42,7 +43,7 @@ export interface SongCardInput {
 }
 
 export function diffColor(diff: string): number {
-  return parseInt((MAI_DIFF_COLOR[diff] ?? "#9333ea").slice(1), 16);
+  return toInt(MAI_DIFF_COLOR[diff] ?? MAI_DIFF_COLOR.MASTER);
 }
 
 function youtubeUrl(title: string, kind: string, diff: string): string {

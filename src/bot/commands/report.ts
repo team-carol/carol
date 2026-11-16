@@ -27,6 +27,7 @@ import {
   type ReportContext,
 } from "../issueApi";
 import { msg } from "../../messages";
+import { color as BRAND, toInt } from "@team-carol/design-system";
 
 export const data = new SlashCommandBuilder()
   .setName("문의")
@@ -117,7 +118,7 @@ function buildPreview(token: string, draft: Draft): {
 } {
   const embed = new EmbedBuilder()
     .setTitle(draft.title || msg("report.noTitle"))
-    .setColor(draft.needsMoreInfo ? 0xf59e0b : 0x9333ea)
+    .setColor(toInt(draft.needsMoreInfo ? BRAND.warning : BRAND.accent))
     .setDescription(draft.summary || msg("report.noSummary"))
     .addFields(
       { name: "유형", value: draft.type || "-", inline: true },

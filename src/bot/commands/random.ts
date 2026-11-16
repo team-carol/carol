@@ -21,6 +21,7 @@ import { maishiftErrorText } from "../utils/notRegistered";
 import { versionPositionText } from "../utils/versionPosition";
 import { rankIcon, comboIcon } from "../utils/emoji";
 import { songContainer, jacketAttachment } from "../utils/songCard";
+import { color as BRAND, toInt } from "@team-carol/design-system";
 import { getScoreRank } from "../../games";
 import { rerollRow, rerollInPlace, postFromMenu, type V2Payload } from "../utils/reroll";
 
@@ -350,7 +351,7 @@ export async function buildRandomMenu(state: RandomState, ownerId: string, msgId
     ]),
   ];
   const container = new ContainerBuilder()
-    .setAccentColor(0x9333ea)
+    .setAccentColor(toInt(BRAND.accent))
     .addTextDisplayComponents((t) => t.setContent(msg("random.menuTitle")))
     .addSeparatorComponents((s) => s.setSpacing(SeparatorSpacingSize.Small));
   for (const row of rows) container.addActionRowComponents(row);

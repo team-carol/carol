@@ -6,6 +6,7 @@ import { getStoredFriendCode, getUserSyncToken, getOptionSnapshots, listOptionPr
 import { getBaseUrl } from "../../web";
 import { PORT } from "../../config";
 import { msg } from "../../messages";
+import { color as BRAND, toInt } from "@team-carol/design-system";
 import { OPTION_PRESET_MAX } from "../../web/optionPreset";
 
 // /게임설정: 웹 게임 설정 페이지(/options) 링크 안내. 적용은 웹/북마클릿에서 한다(봇은 DX NET 세션이 없다).
@@ -27,7 +28,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     : msg("gameOptions.currentNone");
   const embed = new EmbedBuilder()
     .setTitle(msg("gameOptions.title"))
-    .setColor(0xff9294)
+    .setColor(toInt(BRAND.accent))
     .setDescription(msg("gameOptions.description"))
     .addFields(
       { name: msg("gameOptions.currentField"), value: current },

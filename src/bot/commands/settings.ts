@@ -6,6 +6,7 @@ import { getUserFriendCode, getStoredFriendCode, getUserSyncToken, getUserDefaul
 import { getBaseUrl } from "../../web";
 import { PORT } from "../../config";
 import { msg } from "../../messages";
+import { color as BRAND, toInt } from "@team-carol/design-system";
 
 export const data = new SlashCommandBuilder()
   .setName("설정")
@@ -18,7 +19,7 @@ async function buildSettingsContent(userId: string) {
   const server = await getUserDefaultServer(userId) === "jp" ? "JP" : "INTERNATIONAL";
   const embed = new EmbedBuilder()
     .setTitle(msg("settings.title"))
-    .setColor(0x5865f2)
+    .setColor(toInt(BRAND.accent))
     .addFields(
       {
         name: msg("settings.currentServerField"),

@@ -1,6 +1,7 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, EmbedBuilder } from "discord.js";
 import { getRegisteredUserCount, getLastSyncTime } from "../../storage";
 import { msg } from "../../messages";
+import { color as BRAND, toInt } from "@team-carol/design-system";
 import { appVersion, buildVersion } from "../../version";
 
 export const data = new SlashCommandBuilder()
@@ -28,8 +29,8 @@ function formatPing(ping: number): string {
 }
 
 function pingColor(ping: number): number {
-  if (ping < 0) return 0x64748b;
-  return ping < 150 ? 0x22c55e : ping < 400 ? 0xf59e0b : 0xef4444;
+  if (ping < 0) return toInt(BRAND.dim);
+  return toInt(ping < 150 ? BRAND.success : ping < 400 ? BRAND.warning : BRAND.danger);
 }
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {

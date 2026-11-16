@@ -8,7 +8,7 @@ import type { CachedProfile } from "../../storage/types";
 import type { PlayRecord } from "../../scraper";
 import { getConstant, getJacketFile } from "../../constants";
 import { displayTitle } from "../../aliases";
-import { getScoreRank, MAI_CM_COLOR, MAI_DIFF_COLOR } from "../../games";
+import { getScoreRank, MAI_CM_COLOR, MAI_DIFF_COLOR, MAI_MARK_COLOR, MAI_DX_STAR_COLOR } from "../../games";
 import { fetchJacketDataUrl, ratingBreakdown, ratingPlate, plateProgress, plateDial } from "./ratingCard";
 import { musicKindIcons, KIND_ICON_RATIO } from "./dxnetAssets";
 import { alignLeftMargin } from "./textMetrics";
@@ -36,10 +36,6 @@ const MARK_GROUPS: string[][] = [
   ["AP+", "AP", "FC+", "FC"],
   ["FDX+", "FDX", "FS+", "FS"],
 ];
-const MARK_COLOR: Record<string, string> = {
-  "AP+": "#d946ef", AP: "#d946ef", "FC+": "#3b82f6", FC: "#60a5fa",
-  "FDX+": "#10b981", FDX: "#34d399", "FS+": "#22c55e", FS: "#4ade80",
-};
 
 const PROFILE_CARD_VERSION = 22;
 const PROFILE_CARD_CACHE_MAX = 64;
@@ -111,7 +107,7 @@ function clearPanel(clears: PlayRecord[]): El {
       display: "flex", flex: 1,
       ...(gi > 0 ? { borderLeft: `1px solid ${BORDER}`, paddingLeft: 16 } : { paddingRight: 16 }),
     }, keys.map((k) => el("div", { display: "flex", flexDirection: "column", alignItems: "center", flex: 1, gap: 6 }, [
-      el("span", { color: MARK_COLOR[k] ?? INK, fontSize: 12, fontWeight: 800, lineHeight: 1 }, k),
+      el("span", { color: MAI_MARK_COLOR[k] ?? INK, fontSize: 12, fontWeight: 800, lineHeight: 1 }, k),
       el("span", { color: INK, fontFamily: NUM_FONT, fontSize: 20, fontWeight: 700, lineHeight: 1 }, String(marks.get(k) ?? 0)),
     ])))));
 
@@ -150,7 +146,7 @@ function recentRow(record: PlayRecord, profile: CachedProfile, jacket: string | 
       el("div", { display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3 }, [
         el("span", { color: MAI_CM_COLOR[rank] ?? INK, fontSize: 16, fontWeight: 800, lineHeight: 1 }, rank),
         marks.length
-          ? el("div", { display: "flex", gap: 5 }, marks.map((m) => el("span", { color: MARK_COLOR[m] ?? MUTED, fontSize: 10, fontWeight: 800 }, m)))
+          ? el("div", { display: "flex", gap: 5 }, marks.map((m) => el("span", { color: MAI_MARK_COLOR[m] ?? MUTED, fontSize: 10, fontWeight: 800 }, m)))
           : el("span", { fontSize: 10 }, " "),
       ]),
       el("span", { color: INK, fontSize: 16, fontWeight: 700, width: 96, textAlign: "right" }, record.achievement || `${record.achievementVal.toFixed(4)}%`),
@@ -293,7 +289,7 @@ export async function renderProfileCard(
           // 단위(段位)·클래스(오토모다치) 이미지. 단위는 이 기능 이후 동기화부터 저장된다.
           courseUrl ? image(courseUrl, { height: 26, objectFit: "contain" }) : el("span", {}, ""),
           gradeUrl ? image(gradeUrl, { height: 26, objectFit: "contain" }) : el("span", {}, ""),
-          stars ? el("span", { color: "#fbbf24", fontSize: 13, fontWeight: 700 }, `★ ${stars}`) : el("span", {}, ""),
+          stars ? el("span", { color: MAI_DX_STAR_COLOR, fontSize: 13, fontWeight: 700 }, `★ ${stars}`) : el("span", {}, ""),
         ]),
       ]),
       el("div", { display: "flex", flexDirection: "column", alignItems: "flex-end", gap: progress ? 10 : 16, flexShrink: 0 }, [

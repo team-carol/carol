@@ -11,6 +11,7 @@ import { getUserSyncToken } from "../../storage";
 import { getBaseUrl } from "../../web";
 import { PORT } from "../../config";
 import { msg } from "../../messages";
+import { color as BRAND, toInt } from "@team-carol/design-system";
 
 export const data = new SlashCommandBuilder()
   .setName("북마클릿")
@@ -29,7 +30,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     embeds: [
       new EmbedBuilder()
         .setTitle(msg("bookmarklet.title"))
-        .setColor(0x888888)
+        .setColor(toInt(BRAND.dim))
         .setDescription(msg("bookmarklet.body")),
     ],
     components: [row],

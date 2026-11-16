@@ -44,7 +44,8 @@ import { ratingColor } from "./roles";
 import { nextPlateStep } from "./ratingCard";
 import { diffEmoji, rankEmoji, comboEmoji, syncEmoji, dxStarEmoji, blankEmoji, kindEmoji, diffBadgeEmoji, rankIcon, comboIcon, syncIcon, dxStarIcon } from "./emoji";
 import { padColumn } from "./ggsans";
-import { getScoreRank } from "../../games";
+import { color as BRAND, toInt } from "@team-carol/design-system";
+import { getScoreRank, MAI_KIND_COLOR } from "../../games";
 import { dxStars } from "../../sRating";
 import { renderProfileCard } from "./profileCard";
 import { circleOf } from "./circle";
@@ -401,7 +402,7 @@ function buildMapAreaCard(
   translate: boolean,
 ): EmbedBuilder {
   const emb = new EmbedBuilder()
-    .setColor(area.kind === "event" ? 0x9333ea : 0x2b2d31)
+    .setColor(area.kind === "event" ? toInt(BRAND.accent) : 0x2b2d31)
     .setTitle(truncateVisual(areaDisplayName(area.name, translate) || msg("map.unnamedArea"), 32))
     .setAuthor({ name: areaKindLabel(area.kind) })
     .setDescription(mapAreaDescription(area))
@@ -693,7 +694,7 @@ export async function searchResultEmbeds(
       const heading = msg("searchResult.title", { title: escapeMarkdown(displayTitle(title, translate)), kind })
         + (artist ? "\n" + msg("searchResult.artist", { artist: escapeMarkdown(artist) }) : "")
         + "\n" + regionLine.trimEnd();
-      const container = new ContainerBuilder().setAccentColor(musicKind === "DX" ? 0xf97316 : musicKind === "ST" ? 0x3b82f6 : 0x8a8087);
+      const container = new ContainerBuilder().setAccentColor(toInt(musicKind === "DX" ? MAI_KIND_COLOR.DX : musicKind === "ST" ? MAI_KIND_COLOR.ST : BRAND.dim));
       if (buf) {
         const name = `sjacket${i}.png`;
         files.push(new AttachmentBuilder(buf, { name }));

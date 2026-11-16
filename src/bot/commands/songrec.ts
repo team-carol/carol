@@ -40,7 +40,8 @@ import { msg, type MessageKey } from "../../messages";
 import { notRegisteredNotice } from "../utils/notRegistered";
 import { rankIcon, comboIcon } from "../utils/emoji";
 import { songContainer, jacketAttachment } from "../utils/songCard";
-import { getScoreRank } from "../../games";
+import { color as BRAND, toInt } from "@team-carol/design-system";
+import { getScoreRank, MAI_CM_COLOR } from "../../games";
 import { rerollRow, rerollInPlace, postFromMenu, type V2Payload } from "../utils/reroll";
 import {
   ratingBandOf, getLevelCharts, shareAtLeast, getClearRatios, clearBandOf,
@@ -55,12 +56,6 @@ const RANKS = [
   { name: "SSS+", ach: 100.5, weight: 3 },
 ];
 
-const RANK_COLOR: Record<string, number> = {
-  "SSS+": 0xd97706,
-  SSS: 0xf59e0b,
-  "SS+": 0xfbbf24,
-  SS: 0xfbbf24,
-};
 
 export interface Recommendation {
   title: string;
@@ -473,7 +468,7 @@ export async function buildRecommendation(state: RecState, ownerId: string): Pro
         msg("songrec.cardRating", { delta: r.ratingDelta, from: cached.rating, to: cached.rating + r.ratingDelta }),
       ],
       foot,
-      accent: RANK_COLOR[r.targetRank],
+      accent: toInt(MAI_CM_COLOR[r.targetRank] ?? MAI_CM_COLOR.SSS),
       separator,
     }, jackets[i]);
   });
@@ -599,7 +594,7 @@ export function buildRecMenu(state: RecState, ownerId: string, msgId: string): C
   const f = (field: string, value: string) => msg("songrec.menuOption", { field: msg(`songrec.field.${field}` as MessageKey), value });
   const all = msg("songrec.valueAll");
   const container = new ContainerBuilder()
-    .setAccentColor(RANK_COLOR.SSS)
+    .setAccentColor(toInt(BRAND.accent))
     .addTextDisplayComponents((t) => t.setContent(msg("songrec.menuTitle", { user: `<@${state.target}>` })))
     .addSeparatorComponents((s) => s.setSpacing(SeparatorSpacingSize.Small));
   const rows: ActionRowBuilder<StringSelectMenuBuilder>[] = [

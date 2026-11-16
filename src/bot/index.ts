@@ -20,6 +20,7 @@ import { mainotesSource } from "../mainotes/source";
 import { registerChartSource } from "../simai/source";
 import { loadAppEmojis } from "./utils/emoji";
 import { loadMessages, msg, onMessagesReloaded } from "../messages";
+import { color as BRAND, toInt } from "@team-carol/design-system";
 import { appVersion } from "../version";
 import { loadFonts } from "../fonts";
 
@@ -302,7 +303,7 @@ async function maybeSendPatchNotes(i: ChatInputCommandInteraction): Promise<void
       const size = title.length + n.body.length + 60;
       if (embeds.length && total + size > 5800) break;
       total += size;
-      embeds.push(new EmbedBuilder().setColor(0xff9294).setTitle(title.slice(0, 256)).setDescription(n.body.slice(0, 4096))
+      embeds.push(new EmbedBuilder().setColor(toInt(BRAND.accent)).setTitle(title.slice(0, 256)).setDescription(n.body.slice(0, 4096))
         .setFooter({ text: msg("patchNotes.footer") }).setTimestamp(n.publishedAt));
     }
     await i.followUp({ embeds, flags: MessageFlags.Ephemeral });
