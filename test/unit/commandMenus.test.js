@@ -72,3 +72,10 @@ test("targetLine: 공개 결과 맨 위 \"@대상 님의 기록\" 한 줄, 멘�
   assert.equal(withTarget("123", "안내").content, "-# <@123> 님의 기록\n안내");
   assert.equal(targetLine("9", "circle.targetLine"), "-# <@9> 님의 서클");
 });
+
+test("headerWithTarget: 제목 머리글 첫 줄 오른쪽에 @대상만", () => {
+  const { headerWithTarget } = require("../../dist/bot/utils/targetLine.js");
+  assert.equal(headerWithTarget("## 곡 추천\n-# 설명", "7"), "## 곡 추천 <@7>\n-# 설명");
+  assert.equal(headerWithTarget("## 랜덤", "7"), "## 랜덤 <@7>");
+  assert.equal(headerWithTarget("## 랜덤", null), "## 랜덤");
+});

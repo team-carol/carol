@@ -43,7 +43,7 @@ import { songContainer, jacketAttachment } from "../utils/songCard";
 import { color as BRAND, toInt } from "@team-carol/design-system";
 import { getScoreRank, MAI_CM_COLOR } from "../../games";
 import { rerollRow, rerollInPlace, postFromMenu, type V2Payload } from "../utils/reroll";
-import { targetLine, NO_PING } from "../utils/targetLine";
+import { headerWithTarget, NO_PING } from "../utils/targetLine";
 import {
   ratingBandOf, getLevelCharts, shareAtLeast, getClearRatios, clearBandOf,
   CLEAR_CRITERIA, type ChartStat, type ClearCriterion,
@@ -475,7 +475,7 @@ export async function buildRecommendation(state: RecState, ownerId: string): Pro
   });
   return {
     components: [
-      new TextDisplayBuilder().setContent(`${peer ? msg("songrec.headerPeer", { band: bandLabel(peer.band) }) : msg("songrec.header")}\n${targetLine(state.target)}`),
+      new TextDisplayBuilder().setContent(headerWithTarget(peer ? msg("songrec.headerPeer", { band: bandLabel(peer.band) }) : msg("songrec.header"), state.target)),
       ...containers,
       ...(peer ? [new TextDisplayBuilder().setContent(msg("songrec.footer", { text: msg("maishift.credit") }))] : []),
       tail,
@@ -544,7 +544,7 @@ async function nextClearsPayload(
   const footer = `${msg("songrec.nextFooter", { from: band * 20, to: band * 20 + 20, players: stats.players.toLocaleString("en-US") })}  ✦  ${msg("maishift.credit")}`;
   return {
     components: [
-      new TextDisplayBuilder().setContent(`${msg("songrec.nextHeader", { level, criterion: label, cleared, total: levelCharts.length })}\n${targetLine(targetId)}`),
+      new TextDisplayBuilder().setContent(headerWithTarget(msg("songrec.nextHeader", { level, criterion: label, cleared, total: levelCharts.length }), targetId)),
       ...containers,
       new TextDisplayBuilder().setContent(msg("songrec.footer", { text: footer })),
       tail,
