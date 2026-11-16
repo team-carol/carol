@@ -1,4 +1,4 @@
-import { BRAND } from "../../brand";
+import { color as BRAND } from "@team-carol/design-system";
 import { renderInWorker } from "./renderPool";
 import type { CachedProfile } from "../../storage/types";
 import type { PlayRecord } from "../../scraper";
@@ -7,12 +7,12 @@ import { fetchJacketDataUrl } from "./ratingCard";
 import { musicKindIcons, KIND_ICON_RATIO } from "./dxnetAssets";
 import { alignLeftMargin } from "./textMetrics";
 import { displayTitle } from "../../aliases";
-import { getScoreRank, MAI_CM_COLOR } from "../../games";
+import { getScoreRank, MAI_CM_COLOR, MAI_DIFF_COLOR } from "../../games";
 import { msg, cardTextSignature } from "../../messages";
 import { achievementTier } from "../../achievements";
 import { createHash } from "crypto";
 
-// 색은 랜딩과 같은 src/brand.ts 팔레트. 난이도·FC/AP 색은 게임 고유라 아래에 따로 둔다.
+// 색은 랜딩과 같은 @team-carol/design-system 팔레트. 난이도·FC/AP 색은 게임 고유라 아래에 따로 둔다.
 const ACCENT = BRAND.accent;
 const SURFACE = BRAND.surface;
 const BORDER = BRAND.border;
@@ -25,13 +25,7 @@ const RECORD_ROW_HEIGHT = 92;
 const ROW_GAP = 8;
 const EMPTY_BODY_HEIGHT = 230;
 
-const DIFF_COLOR: Record<string, string> = {
-  BASIC: "#16a34a",
-  ADVANCED: "#ea580c",
-  EXPERT: "#dc2626",
-  MASTER: "#9333ea",
-  "Re:MASTER": "#c084fc",
-};
+const DIFF_COLOR: Record<string, string> = MAI_DIFF_COLOR;
 
 export const MARK_COLOR: Record<string, string> = {
   "AP+": "#d946ef",

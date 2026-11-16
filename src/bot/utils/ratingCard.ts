@@ -1,4 +1,4 @@
-import { BRAND } from "../../brand";
+import { color as BRAND } from "@team-carol/design-system";
 import { renderInWorker } from "./renderPool";
 import type { PlayRecord, ChartMarks, MaimaiServer } from "../../scraper";
 import { buildMarkMap, buildKindResolver, chartKey } from "../../scraper";
@@ -68,7 +68,7 @@ function sStarColor(stars: number): string {
 /** /레이팅표 type: maimai DX 레이팅, S-레이팅, 다른 게임 환산. */
 export type RatingType = GameId | "srating";
 
-// ─── Design tokens (ported from mailog, colors from src/brand.ts) ──────────────────────────────────
+// ─── Design tokens (ported from mailog, colors from @team-carol/design-system) ──────────────────────────────────
 const CARD_W = 110;
 const CARD_H = 115;
 const GAP = 5;
@@ -676,7 +676,7 @@ export function plateDial(value: number, width: number): El {
     rows.push(el("div", {
       display: "flex", alignItems: "center", position: "relative",
       height, opacity: DIAL_OPACITY[Math.abs(d)], padding: `0 12px 0 ${center ? DIAL_PAD_L - 1 : DIAL_PAD_L}px`,
-      ...(center ? { borderRadius: 10, background: BRAND.surface2, border: `1px solid ${BRAND.border2}` } : {}),
+      ...(center ? { borderRadius: 10, background: BRAND.surface2, border: `1px solid ${BRAND.borderStrong}` } : {}),
     }, [
       // 강조 막대. 한글 글리프가 줄 상자 가운데보다 2px 쯤 아래에 그려져서 막대도 그만큼 내린다.
       ...(center ? [el("div", { position: "absolute", left: 6, top: (DIAL_CENTER_H - 2 - 15) / 2 + 2, width: 3, height: 15, borderRadius: 99, background: BRAND.accent })] : []),
