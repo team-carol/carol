@@ -40,8 +40,10 @@ import { msg, type MessageKey } from "../../messages";
 import { notRegisteredNotice } from "../utils/notRegistered";
 import { rankIcon, comboIcon } from "../utils/emoji";
 import { songContainer, jacketAttachment } from "../utils/songCard";
-import { getScoreRank } from "../../games";
+import { color as BRAND, toInt } from "@team-carol/design-system";
+import { getScoreRank, MAI_CM_COLOR } from "../../games";
 import { rerollRow, rerollInPlace, postFromMenu, type V2Payload } from "../utils/reroll";
+import { targetLine, NO_PING } from "../utils/targetLine";
 import {
   ratingBandOf, getLevelCharts, shareAtLeast, getClearRatios, clearBandOf,
   CLEAR_CRITERIA, type ChartStat, type ClearCriterion,
@@ -55,12 +57,6 @@ const RANKS = [
   { name: "SSS+", ach: 100.5, weight: 3 },
 ];
 
-const RANK_COLOR: Record<string, number> = {
-  "SSS+": 0xd97706,
-  SSS: 0xf59e0b,
-  "SS+": 0xfbbf24,
-  SS: 0xfbbf24,
-};
 
 export interface Recommendation {
   title: string;
@@ -449,7 +445,7 @@ export async function buildRecommendation(state: RecState, ownerId: string): Pro
   const tail = rerollRow("rec", ownerId, encodeRecState(state));
   // 곡 하나가 컴포넌트 8개(작은 글 위 구분선 포함)라 5곡이면 구분선을 빼야 한도(40) 안에 든다.
   const separator = state.count < MAX_COUNT;
-  if (state.mode === "l") return nextClearsPayload(cached.server, clearRecords, state.level, state.criterion, opts, translate, state.count, separator, tail);
+  if (state.mode === "l") return nextClearsPayload(state.target, cached.server, clearRecords, state.level, state.criterion, opts, translate, state.count, separator, tail);
 
   const pool = collectCandidates(clearRecords, opts, cached.server);
   // 같은 레이팅대 기록(maishift 통계)이 있으면 그 사람들이 흔히 달성한 보면을 더 자주 뽑는다.
@@ -473,24 +469,26 @@ export async function buildRecommendation(state: RecState, ownerId: string): Pro
         msg("songrec.cardRating", { delta: r.ratingDelta, from: cached.rating, to: cached.rating + r.ratingDelta }),
       ],
       foot,
-      accent: RANK_COLOR[r.targetRank],
+      accent: toInt(MAI_CM_COLOR[r.targetRank] ?? MAI_CM_COLOR.SSS),
       separator,
     }, jackets[i]);
   });
   return {
     components: [
-      new TextDisplayBuilder().setContent(peer ? msg("songrec.headerPeer", { band: bandLabel(peer.band) }) : msg("songrec.header")),
+      new TextDisplayBuilder().setContent(`${peer ? msg("songrec.headerPeer", { band: bandLabel(peer.band) }) : msg("songrec.header")}\n${targetLine(state.target)}`),
       ...containers,
       ...(peer ? [new TextDisplayBuilder().setContent(msg("songrec.footer", { text: msg("maishift.credit") }))] : []),
       tail,
     ],
     files: jackets.filter((j): j is AttachmentBuilder => !!j),
     flags: MessageFlags.IsComponentsV2,
+    ...NO_PING,
   };
 }
 
 /** /곡추천 레벨: — 같은 단계 플레이어들이 많이 깬, 아직 못 깬 보면. */
 async function nextClearsPayload(
+  targetId: string,
   server: MaimaiServer,
   clearRecords: PlayRecord[],
   level: string,
@@ -546,13 +544,14 @@ async function nextClearsPayload(
   const footer = `${msg("songrec.nextFooter", { from: band * 20, to: band * 20 + 20, players: stats.players.toLocaleString("en-US") })}  ✦  ${msg("maishift.credit")}`;
   return {
     components: [
-      new TextDisplayBuilder().setContent(msg("songrec.nextHeader", { level, criterion: label, cleared, total: levelCharts.length })),
+      new TextDisplayBuilder().setContent(`${msg("songrec.nextHeader", { level, criterion: label, cleared, total: levelCharts.length })}\n${targetLine(targetId)}`),
       ...containers,
       new TextDisplayBuilder().setContent(msg("songrec.footer", { text: footer })),
       tail,
     ],
     files: jackets.filter((j): j is AttachmentBuilder => !!j),
     flags: MessageFlags.IsComponentsV2,
+    ...NO_PING,
   };
 }
 
@@ -599,7 +598,7 @@ export function buildRecMenu(state: RecState, ownerId: string, msgId: string): C
   const f = (field: string, value: string) => msg("songrec.menuOption", { field: msg(`songrec.field.${field}` as MessageKey), value });
   const all = msg("songrec.valueAll");
   const container = new ContainerBuilder()
-    .setAccentColor(RANK_COLOR.SSS)
+    .setAccentColor(toInt(BRAND.accent))
     .addTextDisplayComponents((t) => t.setContent(msg("songrec.menuTitle", { user: `<@${state.target}>` })))
     .addSeparatorComponents((s) => s.setSpacing(SeparatorSpacingSize.Small));
   const rows: ActionRowBuilder<StringSelectMenuBuilder>[] = [

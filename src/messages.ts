@@ -25,6 +25,9 @@ export const MESSAGES = {
   "common.noBookmarklet": "해당 기능은 캐롤봇 추가 북마클릿 실행이 필요합니다. `/북마클릿`으로 설치한 뒤 maimai DX NET에서 실행해 주세요.",
   "common.needCarolBookmarklet": "해당 기능은 캐롤봇 추가 북마클릿 실행이 필요합니다. `/북마클릿`으로 설치한 뒤 maimai DX NET에서 실행해 주세요.",
   "common.adminGuildOnly": "해당 서버에서는 이 명령어를 사용할 수 없습니다.",
+  // 공개 기록 결과 맨 위 작은 글씨 한 줄(누구의 기록인지). {user} 는 멘션(알림은 가지 않음).
+  "common.targetLine": "-# {user} 님의 기록",
+  "circle.targetLine": "-# {user} 님의 서클",
 
   // ── /레이팅표 ───────────────────────────────────────────────────────────
   "ratingImage.noRecords": "maishift에 레이팅 기록이 없습니다.",
@@ -492,6 +495,7 @@ export const MESSAGES = {
   "button.songNotFound": "곡을 찾을 수 없습니다.",
   "button.mapNotFound": "지방 진행도를 찾을 수 없습니다.",
   "button.shareFooter": "{name}의 플레이  ✦  공유: {sharer}",
+  "button.mapShareFooter": "{name}의 지방 진행도  ✦  공유: {sharer}",
   "button.ownMapOpenOnly": "본인 지방 진행도만 열 수 있습니다.",
   "button.ownMapViewOnly": "본인 지방 진행도만 볼 수 있습니다.",
   "button.ownMapShareOnly": "본인 지방 진행도만 공유할 수 있습니다.",
@@ -635,7 +639,7 @@ export const MESSAGES = {
   "playlistCard.source": "maishift 공개 플레이리스트",
   "trackCard.versionPosition": "{order}/{total}",
   "trackCard.player": "{name} 님의 기록",
-  "trackCard.myRecord": "내 기록",
+  "trackCard.myRecord": "기록",
   "trackCard.noRecord": "아직 플레이 기록이 없습니다.",
   "trackCard.achievement": "달성률",
   "trackCard.dxScore": "디럭스코어",

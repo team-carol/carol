@@ -6,6 +6,7 @@ import { renderCircleCard } from "../utils/circleCard";
 import type { CircleInfo } from "../../scraper";
 import type { CachedProfile } from "../../storage/types";
 import { msg } from "../../messages";
+import { targetLine, NO_PING } from "../utils/targetLine";
 import { notRegisteredNotice } from "../utils/notRegistered";
 
 // /서클: 마지막 동기화 때 가져온 DX NET 서클 정보. 서클 공개(/설정, 기본 공개)가 꺼져 있으면 본인만 본다.
@@ -58,18 +59,18 @@ export async function show(interaction: RepliableInteraction, targetId: string, 
   const translate = await getTranslateTitles(interaction.user.id);
   // 비공개인데 본인이 보는 경우엔 채널에 남기지 않는다.
   const flags = circlePublic ? undefined : MessageFlags.Ephemeral;
-  const content = circlePublic ? undefined : msg("circle.privateSelfNote");
+  const content = circlePublic ? targetLine(target.id, "circle.targetLine") : msg("circle.privateSelfNote");
 
   if (format === "embed") {
     const row = circleButtonsRow(circle, target.id);
-    await interaction.reply({ content, embeds: [circleEmbed(circle, cached, translate)], components: row ? [row] : [], flags });
+    await interaction.reply({ content, ...NO_PING, embeds: [circleEmbed(circle, cached, translate)], components: row ? [row] : [], flags });
     return;
   }
   // 이미지 카드에는 멤버 포인트가 들어 있으므로 멤버 버튼은 뺀다. 재킷을 받아 그리느라 3초를 넘길 수 있어 먼저 defer.
   await interaction.deferReply({ flags });
   const png = await renderCircleCard(circle, cached, { translate });
   const row = circleButtonsRow(circle, target.id, false);
-  await interaction.editReply({ content, files: [new AttachmentBuilder(png, { name: "circle.png" })], components: row ? [row] : [] });
+  await interaction.editReply({ content, ...NO_PING, files: [new AttachmentBuilder(png, { name: "circle.png" })], components: row ? [row] : [] });
 }
 
 /**

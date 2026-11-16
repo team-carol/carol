@@ -10,6 +10,7 @@ import { getConstant, getJacketFile, getSongArtist, getSongVersion, getTrackId }
 import { versionIndex, versionName } from "../../maishift/catalog";
 import { getTrackInfo, getTrackScores } from "../../maishift/track";
 import { PENDING_FEATURES } from "../../maishift/features";
+import { withTarget } from "./targetLine";
 import { displayTitle } from "../../aliases";
 import { versionPositionText } from "./versionPosition";
 import { msg } from "../../messages";
@@ -97,7 +98,7 @@ export async function handleTrackButton(i: ButtonInteraction): Promise<void> {
         .setStyle(d === diff ? ButtonStyle.Primary : ButtonStyle.Secondary)
         .setDisabled(d === diff),
     ));
-    await i.editReply({ content: "", files: [new AttachmentBuilder(png, { name: `track-${trackId}.png` })], components: [row], attachments: [] });
+    await i.editReply({ ...withTarget(ctx.userId), files: [new AttachmentBuilder(png, { name: `track-${trackId}.png` })], components: [row], attachments: [] });
   } catch (e) {
     console.error("[track-detail]", e);
     await fail(msg("trackDetail.failed")).catch(() => {});

@@ -6,6 +6,7 @@ import { koreaPlayDayKey, koreaPlayDayRange } from "../../achievements";
 import { renderAchievementCard } from "../utils/achievementCard";
 import { loadAvatar } from "../utils/embeds";
 import { msg } from "../../messages";
+import { withTarget } from "../utils/targetLine";
 import { notRegisteredNotice } from "../utils/notRegistered";
 import { AP_REPEAT_KIND } from "../../apRepeat";
 
@@ -114,6 +115,7 @@ export async function show(interaction: RepliableInteraction, targetId: string, 
     );
     console.log(`[성과] 렌더 완료 pages=${pngs.length} elapsedMs=${Date.now() - renderStartedAt}`);
     await interaction.editReply({
+      ...withTarget(userId),
       files: pngs.map((png, i) => new AttachmentBuilder(png, { name: `achievement-${playDay}-${i + 1}.png` })),
     });
     console.log(`[성과] 응답 완료 playDay=${playDay}`);

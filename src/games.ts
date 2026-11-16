@@ -352,6 +352,20 @@ export const MAI_CM_COLOR: Record<string, string> = maimaiClear;
 export const GAME_CM_COLOR: Record<GameId, Record<string, string>> = clearColor;
 export const MAI_DIFF_COLOR: Record<string, string> = maimaiDifficulty;
 export const GAME_DIFF_COLOR: Record<GameId, Record<string, string>> = difficultyColor;
+/** 마크 색을 스크래퍼·maishift 기록의 키(FDX/FDX+)로도 찾게 한 것. 디자인 시스템은 FSD/FSD+ 로 적는다. */
+export const MAI_MARK_COLOR: Record<string, string> = { ...maimaiClear, "FDX+": maimaiClear["FSD+"], FDX: maimaiClear.FSD };
+
+// ─── 디자인 시스템에 아직 없는 게임 색 ──────────────────────────────────────────
+// team-carol/carol-design-system 의 /game 에 들어가면 그 값으로 바꾼다. 다른 파일에 따로 적지 말고 여기 것을 쓴다.
+// (레이팅 플레이트 그라데이션·버전 색·스탬프 캐릭터 색처럼 게임 그림을 따라 그린 팔레트는 그 카드 파일에 둔다.)
+/** ST/DX 배지 */
+export const MAI_KIND_COLOR: Record<"DX" | "ST", string> = { DX: "#f97316", ST: "#3b82f6" };
+/** 宴(우타게) 난이도 */
+export const MAI_UTAGE_COLOR = "#ec4899";
+/** 클리어(80%) — 覇者 플레이트 */
+export const MAI_CLEAR_COLOR = "#fb923c";
+/** DX 스코어 별(★) */
+export const MAI_DX_STAR_COLOR = "#fbbf24";
 
 // ─── 게임 설정 (mai-log games.ts 원본 기준) ───────────────────────────────────
 // sections: 카드 그리드 구성. count/cols는 모두 5행이 되도록 맞춰 카드 폭을 유지한다.

@@ -4,6 +4,7 @@ import { getClearList } from "../utils/embeds";
 import { calcSongRating, getConstant, isNewSong, levelToNumber } from "../../constants";
 import { getScoreRank } from "../../games";
 import { msg } from "../../messages";
+import { color as BRAND, toInt } from "@team-carol/design-system";
 
 const NEW_CAP = 15;
 const OLD_CAP = 35;
@@ -39,7 +40,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 
   const emb = new EmbedBuilder()
     .setTitle(msg("ratingcalc.title"))
-    .setColor(0x9333ea)
+    .setColor(toInt(BRAND.accent))
     .addFields(
       { name: msg("ratingcalc.inputField"), value: `\`${constant.toFixed(1)}\`  ✦  \`${ach.toFixed(4)}%\` (${rank})${ap ? "  ✦  AP" : ""}`, inline: false },
       { name: msg("ratingcalc.songRatingField"), value: `**${songRating}**`, inline: false },

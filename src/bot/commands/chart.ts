@@ -14,7 +14,8 @@ import { renderPreviewGif } from "../utils/chartGif";
 import { jacketBuffer, getClearList } from "../utils/embeds";
 import { diffBadgeEmoji, rankIcon, comboIcon, syncIcon, dxStarIcon, kindEmoji } from "../utils/emoji";
 import { getConstant, getJacketFile, getSongVersionName, isSongPlus, getSongGenre } from "../../constants";
-import { getScoreRank } from "../../games";
+import { toInt } from "@team-carol/design-system";
+import { getScoreRank, MAI_DIFF_COLOR, MAI_UTAGE_COLOR } from "../../games";
 import { dxStars } from "../../sRating";
 import type { PlayRecord } from "../../scraper";
 import { getBaseUrl } from "../../web/bookmarklet";
@@ -30,9 +31,9 @@ const MAX_PER_USER = 20;
 const DIFF_LABEL: Record<number, string> = {
   1: "BASIC", 2: "ADVANCED", 3: "EXPERT", 4: "MASTER", 5: "Re:MASTER", 6: "宴", 7: "宴",
 };
-const DIFF_COLOR: Record<number, number> = {
-  1: 0x16a34a, 2: 0xea580c, 3: 0xdc2626, 4: 0x9333ea, 5: 0xc084fc, 6: 0xec4899, 7: 0xec4899,
-};
+const DIFF_COLOR: Record<number, number> = Object.fromEntries(
+  Object.entries(DIFF_LABEL).map(([n, name]) => [n, toInt(MAI_DIFF_COLOR[name] ?? MAI_UTAGE_COLOR)]),
+);
 /** 스탠다드/DX 구분 태그. 같은 곡이 둘 다 있을 때 이름이 겹치는 걸 막는다. */
 function typeTag(type?: string): string {
   return type === "deluxe" ? " [DX]" : type === "standard" ? " [ST]" : "";
@@ -399,7 +400,7 @@ async function chartPayload(userId: string, asked: number | null, x: ReplyInput)
   ].filter(Boolean).map((l) => `-# ${l}`).join("\n");
 
   const files: AttachmentBuilder[] = [];
-  const container = new ContainerBuilder().setAccentColor(DIFF_COLOR[x.diff] ?? 0x9333ea);
+  const container = new ContainerBuilder().setAccentColor(DIFF_COLOR[x.diff] ?? toInt(MAI_DIFF_COLOR.MASTER));
   if (jacket) {
     files.push(new AttachmentBuilder(jacket, { name: "jacket.png" }));
     container.addSectionComponents(

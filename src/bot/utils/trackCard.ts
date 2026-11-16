@@ -6,8 +6,8 @@ import {
 } from "./cardKit";
 import { renderInWorker } from "./renderPool";
 import { songVersionColor, inkOn } from "./ratingCard";
-import { MARK_COLOR } from "./achievementCard";
-import { MAI_DIFF_COLOR, MAI_CM_COLOR, getScoreRank } from "../../games";
+import { color as BRAND } from "@team-carol/design-system";
+import { MAI_DIFF_COLOR, MAI_CM_COLOR, MAI_MARK_COLOR, MAI_KIND_COLOR, getScoreRank } from "../../games";
 import { calcSongRating } from "../../constants";
 import { chartSRating, dxRankStep, dxRankLabel, formatChartSRating } from "../../sRating";
 import type { TrackInfo, TrackScore } from "../../maishift/track";
@@ -131,9 +131,9 @@ function milestones(list: TrackScore[], dxDecimal: boolean): { s: TrackScore; ta
     const pct = (x: TrackScore) => (x.dxMax ? (x.dxScore / x.dxMax) * 100 : 0);
     if (dxRankStep(pct(s)) > dxRankStep(pct(p))) tags.push({ text: dxRankLabel(s.dxScore, s.dxMax, dxDecimal), color: INK, star: true });
     const combo = COMBO[s.combo] ?? "";
-    if (COMBO_ORDER.indexOf(combo) > COMBO_ORDER.indexOf(COMBO[p.combo] ?? "")) tags.push({ text: combo, color: MARK_COLOR[combo] ?? MAI_CM_COLOR[combo] ?? INK });
+    if (COMBO_ORDER.indexOf(combo) > COMBO_ORDER.indexOf(COMBO[p.combo] ?? "")) tags.push({ text: combo, color: MAI_MARK_COLOR[combo] ?? INK });
     const sync = SYNC[s.sync] ?? "";
-    if (SYNC_ORDER.indexOf(sync) > SYNC_ORDER.indexOf(SYNC[p.sync] ?? "")) tags.push({ text: sync, color: MARK_COLOR[sync] ?? MAI_CM_COLOR[sync] ?? INK });
+    if (SYNC_ORDER.indexOf(sync) > SYNC_ORDER.indexOf(SYNC[p.sync] ?? "")) tags.push({ text: sync, color: MAI_MARK_COLOR[sync] ?? INK });
     if (s.achievement >= 101 && p.achievement < 101) tags.push({ text: msg("trackCard.theory"), color: "#fde047" });
     if (tags.length) out.push({ s, tags });
   });
@@ -180,7 +180,7 @@ function changeRows(list: TrackScore[], dxDecimal: boolean): El {
     return el("div", { display: "flex", alignItems: "center", gap: 12, padding: "7px 2px", borderBottom: i < rows.length - 1 ? `1px solid ${BORDER}` : "none" }, [
       el("span", { width: 86, color: MUTED, fontFamily: NUM_FONT, fontSize: 12 }, ymd(s.at)),
       el("span", { width: 92, color: INK, fontFamily: NUM_FONT, fontSize: 14, fontWeight: 700 }, `${s.achievement.toFixed(4)}%`),
-      el("span", { width: 80, color: gain !== null && gain > 0 ? "#4ade80" : FAINT, fontFamily: NUM_FONT, fontSize: 12, fontWeight: 700 },
+      el("span", { width: 80, color: gain !== null && gain > 0 ? BRAND.success : FAINT, fontFamily: NUM_FONT, fontSize: 12, fontWeight: 700 },
         gain === null ? msg("trackCard.firstRecord") : gain > 0 ? `+${gain.toFixed(4)}%` : "—"),
       el("div", { display: "flex", alignItems: "center", flex: 1, color: TEXT, fontFamily: NUM_FONT, fontSize: 12 }, s.dxMax ? [
         el("span", {}, `DX ${fmt(s.dxScore)} / ${fmt(s.dxMax)} (${dxPct.toFixed(2)}%)`),
@@ -234,7 +234,7 @@ function emptyNote(text: string): El {
 }
 
 export async function renderTrackCard(d: TrackCardData): Promise<Buffer> {
-  const diffColor = MAI_DIFF_COLOR[d.diff] ?? "#888";
+  const diffColor = MAI_DIFF_COLOR[d.diff] ?? BRAND.dim;
   const vColor = d.songVersion !== null ? songVersionColor(d.songVersion) : null;
   const vName = d.songVersion !== null ? d.versionName(d.songVersion) : null;
   const marks = d.record && d.record.achievement > 0 ? [d.record.fc, d.record.sync].filter(Boolean) : [];
@@ -247,7 +247,7 @@ export async function renderTrackCard(d: TrackCardData): Promise<Buffer> {
     el("div", { display: "flex", flexDirection: "column", flex: 1, minWidth: 0, gap: 7 }, [
       el("div", { display: "flex", alignItems: "center", gap: 6 }, [
         pill(d.diff, { background: diffColor, color: "#fff" }),
-        pill(d.kind, { background: d.kind === "DX" ? "#f97316" : "#3b82f6", color: "#fff" }),
+        pill(d.kind, { background: MAI_KIND_COLOR[d.kind === "DX" ? "DX" : "ST"], color: "#fff" }),
         ...(vName && vColor ? [pill(vName, { background: vColor, color: inkOn(vColor) })] : []),
         ...(d.positionText ? [el("span", { color: FAINT, fontSize: 10, marginLeft: 2 }, d.positionText)] : []),
       ]),
@@ -259,7 +259,7 @@ export async function renderTrackCard(d: TrackCardData): Promise<Buffer> {
       el("div", { display: "flex", alignItems: "flex-start" }, [
         // 내 콤보·싱크(플레이했을 때만) — 성과표처럼 마크 색의 큰 글씨로 상수 왼쪽에
         ...(marks.length ? [el("div", { display: "flex", alignItems: "center", gap: 10, marginRight: 18, height: 34 }, marks.map((m) =>
-          el("span", { color: MARK_COLOR[m] ?? MAI_CM_COLOR[m] ?? TEXT, fontSize: 22, fontWeight: 800, lineHeight: 1 }, m)))] : []),
+          el("span", { color: MAI_MARK_COLOR[m] ?? TEXT, fontSize: 22, fontWeight: 800, lineHeight: 1 }, m)))] : []),
         el("span", { color: INK, fontFamily: NUM_FONT, fontSize: 34, fontWeight: 800, lineHeight: 1 }, d.constant !== null ? d.constant.toFixed(1) : "—"),
         ...(d.constantEstimated ? [el("span", { color: MUTED, fontFamily: NUM_FONT, fontSize: 16, fontWeight: 800, marginLeft: 2 }, "?")] : []),
       ]),

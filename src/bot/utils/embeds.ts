@@ -44,7 +44,8 @@ import { ratingColor } from "./roles";
 import { nextPlateStep } from "./ratingCard";
 import { diffEmoji, rankEmoji, comboEmoji, syncEmoji, dxStarEmoji, blankEmoji, kindEmoji, diffBadgeEmoji, rankIcon, comboIcon, syncIcon, dxStarIcon } from "./emoji";
 import { padColumn } from "./ggsans";
-import { getScoreRank } from "../../games";
+import { color as BRAND, toInt } from "@team-carol/design-system";
+import { getScoreRank, MAI_KIND_COLOR } from "../../games";
 import { dxStars } from "../../sRating";
 import { renderProfileCard } from "./profileCard";
 import { circleOf } from "./circle";
@@ -55,6 +56,7 @@ import { koreaPlayDayKey } from "../../achievements";
 import { buildMarkMap, buildKindResolver, chartKey } from "../../scraper";
 import type { PlayRecord, ChartMarks, MaimaiServer, MapArea } from "../../scraper";
 import { msg } from "../../messages";
+import { targetLine, NO_PING } from "./targetLine";
 import { versionPositionText } from "./versionPosition";
 
 // 곡 자켓 버퍼: DB 캐시 → maimai net(musicId) → 카탈로그 재킷(title) 순으로 확보하고 캐시
@@ -401,7 +403,7 @@ function buildMapAreaCard(
   translate: boolean,
 ): EmbedBuilder {
   const emb = new EmbedBuilder()
-    .setColor(area.kind === "event" ? 0x9333ea : 0x2b2d31)
+    .setColor(area.kind === "event" ? toInt(BRAND.accent) : 0x2b2d31)
     .setTitle(truncateVisual(areaDisplayName(area.name, translate) || msg("map.unnamedArea"), 32))
     .setAuthor({ name: areaKindLabel(area.kind) })
     .setDescription(mapAreaDescription(area))
@@ -523,6 +525,7 @@ export async function searchResultEmbeds(
   components: (ContainerBuilder | TextDisplayBuilder | ActionRowBuilder<ButtonBuilder>)[];
   files: AttachmentBuilder[];
   flags: MessageFlags.IsComponentsV2;
+  allowedMentions?: typeof NO_PING.allowedMentions;
 }> {
   // Components V2: 검색어 한 줄 → 곡마다 컨테이너(제목·재킷·지역/장르/버전, 코드 블록 점수표, 상세·외부 출력 버튼) → 페이지 버튼.
   const records = getClearList(p);
@@ -693,7 +696,7 @@ export async function searchResultEmbeds(
       const heading = msg("searchResult.title", { title: escapeMarkdown(displayTitle(title, translate)), kind })
         + (artist ? "\n" + msg("searchResult.artist", { artist: escapeMarkdown(artist) }) : "")
         + "\n" + regionLine.trimEnd();
-      const container = new ContainerBuilder().setAccentColor(musicKind === "DX" ? 0xf97316 : musicKind === "ST" ? 0x3b82f6 : 0x8a8087);
+      const container = new ContainerBuilder().setAccentColor(toInt(musicKind === "DX" ? MAI_KIND_COLOR.DX : musicKind === "ST" ? MAI_KIND_COLOR.ST : BRAND.dim));
       if (buf) {
         const name = `sjacket${i}.png`;
         files.push(new AttachmentBuilder(buf, { name }));
@@ -721,7 +724,7 @@ export async function searchResultEmbeds(
     }),
   );
   // 컴포넌트 메시지는 글이 모두 합쳐 4000자까지다(이모지는 코드 30자 남짓). 난이도 배지로 넘칠 것 같으면 이 페이지는 한 칸 약자로.
-  const author = msg("searchResult.author", { query: shownQuery, type: typeLabel });
+  const author = `${msg("searchResult.author", { query: shownQuery, type: typeLabel })}\n${targetLine(userId)}`;
   const badgeLength = author.length + built.reduce((n, b) => n + b.headingLength + b.badgeLines.join("\n-# \u2800\n").length, 0);
   const useBadge = badgeLength <= TEXT_LIMIT;
   for (const b of built) {
@@ -758,6 +761,7 @@ export async function searchResultEmbeds(
     ],
     files,
     flags: MessageFlags.IsComponentsV2,
+    ...NO_PING,
   };
 }
 

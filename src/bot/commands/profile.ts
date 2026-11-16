@@ -1,6 +1,7 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, MessageFlags, type RepliableInteraction } from "discord.js";
 import { getCachedProfile, getUserFriendCode } from "../../storage";
 import { buildProfileReply } from "../utils/embeds";
+import { withTarget } from "../utils/targetLine";
 import { msg } from "../../messages";
 import { notRegisteredNotice } from "../utils/notRegistered";
 
@@ -36,6 +37,6 @@ export async function show(interaction: RepliableInteraction, userId: string, fo
     await interaction.editReply({ content: await notRegistered() });
     return null;
   }
-  await interaction.editReply(await buildProfileReply(cached, userId, format, interaction.user.id));
+  await interaction.editReply({ ...await buildProfileReply(cached, userId, format, interaction.user.id), ...withTarget(userId) });
   return cached;
 }
