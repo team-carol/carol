@@ -7,6 +7,7 @@ import { getStampCards } from "../../maishift/stamps";
 import { PENDING_FEATURES } from "../../maishift/features";
 import { regionLatestVersion } from "../../constants";
 import { msg } from "../../messages";
+import { withTarget } from "../utils/targetLine";
 import { noteStampNames } from "../../nameTranslations";
 
 // /스탬프: maishift 스탬프 카드 현황(파트너·곡·기타 진행 중 카드와 완료한 카드)을 이미지로.
@@ -49,7 +50,7 @@ export async function show(interaction: RepliableInteraction, targetId: string):
       return;
     }
     const png = await renderStampCard(cached, await loadAvatar(target.id, cached), cards, regionLatestVersion(cached.server), await getTranslateTitles(interaction.user.id));
-    await interaction.editReply({ files: [new AttachmentBuilder(png, { name: "stamp.png" })] });
+    await interaction.editReply({ ...withTarget(target.id), files: [new AttachmentBuilder(png, { name: "stamp.png" })] });
   } catch (e) {
     console.error("[stamp]", e);
     await interaction.editReply({ content: msg("stamp.failed") }).catch(() => {});

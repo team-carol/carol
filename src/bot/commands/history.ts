@@ -7,6 +7,7 @@ import { ratingMilestones, playMilestones } from "../../historyStats";
 import { versionName } from "../../maishift/catalog";
 import { calcSongRating } from "../../constants";
 import { msg } from "../../messages";
+import { withTarget } from "../utils/targetLine";
 import { notRegisteredNotice } from "../utils/notRegistered";
 
 // /히스토리: maishift 히스토리(업로드마다의 레이팅·플레이 횟수)를 기간을 골라 이미지로.
@@ -78,7 +79,7 @@ export async function show(interaction: RepliableInteraction, targetId: string, 
       lastAt: last.at,
       lastVersionId: last.versionId,
     });
-    await interaction.editReply({ files: [new AttachmentBuilder(png, { name: "history.png" })] });
+    await interaction.editReply({ ...withTarget(target.id), files: [new AttachmentBuilder(png, { name: "history.png" })] });
   } catch (e) {
     console.error("[history]", e);
     await interaction.editReply({ content: msg("history.failed") });

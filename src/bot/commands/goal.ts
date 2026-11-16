@@ -39,6 +39,7 @@ import {
 import { getAllSongTitles } from "../../constants";
 import { normalizeQuery, aliasMatches } from "../../aliases";
 import { msg } from "../../messages";
+import { color as BRAND, toInt } from "@team-carol/design-system";
 
 // /목표: 목록(진행도)을 보여 주고, 그 아래 추가·삭제 버튼으로 관리한다(예전 /목표 추가·목록·삭제 를 하나로).
 // - 추가: 목록의 유형별 추가 버튼이 바로 입력 창(곡명·숫자 칸과 난이도·타입·기준 선택 메뉴를 한 창에)을 연다.
@@ -47,7 +48,7 @@ import { msg } from "../../messages";
 // customId — 목록 페이지 goal:<대상>:<페이지>, 추가 goal:add:<유형 r|c|g>:<대상>, 삭제 goal:del:<대상>, 입력 창 goal:am:<유형>:<주인>:<목록 메시지>,
 //            삭제 메뉴 선택 goal:ds:<주인>:<목록 메시지>, 삭제 goal:dx:<주인>:<목록 메시지>:<목표 id>. 목록 메시지 "-" 는 고칠 목록 없음.
 
-const ACCENT = 0x9333ea;
+const ACCENT = toInt(BRAND.accent);
 const MAX_GOALS_PER_USER = 25;
 const PAGE_SIZE = 8;
 

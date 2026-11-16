@@ -11,6 +11,7 @@ import { getJacketFile, getTitleByJacket } from "../../constants";
 import { displayTitle } from "../../aliases";
 import { msg, cardTextSignature, type MessageKey } from "../../messages";
 import { CIRCLE_COLOR_STYLE, CIRCLE_STAGE_POINTS } from "./circleColors";
+import { trophy } from "@team-carol/design-system/game";
 import { circleSyncedAt } from "./circle";
 import { createHash } from "crypto";
 
@@ -167,8 +168,8 @@ function progressPanel(circle: CircleInfo, stage: CircleColor): El {
 
 // 순위 주변: 피라미드 아래에 가로로. 오른쪽으로 갈수록 순위가 높다(바로 아래 · 내 서클 · 바로 위).
 // 남의 서클에는 내 서클과의 포인트 차이.
-// 1~3위 메달 색(게임 랭킹의 금·은·동)
-const MEDAL = ["#f2c94c", "#c3ccd4", "#c77d43"];
+// 1~3위 메달 색(게임 랭킹의 금·은·동 = 칭호 금·은·동 색)
+const MEDAL = [trophy.gold.background, trophy.silver.background, trophy.bronze.background];
 
 function trophyBand(m: CircleMember, maxWidth: number | string | undefined, fontSize: number): El {
   const trophyStyle = TROPHY_STYLE[m.trophyClass] ?? TROPHY_STYLE.normal;

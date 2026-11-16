@@ -13,9 +13,11 @@ import { PLAY_CURRENT_COLOR, RATING_AXES } from "./profileCard";
 import type { RatingPoint, PlayCountPoint } from "../../ratingHistory";
 import { versionWeek, type Milestone } from "../../historyStats";
 import { msg } from "../../messages";
+import { color as BRAND } from "@team-carol/design-system";
+import { MAI_DX_STAR_COLOR } from "../../games";
 
-const UP = "#4ade80";
-const DOWN = "#f87171";
+const UP = BRAND.success;
+const DOWN = BRAND.danger;
 
 export interface HistoryCardData {
   /** 기간 이름(전체·1년 …) */
@@ -115,7 +117,7 @@ export async function renderHistoryCard(profile: CachedProfile, avatarBuf: Buffe
       ]), false),
       statCell(msg("historyCard.course"), courseUrl ? image(courseUrl, { height: 26, objectFit: "contain" }) : el("span", { color: FAINT, fontSize: 14 }, "—"), true),
       statCell(msg("historyCard.class"), gradeUrl ? image(gradeUrl, { height: 26, objectFit: "contain" }) : el("span", { color: FAINT, fontSize: 14 }, "—"), true),
-      statCell(msg("historyCard.stars"), el("span", { color: "#fbbf24", fontSize: 18, fontWeight: 800 }, `★ ${stars}`), true),
+      statCell(msg("historyCard.stars"), el("span", { color: MAI_DX_STAR_COLOR, fontSize: 18, fontWeight: 800 }, `★ ${stars}`), true),
     ]),
     // 기간
     el("div", { display: "flex", flexDirection: "column", alignItems: "center", gap: 4, marginTop: 18 }, [

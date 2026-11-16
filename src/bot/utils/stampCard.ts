@@ -7,7 +7,8 @@ import {
 } from "./cardKit";
 import { userCardHeader, avatarDataUrl } from "./cardHeader";
 import { renderInWorker } from "./renderPool";
-import { MAI_DIFF_COLOR } from "../../games";
+import { color as BRAND } from "@team-carol/design-system";
+import { MAI_DIFF_COLOR, MAI_KIND_COLOR } from "../../games";
 import { displayTitle } from "../../aliases";
 import { stampDisplayName } from "../../nameTranslations";
 import type { CachedProfile } from "../../storage/types";
@@ -80,8 +81,8 @@ function row(c: StampCard, img: string | null, latestVersion: number | null, tra
     ]),
     el("div", { display: "flex", flexDirection: "column", flex: 1, minWidth: 0, gap: 7 }, [
       el("div", { display: "flex", alignItems: "center", gap: 6, minWidth: 0 }, [
-        ...(song ? [pill(song.type === "DX" ? "DX" : "ST", { background: song.type === "DX" ? "#f97316" : "#3b82f6", color: "#fff", fontSize: 9 })] : []),
-        ...(isNew ? [pill(msg("stampCard.newChart"), { background: "rgba(74,222,128,0.18)", color: "#4ade80", fontSize: 9 })] : []),
+        ...(song ? [pill(song.type === "DX" ? "DX" : "ST", { background: MAI_KIND_COLOR[song.type === "DX" ? "DX" : "ST"], color: "#fff", fontSize: 9 })] : []),
+        ...(isNew ? [pill(msg("stampCard.newChart"), { background: BRAND.successBg, color: BRAND.success, fontSize: 9 })] : []),
         el("span", { color: INK, fontSize: 14, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", flex: 1, minWidth: 0 }, name),
       ]),
       el("div", { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }, [

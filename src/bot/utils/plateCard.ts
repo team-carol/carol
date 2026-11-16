@@ -1,13 +1,14 @@
 // /플레이트 이미지 카드. 다른 사용자 카드(/스탬프·/히스토리)와 같은 머리(cardHeader)·패널(cardKit)·랜딩 토큰을 쓴다.
 // - 전체: 버전마다 한 줄, 極·将·神·舞舞·覇者 칸에 진행 막대(다 채우면 완료 칩).
-// - 상세: 그 플레이트의 종류별 이름표 그림·진행(같은 레이팅대 예상 플레이 수)과, 고른 종류의 남은 보면(가까운 순).
+// - 상세: 그 플레이트의 종류별 이름표 그림·진행(maishift 플레이트 난이도)과, 고른 종류의 남은 보면(가까운 순).
+import { withAlpha } from "@team-carol/design-system";
 import {
   SURFACE, SURFACE2, BORDER, TEXT, MUTED, CANVAS, INK, FAINT, NUM_FONT,
   type El, el, image, pill, panel, kstStamp,
 } from "./cardKit";
 import { userCardHeader, avatarDataUrl } from "./cardHeader";
 import { renderInWorker } from "./renderPool";
-import { MAI_DIFF_COLOR } from "../../games";
+import { MAI_DIFF_COLOR, MAI_MARK_COLOR, MAI_CLEAR_COLOR, MAI_KIND_COLOR } from "../../games";
 import { displayTitle } from "../../aliases";
 import { versionName } from "../../maishift/catalog";
 import type { CachedProfile } from "../../storage/types";
@@ -15,16 +16,12 @@ import type { PlateDef, PlateProgress, PlateType, PlateChartState } from "../../
 import { msg } from "../../messages";
 
 const WIDTH = 760;
-/** 종류별 색(게임 마크 색: FC 파랑, SSS 금색, AP 자주, FDX 초록). 覇者 는 주황. */
-export const PLATE_TYPE_COLOR: Record<PlateType, string> = { 極: "#60a5fa", 将: "#f59e0b", 神: "#d946ef", 舞舞: "#34d399", 覇者: "#fb923c" };
+/** 종류별 색(게임 마크 색: FC 파랑, SSS 금색, AP 자주, FDX 초록, 覇者 클리어 주황). */
+export const PLATE_TYPE_COLOR: Record<PlateType, string> = {
+  極: MAI_MARK_COLOR.FC, 将: MAI_MARK_COLOR.SSS, 神: MAI_MARK_COLOR.AP, 舞舞: MAI_MARK_COLOR.FDX, 覇者: MAI_CLEAR_COLOR,
+};
 export const PLATE_TYPE_LABEL: Record<PlateType, string> = { 極: "FC", 将: "SSS", 神: "AP", 舞舞: "FDX", 覇者: "CLEAR" };
 const ALL_TYPES: PlateType[] = ["極", "将", "神", "舞舞", "覇者"];
-const KIND_COLOR = { DX: "#f97316", ST: "#3b82f6" };
-
-function alpha(hex: string, a: number): string {
-  const n = parseInt(hex.slice(1), 16);
-  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
-}
 
 /** 플레이트 대상 버전 이름(真 은 두 버전, 舞 는 maimai~FiNALE). */
 export function plateVersionLabel(def: PlateDef): string {
@@ -48,7 +45,7 @@ function bar(ratio: number, color: string, height: number): El {
 
 function doneChip(type: PlateType, height = 22): El {
   const color = PLATE_TYPE_COLOR[type];
-  return el("div", { display: "flex", alignItems: "center", justifyContent: "center", width: "100%", height, borderRadius: 8, background: alpha(color, 0.18), border: `1px solid ${alpha(color, 0.5)}` }, [
+  return el("div", { display: "flex", alignItems: "center", justifyContent: "center", width: "100%", height, borderRadius: 8, background: withAlpha(color, 0.18), border: `1px solid ${withAlpha(color, 0.5)}` }, [
     el("span", { color, fontSize: 11, fontWeight: 800, lineHeight: 1 }, msg("plateCard.complete")),
   ]);
 }
@@ -146,7 +143,7 @@ function plateImage(prefix: string, type: PlateType, src: string | undefined): E
   const color = PLATE_TYPE_COLOR[type];
   return el("div", {
     display: "flex", alignItems: "center", justifyContent: "center", width: PLATE_IMG_W, height: PLATE_IMG_H, flexShrink: 0,
-    borderRadius: 8, background: SURFACE2, border: `1px solid ${alpha(color, 0.35)}`,
+    borderRadius: 8, background: SURFACE2, border: `1px solid ${withAlpha(color, 0.35)}`,
   }, [el("span", { color, fontSize: 24, fontWeight: 800, letterSpacing: 2, lineHeight: 1 }, plateName(prefix, type))]);
 }
 
@@ -163,7 +160,7 @@ function plateRow(p: PlateProgress, type: PlateType, selected: boolean, extras: 
     : msg("plateCard.tileLeft", { left });
   return el("div", {
     display: "flex", alignItems: "center", gap: 16, padding: "8px 10px", borderRadius: 12,
-    background: selected ? alpha(color, 0.08) : "transparent", border: `1px solid ${selected ? alpha(color, 0.6) : "transparent"}`,
+    background: selected ? withAlpha(color, 0.08) : "transparent", border: `1px solid ${selected ? withAlpha(color, 0.6) : "transparent"}`,
   }, [
     plateImage(p.def.prefix, type, extras.images?.[type]),
     el("div", { display: "flex", flexDirection: "column", flex: 1, minWidth: 0, gap: 7 }, [
@@ -197,7 +194,7 @@ function remainingRow(type: PlateType, s: PlateChartState, translate: boolean): 
     el("div", { display: "flex", alignItems: "center", justifyContent: "center", width: 38, height: 20, borderRadius: 6, background: MAI_DIFF_COLOR[c.diff] ?? SURFACE2, flexShrink: 0 }, [
       el("span", { color: "#fff", fontSize: 10, fontWeight: 800, lineHeight: 1 }, c.constant > 0 ? c.constant.toFixed(1) : c.level),
     ]),
-    pill(c.kind, { background: KIND_COLOR[c.kind], color: "#fff", fontSize: 8, padding: "2px 6px" }),
+    pill(c.kind, { background: MAI_KIND_COLOR[c.kind], color: "#fff", fontSize: 8, padding: "2px 6px" }),
     el("span", { color: INK, fontSize: 11, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", flex: 1, minWidth: 0 }, displayTitle(c.title, translate)),
     el("div", { display: "flex", alignItems: "baseline", gap: 4, flexShrink: 0 }, [
       el("span", { color: s.record && s.record.achievementVal > 0 ? TEXT : FAINT, fontFamily: NUM_FONT, fontSize: 10, lineHeight: 1 }, main),

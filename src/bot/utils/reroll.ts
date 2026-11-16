@@ -8,7 +8,7 @@
  */
 import {
   ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, ComponentType,
-  type APIMessageTopLevelComponent, type AttachmentBuilder, type ButtonInteraction, type ContainerBuilder, type TextDisplayBuilder,
+  type APIMessageTopLevelComponent, type AttachmentBuilder, type MessageMentionOptions, type ButtonInteraction, type ContainerBuilder, type TextDisplayBuilder,
 } from "discord.js";
 import { msg } from "../../messages";
 
@@ -16,6 +16,8 @@ export interface V2Payload {
   components: (ContainerBuilder | TextDisplayBuilder | ActionRowBuilder<ButtonBuilder>)[];
   files: AttachmentBuilder[];
   flags: MessageFlags.IsComponentsV2;
+  /** 머리글의 "@대상 님의 기록" 멘션이 알림을 보내지 않게 */
+  allowedMentions?: MessageMentionOptions;
 }
 
 /** 결과 메시지 맨 아래 버튼 줄. */

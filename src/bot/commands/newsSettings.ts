@@ -5,6 +5,7 @@ import {
 import { getNewsChannels, setNewsChannel, clearNewsChannel } from "../../storage";
 import { isNewsSource, type NewsSource } from "../../news";
 import { msg } from "../../messages";
+import { color as BRAND, toInt } from "@team-carol/design-system";
 
 const SOURCE_LABEL_KEY = {
   jp: "newsSettings.jpField",
@@ -40,7 +41,7 @@ async function currentSettings(guildId: string) {
     embeds: [
       new EmbedBuilder()
         .setTitle(msg("newsSettings.title"))
-        .setColor(0x5865f2)
+        .setColor(toInt(BRAND.accent))
         .addFields(field("jp"), field("intl"))
         .setFooter({ text: msg("newsSettings.hint") }),
     ],

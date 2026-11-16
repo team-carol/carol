@@ -7,7 +7,7 @@ import { fetchJacketDataUrl } from "./ratingCard";
 import { musicKindIcons, KIND_ICON_RATIO } from "./dxnetAssets";
 import { alignLeftMargin } from "./textMetrics";
 import { displayTitle } from "../../aliases";
-import { getScoreRank, MAI_CM_COLOR, MAI_DIFF_COLOR } from "../../games";
+import { getScoreRank, MAI_CM_COLOR, MAI_DIFF_COLOR, MAI_MARK_COLOR } from "../../games";
 import { msg, cardTextSignature } from "../../messages";
 import { achievementTier } from "../../achievements";
 import { createHash } from "crypto";
@@ -26,20 +26,6 @@ const ROW_GAP = 8;
 const EMPTY_BODY_HEIGHT = 230;
 
 const DIFF_COLOR: Record<string, string> = MAI_DIFF_COLOR;
-
-export const MARK_COLOR: Record<string, string> = {
-  "AP+": "#d946ef",
-  AP: "#d946ef",
-  "FC+": "#3b82f6",
-  FC: "#60a5fa",
-  // 스크래퍼는 FDX/FDX+ 로 준다. FSD 는 예전 키라 호환용으로 남긴다.
-  "FDX+": "#10b981",
-  FDX: "#34d399",
-  "FSD+": "#10b981",
-  FSD: "#34d399",
-  "FS+": "#22c55e",
-  FS: "#4ade80",
-};
 
 const jacketCache = new Map<string, string | null>();
 
@@ -173,7 +159,7 @@ function recordRow(record: PlayRecord, rankNo: number, profile: CachedProfile, j
   const achievementLabel = before !== null ? `${after.toFixed(4)}%(+${Math.max(0, after - before).toFixed(4)}%)` : `${after.toFixed(4)}%`;
   const rank = getScoreRank(after);
   const isAP = record.fc === "AP" || record.fc === "AP+";
-  const markColor = (mark: string) => MARK_COLOR[mark] ?? MAI_CM_COLOR[mark] ?? "rgba(255,255,255,0.7)";
+  const markColor = (mark: string) => MAI_MARK_COLOR[mark] ?? "rgba(255,255,255,0.7)";
   return el(
     "div",
     {

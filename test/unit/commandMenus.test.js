@@ -65,3 +65,10 @@ test("maishiftVersionId: 세대·PLUS → maishift 버전 번호", () => {
   assert.equal(id("MAGiCAL", false), 27);
   assert.equal(id("MAGiCAL", true), 28);
 });
+
+test("targetLine: 공개 결과 맨 위 \"@대상 님의 기록\" 한 줄, 멘션 알림은 끈다", () => {
+  const { withTarget, targetLine } = require("../../dist/bot/utils/targetLine.js");
+  assert.deepEqual(withTarget("123"), { content: "-# <@123> 님의 기록", allowedMentions: { parse: [] } });
+  assert.equal(withTarget("123", "안내").content, "-# <@123> 님의 기록\n안내");
+  assert.equal(targetLine("9", "circle.targetLine"), "-# <@9> 님의 서클");
+});

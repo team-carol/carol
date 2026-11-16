@@ -4,6 +4,7 @@ import { getTopList, getClearList, loadAvatar } from "../utils/embeds";
 import { renderRatingCard, type RatingType } from "../utils/ratingCard";
 import { GAMES, isGameId } from "../../games";
 import { msg } from "../../messages";
+import { withTarget } from "../utils/targetLine";
 import { koreaPlayDayRange } from "../../achievements";
 import { getMaishiftSnapshot, getMaishiftFuture } from "../../maishift";
 import { PENDING_FEATURES } from "../../maishift/features";
@@ -169,7 +170,7 @@ export async function show(interaction: RepliableInteraction, targetId: string, 
       futureVersion,
     );
     await interaction.editReply({
-      content: notice,
+      ...withTarget(userId, notice),
       files: [new AttachmentBuilder(png, { name: dateOpt ? `rating-${type}-${dateOpt}.png` : future ? "rating-future.png" : `rating-${type}.png` })],
     });
   } catch (e) {

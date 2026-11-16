@@ -6,6 +6,7 @@ import { getBaseUrl } from "../../web";
 import { issueAdminToken } from "../../web/adminAuth";
 import { CONFIG, PORT } from "../../config";
 import { msg } from "../../messages";
+import { color as BRAND, toInt } from "@team-carol/design-system";
 
 // 별명 관리와 문구 관리를 한 페이지(탭)로 합친 관리자 명령.
 export const data = new SlashCommandBuilder()
@@ -26,7 +27,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   const url = `${getBaseUrl(PORT)}/admin?code=${token}`;
   const embed = new EmbedBuilder()
     .setTitle(msg("admin.embedTitle"))
-    .setColor(0x9333ea)
+    .setColor(toInt(BRAND.accent))
     .setDescription(msg("admin.embedBody"));
 
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
