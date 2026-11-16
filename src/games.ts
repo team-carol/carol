@@ -2,7 +2,7 @@
 // 레이팅 계산식은 mai-log 원본을 그대로 유지한다 (수치·반올림 순서 포함).
 // maimai 기록(달성률 0~101%, 상수 0~15.0)을 각 게임 스케일로 선형 보간해 환산한다.
 
-import { BRAND } from "./brand";
+import { clearColor, difficultyColor, gameAccent, maimaiClear, maimaiDifficulty, ratingValue } from "@team-carol/design-system/game";
 import type { PlayRecord } from "./scraper";
 
 export type GameId = "maimai" | "chunithm" | "sdvx" | "arcaea";
@@ -346,62 +346,12 @@ export function buildDisplayMarks(ach: number, marks: string[], game: GameId): s
   return convertMarks(baseMarks, game);
 }
 
-// ─── 색상 팔레트 (mai-log scoreConvert.ts 원본) ───────────────────────────────
+// ─── 색상 팔레트 (@team-carol/design-system/game) ─────────────────────────────
 
-export const MAI_CM_COLOR: Record<string, string> = {
-  "SSS+":"#d97706","SSS":"#f59e0b","SS+":"#fbbf24","SS":"#fbbf24",
-  "S+":"#fb923c","S":"#fb923c","AAA":"#60a5fa","AA":"#60a5fa","A":"#93c5fd",
-  "BBB":"#7dd3fc","BB":"#bae6fd","B":"#e0f2fe",
-  "C":"#d1d5db","D":"#9ca3af",
-  "AP+":"#d946ef","AP":"#d946ef","FC+":"#3b82f6","FC":"#60a5fa",
-  "FS+":"#22c55e","FS":"#4ade80","FSD+":"#10b981","FSD":"#34d399",
-  "SYNC":"#94a3b8",
-};
-
-export const GAME_CM_COLOR: Record<GameId, Record<string, string>> = {
-  maimai: MAI_CM_COLOR,
-  chunithm: {
-    ...MAI_CM_COLOR,
-    "AJC":"#ca8a04","AJ":"#f59e0b",
-  },
-  sdvx: {
-    "PUC":"#ca8a04","UC":"#f59e0b","COMP":"#3b82f6","PLAYED":"#6b7280",
-    "S":"#d97706","AAA+":"#f59e0b","AAA":"#fbbf24",
-    "AA+":"#fb923c","AA":"#fb923c",
-    "A+":"#60a5fa","A":"#93c5fd",
-    "B":"#4ade80","C":"#9ca3af","D":"#6b7280",
-  },
-  arcaea: {
-    "EX+":"#d97706","EX":"#a855f7","AA":"#c084fc","A":"#d8b4fe",
-    "B":"#60a5fa","D":"#6b7280",
-    "P":"#ca8a04","F":"#f59e0b","C":"#3b82f6","L":"#6b7280",
-  },
-};
-
-export const MAI_DIFF_COLOR: Record<string, string> = {
-  "BASIC":"#16a34a",
-  "ADVANCED":"#ea580c",
-  "EXPERT":"#dc2626",
-  "MASTER":"#9333ea",
-  "Re:MASTER":"#c084fc",
-};
-
-export const GAME_DIFF_COLOR: Record<GameId, Record<string, string>> = {
-  maimai: MAI_DIFF_COLOR,
-  chunithm: {
-    "BASIC":"#16a34a","ADVANCED":"#d97706","EXPERT":"#dc2626",
-    "MASTER":"#9333ea","ULTIMA":"#555555",
-  },
-  sdvx: {
-    "NOVICE":"#16a34a","ADVANCED":"#2563eb","EXHAUST":"#dc2626","MAXIMUM":"#7c3aed",
-    "INFINITE":"#c026d3","GRAVITY":"#ea580c","HEAVENLY":"#0ea5e9",
-    "VIVID":"#ec4899","EXCEED":"#d97706","NABLA":"#0d9488",
-  },
-  arcaea: {
-    "Past":"#64748b","Present":"#059669","Future":"#7c3aed","Beyond":"#dc2626",
-    "Eternal":"#dc2626",
-  },
-};
+export const MAI_CM_COLOR: Record<string, string> = maimaiClear;
+export const GAME_CM_COLOR: Record<GameId, Record<string, string>> = clearColor;
+export const MAI_DIFF_COLOR: Record<string, string> = maimaiDifficulty;
+export const GAME_DIFF_COLOR: Record<GameId, Record<string, string>> = difficultyColor;
 
 // ─── 게임 설정 (mai-log games.ts 원본 기준) ───────────────────────────────────
 // sections: 카드 그리드 구성. count/cols는 모두 5행이 되도록 맞춰 카드 폭을 유지한다.
@@ -444,14 +394,14 @@ export const ARCAEA_DOUBLE_COUNT = 10;
 export const ARCAEA_POTENTIAL_DIVISOR = 60;
 
 // 2배 가중치가 붙은 곡의 레이팅 숫자 색 (기본은 흰색)
-export const RS_DEFAULT_COLOR = "#fff";
-export const RS_DOUBLE_COLOR = "#fbbf24";
+export const RS_DEFAULT_COLOR = ratingValue.default;
+export const RS_DOUBLE_COLOR = ratingValue.double;
 
 export const GAMES: Record<GameId, GameConfig> = {
   maimai: {
     id: "maimai",
     label: "maimai DX",
-    accent: BRAND.accent,
+    accent: gameAccent.maimai,
     ratingLabel: "RATING",
     select: "newOld",
     sections: [
@@ -467,7 +417,7 @@ export const GAMES: Record<GameId, GameConfig> = {
   chunithm: {
     id: "chunithm",
     label: "CHUNITHM",
-    accent: "#f97316",
+    accent: gameAccent.chunithm,
     ratingLabel: "RATING",
     select: "newOld",
     sections: [
@@ -482,7 +432,7 @@ export const GAMES: Record<GameId, GameConfig> = {
   sdvx: {
     id: "sdvx",
     label: "SOUND VOLTEX",
-    accent: "#38bdf8",
+    accent: gameAccent.sdvx,
     ratingLabel: "VOLFORCE",
     select: "top",
     sections: [{ label: "VOLFORCE", count: 50, cols: 10 }],
@@ -496,7 +446,7 @@ export const GAMES: Record<GameId, GameConfig> = {
   arcaea: {
     id: "arcaea",
     label: "Arcaea",
-    accent: "#a855f7",
+    accent: gameAccent.arcaea,
     ratingLabel: "POTENTIAL",
     select: "top",
     sections: [{ label: "BEST", count: 50, cols: 10 }],

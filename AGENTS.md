@@ -51,7 +51,7 @@ carol/
 | DB schema/storage | `src/storage/postgres.ts` | PostgreSQL storage and numbered migrations. |
 | maimai parsing | `src/scraper.ts` | Cheerio selectors tied to DX NET markup. |
 | Song constants/jackets | `src/constants.ts` | maishift song catalog (ASIA + JAPAN) cached daily in `constants_cache`; startup network failure is non-fatal. JP-only jacket images come from the otoge-db image mirror (maimaidx.jp TLS chain breaks Node fetch). |
-| Visual tokens | `src/brand.ts`, `src/web/theme.ts` | carol-web landing palette shared by web pages and PNG cards. Bump `CARD_VERSION`/`ACH_CARD_VERSION` when card colors change. |
+| Visual tokens | `@team-carol/design-system`, `src/web/theme.ts` | Shared brand/game tokens for web pages, overlays and PNG cards. Bump `CARD_VERSION`/`ACH_CARD_VERSION` when card colors change. |
 | Deploy/runbook | `docs/DEPLOY.md`, `docs/SETUP.md` | Cloudflare tunnel + GCP VM workflow. |
 
 ## CODE MAP
@@ -80,7 +80,7 @@ TypeScript LSP was unavailable in this workspace, and codegraph is not indexed. 
 - TypeScript is strict CommonJS targeting ES2022. Build output, declarations, and maps go to `dist/`.
 - Runtime storage is PostgreSQL through `DATABASE_URL`; migrations in `src/storage/postgres.ts` are numbered and immutable once released.
 - Slash commands use Korean names. User `/설정` links to web settings; guild auto-role lives in `/서버설정`.
-- Web UI is inline string HTML/CSS/JS. Web pages use the carol-web (landing) design system from `src/web/theme.ts`: `BASE_CSS` CSS variables (`--canvas #1a1a1c`, `--surface #242427`, `--border #33333a`, `--accent #ff9294`), Pretendard, shared `pageHead()`/`topbar()`/`siteFooter()`/`.btn-primary`. Use the variables — don't hard-code colors. Raw values live in `src/brand.ts` (`BRAND`), which the PNG rating/achievement cards also use; game colors (difficulty, FC/AP, DX) stay separate.
+- Web UI is inline string HTML/CSS/JS. Web pages use `@team-carol/design-system` (team-carol/carol-design-system) through `src/web/theme.ts`: `BASE_CSS` is the design system CSS (`carolCss`: `--crl-*` tokens, reset, `crl-*` components) plus carol-only bits (page frame, status text, switch). Use `crl-*` classes (`crl-btn crl-btn--primary`, `crl-card`, `crl-tabs crl-tabs--contained`, `crl-input`, `crl-tag`, `crl-topbar`, `crl-heading-2` …) and `var(--crl-*)` — don't hard-code colors; if a token looks wrong, fix it in the design system repo. Bookmarklet overlays can't use CSS variables: `bookmarklet.ts` interpolates `T` (= design system `color`), `optionPreset.ts`/`importClient.ts` get the palette via `withOverlayTheme()`. PNG cards and Discord colors import `color`/`toInt` from `@team-carol/design-system`; game colors (difficulty, rank, FC/AP, trophy) come from `@team-carol/design-system/game` (`games.ts` re-exports them). `npm run preview` serves every page and overlay with fake data (no DB/config).
 - Rating-card UI uses satori without JSX via the local `el()` helper and NotoSansJP fonts cached under `{DATA_DIR}/fonts/`.
 
 ## ANTI-PATTERNS (THIS PROJECT)
@@ -100,6 +100,7 @@ npm run build     # tsc -> dist/
 npm start         # node dist/bot/index.js
 npm run dev       # ts-node src/bot/index.ts
 npm run dev:web   # ts-node src/web/dev.ts, no Discord client
+npm run preview   # design preview of pages + bookmarklet overlays, fake data, no DB
 docker compose up -d
 ```
 

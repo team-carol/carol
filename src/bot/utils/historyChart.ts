@@ -3,7 +3,7 @@
 // 선·격자는 SVG 이미지로 그리고(resvg 가 벡터로 렌더), 축 라벨·값은 satori 텍스트로 올린다
 // (중첩 SVG 안의 text 는 글꼴을 못 찾을 수 있어서). 실측끼리 잇는 구간은 실선, 추정이 끼면 점선.
 // 값은 다음 측정 전까지 그대로이므로 계단 모양(가로로 이어 가다 다음 점에서 세로로)으로 그린다. 점은 찍지 않는다.
-import { BRAND } from "../../brand";
+import { color as BRAND } from "@team-carol/design-system";
 import { ACCENT, BORDER, FAINT, NUM_FONT, type El, el, image } from "./cardKit";
 import { msg } from "../../messages";
 

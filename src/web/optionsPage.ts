@@ -26,89 +26,71 @@ export function optionsPage(token: string, data: OptionsPageData): string {
 <style>
 ${BASE_CSS}
 .page{max-width:760px}
-h1{font-size:clamp(36px,5vw,52px);font-weight:500;color:var(--ink);letter-spacing:-.01em;line-height:1.15;margin-bottom:12px}
-.sub{font-size:15px;color:var(--muted);margin-bottom:32px}
-.card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:26px 28px;margin-bottom:14px}
 .card-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px;flex-wrap:wrap}
-.card-title{font-size:18px;font-weight:500;color:var(--ink)}
-.card-meta{font-size:13px;color:var(--dim);margin-top:2px}
-.seg{display:inline-flex;gap:4px;padding:4px;background:var(--canvas-alt);border:1px solid var(--border);border-radius:12px;margin-bottom:14px}
-.seg button{background:transparent;border:0;color:var(--muted);border-radius:9px;padding:7px 16px;font-size:14px;font-weight:500;cursor:pointer}
-.seg button.on{background:var(--surface-2);color:var(--ink);box-shadow:0 0 0 1px var(--border-2)}
+.card-title{font-size:18px;font-weight:500;color:var(--crl-ink)}
+.card-meta{font-size:13px;color:var(--crl-dim);margin-top:2px}
+.seg{margin-bottom:14px}
 .group{margin-top:18px}
 .group:first-child{margin-top:0}
-.group-title{font-size:13px;font-weight:500;color:var(--dim);margin-bottom:8px}
+.group-title{font-size:13px;font-weight:500;color:var(--crl-dim);margin-bottom:8px}
 .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
-.opt{display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--canvas-alt);border:1px solid var(--border);border-radius:10px;padding:9px 12px;min-width:0}
-.opt-l{font-size:12.5px;color:var(--muted);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.opt-v{font-size:13.5px;color:var(--ink-2);font-weight:500;text-align:right;flex-shrink:0;max-width:55%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.opt.diff{border-color:rgba(255,146,148,.45)}
-.opt.diff .opt-v{color:var(--accent-soft)}
-.opt select{flex-shrink:0;max-width:58%;background:var(--surface);border:1px solid var(--border-2);border-radius:8px;color:var(--ink);font-size:13px;padding:5px 8px;outline:none}
-.opt select:focus{border-color:var(--accent)}
-.empty{color:var(--faint);font-size:14px;text-align:center;padding:18px 0;line-height:1.7}
-.p-item{border-top:1px solid var(--border);padding:16px 0}
+.opt{display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--crl-canvas-alt);border:1px solid var(--crl-border);border-radius:var(--crl-radius-control);padding:9px 12px;min-width:0}
+.opt-l{font-size:12.5px;color:var(--crl-muted);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.opt-v{font-size:13.5px;color:var(--crl-ink-2);font-weight:500;text-align:right;flex-shrink:0;max-width:55%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.opt.diff{border-color:color-mix(in srgb,var(--crl-accent) 45%,transparent)}
+.opt.diff .opt-v{color:var(--crl-accent-soft)}
+.opt select.crl-input{width:auto;flex-shrink:0;max-width:58%;background-color:var(--crl-surface);border-radius:var(--crl-radius-small);font-size:13px;padding:5px 28px 5px 8px}
+.p-item{border-top:1px solid var(--crl-border);padding:16px 0}
 .p-item:first-child{border-top:0;padding-top:0}
 .p-row{display:flex;align-items:center;gap:12px}
 .p-info{flex:1;min-width:0}
-.p-name{color:var(--ink);font-size:16px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.p-meta{font-size:13px;color:var(--dim);margin-top:2px}
-.p-meta .d{color:var(--accent-soft)}
+.p-name{color:var(--crl-ink);font-size:16px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.p-meta{font-size:13px;color:var(--crl-dim);margin-top:2px}
+.p-meta .d{color:var(--crl-accent-soft)}
 .p-actions{display:flex;gap:6px;flex-shrink:0}
-.sm{background:none;border:1px solid var(--border-2);color:var(--muted);border-radius:10px;padding:6px 14px;font-size:13px;cursor:pointer;transition:border-color .15s,color .15s}
-.sm:hover{border-color:var(--ink-soft);color:var(--ink)}
-.sm.del:hover{border-color:var(--err);color:var(--err)}
-.btn-sm{padding:8px 16px;font-size:14px}
-.editor{margin-top:14px;padding:18px;background:var(--canvas);border:1px solid var(--border);border-radius:14px}
-.editor .name{width:100%;background:var(--canvas-alt);border:1px solid var(--border);border-radius:12px;padding:11px 14px;color:var(--ink);font-size:15px;outline:none;margin-bottom:6px}
-.editor .name:focus{border-color:var(--accent)}
-.ed-note{font-size:12.5px;color:var(--dim);margin-bottom:14px}
+.editor{margin-top:14px;padding:18px;background:var(--crl-canvas);border:1px solid var(--crl-border);border-radius:var(--crl-radius-card)}
+.editor .name{margin-bottom:6px;font-size:15px}
+.ed-note{font-size:12.5px;color:var(--crl-dim);margin-bottom:14px}
 .ed-foot{display:flex;align-items:center;gap:8px;margin-top:18px;flex-wrap:wrap}
-.ed-foot .sp{flex:1}
-.linkbtn{background:none;border:0;color:var(--accent-soft);font-size:13px;cursor:pointer;padding:0}
-.ed-bar{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--dim);margin:0 0 12px}
-.ed-bar.dirty{color:var(--warn)}
-.ed-bar.dirty::before{content:'';width:8px;height:8px;border-radius:50%;background:var(--warn);flex-shrink:0}
-.opt.dirty{box-shadow:inset 3px 0 0 var(--warn)}
-.unsaved{color:var(--warn)}
+.linkbtn{background:none;border:0;color:var(--crl-accent-soft);font-size:13px;cursor:pointer;padding:0}
+.ed-bar{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--crl-dim);margin:0 0 12px}
+.ed-bar.dirty{color:var(--crl-warning)}
+.ed-bar.dirty::before{content:'';width:8px;height:8px;border-radius:50%;background:var(--crl-warning);flex-shrink:0}
+.opt.dirty{box-shadow:inset 3px 0 0 var(--crl-warning)}
+.unsaved{color:var(--crl-warning)}
 .fold-head{cursor:pointer;user-select:none;margin-bottom:0}
 .fold-head.open{margin-bottom:18px}
 .chev{display:inline-block;transition:transform .15s}
 .fold-head.open .chev{transform:rotate(180deg)}
-.linkbtn:hover{color:var(--accent)}
+.linkbtn:hover{color:var(--crl-accent)}
 .install{display:flex;gap:10px;flex-wrap:wrap}
-.install .bm{cursor:grab}
-.steps{margin:14px 0 0 20px;font-size:14px;color:var(--muted)}
+.steps{margin:14px 0 0 20px;font-size:14px;color:var(--crl-muted)}
 .steps li{margin:4px 0}
-.status{font-size:13px;min-height:0;margin-top:10px;text-align:center}
-.status:empty{margin-top:0}
-.status.ok{color:var(--ok)}
-.status.err{color:var(--err)}
-@media(max-width:620px){.grid{grid-template-columns:1fr}.card{padding:22px}.editor{padding:14px}}
+@media(max-width:620px){.grid{grid-template-columns:1fr}.editor{padding:14px}}
 </style></head><body>
 ${topbar(userNav(token, "options"))}
 <main class="page">
-<h1>게임 설정</h1>
-<p class="sub">maimai DX NET 게임 옵션을 확인하고, 프리셋으로 만들어 두었다가 한 번에 바꿀 수 있습니다.</p>
+<h1 class="crl-heading-2 page-title">게임 설정</h1>
+<p class="crl-body-sm page-lead">maimai DX NET 게임 옵션을 확인하고, 프리셋으로 만들어 두었다가 한 번에 바꿀 수 있습니다.</p>
 
 <div id="segWrap"></div>
 
-<div class="card">
+<div class="crl-card">
   <div class="card-head fold-head" id="curHead"><div><div class="card-title">현재 설정</div><div class="card-meta" id="curMeta"></div></div>
-  <button class="sm" id="curToggle" type="button"><span id="curToggleText">펼치기</span> <span class="chev">\u25BE</span></button></div>
+  <button class="crl-btn crl-btn--secondary crl-btn--sm" id="curToggle" type="button"><span id="curToggleText">펼치기</span> <span class="chev">\u25BE</span></button></div>
   <div id="current" hidden></div>
 </div>
 
-<div class="card">
+<div class="crl-card">
   <div class="card-head"><div><div class="card-title">프리셋</div><div class="card-meta" id="pMeta"></div></div>
-  <button class="btn btn-primary btn-sm" id="newBtn" onclick="startNew()">+ 새 프리셋</button></div>
+  <button class="crl-btn crl-btn--primary crl-btn--sm" id="newBtn" onclick="startNew()">+ 새 프리셋</button></div>
   <div id="presets"></div>
   <div class="status" id="pStatus"></div>
 </div>
 
-<div class="card">
+<div class="crl-card">
   <div class="card-head"><div><div class="card-title">프리셋 적용하기</div><div class="card-meta">적용은 DX NET 에서 옵션 프리셋 북마클릿으로 합니다.</div></div></div>
-  <div class="install"><a class="btn btn-primary bm" href="${escAttr(data.bookmarklet)}" onclick="return false">캐롤봇 옵션 프리셋</a><button class="btn btn-secondary" onclick="copyBm()">코드 복사</button></div>
+  <div class="install"><a class="crl-btn crl-btn--primary bm" href="${escAttr(data.bookmarklet)}" onclick="return false">캐롤봇 옵션 프리셋</a><button class="crl-btn crl-btn--secondary" onclick="copyBm()">코드 복사</button></div>
   <ol class="steps">
     <li>위 버튼을 북마크바로 드래그합니다. 모바일은 코드를 복사해 북마크 주소에 붙여넣으세요.</li>
     <li>maimai DX NET 아무 페이지에서 북마클릿을 실행합니다.</li>
@@ -163,7 +145,7 @@ function diffCount(preset,s){
 function renderSeg(){
   var w=document.getElementById('segWrap');
   if(D.snapshots.length<2){w.innerHTML='';return;}
-  w.innerHTML='<div class="seg">'+['intl','jp'].filter(function(s){return snap(s);}).map(function(s){return '<button class="'+(s===view?'on':'')+'" data-s="'+s+'">'+SERVER_NAME[s]+'</button>';}).join('')+'</div>';
+  w.innerHTML='<div class="crl-tabs crl-tabs--contained seg">'+['intl','jp'].filter(function(s){return snap(s);}).map(function(s){return '<button class="crl-tab'+(s===view?' is-active':'')+'" data-s="'+s+'">'+SERVER_NAME[s]+'</button>';}).join('')+'</div>';
   w.querySelectorAll('button').forEach(function(b){b.onclick=function(){view=this.getAttribute('data-s');render();};});
 }
 
@@ -200,7 +182,7 @@ function renderPresets(){
     var d=n===null?'':(n?' · <span class="d">현재와 '+n+'개 다름</span>':' · 현재와 같음');
     var tag=editing&&editing.id===p.id?'<span id="dirtyTag"></span>':'';
     html+='<div class="p-item"><div class="p-row"><div class="p-info"><div class="p-name">'+esc(p.name)+'</div><div class="p-meta">'+SERVER_NAME[p.server]+' · '+fmt(p.updatedAt)+d+tag+'</div></div>'
-      +'<div class="p-actions"><button class="sm" data-edit="'+p.id+'">'+(editing&&editing.id===p.id?'닫기':'편집')+'</button><button class="sm del" data-del="'+p.id+'">삭제</button></div></div>';
+      +'<div class="p-actions"><button class="crl-btn crl-btn--secondary crl-btn--sm" data-edit="'+p.id+'">'+(editing&&editing.id===p.id?'닫기':'편집')+'</button><button class="crl-btn crl-btn--secondary crl-btn--sm crl-btn--danger" data-del="'+p.id+'">삭제</button></div></div>';
     if(editing&&editing.id===p.id)html+=editorHtml();
     html+='</div>';
   });
@@ -213,7 +195,7 @@ function renderPresets(){
 function editorHtml(){
   var cat=catalogFor(editing.server),cur=snap(editing.server);
   var dirty=dirtyInfo();
-  var h='<div class="editor"><div class="ed-bar" id="edBar"></div><input class="name" id="edName" maxlength="30" placeholder="프리셋 이름 (예: 평소, 연습용)" value="'+esc(editing.name)+'">';
+  var h='<div class="editor"><div class="ed-bar" id="edBar"></div><input class="crl-input name" id="edName" maxlength="30" placeholder="프리셋 이름 (예: 평소, 연습용)" value="'+esc(editing.name)+'">';
   if(!cat){
     h+='<div class="ed-note">동기화된 설정이 없어 이름만 바꿀 수 있습니다. 프로필 북마클릿으로 동기화하면 항목도 편집할 수 있어요.</div>';
   } else {
@@ -224,14 +206,14 @@ function editorHtml(){
         var known=optText(f,v)!==null;
         var curF=cur?cur.fields.find(function(x){return x.name===f.name;}):null;
         var isDiff=curF&&curF.value!==v;
-        return '<label class="opt'+(isDiff?' diff':'')+(dirty.fields[f.name]?' dirty':'')+'" title="'+esc(f.desc||f.label)+'"><span class="opt-l">'+esc(f.label)+'</span><select data-f="'+esc(f.name)+'">'
+        return '<label class="opt'+(isDiff?' diff':'')+(dirty.fields[f.name]?' dirty':'')+'" title="'+esc(f.desc||f.label)+'"><span class="opt-l">'+esc(f.label)+'</span><select class="crl-input" data-f="'+esc(f.name)+'">'
           +(known?'':'<option value="'+esc(v)+'" selected>(알 수 없는 값 '+esc(v)+')</option>')
           +f.options.map(function(o){return '<option value="'+esc(o[0])+'"'+(o[0]===v?' selected':'')+'>'+esc(o[1])+'</option>';}).join('')
           +'</select></label>';
       }).join('')+'</div></div>';
     }).join('');
   }
-  h+='<div class="ed-foot"><span class="sp"></span><button class="btn btn-secondary btn-sm" id="edCancel">취소</button><button class="btn btn-primary btn-sm" id="edSave">저장</button></div></div>';
+  h+='<div class="ed-foot"><span class="sp"></span><button class="crl-btn crl-btn--secondary crl-btn--sm" id="edCancel">취소</button><button class="crl-btn crl-btn--primary crl-btn--sm" id="edSave">저장</button></div></div>';
   return h;
 }
 

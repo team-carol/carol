@@ -31,7 +31,8 @@ import type { Chart } from "../simai/types";
 import { messagesAdminPage, type MessageRowVM } from "./messagesAdminPage";
 import { commandsAdminPage, type CommandRowVM } from "./commandsAdminPage";
 import { getCommandDefinitions, getCommandOverride, applyOverride, validateOverride as validateCommandOverride, saveCommandOverride, syncCommandsNow, type CommandJson } from "../commandOverrides";
-import { BASE_CSS, pageHead, topbar, siteFooter, BRAND_AVATAR_PATH, userNav } from "./theme";
+import { BRAND_AVATAR_PATH } from "./theme";
+import { guidePage } from "./guidePage";
 import { privacyPage, termsPage } from "./legalPages";
 import { BRAND_AVATAR_PNG } from "./brandAvatar";
 import {
@@ -131,110 +132,6 @@ async function cacheMapImages(areas: readonly { imageUrl: string }[], server: st
     }
   }
   return saved;
-}
-
-function guidePage(token: string, bookmarklet: string): string {
-  const bmEscaped = bookmarklet.replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/`/g, "\\`");
-  return `<!DOCTYPE html><html lang="ko"><head>${pageHead("캐롤봇 추가 북마클릿 설치 · 캐롤봇")}
-<style>
-${BASE_CSS}
-.page{max-width:680px}
-h1{font-size:clamp(36px,5vw,52px);font-weight:500;color:var(--ink);letter-spacing:-.01em;line-height:1.15;margin-bottom:14px}
-.lead{font-size:clamp(16px,1.6vw,18px);color:var(--muted);margin-bottom:36px}
-.tabs{display:flex;gap:4px;margin-bottom:16px;padding:4px;background:var(--surface);border:1px solid var(--border);border-radius:14px}
-.tabBtn{flex:1;background:transparent;color:var(--muted);border:0;border-radius:10px;padding:10px 16px;font-size:15px;font-weight:500;cursor:pointer;transition:background-color .15s,color .15s}
-.tabBtn:hover{color:var(--ink)}
-.tabBtn.active{background:var(--surface-2);color:var(--ink);box-shadow:0 0 0 1px var(--border-2)}
-.card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px;margin-bottom:14px}
-.card .eyebrow{color:var(--accent-soft)}
-.hint{font-size:13.5px;color:var(--dim);margin-top:8px}
-.bm{margin:18px 0 4px;cursor:grab}
-.bm:active{cursor:grabbing}
-.copy-btn{width:100%;margin:16px 0 0;padding:14px 22px}
-.copy-ok{color:var(--ok);font-size:13px;text-align:center;min-height:18px;margin-top:8px}
-.steps{list-style:none;counter-reset:s;margin-top:4px}
-.step{counter-increment:s;display:flex;gap:14px;margin-bottom:14px;font-size:15.5px;line-height:1.6}
-.step:last-child{margin-bottom:0}
-.step::before{content:counter(s);flex-shrink:0;width:26px;height:26px;margin-top:1px;background:var(--surface-2);color:var(--accent-soft);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:500}
-.tab{display:none}
-.tab.active{display:block}
-@media(max-width:560px){.card{padding:22px}}
-</style></head><body>
-${topbar(userNav(token, "sync"))}
-<main class="page">
-<h1>캐롤봇 추가 북마클릿 설치</h1>
-<p class="lead">프로필·기록은 maishift에서 가져옵니다. 서클·지방·게임 설정처럼 maishift에 없는 정보는 maimai DX NET에서 이 북마클릿을 실행하면 캐롤봇으로 동기화됩니다.</p>
-<div class="tabs">
-<button class="tabBtn active" id="tbPC" onclick="sw('PC')">💻 PC</button>
-<button class="tabBtn" id="tbMB" onclick="sw('MB')">📱 모바일</button>
-</div>
-<div class="tab active" id="tPC">
-<div class="card">
-<p class="eyebrow">Step 01</p>
-<p>아래 버튼을 브라우저 북마크바로 드래그하세요.</p>
-<a class="btn btn-primary bm" href="${bookmarklet}" draggable="true">캐롤봇 추가</a>
-<p class="hint">북마크바가 없으면 <code>Ctrl+Shift+B</code></p>
-</div>
-<div class="card">
-<p class="eyebrow">Step 02</p>
-<p>maishift 북마클릿은 캐롤봇 추가 북마클릿을 실행할 때 자동으로 함께 실행됩니다.</p>
-</div>
-<div class="card">
-<p class="eyebrow">Step 03</p>
-<p><a href="https://maimaidx-eng.com/maimai-mobile/" target="_blank">maimai DX NET</a> 또는 <a href="https://maimaidx.jp/maimai-mobile/" target="_blank">maimaiでらっくすNET</a>에서 저장한 북마크를 클릭하세요.</p>
-</div>
-</div>
-<div class="tab" id="tMB">
-<div class="card">
-<p class="eyebrow">Step 01</p>
-<p>아래 버튼으로 북마클릿 코드를 복사하세요.</p>
-<button class="btn btn-primary copy-btn" onclick="copyBm()">📋 코드 복사</button>
-<div class="copy-ok" id="cpOk"></div>
-</div>
-<div class="card">
-<p class="eyebrow">Step 02</p>
-<p>maishift 북마클릿은 캐롤봇 추가 북마클릿을 실행할 때 자동으로 함께 실행됩니다.</p>
-</div>
-<div class="card">
-<p class="eyebrow">Step 03</p>
-<ol class="steps">
-<li class="step"><strong>빈 페이지를 북마크 저장</strong> (⭐ 또는 공유 → 북마크 추가)</li>
-<li class="step">북마크 목록을 열고, 방금 저장한 북마크를 <strong>편집</strong></li>
-<li class="step">URL 칸을 모두 지우고, 복사한 코드를 <strong>붙여넣기</strong></li>
-<li class="step"><a href="https://maimaidx-eng.com/maimai-mobile/" target="_blank">maimai DX NET</a> 또는 <a href="https://maimaidx.jp/maimai-mobile/" target="_blank">maimaiでらっくすNET</a>에서 해당 북마크 실행</li>
-</ol>
-</div>
-</div>
-</main>
-${siteFooter()}
-<script>
-function sw(t){
-  document.getElementById('tPC').className='tab'+(t==='PC'?' active':'');
-  document.getElementById('tMB').className='tab'+(t==='MB'?' active':'');
-  document.getElementById('tbPC').className='tabBtn'+(t==='PC'?' active':'');
-  document.getElementById('tbMB').className='tabBtn'+(t==='MB'?' active':'');
-}
-function copyBm(){
-  var code='${bmEscaped}';
-  if(navigator.clipboard&&navigator.clipboard.writeText){
-    navigator.clipboard.writeText(code).then(function(){
-      document.getElementById('cpOk').textContent='✅ 복사 완료!';
-      setTimeout(function(){document.getElementById('cpOk').textContent='';},3000);
-    }).catch(fallback);
-  } else { fallback(); }
-  function fallback(){
-    var ta=document.createElement('textarea');
-    ta.value=code;ta.style.position='fixed';ta.style.opacity='0';
-    document.body.appendChild(ta);ta.focus();ta.select();
-    try{document.execCommand('copy');document.getElementById('cpOk').textContent='✅ 복사 완료!';}
-    catch(e){document.getElementById('cpOk').textContent='❌ 수동 복사 필요';}
-    document.body.removeChild(ta);
-    setTimeout(function(){document.getElementById('cpOk').textContent='';},3000);
-  }
-}
-if(/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)) sw('MB');
-</script>
-</body></html>`;
 }
 
 /** 저장된 채보를 재생/렌더에 쓸 Chart 로 만든다. /chart 와 /chart/gif 가 공유한다. */

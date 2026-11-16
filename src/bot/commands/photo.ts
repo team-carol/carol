@@ -13,7 +13,7 @@ import { hasCarolSync } from "../utils/syncExtras";
 import { circleOf } from "../utils/circle";
 import { notRegisteredNotice } from "../utils/notRegistered";
 import { GAMES, isGameId } from "../../games";
-import { BRAND } from "../../brand";
+import { color as BRAND, toInt } from "@team-carol/design-system";
 import { msg } from "../../messages";
 import * as profile from "./profile";
 import * as ratingimage from "./ratingimage";
@@ -139,7 +139,7 @@ async function buildMenu(targetId: string, ownerId: string, wanted: Selection = 
   const code = encode(sel);
 
   const container = new ContainerBuilder()
-    .setAccentColor(parseInt(BRAND.accent.slice(1), 16))
+    .setAccentColor(toInt(BRAND.accent))
     .addTextDisplayComponents((t) => t.setContent(title))
     .addSeparatorComponents((s) => s.setSpacing(SeparatorSpacingSize.Small))
     .addTextDisplayComponents((t) => t.setContent(msg("photo.kindHeading")))

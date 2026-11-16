@@ -16,6 +16,8 @@ src/web/
 ├── patchNotesAdminPage.ts # /admin/patch-notes 패치노트 작성·게시 탭
 ├── chartPlayer.ts   # simai 채보 플레이어 페이지 껍데기 (HTML/CSS + 컨트롤)
 ├── chartRenderer.ts # 플레이어 그리기 코어를 담은 JS 문자열 (서버 GIF 생성과 공용)
+├── guidePage.ts     # /sync 추가 북마클릿 설치 안내
+├── preview.ts       # npm run preview: 가짜 데이터로 모든 페이지·북마클릿 오버레이를 띄우는 디자인 미리보기 (운영 서버는 안 씀)
 └── dev.ts           # web-only local entrypoint
 ```
 
@@ -64,7 +66,7 @@ src/web/
 - Do not introduce Express. `index.ts` intentionally uses Node `http` and manual routing.
 - Route auth is `sync_token` query param resolved by `findUserBySyncToken`; production rejects missing/expired tokens with 403.
 - `isDev = !CONFIG.baseUrl` allows local `/sync` and `/settings` preview without a token.
-- Web pages use inline CSS built on `theme.ts` (tokens copied from team-carol/carol-web `app/globals.css`): start every `<style>` with `BASE_CSS` (admin pages add `ADMIN_CSS`), use `pageHead()`/`topbar()`/`siteFooter()`, and reference `var(--…)` instead of hex colors. Injected overlays (`bookmarklet.ts`, `importClient.ts`) can't use the variables, so they hard-code the same values (`T` in `theme.ts`).
+- Web pages use `@team-carol/design-system` (team-carol/carol-design-system) through `src/web/theme.ts`: `BASE_CSS` is the design system CSS (`carolCss`: `--crl-*` tokens, reset, `crl-*` components) plus carol-only bits (page frame, status text, switch). Use `crl-*` classes (`crl-btn crl-btn--primary`, `crl-card`, `crl-tabs crl-tabs--contained`, `crl-input`, `crl-tag`, `crl-topbar`, `crl-heading-2` …) and `var(--crl-*)` — don't hard-code colors; if a token looks wrong, fix it in the design system repo. Bookmarklet overlays can't use CSS variables: `bookmarklet.ts` interpolates `T` (= design system `color`), `optionPreset.ts`/`importClient.ts` get the palette via `withOverlayTheme()`. PNG cards and Discord colors import `color`/`toInt` from `@team-carol/design-system`; game colors (difficulty, rank, FC/AP, trophy) come from `@team-carol/design-system/game` (`games.ts` re-exports them). `npm run preview` serves every page and overlay with fake data (no DB/config). Start every `<style>` with `BASE_CSS` (admin pages add `ADMIN_CSS`) and use `pageHead()`/`topbar()`/`siteFooter()`/`adminTabs()`.
 - `/brand/avatar.png` serves the carolbot avatar embedded as base64 in `brandAvatar.ts` (Docker only ships compiled `src/` → `dist/`).
 - `settingsPage()` serializes data with `<`/`>` escaped before embedding in `<script>`.
 - The injected maishift bookmarklet must not have `window.open` overridden; it opens a popup and needs native browser behavior.
@@ -93,6 +95,7 @@ src/web/
 ```bash
 npm run build
 npm run dev:web
+npm run preview   # http://localhost:3457/ — 디자인 확인용(DB 없음)
 ```
 
 Manual QA: open `http://localhost:3456/sync` and `/settings` in local mode; use a real maimai DX NET page for bookmarklet sync behavior.

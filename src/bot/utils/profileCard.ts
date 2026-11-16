@@ -1,4 +1,4 @@
-import { BRAND } from "../../brand";
+import { color as BRAND } from "@team-carol/design-system";
 import {
   ACCENT, SURFACE, SURFACE2, BORDER, TEXT, MUTED, CANVAS, INK, SOFT, FAINT, NUM_FONT, TROPHY_STYLE,
   type El, el, image, pill, remoteDataUrl, kstStamp, wordmark, creditOf, statsPanel, panel,
@@ -8,7 +8,7 @@ import type { CachedProfile } from "../../storage/types";
 import type { PlayRecord } from "../../scraper";
 import { getConstant, getJacketFile } from "../../constants";
 import { displayTitle } from "../../aliases";
-import { getScoreRank, MAI_CM_COLOR } from "../../games";
+import { getScoreRank, MAI_CM_COLOR, MAI_DIFF_COLOR } from "../../games";
 import { fetchJacketDataUrl, ratingBreakdown, ratingPlate, plateProgress, plateDial } from "./ratingCard";
 import { musicKindIcons, KIND_ICON_RATIO } from "./dxnetAssets";
 import { alignLeftMargin } from "./textMetrics";
@@ -18,18 +18,12 @@ import { hasCarolSync, extrasSyncedAt } from "./syncExtras";
 import { msg, cardTextSignature } from "../../messages";
 import { formatTopPercent, type RatingRank } from "../../maishift/stats";
 
-// /프로필 이미지 카드. 레이아웃·색은 /성과 카드와 같은 랜딩(carol-web) 토큰(src/brand.ts)을 따른다.
+// /프로필 이미지 카드. 레이아웃·색은 /성과 카드와 같은 랜딩(carol-web) 토큰(@team-carol/design-system)을 따른다.
 // 헤더(아바타·이름·칭호·클래스·레이팅 플레이트) → 레이팅 구성 → 클리어 현황 → 최근 플레이 5곡.
 
 const RECENT_COUNT = 5;
 
-const DIFF_COLOR: Record<string, string> = {
-  BASIC: "#16a34a",
-  ADVANCED: "#ea580c",
-  EXPERT: "#dc2626",
-  MASTER: "#9333ea",
-  "Re:MASTER": "#c084fc",
-};
+const DIFF_COLOR: Record<string, string> = MAI_DIFF_COLOR;
 
 
 // 랭크 막대그래프 색. 게임 랭크색(금색 계열)을 진한 것 → 옅은 것 순으로 이어 붙였다.
@@ -37,7 +31,7 @@ const RANK_RAMP: [string, string][] = [
   ["SSS+", "#d97706"], ["SSS", "#f59e0b"], ["SS+", "#fbbf24"],
   ["SS", "#fcd34d"], ["S+", "#fde68a"], ["S", "#fef3c7"],
 ];
-const RANK_OTHER_COLOR = BRAND.border2;
+const RANK_OTHER_COLOR = BRAND.borderStrong;
 const MARK_GROUPS: string[][] = [
   ["AP+", "AP", "FC+", "FC"],
   ["FDX+", "FDX", "FS+", "FS"],
@@ -287,7 +281,7 @@ export async function renderProfileCard(
           el("span", { color: INK, fontSize: 26, fontWeight: 800, lineHeight: 1.1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginLeft: nameShift, flexShrink: 1, minWidth: 0 }, name),
           // 서클 이름(/설정 서클 공개가 켜져 있을 때만)
           circleName
-            ? el("div", { display: "flex", alignItems: "center", gap: 6, flexShrink: 0, maxWidth: 260, border: `1px solid ${BRAND.border2}`, borderRadius: 99, padding: "3px 10px" }, [
+            ? el("div", { display: "flex", alignItems: "center", gap: 6, flexShrink: 0, maxWidth: 260, border: `1px solid ${BRAND.borderStrong}`, borderRadius: 99, padding: "3px 10px" }, [
                 el("span", { color: FAINT, fontSize: 9, fontWeight: 700, letterSpacing: 0.6 }, msg("profileCard.circleChip")),
                 el("span", { color: TEXT, fontSize: 12, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, circleName),
               ])

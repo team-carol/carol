@@ -1,6 +1,6 @@
 # carol — Design System
 
-> **Brand palette:** web pages and the PNG rating/achievement cards follow the carol-web landing design system (team-carol/carol-web `app/globals.css`). Values live in `src/brand.ts` (`BRAND`); web pages use them as CSS variables via `src/web/theme.ts`. Canvas `#1a1a1c`, surface `#242427`, border `#33333a`, text `#f2edef`/`#cfc6ca`, accent coral `#ff9294` (text on accent `#3a1e1e`). Cards bump `CARD_VERSION` / `ACH_CARD_VERSION` on palette changes so cached PNGs re-render.
+> **Brand palette:** web pages, bookmarklet overlays and the PNG cards use `@team-carol/design-system` (team-carol/carol-design-system). Brand tokens come from its `color` export (CSS `--crl-*` via `src/web/theme.ts`), game colors from `@team-carol/design-system/game`. Canvas `#1a1a1c`, surface `#242427`, border `#33333a`, text `#f2edef`/`#cfc6ca`, accent coral `#ff9294` (text on accent `#3a1e1e`). Cards bump `CARD_VERSION` / `ACH_CARD_VERSION` on palette changes so cached PNGs re-render.
 >
 > Card shapes follow the landing too: panels and rows are rounded (16px) surface boxes with a 1px border; jacket tiles are rounded (10px); difficulty, rank and "TOP N" labels are pills instead of colored stripes. The wordmark is `carol` (ink) + `bot` (accent).
 >
