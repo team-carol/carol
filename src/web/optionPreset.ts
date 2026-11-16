@@ -8,6 +8,8 @@
 //
 // 적용할 값이 그 계정의 select 에 없으면(미해금 SE·디자인 등) 그 항목은 현재 값을 유지한다.
 
+import { withOverlayTheme } from "./theme";
+
 export const OPTION_PRESET_MAX = 10;
 const NAME_MAX = 30;
 const FIELD_MAX = 80;
@@ -44,8 +46,8 @@ export function sanitizeOptionPreset(body: unknown): { name: string; server: "in
 }
 
 // /option.js 로 서빙되는 클라이언트. 규칙: 이 문자열 안에서 백틱과 ${ 를 쓰지 말 것.
-// 오버레이는 CSS 변수를 못 쓰므로 theme.ts 의 T 와 같은 값을 박아 둔다(bookmarklet.ts 와 같은 룩).
-export const OPTION_CLIENT_JS = String.raw`
+// 오버레이는 CSS 변수를 못 쓰므로 색·글꼴은 withOverlayTheme() 가 디자인 시스템 값으로 채운다(bookmarklet.ts 와 같은 룩).
+export const OPTION_CLIENT_JS = withOverlayTheme(String.raw`
 (function(){
   var h=location.hostname, server=h==='maimaidx.jp'?'jp':(h==='maimaidx-eng.com'?'intl':'');
   if(!server){ alert('maimai DX NET 페이지에서 실행해주세요.'); return; }
@@ -56,17 +58,17 @@ export const OPTION_CLIENT_JS = String.raw`
   var ON_PAGE=location.pathname.indexOf(PAGE)===0;
   var API=BASE+'/api/option-presets?code='+encodeURIComponent(CODE);
 
-  var C={bg:'#242427',border:'#33333a',line:'#2e2e33',ink:'#f2edef',text:'#cfc6ca',muted:'#b3a8ad',dim:'#8a8087',faint:'#6f676c',accent:'#ff9294',accentInk:'#3a1e1e',soft:'#f2b3bf',field:'#1a1a1c',ok:'#4ade80',err:'#f87171',warn:'#facc15'};
-  var MONO='ui-monospace,SFMono-Regular,Menlo,monospace';
+  var C=__CAROL_OVERLAY_THEME__;
+  var MONO=C.mono;
 
   var old=document.getElementById('carol-opt-ov'); if(old) old.remove();
   var ov=document.createElement('div'); ov.id='carol-opt-ov';
-  ov.style.cssText='position:fixed;top:16px;right:16px;z-index:2147483647;background:'+C.bg+';border:1px solid '+C.border+';border-radius:16px;padding:16px 18px;font:13px Pretendard,"Pretendard Variable",system-ui,-apple-system,sans-serif;color:'+C.text+';width:340px;max-width:calc(100vw - 32px);box-sizing:border-box;max-height:calc(100vh - 32px);overflow-y:auto;box-shadow:0 12px 36px rgba(0,0,0,.55),0 0 0 1px rgba(255,146,148,.14);text-align:left;line-height:1.45';
+  ov.style.cssText='position:fixed;top:16px;right:16px;z-index:2147483647;background:'+C.bg+';border:1px solid '+C.border+';border-radius:16px;padding:16px 18px;font:13px '+C.sans+';color:'+C.text+';width:340px;max-width:calc(100vw - 32px);box-sizing:border-box;max-height:calc(100vh - 32px);overflow-y:auto;box-shadow:0 12px 36px rgba(0,0,0,.55),0 0 0 1px '+C.glow+';text-align:left;line-height:1.45';
   document.body.appendChild(ov);
 
   function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
   function el(tag,css,html){ var e=document.createElement(tag); if(css) e.style.cssText=css; if(html!=null) e.innerHTML=html; return e; }
-  function btn(label,primary){ var b=el('button','border:0;border-radius:10px;padding:6px 12px;font:inherit;font-size:12px;font-weight:600;cursor:pointer;'+(primary?'background:'+C.accent+';color:'+C.accentInk:'background:'+C.line+';color:'+C.text+';box-shadow:0 0 0 1px #3a353d'),esc(label)); b.type='button'; return b; }
+  function btn(label,primary){ var b=el('button','border:0;border-radius:10px;padding:6px 12px;font:inherit;font-size:12px;font-weight:600;cursor:pointer;'+(primary?'background:'+C.accent+';color:'+C.accentInk:'background:'+C.line+';color:'+C.text+';box-shadow:0 0 0 1px '+C.strong),esc(label)); b.type='button'; return b; }
 
   var head=el('div','display:flex;justify-content:space-between;align-items:center;padding-bottom:10px;margin-bottom:10px;border-bottom:1px solid '+C.line,
     '<div style="display:flex;align-items:baseline"><span style="color:'+C.ink+';font-size:15px;font-weight:600">캐롤봇</span><span style="color:'+C.faint+';font-size:10px;font-weight:600;letter-spacing:.6px;margin-left:10px;font-family:'+MONO+'">OPTION PRESET · '+(server==='jp'?'JP':'INTL')+'</span></div>');
@@ -247,4 +249,4 @@ export const OPTION_CLIENT_JS = String.raw`
     render();
   })();
 })();
-`;
+`);

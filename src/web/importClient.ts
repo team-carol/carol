@@ -9,10 +9,13 @@
 // 브라우저 세션(이미 챌린지 통과)이 하는 same-origin 요청이라 우회가 아니다.
 //
 // 규칙: 이 문자열은 브라우저에 그대로 나가므로 여기 안에서 백틱과 ${ 를 쓰지 말 것
-// (TS 템플릿 리터럴 안에 들어간다). 문자열은 따옴표+연결로만.
+// (TS 템플릿 리터럴 안에 들어간다). 문자열은 따옴표+연결로만. 색·글꼴은 C(withOverlayTheme) 를 쓴다.
 
-export const IMPORT_CLIENT_JS = String.raw`
+import { withOverlayTheme } from "./theme";
+
+export const IMPORT_CLIENT_JS = withOverlayTheme(String.raw`
 (function(){
+  var C = __CAROL_OVERLAY_THEME__;
   var CFG = window.__carolImport || {};
   var BASE = String(CFG.base||"").replace(/\/+$/,"");
   var CODE = String(CFG.code||"");
@@ -113,21 +116,21 @@ export const IMPORT_CLIENT_JS = String.raw`
 
   // ── UI ────────────────────────────────────────────────────────────────
   var ui=document.createElement("div"); ui.id="carolImportUI";
-  ui.setAttribute("style","position:fixed;right:16px;bottom:16px;z-index:2147483647;width:340px;max-width:92vw;background:#242427;color:#f2edef;border:1px solid #33333a;border-radius:16px;font:13px/1.55 Pretendard,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;box-shadow:0 8px 30px rgba(0,0,0,.5);overflow:hidden");
+  ui.setAttribute("style","position:fixed;right:16px;bottom:16px;z-index:2147483647;width:340px;max-width:92vw;background:"+C.bg+";color:"+C.ink+";border:1px solid "+C.border+";border-radius:16px;font:13px/1.55 "+C.sans+";box-shadow:0 8px 30px rgba(0,0,0,.5);overflow:hidden");
   ui.innerHTML=""
-   +"<div style='padding:10px 14px;background:#ff9294;color:#3a1e1e;font-weight:600;display:flex;justify-content:space-between;align-items:center'>캐롤봇 채보 등록<span id='ciClose' style='cursor:pointer;font-weight:400;opacity:.85'>✕</span></div>"
+   +"<div style='padding:10px 14px;background:"+C.accent+";color:"+C.accentInk+";font-weight:600;display:flex;justify-content:space-between;align-items:center'>캐롤봇 채보 등록<span id='ciClose' style='cursor:pointer;font-weight:400;opacity:.85'>✕</span></div>"
    +"<div style='padding:12px'>"
-   +"<div id='ciStat' style='margin-bottom:6px;color:#cfc6ca'>목록을 읽는 중…</div>"
-   +"<div style='height:8px;background:#2e2e33;border-radius:99px;overflow:hidden;margin:8px 0'><div id='ciBar' style='height:100%;width:0;background:#ff9294;transition:width .2s'></div></div>"
-   +"<div id='ciNow' style='color:#f2edef;min-height:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis'></div>"
-   +"<div id='ciEta' style='color:#8a8087;font-size:12px;margin:4px 0 8px'></div>"
+   +"<div id='ciStat' style='margin-bottom:6px;color:"+C.text+"'>목록을 읽는 중…</div>"
+   +"<div style='height:8px;background:"+C.line+";border-radius:99px;overflow:hidden;margin:8px 0'><div id='ciBar' style='height:100%;width:0;background:"+C.accent+";transition:width .2s'></div></div>"
+   +"<div id='ciNow' style='color:"+C.ink+";min-height:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis'></div>"
+   +"<div id='ciEta' style='color:"+C.dim+";font-size:12px;margin:4px 0 8px'></div>"
    +"<div style='display:flex;gap:6px;align-items:center;margin-bottom:8px'>"
-   +"<button id='ciToggle' style='flex:1;padding:7px;border:0;border-radius:10px;background:#ff9294;color:#3a1e1e;font-weight:600;cursor:pointer'>시작</button>"
-   +"<button id='ciStop' style='padding:7px 10px;border:1px solid #3a353d;border-radius:8px;background:#2e2e33;color:#f2edef;cursor:pointer'>중지</button>"
-   +"<label style='font-size:12px;color:#b3a8ad;display:flex;align-items:center;gap:3px'>간격<input id='ciInt' type='number' min='5' max='120' value='15' style='width:42px;background:#2e2e33;color:#f2edef;border:1px solid #3a353d;border-radius:6px;padding:3px'>s</label>"
+   +"<button id='ciToggle' style='flex:1;padding:7px;border:0;border-radius:10px;background:"+C.accent+";color:"+C.accentInk+";font-weight:600;cursor:pointer'>시작</button>"
+   +"<button id='ciStop' style='padding:7px 10px;border:1px solid "+C.strong+";border-radius:8px;background:"+C.line+";color:"+C.ink+";cursor:pointer'>중지</button>"
+   +"<label style='font-size:12px;color:"+C.muted+";display:flex;align-items:center;gap:3px'>간격<input id='ciInt' type='number' min='5' max='120' value='15' style='width:42px;background:"+C.line+";color:"+C.ink+";border:1px solid "+C.strong+";border-radius:6px;padding:3px'>s</label>"
    +"</div>"
-   +"<label style='font-size:12px;color:#b3a8ad;display:flex;align-items:center;gap:5px;margin:0 0 8px'><input id='ciForce' type='checkbox' style='margin:0'>이미 등록된 곡도 다시 가져오기(잘린 채보 교체)</label>"
-   +"<div id='ciLog' style='height:110px;overflow:auto;background:#1a1a1c;border:1px solid #2e2e33;border-radius:8px;padding:6px;font:11px/1.45 ui-monospace,Menlo,monospace;color:#cfc6ca'></div>"
+   +"<label style='font-size:12px;color:"+C.muted+";display:flex;align-items:center;gap:5px;margin:0 0 8px'><input id='ciForce' type='checkbox' style='margin:0'>이미 등록된 곡도 다시 가져오기(잘린 채보 교체)</label>"
+   +"<div id='ciLog' style='height:110px;overflow:auto;background:"+C.field+";border:1px solid "+C.line+";border-radius:8px;padding:6px;font:11px/1.45 "+C.mono+";color:"+C.text+"'></div>"
    +"</div>";
   document.body.appendChild(ui);
   var $=function(id){ return document.getElementById(id); };
@@ -146,16 +149,16 @@ export const IMPORT_CLIENT_JS = String.raw`
         var html=await fetch("/simai/pages/"+item.page+".html").then(function(r){ return r.text(); });
         var doc=new DOMParser().parseFromString(html,"text/html");
         var song=extract(doc);
-        if(!song || !song.charts.length){ state.skip++; log("· "+item.title+" — 노트 없음, 건너뜀","#8a8087"); }
+        if(!song || !song.charts.length){ state.skip++; log("· "+item.title+" — 노트 없음, 건너뜀",C.dim); }
         else{
           song.page=item.page;
           var r=await api("/api/admin/simai/import?code="+encodeURIComponent(CODE),{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(song)});
-          if(r.status===403){ log("✗ 토큰이 만료되었습니다. /채보가져오기 로 다시 열어주세요.","#f66"); state.running=false; state.stop=true; $("ciToggle").textContent="시작"; break; }
+          if(r.status===403){ log("✗ 토큰이 만료되었습니다. /채보가져오기 로 다시 열어주세요.",C.err); state.running=false; state.stop=true; $("ciToggle").textContent="시작"; break; }
           var j=await r.json().catch(function(){ return {}; });
-          if(r.ok && j.ok){ state.add++; state.ok++; log("✓ "+item.title+" — "+j.saved.length+"난이도 등록","#6f6"); }
-          else{ state.fail++; log("✗ "+item.title+" — "+(j.error||("HTTP "+r.status)),"#f66"); }
+          if(r.ok && j.ok){ state.add++; state.ok++; log("✓ "+item.title+" — "+j.saved.length+"난이도 등록",C.ok); }
+          else{ state.fail++; log("✗ "+item.title+" — "+(j.error||("HTTP "+r.status)),C.err); }
         }
-      }catch(e){ state.fail++; log("✗ "+item.title+" — "+(e&&e.message||e),"#f66"); }
+      }catch(e){ state.fail++; log("✗ "+item.title+" — "+(e&&e.message||e),C.err); }
       state.idx++; setBar(); setEta();
       if(state.idx>=state.todo.length){ $("ciNow").textContent="완료 🎉"; state.running=false; $("ciToggle").textContent="시작"; break; }
       // 사람 속도 간격. 중지/일시정지를 잘게 확인하며 대기.
@@ -175,13 +178,13 @@ export const IMPORT_CLIENT_JS = String.raw`
   }
   async function init(){
     var songs=parseList();
-    if(!songs.length){ $("ciStat").textContent="이 페이지에서 곡 목록을 못 찾았습니다."; log("공식 채보 데이터(스탠다드/でらっくす) 목록 페이지에서 실행하세요.","#f66"); return; }
+    if(!songs.length){ $("ciStat").textContent="이 페이지에서 곡 목록을 못 찾았습니다."; log("공식 채보 데이터(스탠다드/でらっくす) 목록 페이지에서 실행하세요.",C.err); return; }
     $("ciStat").textContent="이미 등록된 곡 확인 중… (목록 "+songs.length+"곡)";
     state.allSongs=songs; state.known={};
     try{ var kr=await api("/api/admin/simai/known-pages?code="+encodeURIComponent(CODE)); var kj=await kr.json(); if(kj && kj.pages) for(var i=0;i<kj.pages.length;i++) state.known[kj.pages[i]]=1; }
-    catch(e){ log("등록 목록 조회 실패: "+(e&&e.message||e)+" (전체를 대상으로 진행)","#fa0"); }
+    catch(e){ log("등록 목록 조회 실패: "+(e&&e.message||e)+" (전체를 대상으로 진행)",C.warn); }
     recompute();
-    log("목록 "+songs.length+"곡 · 대상 "+state.todo.length+"곡","#9cf");
+    log("목록 "+songs.length+"곡 · 대상 "+state.todo.length+"곡",C.soft);
     if(!state.todo.length){ $("ciNow").textContent="모두 등록됨 ✓ (잘린 채보 교체는 위 체크박스)"; }
   }
 
@@ -192,4 +195,4 @@ export const IMPORT_CLIENT_JS = String.raw`
 
   init();
 })();
-`;
+`);
