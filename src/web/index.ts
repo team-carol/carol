@@ -33,6 +33,7 @@ import { commandsAdminPage, type CommandRowVM } from "./commandsAdminPage";
 import { getCommandDefinitions, getCommandOverride, applyOverride, validateOverride as validateCommandOverride, saveCommandOverride, syncCommandsNow, type CommandJson } from "../commandOverrides";
 import { BRAND_AVATAR_PATH } from "./theme";
 import { guidePage } from "./guidePage";
+import { ICON_PATH_PREFIX, handleIconRequest } from "./iconProxy";
 import { privacyPage, termsPage } from "./legalPages";
 import { BRAND_AVATAR_PNG } from "./brandAvatar";
 import {
@@ -351,6 +352,11 @@ export function startWebServer(port: number): void {
       } else {
         res.writeHead(404); res.end();
       }
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname.startsWith(ICON_PATH_PREFIX)) {
+      await handleIconRequest(req, res, url.pathname);
       return;
     }
 

@@ -169,6 +169,7 @@ PostgreSQL 컨테이너, 봇 컨테이너(Node 22 빌드)를 함께 띄우고 �
 | `GET /settings?code=...` | 개인정보 공개 여부, 기본 서버(INTL/JP), 곡 제목 한국어 번역, 성과 최소 달성률, 프리셋/추가 북마클릿 관리 |
 | `GET /api/settings` · `POST /api/settings/*` | 위 설정 페이지가 사용하는 JSON API |
 | `GET /avatar` · `GET /jacket` | 캐시된 아바타/곡 자켓 PNG |
+| `GET /api/icon/{id}` | maimai 아이콘 중계 (SEGA 아이콘 파일 이름 16진수 16자리, IP 당 분당 60회) |
 | `GET /admin?code=...` | 관리 페이지 진입점 (`/관리`로 발급한 토큰 필요) |
 | `GET /admin/aliases?code=...` | 곡 별명 관리 탭 |
 | `GET /admin/messages?code=...` | 봇 문구 관리 탭 |
