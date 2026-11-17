@@ -22,6 +22,10 @@ export const CONFIG = require("../config.json") as {
   newsBackfill?: boolean;
   /** carol-ops의 GET /admin/status 인증용 공유 secret. 비어있으면 라우트가 401. */
   opsSharedSecret?: string;
+  /** GET /api/icon/{id} 를 브라우저 JS 로 읽을 수 있는 Origin 목록(CORS). 정확한 Origin("https://keyring.team-carol.com")
+   *  또는 하위 도메인 묶음("https://*.team-carol.com", 루트 도메인 자체는 포함 안 함). 빈 배열이면 아무 곳도 허용 안 함.
+   *  생략하면 src/web/iconProxy.ts DEFAULT_ICON_CORS_ORIGINS. → iconProxy.ts */
+  iconCorsOrigins?: string[];
 };
 
 export const PORT = CONFIG.webPort ?? 3456;

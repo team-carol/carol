@@ -13,5 +13,6 @@
   "geminiModel": "gemini-3.6-flash (선택, 생략 시 이 값)",
   "mainotesFetchCharts": true,
   "maishiftApiKey": "maishift 설정 › 개발자에서 발급한 API 키 (msk_…). 없으면 maishift 연동 비활성",
-  "opsSharedSecret": "carol-ops의 carolStatusSecret과 동일한 공유 secret (없으면 /admin/status 비활성)"
+  "opsSharedSecret": "carol-ops의 carolStatusSecret과 동일한 공유 secret (없으면 /admin/status 비활성)",
+  "iconCorsOrigins": ["https://keyring.team-carol.com", "https://www.team-carol.com", "http://localhost:5173"]
 }
