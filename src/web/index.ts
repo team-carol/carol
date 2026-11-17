@@ -157,12 +157,14 @@ const GIF_MAX_CONCURRENT = 2;
 
 export function startWebServer(port: number): void {
   const server = http.createServer((req, res) => { void (async () => {
+    const url = new URL(req.url || "/", `http://localhost:${port}`);
+    // 아이콘 중계는 CORS 를 팀 프로젝트로만 연다. 아래 공통 CORS(*) 를 받지 않게 먼저 처리한다.
+    if (url.pathname.startsWith(ICON_PATH_PREFIX)) { await handleIconRequest(req, res, url.pathname); return; }
+
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
     res.setHeader("Access-Control-Allow-Headers", "Content-Type, Content-Encoding");
     if (req.method === "OPTIONS") { res.writeHead(204); res.end(); return; }
-
-    const url = new URL(req.url || "/", `http://localhost:${port}`);
 
     if (req.method === "GET" && url.pathname === "/invite") {
       const targetUrl = discordInviteUrl();
@@ -352,11 +354,6 @@ export function startWebServer(port: number): void {
       } else {
         res.writeHead(404); res.end();
       }
-      return;
-    }
-
-    if (req.method === "GET" && url.pathname.startsWith(ICON_PATH_PREFIX)) {
-      await handleIconRequest(req, res, url.pathname);
       return;
     }
 

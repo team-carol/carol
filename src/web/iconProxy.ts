@@ -3,8 +3,55 @@
 // 공개 이미지 id 만 받는다(사용자 정보 없음). SEGA 아이콘 경로 말고는 받지 않는다 — 아무 주소나 받아 주는 통로가 되면 안 된다.
 
 import type { IncomingMessage, ServerResponse } from "http";
+import { CONFIG } from "../config";
 
 export const ICON_PATH_PREFIX = "/api/icon/";
+
+// CORS: 서버 공통의 Access-Control-Allow-Origin: * 대신, 요청 Origin 이 허용 목록에 있을 때만 그 Origin 을 돌려준다.
+// 목록에 없으면 CORS 헤더 없이 응답한다(<img> 로는 보이지만 다른 사이트의 JS 는 못 읽음).
+// GET 만, 쿠키 없음, 커스텀 헤더 없음이라 사전 요청(OPTIONS)은 받지 않는다. 목록은 config.json iconCorsOrigins.
+export const DEFAULT_ICON_CORS_ORIGINS = ["https://keyring.team-carol.com", "https://www.team-carol.com", "http://localhost:5173"];
+
+export type OriginRule = { exact: string } | { scheme: string; suffix: string; port: string };
+
+/** "https://keyring.team-carol.com" 또는 "https://*.team-carol.com" 을 규칙으로. 잘못된 값은 null. */
+export function parseOriginRule(raw: string): OriginRule | null {
+  const s = raw.trim().replace(/\/+$/, "").toLowerCase();
+  const wild = /^(https?):\/\/\*\.([a-z0-9.-]+)(?::(\d+))?$/.exec(s);
+  if (wild) return { scheme: wild[1], suffix: "." + wild[2], port: wild[3] ?? "" };
+  try {
+    const u = new URL(s);
+    if ((u.protocol !== "https:" && u.protocol !== "http:") || u.origin !== s) return null;
+    return { exact: u.origin };
+  } catch {
+    return null;
+  }
+}
+
+function loadCorsRules(): OriginRule[] {
+  const list = Array.isArray(CONFIG.iconCorsOrigins) ? CONFIG.iconCorsOrigins : DEFAULT_ICON_CORS_ORIGINS;
+  const rules: OriginRule[] = [];
+  for (const raw of list) {
+    const rule = typeof raw === "string" ? parseOriginRule(raw) : null;
+    if (rule) rules.push(rule);
+    else console.warn(`[icon] config.iconCorsOrigins 의 잘못된 값을 건너뜀: ${JSON.stringify(raw)}`);
+  }
+  return rules;
+}
+const corsRules = loadCorsRules();
+
+/** 허용된 Origin 이면 그 값을, 아니면 null. */
+export function allowedIconOrigin(origin: string | undefined, rules: readonly OriginRule[] = corsRules): string | null {
+  if (!origin) return null;
+  let u: URL;
+  try { u = new URL(origin); } catch { return null; }
+  if (u.origin !== origin) return null;
+  for (const r of rules) {
+    if ("exact" in r) { if (r.exact === origin) return origin; continue; }
+    if (u.protocol === r.scheme + ":" && u.port === r.port && u.hostname.endsWith(r.suffix) && u.hostname.length > r.suffix.length) return origin;
+  }
+  return null;
+}
 
 const ID_RE = /^[0-9a-f]{16}$/;
 const ORIGINS = ["https://maimaidx-eng.com", "https://maimaidx.jp"] as const;
@@ -81,12 +128,18 @@ async function loadIcon(id: string): Promise<IconResult> {
   return missing ? { ok: false, status: 404, error: "not_found" } : { ok: false, status: 502, error: "upstream_failed" };
 }
 
+/** /api/icon/ 로 시작하는 모든 요청. 서버 공통 CORS 헤더를 붙이기 전에 불러야 한다. */
 export async function handleIconRequest(req: IncomingMessage, res: ServerResponse, pathname: string): Promise<void> {
+  res.setHeader("Vary", "Origin");
+  const allowed = allowedIconOrigin(typeof req.headers.origin === "string" ? req.headers.origin : undefined);
+  if (allowed) res.setHeader("Access-Control-Allow-Origin", allowed);
+
   const json = (status: number, error: string, extra: Record<string, string> = {}) => {
     res.writeHead(status, { "content-type": "application/json; charset=utf-8", ...extra });
     res.end(JSON.stringify({ error }));
   };
 
+  if (req.method !== "GET") { json(405, "method_not_allowed", { allow: "GET" }); return; }
   const id = pathname.slice(ICON_PATH_PREFIX.length);
   if (!ID_RE.test(id)) { json(400, "invalid_id"); return; }
 

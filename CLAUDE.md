@@ -27,6 +27,7 @@ There is no linter or formatter. Validate storage changes with `npm run test:int
 - Empty `encryptionKey` is generated on first start and **written back** to `config.json` — do not overwrite the file after first run.
 - `baseUrl` controls bookmarklet URLs. Empty = local `http://localhost:{webPort}`; production must set the tunnel/domain URL.
 - `carolIssueBaseUrl` + `carolSharedSecret` enable the `/문의` issue-report flow (`src/bot/issueApi.ts` → carol-issue `/triage/*`). Both must be set or the command is inert (`isConfigured()` guard). `carolIssueGuildId` is the DM fallback `guildId`. These are read-only — never add config write-back for them.
+- `iconCorsOrigins` (string[]) limits browser CORS for `GET /api/icon/{id}` (`src/web/iconProxy.ts`): exact origins or `https://*.domain` (subdomains only). Omitted → keyring, www.team-carol.com, `http://localhost:5173`; `[]` → none. Other routes keep `Access-Control-Allow-Origin: *`.
 
 ## Architecture
 
