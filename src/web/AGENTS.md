@@ -35,6 +35,7 @@ src/web/
 | 노트·슬라이드 그리기 | `chartRenderer.ts` | canvas 링 렌더러. **백틱과 `${` 를 쓰지 말 것** (템플릿 문자열로 보관). `/보면` 미리보기 GIF도 이 코드를 vm 에 올려 쓴다. |
 | Scrape sync pipeline | `POST /sync` in `index.ts` | (feat/maishift) 친구 코드·최근 플레이(상세 수집은 COLLECT_PLAY_DETAILS 로 꺼 둠)·지방·게임 설정·서클·단위/클래스 이미지(`ri`, `saveRankImages`)만 받아 `saveSyncExtras` 로 저장하고, 연동돼 있으면 30·90초 뒤 maishift 확인을 예약한다. 프로필·전체 기록·레이팅 대상·성과는 maishift 쪽(`src/maishift/sync.ts`). 서클(`ci`/`cm` → `parseCircle`)은 판단 불가(undefined)면 기존 `circle_json` 을 유지한다. |
 | Jacket/avatar endpoints | `GET /jacket`, `GET /avatar` in `index.ts` | Cache-first asset responses. |
+| maimai icon relay | `GET /api/icon/{id}` → `iconProxy.ts` | 16-hex SEGA icon id only (no user data); intl → jp DX NET, png ≤512KB, memory cache, 60/min per IP. |
 
 ## ROUTES
 
@@ -48,6 +49,7 @@ src/web/
 | `POST /api/settings/circle` | 서클 공개 토글(`sessions.circle_public`, 기본 공개). |
 | `GET /bookmarklet.js?code=TOKEN` | Serves generated sync JS with enabled presets/extras. |
 | `GET /avatar`, `GET /jacket` | Stored/fetched PNG assets. |
+| `GET /api/icon/{id}` | DX NET icon relay for carol keyring (404 not on SEGA, 502 upstream failed, 429 rate limit). |
 | `GET /chart?id=TOKEN` | simai 채보 플레이어. 토큰을 아는 사람만 열 수 있고 로그인은 요구하지 않는다. |
 | `GET /chart/gif?id=TOKEN&start&dur&size&fps&speed&mirror&guide` | **폴백 전용** GIF 생성. OffscreenCanvas/Worker 가 없는 브라우저(구형 Safari 등)만 여기로 온다. 서버에서 옵션 클램프(길이 ≤60초, 크기 ≤800px), 동시 실행 `GIF_MAX_CONCURRENT`(2) 초과 시 429. `/chart` 와 `loadChart()` 공유. |
 
