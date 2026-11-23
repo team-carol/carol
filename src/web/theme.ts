@@ -95,8 +95,8 @@ export const ADMIN_CSS = `.page{max-width:var(--crl-container-narrow)}
 .admin-tabs{margin:0 0 28px}
 .admin-sub{font-size:var(--crl-type-body-sm-size);line-height:var(--crl-type-body-sm-line-height);color:var(--crl-muted);margin-bottom:24px}`;
 
-type AdminTab = "aliases" | "names" | "messages" | "commands" | "import" | "patch-notes";
-const ADMIN_TABS: [AdminTab, string][] = [["aliases", "곡 별명"], ["names", "이름 번역"], ["messages", "봇 문구"], ["commands", "명령어"], ["import", "채보 등록"], ["patch-notes", "패치노트"]];
+type AdminTab = "aliases" | "artists" | "names" | "messages" | "commands" | "import" | "patch-notes";
+const ADMIN_TABS: [AdminTab, string][] = [["aliases", "곡 별명"], ["artists", "아티스트 별명"], ["names", "이름 번역"], ["messages", "봇 문구"], ["commands", "명령어"], ["import", "채보 등록"], ["patch-notes", "패치노트"]];
 
 export function adminTabs(token: string, active: AdminTab): string {
   return `<nav class="crl-tabs crl-tabs--contained admin-tabs">${ADMIN_TABS.map(([id, label]) =>

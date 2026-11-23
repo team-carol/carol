@@ -5,8 +5,8 @@ import {
   type ButtonInteraction,
 } from "discord.js";
 import { randomBytes } from "crypto";
-import { saveSimaiChart, countSimaiChartsByOwner, getTranslateTitles, getUserFriendCode, getCachedProfile } from "../../storage";
-import { displayTitle, normalizeQuery } from "../../aliases";
+import { saveSimaiChart, countSimaiChartsByOwner, getTranslateTitles, getTranslateArtists, getUserFriendCode, getCachedProfile } from "../../storage";
+import { displayTitle, displayArtist, normalizeQuery } from "../../aliases";
 import { parseMaidata, UNKNOWN_DIFFICULTY } from "../../simai/parse";
 import { resolveChart, ChartUnavailableError } from "../../simai/source";
 import { searchAllCharts, chartIndexSize, type ChartHit } from "../../simai/chartSearch";
@@ -341,7 +341,7 @@ async function chartPayload(userId: string, asked: number | null, x: ReplyInput)
   const s = x.chart.stats;
   // 곡명 한국어 번역: 실행 유저의 표시 설정(translate_titles)이 켜져 있고 번역 별명이
   // 있으면 치환. 다른 임베드(검색·최근)와 같은 방식.
-  const translate = await getTranslateTitles(userId);
+  const [translate, translateArtist] = await Promise.all([getTranslateTitles(userId), getTranslateArtists(userId)]);
   const shownTitle = displayTitle(x.title, translate);
   const kind = x.chartType === "deluxe" ? "DX" : x.chartType === "standard" ? "ST" : "";
   const diffName: string | undefined = DIFF_LABEL[x.diff];
@@ -370,7 +370,7 @@ async function chartPayload(userId: string, asked: number | null, x: ReplyInput)
 
   const heading = [
     msg("chart.title", { title: escapeMarkdown(shownTitle || msg("chart.untitled")), kind: kind ? ` ${kindEmoji(kind)}` : "" }),
-    x.artist && msg("chart.artist", { artist: escapeMarkdown(x.artist) }),
+    x.artist && msg("chart.artist", { artist: escapeMarkdown(displayArtist(x.artist, translateArtist)) }),
     (version || genre) && msg("chart.version", { version: [version, genre].filter(Boolean).join(" / ") }),
     msg("chart.level", {
       diff: diffName ? diffBadgeEmoji(diffName) : msg("chart.diffUnknown"),

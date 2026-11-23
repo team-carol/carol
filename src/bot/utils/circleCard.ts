@@ -8,7 +8,7 @@ import { alignLeftMargin } from "./textMetrics";
 import type { CachedProfile } from "../../storage/types";
 import { CIRCLE_COLORS, type CircleInfo, type CircleMember, type CircleColor } from "../../scraper";
 import { getJacketFile, getTitleByJacket } from "../../constants";
-import { displayTitle } from "../../aliases";
+import { displayTitle, displayArtist } from "../../aliases";
 import { msg, cardTextSignature, type MessageKey } from "../../messages";
 import { CIRCLE_COLOR_STYLE, CIRCLE_STAGE_POINTS } from "./circleColors";
 import { trophy } from "@team-carol/design-system/game";
@@ -46,7 +46,7 @@ function gaugeBar(percent: number): El {
   ]);
 }
 
-function challengePanel(circle: CircleInfo, translate: boolean, jacket: string | null, forecast: { title: string | null; jacket: string | null } | null): El {
+function challengePanel(circle: CircleInfo, translate: boolean, translateArtist: boolean, jacket: string | null, forecast: { title: string | null; jacket: string | null } | null): El {
   const ch = circle.challenge!;
   const left = el("div", { display: "flex", flex: 1, minWidth: 0, alignItems: "center" }, [
     jacket
@@ -55,7 +55,7 @@ function challengePanel(circle: CircleInfo, translate: boolean, jacket: string |
     el("div", { display: "flex", flexDirection: "column", flex: 1, minWidth: 0, gap: 6 }, [
       ch.genre ? el("span", { color: MUTED, fontSize: 10, fontWeight: 700, letterSpacing: 0.4 }, ch.genre) : el("span", {}, ""),
       el("span", { color: INK, fontSize: 18, fontWeight: 700, lineHeight: 1.25, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, displayTitle(ch.title, translate)),
-      el("span", { color: MUTED, fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, ch.artist || " "),
+      el("span", { color: MUTED, fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, ch.artist ? displayArtist(ch.artist, translateArtist) : " "),
       el("div", { display: "flex", alignItems: "baseline", gap: 8, marginTop: 6 }, [
         el("span", { color: MUTED, fontSize: 11 }, msg("circleCard.achievement")),
         el("span", { color: SOFT, fontFamily: NUM_FONT, fontSize: 26, fontWeight: 700, lineHeight: 1 }, ch.achievement || "—"),
@@ -259,13 +259,14 @@ function memberRow(m: CircleMember, rank: number): El {
   ]);
 }
 
-export async function renderCircleCard(circle: CircleInfo, profile: CachedProfile, opts: { translate?: boolean } = {}): Promise<Buffer> {
+export async function renderCircleCard(circle: CircleInfo, profile: CachedProfile, opts: { translate?: boolean; translateArtist?: boolean } = {}): Promise<Buffer> {
   const translate = !!opts.translate;
+  const translateArtist = !!opts.translateArtist;
   // 서클은 서클원 누구든 북마클릿으로 동기화하면 바뀐다(maishift 업로드 시각인 lastSyncedAt 과 따로). 초기화까지 남은 날은
   // 볼 때마다 다시 세므로 내용의 해시도 넣는다. 카드 주인 이름은 maishift 값이라 lastSyncedAt 도 넣는다.
   const synced = circleSyncedAt(profile);
   const circleHash = createHash("sha1").update(JSON.stringify(circle)).digest("hex").slice(0, 16);
-  const cacheKey = [profile.profileKey, profile.lastSyncedAt, synced, circleHash, translate ? 1 : 0, CIRCLE_CARD_VERSION, cardTextSignature()].join("|");
+  const cacheKey = [profile.profileKey, profile.lastSyncedAt, synced, circleHash, translate ? 1 : 0, translateArtist ? 1 : 0, CIRCLE_CARD_VERSION, cardTextSignature()].join("|");
   const memo = circleCardCache.get(cacheKey);
   if (memo) return memo;
 
@@ -315,7 +316,7 @@ export async function renderCircleCard(circle: CircleInfo, profile: CachedProfil
     ]),
     ...(circle.progress ? [progressPanel(circle, circle.progress)] : []),
     ...(circle.challenge
-      ? [challengePanel(circle, translate, challengeJacket, circle.forecastJacket ? { title: forecastTitle, jacket: forecastJacket } : null)]
+      ? [challengePanel(circle, translate, translateArtist, challengeJacket, circle.forecastJacket ? { title: forecastTitle, jacket: forecastJacket } : null)]
       : []),
     membersPanel(members, month, topIcons),
     // 푸터
