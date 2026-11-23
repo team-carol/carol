@@ -1,4 +1,4 @@
-import { getAllAliases, getTranslationAliases } from "./storage";
+import { getAllAliases, getTranslationAliases, getAllArtistAliases, getArtistTranslationAliases } from "./storage";
 
 // 곡명 → 별명 목록 (캐롤 자체 SQLite의 song_aliases 테이블에서 로드)
 let aliasMap: Map<string, string[]> = new Map();
@@ -11,6 +11,16 @@ export function setExternalTranslations(map: Map<string, string>): void { extern
 // 공백 제거 + 소문자 정규화 (mailog 검색과 동일한 매칭 규칙)
 export function normalizeQuery(s: string): string {
   return s.toLowerCase().replace(/\s+/g, "");
+}
+
+/**
+ * /검색 이스터에그: 검색어 맨 앞의 "근"을 뗀 검색어. 그대로는 맞는 곡이 없을 때만 이걸로 다시 찾는다
+ * ("근나리 해저담" → "나리 해저담"). 맨 앞이 "근"이 아니거나 떼면 아무것도 안 남으면 null.
+ */
+export function withoutGeunPrefix(query: string): string | null {
+  const s = query.trim();
+  if (!s.startsWith("근")) return null;
+  return s.slice(1).trim() || null;
 }
 
 export async function loadAliases(): Promise<void> {
@@ -53,4 +63,41 @@ export function isTranslatableTitle(title: string): boolean {
 export function displayTitle(title: string, translate: boolean): string {
   if (!translate) return title;
   return getTranslation(title) ?? title;
+}
+
+// ─── 아티스트 별명·번역 (/관리 → 아티스트 별명, artist_aliases) ─────────────────
+// 키는 카탈로그(maishift 곡 목록)의 아티스트 문자열 그대로다("A feat. B" 도 한 덩어리).
+let artistAliasMap: Map<string, string[]> = new Map();
+let artistTranslationMap: Map<string, string> = new Map();
+
+export async function loadArtistAliases(): Promise<void> {
+  const rows = await getAllArtistAliases();
+  const map = new Map<string, string[]>();
+  for (const { artist, alias } of rows) map.set(artist, [...(map.get(artist) ?? []), alias]);
+  artistAliasMap = map;
+  artistTranslationMap = new Map((await getArtistTranslationAliases()).map((t) => [t.artist, t.alias]));
+  console.log(`[aliases] 아티스트 별명 ${rows.length}개 (아티스트 ${map.size}명), 번역 ${artistTranslationMap.size}개 로드`);
+}
+
+/** 테스트용: DB 없이 아티스트 별명·번역을 넣는다. */
+export function setArtistAliasesForTest(aliases: Map<string, string[]>, translations: Map<string, string>): void {
+  artistAliasMap = aliases;
+  artistTranslationMap = translations;
+}
+
+/** 아티스트 이름이나 그 별명(번역 포함)이 정규화된 질의 q 를 포함하는지. */
+export function artistMatches(artist: string, q: string): boolean {
+  if (!q) return false;
+  if (normalizeQuery(artist).includes(q)) return true;
+  return (artistAliasMap.get(artist) ?? []).some((a) => normalizeQuery(a).includes(q));
+}
+
+export function getArtistTranslation(artist: string): string | null {
+  return artistTranslationMap.get(artist) ?? null;
+}
+
+// 아티스트명 번역 설정(/설정, translate_artists)이 켜져 있고 번역이 있으면 번역, 아니면 원래 이름.
+export function displayArtist(artist: string, translate: boolean): string {
+  if (!translate) return artist;
+  return getArtistTranslation(artist) ?? artist;
 }

@@ -12,7 +12,7 @@ import { PATCH_NOTE_WINDOW_MS, PATCH_NOTE_SHOW_MAX } from "../patchNotes";
 import { recentEmbeds, rtTableEmbed, searchResultEmbeds, getSearchCtx, mapAreaEmbed } from "./utils/embeds";
 
 import { loadConstants } from "../constants";
-import { loadAliases } from "../aliases";
+import { loadAliases, loadArtistAliases } from "../aliases";
 import { loadNameTranslations, backfillAreaNames } from "../nameTranslations";
 import { loadRegistryIndex } from "../simai/registryIndex";
 import { loadMainotesIndex, syncMainotes } from "../mainotes";
@@ -135,6 +135,11 @@ client.once(Events.ClientReady, async (c) => {
     await loadAliases();
   } catch (e) {
     console.error("[aliases] 로드 실패:", e);
+  }
+  try {
+    await loadArtistAliases();
+  } catch (e) {
+    console.error("[aliases] 아티스트 별명 로드 실패:", e);
   }
   try {
     await loadNameTranslations();

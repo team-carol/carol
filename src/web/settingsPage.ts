@@ -1,8 +1,8 @@
 import type { MaimaiServer } from "../storage/types";
 import { BASE_CSS, pageHead, topbar, siteFooter, userNav } from "./theme";
 
-export function settingsPage(token: string, defaultServer: MaimaiServer, translate = false, circlePublic = true, dxDecimal = false): string {
-  const dataJson = JSON.stringify({ defaultServer, translate, circlePublic, dxDecimal })
+export function settingsPage(token: string, defaultServer: MaimaiServer, translate = false, circlePublic = true, dxDecimal = false, translateArtists = false): string {
+  const dataJson = JSON.stringify({ defaultServer, translate, circlePublic, dxDecimal, translateArtists })
     .replace(/</g, "\\u003c").replace(/>/g, "\\u003e");
   const tokenJson = JSON.stringify(token);
 
@@ -13,6 +13,7 @@ ${BASE_CSS}
 .nav{margin-bottom:36px;font-size:14px}
 .section-label{margin-bottom:16px}
 .toggle-row{display:flex;align-items:center;justify-content:space-between;gap:16px}
+.artist-row{margin-top:14px;padding-top:14px;border-top:1px solid var(--crl-border)}
 .toggle-info{flex:1}
 .toggle-title{color:var(--crl-ink);font-size:16px;font-weight:500;margin-bottom:4px}
 .ms-link{display:inline-block;margin-top:10px;font-size:14px;font-weight:600}
@@ -68,6 +69,14 @@ ${topbar(userNav(token, "settings"))}
 <label class="switch"><input type="checkbox" id="transToggle" onchange="toggleTranslate()"><span class="slider"></span></label>
 </div>
 <div class="status" id="transStatus"></div>
+<div class="toggle-row artist-row">
+<div class="toggle-info">
+<div class="toggle-title">아티스트 이름 번역 표시</div>
+<div class="crl-body-sm">곡 제목 번역과 따로, 일본어로 된 아티스트 이름을 한국어 이름이 있으면 한국어로 표시합니다.</div>
+</div>
+<label class="switch"><input type="checkbox" id="artistTransToggle" onchange="toggleTranslateArtists()"><span class="slider"></span></label>
+</div>
+<div class="status" id="artistTransStatus"></div>
 </div>
 <div class="crl-card">
 <p class="crl-eyebrow section-label">DX ✦ 랭크 표시</p>
@@ -100,6 +109,7 @@ var DATA=${dataJson};
 (function init(){
   renderDefaultServer();
   renderTranslate();
+  renderTranslateArtists();
   renderDxDecimal();
   renderCircle();
   loadAchievementFilter();
@@ -165,6 +175,19 @@ function toggleCircle(){
 
 function renderTranslate(){
   document.getElementById('transToggle').checked=!!DATA.translate;
+}
+
+function renderTranslateArtists(){
+  document.getElementById('artistTransToggle').checked=!!DATA.translateArtists;
+}
+
+function toggleTranslateArtists(){
+  var cb=document.getElementById('artistTransToggle');
+  var want=cb.checked;
+  fetch('/api/settings/translate-artists?code='+TOKEN,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({translate:want})})
+  .then(function(r){if(!r.ok)throw new Error(r.status);return r.json();})
+  .then(function(){DATA.translateArtists=want;showStatus('artistTransStatus','ok','저장됨');})
+  .catch(function(){cb.checked=!cb.checked;showStatus('artistTransStatus','err','저장 실패');});
 }
 
 function renderDxDecimal(){
