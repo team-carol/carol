@@ -4,7 +4,7 @@ import { createHash, timingSafeEqual } from "crypto";
 import { gunzip } from "zlib";
 import { promisify } from "util";
 import { parseFriendCode as parseFC, parseRecentRecords, parsePlaylogHistory, getMaimaiBaseUrl, parseMapAreas, parsePlaylogDetail, parseUserOptions, parseCircle } from "../scraper";
-import { saveSyncExtras, getMaishiftLink, achievementProfileKeys, saveUserSession, findUserBySyncToken, getAvatarBlob, getSongJacket, saveSongJacket, getUserDefaultServer, setUserDefaultServer, isMaimaiServer, getMapImage, saveMapImage, backfillEventRatingUp, getAllAliases, listNameTranslations, setNameTranslation, addAlias, deleteAlias, setAliasTranslation, setMessageOverride, deleteMessageOverride, getTranslateTitles, setTranslateTitles, getDxRankDecimal, setDxRankDecimal, saveProfileCircle, saveSharedCircle, getCirclePublic, setCirclePublic, getRegisteredUserCount, getAchievementMinimum, setAchievementMinimum, getPolicyAck, setPolicyAck, getSimaiChart, saveSimaiChart, listRegistryCharts, auditRegistryCharts, listOptionPresets, saveOptionPreset, deleteOptionPreset, saveOptionSnapshot, getOptionSnapshots, listPatchNotes, savePatchNote, setPatchNotePublished, deletePatchNote } from "../storage";
+import { saveSyncExtras, getMaishiftLink, achievementProfileKeys, saveUserSession, findUserBySyncToken, getAvatarBlob, getSongJacket, saveSongJacket, getUserDefaultServer, setUserDefaultServer, isMaimaiServer, getMapImage, saveMapImage, backfillEventRatingUp, getAllAliases, listNameTranslations, setNameTranslation, addAlias, deleteAlias, setAliasTranslation, getAllArtistAliases, addArtistAlias, deleteArtistAlias, setArtistAliasTranslation, setMessageOverride, deleteMessageOverride, getTranslateTitles, setTranslateTitles, getTranslateArtists, setTranslateArtists, getDxRankDecimal, setDxRankDecimal, saveProfileCircle, saveSharedCircle, getCirclePublic, setCirclePublic, getRegisteredUserCount, getAchievementMinimum, setAchievementMinimum, getPolicyAck, setPolicyAck, getSimaiChart, saveSimaiChart, listRegistryCharts, auditRegistryCharts, listOptionPresets, saveOptionPreset, deleteOptionPreset, saveOptionSnapshot, getOptionSnapshots, listPatchNotes, savePatchNote, setPatchNotePublished, deletePatchNote } from "../storage";
 import { POLICY_VERSION } from "../policy";
 import type { SongAliasRow } from "../storage/types";
 import { scheduleMaishiftCheck } from "../maishift";
@@ -16,9 +16,10 @@ import { optionsPage } from "./optionsPage";
 import { patchNotesAdminPage } from "./patchNotesAdminPage";
 import { sanitizePatchNote } from "../patchNotes";
 import { appVersion } from "../version";
-import { getAllSongTitles } from "../constants";
+import { getAllSongTitles, getAllArtists } from "../constants";
 import { settingsPage } from "./settingsPage";
 import { aliasAdminPage } from "./aliasAdminPage";
+import { artistAliasAdminPage } from "./artistAliasAdminPage";
 import { chartPlayerPage, chartNotFoundPage } from "./chartPlayer";
 import { parseMaidata } from "../simai/parse";
 import { sanitizeSong, buildMaidata, atwikiChartId, parseAtwikiId } from "../simai/atwiki";
@@ -41,7 +42,7 @@ import {
   validateOverride, loadMessages, type MessageKey,
 } from "../messages";
 import { isValidAdminToken, issueAdminToken } from "./adminAuth";
-import { loadAliases } from "../aliases";
+import { loadAliases, loadArtistAliases } from "../aliases";
 import { noteAreaNames, setNameTranslationCache, NAME_KINDS, type NameKind } from "../nameTranslations";
 import { namesAdminPage } from "./namesAdminPage";
 import { CONFIG, PORT } from "../config";
@@ -430,8 +431,9 @@ export function startWebServer(port: number): void {
       const translate = userId ? await getTranslateTitles(userId) : false;
       const circlePublic = userId ? await getCirclePublic(userId) : true;
       const dxDecimal = userId ? await getDxRankDecimal(userId) : false;
+      const translateArtists = userId ? await getTranslateArtists(userId) : false;
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-      res.end(settingsPage(token, defaultServer, translate, circlePublic, dxDecimal));
+      res.end(settingsPage(token, defaultServer, translate, circlePublic, dxDecimal, translateArtists));
       return;
     }
 
@@ -755,6 +757,52 @@ export function startWebServer(port: number): void {
       return;
     }
 
+    // ─── 아티스트 별명·번역 (artistAliasAdminPage.ts, artist_aliases) ─────────
+    if (req.method === "GET" && url.pathname === "/admin/artists") {
+      const token = url.searchParams.get("code") || "";
+      if (!isValidAdminToken(token)) { res.writeHead(403); res.end("expired"); return; }
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" });
+      res.end(artistAliasAdminPage(token, getAllArtists(), await getAllArtistAliases()));
+      return;
+    }
+    if (req.method === "POST" && (url.pathname === "/api/admin/artists" || url.pathname === "/api/admin/artists/delete" || url.pathname === "/api/admin/artists/translation")) {
+      const json = (status: number, data: unknown) => { res.writeHead(status, { "content-type": "application/json" }); res.end(JSON.stringify(data)); };
+      if (!isValidAdminToken(url.searchParams.get("code") || "")) { json(403, { ok: false, error: "expired" }); return; }
+      try {
+        const body = JSON.parse(await readBody(req));
+        if (url.pathname === "/api/admin/artists") {
+          const artist = typeof body.artist === "string" ? body.artist : "";
+          const alias = (typeof body.alias === "string" ? body.alias : "").trim();
+          if (!artist || !alias) { json(400, { ok: false, error: "아티스트와 별명을 모두 입력하세요" }); return; }
+          if (alias.length > 100) { json(400, { ok: false, error: "100자 이하로 입력하세요" }); return; }
+          const created = await addArtistAlias(artist, alias);
+          if (!created) { json(409, { ok: false, error: "이미 존재하는 별명입니다" }); return; }
+          await loadArtistAliases();
+          json(200, { ok: true, alias: created });
+          return;
+        }
+        const id = typeof body.id === "number" ? body.id : parseInt(body.id, 10);
+        if (!Number.isInteger(id)) { json(400, { ok: false, error: "invalid_id" }); return; }
+        if (url.pathname === "/api/admin/artists/delete") {
+          const removed = await deleteArtistAlias(id);
+          if (removed) await loadArtistAliases();
+          json(200, { ok: removed });
+          return;
+        }
+        // 번역 지정/해제(아티스트당 1개)
+        const on = !!body.on;
+        const artist = await setArtistAliasTranslation(id, on);
+        if (artist === null) { json(404, { ok: false, error: "not_found" }); return; }
+        await loadArtistAliases();
+        json(200, { ok: true, artist, on });
+      } catch (e) {
+        console.error("[admin] 아티스트 별명 요청 실패:", e);
+        const badBody = e instanceof SyntaxError;
+        json(badBody ? 400 : 500, { ok: false, error: badBody ? "invalid_body" : "서버 오류가 발생했습니다" });
+      }
+      return;
+    }
+
     // ─── 지방·스탬프 카드 이름 번역 (namesAdminPage.ts) ────────────────────
     if (req.method === "GET" && url.pathname === "/admin/names") {
       const token = url.searchParams.get("code") || "";
@@ -883,7 +931,7 @@ export function startWebServer(port: number): void {
       const defaultServer = await getUserDefaultServer(userId);
       const translate = await getTranslateTitles(userId);
       res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({ defaultServer, translate, circlePublic: await getCirclePublic(userId), minimumAchievement: await getAchievementMinimum(userId) }));
+      res.end(JSON.stringify({ defaultServer, translate, translateArtists: await getTranslateArtists(userId), circlePublic: await getCirclePublic(userId), minimumAchievement: await getAchievementMinimum(userId) }));
       return;
     }
 
@@ -919,6 +967,24 @@ export function startWebServer(port: number): void {
         const body = JSON.parse(await readBody(req));
         const value = !!body.translate;
         await setTranslateTitles(userId, value);
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ translate: value }));
+      } catch {
+        res.writeHead(400, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: "invalid_body" }));
+      }
+      return;
+    }
+
+    // 아티스트명 번역 표시(곡명 번역과 따로, sessions.translate_artists)
+    if (req.method === "POST" && url.pathname === "/api/settings/translate-artists") {
+      const token = url.searchParams.get("code") || "";
+      const userId = await findUserBySyncToken(token);
+      if (!userId) { res.writeHead(403, { "content-type": "application/json" }); res.end(JSON.stringify({ error: "expired" })); return; }
+      try {
+        const body = JSON.parse(await readBody(req));
+        const value = body.translate === true;
+        await setTranslateArtists(userId, value);
         res.writeHead(200, { "content-type": "application/json" });
         res.end(JSON.stringify({ translate: value }));
       } catch {

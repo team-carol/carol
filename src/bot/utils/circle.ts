@@ -3,7 +3,7 @@ import type { CircleInfo } from "../../scraper";
 import type { CachedProfile } from "../../storage/types";
 import { msg } from "../../messages";
 import { color as BRAND, toInt } from "@team-carol/design-system";
-import { displayTitle } from "../../aliases";
+import { displayTitle, displayArtist } from "../../aliases";
 import { getTitleByJacket } from "../../constants";
 import { CIRCLE_COLOR_STYLE } from "./circleColors";
 import { extrasSyncedAt } from "./syncExtras";
@@ -42,7 +42,7 @@ function footerOf(profile: CachedProfile): { text: string } {
   };
 }
 
-export function circleEmbed(circle: CircleInfo, profile: CachedProfile, translate = false): EmbedBuilder {
+export function circleEmbed(circle: CircleInfo, profile: CachedProfile, translate = false, translateArtist = false): EmbedBuilder {
   const synced = new Date(circleSyncedAt(profile));
   const month = Number(synced.toLocaleString("en-US", { timeZone: "Asia/Seoul", month: "numeric" }));
   const emb = new EmbedBuilder()
@@ -80,7 +80,7 @@ export function circleEmbed(circle: CircleInfo, profile: CachedProfile, translat
       name: msg("circle.challengeField"),
       value: msg("circle.challengeValue", {
         title: escapeMarkdown(displayTitle(circle.challenge.title, translate)),
-        artist: escapeMarkdown(circle.challenge.artist),
+        artist: escapeMarkdown(displayArtist(circle.challenge.artist, translateArtist)),
         achievement: circle.challenge.achievement || "—",
       }),
     });

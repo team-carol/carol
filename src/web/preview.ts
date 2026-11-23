@@ -15,6 +15,7 @@ import { guidePage } from "./guidePage";
 import { settingsPage } from "./settingsPage";
 import { optionsPage } from "./optionsPage";
 import { aliasAdminPage } from "./aliasAdminPage";
+import { artistAliasAdminPage } from "./artistAliasAdminPage";
 import { namesAdminPage } from "./namesAdminPage";
 import { messagesAdminPage } from "./messagesAdminPage";
 import { commandsAdminPage } from "./commandsAdminPage";
@@ -27,7 +28,7 @@ import { OPTION_CLIENT_JS, buildOptionBookmarklet } from "./optionPreset";
 import { IMPORT_CLIENT_JS } from "./importClient";
 import { parseMaidata } from "../simai/parse";
 import type { Chart } from "../simai/types";
-import type { OptionPresetRow, OptionSnapshot, PatchNoteRow, SongAliasRow, UserOptionField } from "../storage/types";
+import type { ArtistAliasRow, OptionPresetRow, OptionSnapshot, PatchNoteRow, SongAliasRow, UserOptionField } from "../storage/types";
 
 const PORT = Number(process.env.PREVIEW_PORT) || 3457;
 const BASE = `http://localhost:${PORT}`;
@@ -75,6 +76,18 @@ const SONGS = [
   { title: "Xaleid◆scopiX", version: 15, versionName: "Splash", region: null },
   { title: "ハードモード", version: 21, versionName: "BUDDiES", region: "jp" as const },
   { title: "Garakuta Doll Play", version: 3, versionName: "GreeN", region: null },
+];
+
+const ARTISTS = [
+  { artist: "ARForest", songs: ["Xaleid◆scopiX"] },
+  { artist: "かめりあ", songs: ["PANDORA PARADOXXX", "ハードモード"] },
+  { artist: "じーざす（ワンダフル☆オポチュニティ！）", songs: ["系ぎて"] },
+  { artist: "LeaF", songs: ["Garakuta Doll Play"] },
+];
+let artistAliasSeq = 3;
+const artistAliases: ArtistAliasRow[] = [
+  { id: 1, artist: "かめりあ", alias: "카메리아", isTranslation: true },
+  { id: 2, artist: "かめりあ", alias: "camellia", isTranslation: false },
 ];
 
 let noteSeq = 4;
@@ -174,7 +187,7 @@ function wikiSong(page: number): string {
 function indexPage(): string {
   const groups: [string, [string, string][]][] = [
     ["사용자 페이지", [["/sync", "추가 북마클릿 설치 안내"], ["/settings", "설정"], ["/options", "게임 설정"]]],
-    ["관리 페이지", [["/admin/aliases", "곡 별명"], ["/admin/names", "이름 번역"], ["/admin/messages", "봇 문구"], ["/admin/commands", "명령어"], ["/admin/import", "채보 등록"], ["/admin/patch-notes", "패치노트"]]],
+    ["관리 페이지", [["/admin/aliases", "곡 별명"], ["/admin/artists", "아티스트 별명"], ["/admin/names", "이름 번역"], ["/admin/messages", "봇 문구"], ["/admin/commands", "명령어"], ["/admin/import", "채보 등록"], ["/admin/patch-notes", "패치노트"]]],
     ["공개 페이지", [["/chart", "채보 플레이어"], ["/chart/missing", "채보 없음"], ["/terms", "이용약관"], ["/privacy", "개인정보처리방침"]]],
     ["북마클릿 오버레이", [["/maimai-mobile/", "가짜 DX NET — 추가 북마클릿·옵션 프리셋"], ["/maimai-mobile/home/userOption/updateUserOption/", "가짜 DX NET 옵션 페이지"], ["/simai/pages/32.html", "가짜 simai wiki — 채보 등록"]]],
   ];
@@ -220,9 +233,10 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse): Prom
   if (get && path === "/") return html(res, indexPage());
   if (get && path === "/brand/avatar.png") return send(res, 200, "image/png", BRAND_AVATAR_PNG);
   if (get && path === "/sync") return html(res, guidePage(TOKEN, buildBookmarklet(TOKEN, PORT)));
-  if (get && path === "/settings") return html(res, settingsPage(TOKEN, "intl", true, true, false));
+  if (get && path === "/settings") return html(res, settingsPage(TOKEN, "intl", true, true, false, true));
   if (get && path === "/options") return html(res, optionsPage(TOKEN, { bookmarklet: buildOptionBookmarklet(BASE, TOKEN), snapshots: [optionSnapshot()], presets, max: 10, defaultServer: "intl" }));
   if (get && path === "/admin/aliases") return html(res, aliasAdminPage(TOKEN, SONGS, aliases));
+  if (get && path === "/admin/artists") return html(res, artistAliasAdminPage(TOKEN, ARTISTS, artistAliases));
   if (get && path === "/admin/names") return html(res, namesAdminPage(TOKEN, [
     { kind: "area", source: "メトロポリス地方", ko: "메트로폴리스 지방", imageUrl: "" },
     { kind: "area", source: "スカイストリート地方", ko: "", imageUrl: "" },
@@ -306,6 +320,12 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse): Prom
     const b = await readJson(req);
     const alias: SongAliasRow = { id: aliasSeq++, title: String(b.title), alias: String(b.alias), isTranslation: false };
     aliases.push(alias);
+    return json(res, { ok: true, alias });
+  }
+  if (post && path === "/api/admin/artists") {
+    const b = await readJson(req);
+    const alias: ArtistAliasRow = { id: artistAliasSeq++, artist: String(b.artist), alias: String(b.alias), isTranslation: false };
+    artistAliases.push(alias);
     return json(res, { ok: true, alias });
   }
   if (post && path === "/api/admin/names") { const b = await readJson(req); return json(res, { ok: true, ko: String(b.ko ?? "") }); }

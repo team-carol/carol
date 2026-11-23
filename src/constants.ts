@@ -616,6 +616,18 @@ export function getAllSongTitles(): AliasSongInfo[] {
     .sort((a, b) => a.title.localeCompare(b.title, "en"));
 }
 
+/** 아티스트 별명 관리 페이지용: 카탈로그의 아티스트(문자열 그대로)와 그 곡들. */
+export interface ArtistInfo { artist: string; songs: string[] }
+export function getAllArtists(): ArtistInfo[] {
+  const map = new Map<string, string[]>();
+  for (const [title, artist] of artistMap) {
+    if (!artist || isUtageSong(title)) continue;
+    map.set(artist, [...(map.get(artist) ?? []), title]);
+  }
+  return Array.from(map, ([artist, songs]) => ({ artist, songs: songs.sort((x, y) => x.localeCompare(y, "en")) }))
+    .sort((a, b) => a.artist.localeCompare(b.artist, "en"));
+}
+
 export interface ChartInfo {
   title: string;
   kind: "ST" | "DX";

@@ -11,16 +11,16 @@ import {
 import { searchResultEmbeds } from "../utils/embeds";
 import { msg } from "../../messages";
 import { notRegisteredNotice } from "../utils/notRegistered";
-import { listCatalogSongKinds, songPickValue } from "../../constants";
-import { normalizeQuery, aliasMatches, getTranslation } from "../../aliases";
+import { listCatalogSongKinds, songPickValue, getSongArtist } from "../../constants";
+import { normalizeQuery, aliasMatches, getTranslation, withoutGeunPrefix, artistMatches } from "../../aliases";
 
 export const data = new SlashCommandBuilder()
   .setName("검색")
   .setDescription("내 클리어 기록에서 곡을 검색")
   .addStringOption((opt) =>
     opt
-      .setName("title")
-      .setDescription("검색할 곡명 (별명 가능))")
+      .setName("검색어")
+      .setDescription("곡명·아티스트 (별명 가능)")
       .setRequired(true)
       .setMaxLength(50)
       .setAutocomplete(true),
@@ -48,21 +48,30 @@ export const data = new SlashCommandBuilder()
  * 네트워크·DB 없이 메모리 카탈로그만 본다(Discord 자동완성 3초 제한).
  */
 export async function autocomplete(interaction: AutocompleteInteraction): Promise<void> {
-  const q = normalizeQuery(interaction.options.getFocused());
-  if (!q) { await interaction.respond([]); return; }
+  const typed = interaction.options.getFocused();
+  if (!normalizeQuery(typed)) { await interaction.respond([]); return; }
   const type = interaction.options.getString("type") ?? "";
-  const rank = (t: string) => {
-    const n = normalizeQuery(t);
-    return n === q ? 0 : n.startsWith(q) ? 1 : n.includes(q) ? 2 : 3;
+  // 곡명·별명으로 맞은 곡이 먼저, 아티스트(이름·아티스트 별명)로만 맞은 곡은 뒤에(이름 옆에 아티스트를 붙인다).
+  const find = (q: string) => {
+    const rank = (t: string) => {
+      const n = normalizeQuery(t);
+      return n === q ? 0 : n.startsWith(q) ? 1 : n.includes(q) ? 2 : aliasMatches(t, q) ? 3 : 4;
+    };
+    return listCatalogSongKinds()
+      .filter((c) => !type || c.musicKind === type)
+      .map((c) => ({ ...c, rank: rank(c.title), artist: getSongArtist(c.title) }))
+      .filter((c) => c.rank < 4 || (!!c.artist && artistMatches(c.artist, q)))
+      .sort((a, b) => a.rank - b.rank || a.title.localeCompare(b.title) || a.musicKind.localeCompare(b.musicKind))
+      .slice(0, 25);
   };
-  const hits = listCatalogSongKinds()
-    .filter((c) => (!type || c.musicKind === type) && (normalizeQuery(c.title).includes(q) || aliasMatches(c.title, q)))
-    .sort((a, b) => rank(a.title) - rank(b.title) || a.title.localeCompare(b.title) || a.musicKind.localeCompare(b.musicKind))
-    .slice(0, 25);
+  let hits = find(normalizeQuery(typed));
+  // 이스터에그: 맨 앞 "근"은 그대로 맞는 곡이 없으면 떼고 찾는다(검색 결과와 같은 규칙, embeds.ts searchResultEmbeds).
+  const geunless = withoutGeunPrefix(typed);
+  if (!hits.length && geunless) hits = find(normalizeQuery(geunless));
   await interaction.respond(hits.map((c) => {
     const ko = getTranslation(c.title);
     // Discord 는 이름을 100자까지만 받는다.
-    const name = `${c.title} [${c.musicKind}]${ko ? ` ✦ ${ko}` : ""}`.slice(0, 100);
+    const name = `${c.title} [${c.musicKind}]${ko ? ` ✦ ${ko}` : ""}${c.rank === 4 && c.artist ? ` · ${c.artist}` : ""}`.slice(0, 100);
     return { name, value: songPickValue(c.title, c.musicKind) };
   }));
 }
@@ -79,7 +88,7 @@ export async function execute(
     await interaction.reply({ content: notice, flags: MessageFlags.Ephemeral });
     return;
   }
-  const query = interaction.options.getString("title", true);
+  const query = interaction.options.getString("검색어", true);
   const typeFilter = interaction.options.getString("type") ?? "";
   await interaction.deferReply();
   try {

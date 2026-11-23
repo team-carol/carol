@@ -18,6 +18,7 @@ import {
   getMapImage,
   saveSongJacket,
   getTranslateTitles,
+  getTranslateArtists,
   getCirclePublic,
 } from "../../storage";
 import { getMaimaiBaseUrl } from "../../scraper";
@@ -38,7 +39,7 @@ import {
   isSongPlus,
   jacketFileUrl,
 } from "../../constants";
-import { aliasMatches, normalizeQuery, displayTitle } from "../../aliases";
+import { aliasMatches, normalizeQuery, displayTitle, withoutGeunPrefix, artistMatches, displayArtist } from "../../aliases";
 import { areaDisplayName } from "../../nameTranslations";
 import { ratingColor } from "./roles";
 import { nextPlateStep } from "./ratingCard";
@@ -531,38 +532,54 @@ export async function searchResultEmbeds(
   const records = getClearList(p);
   // 자동완성 목록에서 고른 곡이면 그 곡·종류만, 아니면 검색어로 찾는다(예전과 같이).
   const picked = resolveSongPick(query);
-  const translate = await getTranslateTitles(userId);
+  const [translate, translateArtist] = await Promise.all([getTranslateTitles(userId), getTranslateArtists(userId)]);
   const shownQuery = picked ? displayTitle(picked.title, translate) : query;
-  const q = normalizeQuery(picked ? picked.title : query);
+  let q = normalizeQuery(picked ? picked.title : query);
   // 같은 곡명이라도 ST/DX 채보는 별도 결과로 분리 (musicKind 포함 키로 그룹핑).
   // 검색 대상은 클리어기록 스냅샷이 아니라 otoge-db 카탈로그 → 동기화하지 않았어도,
   // 국제판 프로필이라도 JP 전용곡까지 잡힌다. 기록이 있으면 점수/FC/SYNC 를 덧댄다.
-  type SearchGroup = { title: string; musicKind: string; records: PlayRecord[] };
-  const byChart = new Map<string, SearchGroup>();
-  const matchTitle = (t: string, kind: string) => picked
-    ? t === picked.title && kind === picked.musicKind
-    : normalizeQuery(t).includes(q) || aliasMatches(t, q);
-  const ensureGroup = (title: string, musicKind: string): SearchGroup => {
-    const key = `${musicKind}|${title}`;
-    let g = byChart.get(key);
-    if (!g) {
-      g = { title, musicKind, records: [] };
-      byChart.set(key, g);
+  // byArtist: 곡명·별명이 아니라 아티스트(이름·아티스트 별명)로만 맞은 곡. 곡명으로 맞은 곡 뒤에 둔다.
+  type SearchGroup = { title: string; musicKind: string; records: PlayRecord[]; byArtist: boolean };
+  const collect = (q: string): Map<string, SearchGroup> => {
+    const byChart = new Map<string, SearchGroup>();
+    // 0 = 안 맞음, 1 = 곡명·별명, 2 = 아티스트로만
+    const match = (t: string, kind: string): 0 | 1 | 2 => {
+      if (picked) return t === picked.title && kind === picked.musicKind ? 1 : 0;
+      if (normalizeQuery(t).includes(q) || aliasMatches(t, q)) return 1;
+      const artist = getSongArtist(t);
+      return artist && artistMatches(artist, q) ? 2 : 0;
+    };
+    const ensureGroup = (title: string, musicKind: string, how: 1 | 2): SearchGroup => {
+      const key = `${musicKind}|${title}`;
+      let g = byChart.get(key);
+      if (!g) {
+        g = { title, musicKind, records: [], byArtist: how === 2 };
+        byChart.set(key, g);
+      }
+      return g;
+    };
+    // 1) 카탈로그(미플레이 곡 포함). ST/DX 타입 필터도 여기서 적용.
+    for (const c of listCatalogSongKinds()) {
+      if (typeFilter && c.musicKind !== typeFilter) continue;
+      const how = match(c.title, c.musicKind);
+      if (how) ensureGroup(c.title, c.musicKind, how);
     }
-    return g;
+    // 2) 내 클리어 기록을 덧댄다(카탈로그에 없는 곡이라도 기록이 있으면 노출).
+    for (const r of records) {
+      const kind = r.musicKind || "";
+      if (typeFilter && kind !== typeFilter) continue;
+      const how = match(r.title, kind);
+      if (how) ensureGroup(r.title, kind, how).records.push(r);
+    }
+    return byChart;
   };
-  // 1) 카탈로그(미플레이 곡 포함). ST/DX 타입 필터도 여기서 적용.
-  for (const c of listCatalogSongKinds()) {
-    if (typeFilter && c.musicKind !== typeFilter) continue;
-    if (!matchTitle(c.title, c.musicKind)) continue;
-    ensureGroup(c.title, c.musicKind);
-  }
-  // 2) 내 클리어 기록을 덧댄다(카탈로그에 없는 곡이라도 기록이 있으면 노출).
-  for (const r of records) {
-    const kind = r.musicKind || "";
-    if (typeFilter && kind !== typeFilter) continue;
-    if (!matchTitle(r.title, kind)) continue;
-    ensureGroup(r.title, kind).records.push(r);
+  let byChart = collect(q);
+  // 이스터에그: 맨 앞 "근"은 그대로 맞는 곡이 없으면 떼고 다시 찾는다("근나리 해저담" → "나리 해저담").
+  // 검색어 줄에는 입력한 그대로 보여 준다. 페이지 버튼도 같은 검색어로 다시 불러 같은 결과가 나온다.
+  const geunless = picked ? null : withoutGeunPrefix(query);
+  if (byChart.size === 0 && geunless) {
+    q = normalizeQuery(geunless);
+    byChart = collect(q);
   }
   const keys = Array.from(byChart.entries())
     .sort(([, a], [, b]) => {
@@ -570,6 +587,8 @@ export async function searchResultEmbeds(
       const exactA = normalizeQuery(a.title) === q ? 1 : 0;
       const exactB = normalizeQuery(b.title) === q ? 1 : 0;
       if (exactA !== exactB) return exactB - exactA;
+      // 곡명·별명으로 맞은 곡을 아티스트로만 맞은 곡보다 앞에
+      if (a.byArtist !== b.byArtist) return a.byArtist ? 1 : -1;
       // 그다음 내 최고 달성률 순(미플레이 곡은 0으로 뒤로).
       const bestA = a.records.reduce((m, r) => Math.max(m, r.achievementVal), 0);
       const bestB = b.records.reduce((m, r) => Math.max(m, r.achievementVal), 0);
@@ -695,7 +714,8 @@ export async function searchResultEmbeds(
         + (versionLabel ? msg("searchResult.versionSuffix", { version: versionLabel }) : "")
         + (genre ? msg("searchResult.genreSuffix", { genre }) : "")
         + "\n";
-      const artist = getSongArtist(title);
+      const artistRaw = getSongArtist(title);
+      const artist = artistRaw ? displayArtist(artistRaw, translateArtist) : null;
       const heading = msg("searchResult.title", { title: escapeMarkdown(displayTitle(title, translate)), kind })
         + (artist ? "\n" + msg("searchResult.artist", { artist: escapeMarkdown(artist) }) : "")
         + "\n" + regionLine.trimEnd();

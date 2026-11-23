@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, ButtonInteraction, MessageFlags, AttachmentBuilder, type RepliableInteraction } from "discord.js";
-import { getCachedProfile, getUserFriendCode, getCirclePublic, getTranslateTitles } from "../../storage";
+import { getCachedProfile, getUserFriendCode, getCirclePublic, getTranslateTitles, getTranslateArtists } from "../../storage";
 import { circleOf, circleEmbed, circleMembersEmbed, circleButtonsRow } from "../utils/circle";
 import { searchResultEmbeds } from "../utils/embeds";
 import { renderCircleCard } from "../utils/circleCard";
@@ -56,19 +56,19 @@ export async function show(interaction: RepliableInteraction, targetId: string, 
   }
   const { circle, cached, circlePublic } = loaded;
   // 과제곡 제목 번역은 보는 사람의 설정을 따른다.
-  const translate = await getTranslateTitles(interaction.user.id);
+  const [translate, translateArtist] = await Promise.all([getTranslateTitles(interaction.user.id), getTranslateArtists(interaction.user.id)]);
   // 비공개인데 본인이 보는 경우엔 채널에 남기지 않는다.
   const flags = circlePublic ? undefined : MessageFlags.Ephemeral;
   const content = circlePublic ? targetLine(target.id, "circle.targetLine") : msg("circle.privateSelfNote");
 
   if (format === "embed") {
     const row = circleButtonsRow(circle, target.id);
-    await interaction.reply({ content, ...NO_PING, embeds: [circleEmbed(circle, cached, translate)], components: row ? [row] : [], flags });
+    await interaction.reply({ content, ...NO_PING, embeds: [circleEmbed(circle, cached, translate, translateArtist)], components: row ? [row] : [], flags });
     return;
   }
   // 이미지 카드에는 멤버 포인트가 들어 있으므로 멤버 버튼은 뺀다. 재킷을 받아 그리느라 3초를 넘길 수 있어 먼저 defer.
   await interaction.deferReply({ flags });
-  const png = await renderCircleCard(circle, cached, { translate });
+  const png = await renderCircleCard(circle, cached, { translate, translateArtist });
   const row = circleButtonsRow(circle, target.id, false);
   await interaction.editReply({ content, ...NO_PING, files: [new AttachmentBuilder(png, { name: "circle.png" })], components: row ? [row] : [] });
 }

@@ -2,7 +2,7 @@
 // customId: trk:<검색 토큰>:<곡 순서>            — 새 메시지로 상세 카드(기본 난이도: 내가 플레이한 가장 높은 난이도)
 //           trkd:<검색 토큰>:<곡 순서>:<난이도 번호> — 상세 카드 메시지에서 난이도 바꾸기
 import { ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, ComponentType, type ButtonInteraction } from "discord.js";
-import { getCachedProfile, getDxRankDecimal, getMaishiftLink, getTranslateTitles, loadUserSession } from "../../storage";
+import { getCachedProfile, getDxRankDecimal, getMaishiftLink, getTranslateTitles, getTranslateArtists, loadUserSession } from "../../storage";
 import { getSearchCtx, getClearList } from "./embeds";
 import { fetchJacketDataUrl } from "./ratingCard";
 import { renderTrackCard } from "./trackCard";
@@ -11,7 +11,7 @@ import { versionIndex, versionName } from "../../maishift/catalog";
 import { getTrackInfo, getTrackScores } from "../../maishift/track";
 import { PENDING_FEATURES } from "../../maishift/features";
 import { withTarget } from "./targetLine";
-import { displayTitle } from "../../aliases";
+import { displayTitle, displayArtist } from "../../aliases";
 import { versionPositionText } from "./versionPosition";
 import { msg } from "../../messages";
 
@@ -62,7 +62,7 @@ export async function handleTrackButton(i: ButtonInteraction): Promise<void> {
 
     const record = records.find((r) => r.diff === diff) ?? null;
     const link = await getMaishiftLink(ctx.userId);
-    const [info, scores, translate, dxDecimal, jacket, positionText] = await Promise.all([
+    const [info, scores, translate, dxDecimal, jacket, positionText, translateArtist] = await Promise.all([
       getTrackInfo(trackId),
       link && PENDING_FEATURES.trackHistory ? getTrackScores(trackId, link.handle) : Promise.resolve(null),
       getTranslateTitles(i.user.id),
@@ -70,11 +70,12 @@ export async function handleTrackButton(i: ButtonInteraction): Promise<void> {
       getDxRankDecimal(i.user.id),
       (async () => { const f = getJacketFile(title); return f ? fetchJacketDataUrl(f) : null; })(),
       versionPositionText(title, musicKind, cached.server),
+      getTranslateArtists(i.user.id),
     ]);
     const code = getSongVersion(title, cached.server, musicKind);
     const png = await renderTrackCard({
       title: displayTitle(title, translate),
-      artist: getSongArtist(title),
+      artist: (() => { const a = getSongArtist(title); return a ? displayArtist(a, translateArtist) : null; })(),
       kind: musicKind === "DX" ? "DX" : "ST",
       diff,
       constant: record?.constant ?? getConstant(title, musicKind, diff, cached.server, true),
