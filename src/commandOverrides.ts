@@ -1,9 +1,12 @@
 /**
- * 슬래시 명령어 이름·설명·옵션 순서·옵션 설명 덮어쓰기(/관리 → 명령어 탭, src/web/commandsAdminPage.ts).
+ * 슬래시 명령어 이름·설명·옵션 이름·옵션 순서·옵션 설명 덮어쓰기(/관리 → 명령어 탭, src/web/commandsAdminPage.ts).
  * 코드의 SlashCommandBuilder 가 기본값이고, 운영자가 바꾼 값만 constants_cache(`command_overrides`)에 둔다.
  * 봇이 명령을 디스코드에 등록할 때(시작할 때, 또는 관리 페이지의 "디스코드에 반영") 덮어쓴 값을 입혀 올린다.
  * - 명령 키는 코드의 기본 이름이다. 이름을 바꾸면 들어온 상호작용의 이름을 키로 되돌려 라우팅한다(keyForName).
- * - 옵션 이름은 코드가 그 이름으로 값을 읽으므로 바꿀 수 없다. 디스코드 명령 목록은 이름 순으로 보이므로 명령 순서도 정할 수 없다.
+ * - 옵션 이름(맨 위 옵션, 하위 명령이면 그 이름)도 바꿀 수 있다. 코드는 늘 원래 이름으로 값을 읽으므로, 들어온 상호작용의 옵션 이름을
+ *   마지막으로 디스코드에 올린 덮어쓰기 기준으로 원래 이름으로 되돌린다(bot/index.ts restoreOptionNames ← canonicalOptionNames).
+ *   하위 명령 안의 옵션 이름은 바꾸지 않는다.
+ * - 디스코드 명령 목록은 이름 순으로 보이므로 명령 순서는 정할 수 없다.
  * - 디스코드 규칙: 필수 옵션이 선택 옵션보다 앞에 와야 해서, 순서를 바꿔도 필수 옵션은 앞으로 모은다.
  */
 import { getKvCache, saveKvCache } from "./storage";
@@ -15,6 +18,8 @@ export interface CommandOverride {
   order?: string[];
   /** 옵션 이름 → 설명 */
   optionDescriptions?: Record<string, string>;
+  /** 원래 옵션 이름 → 디스코드에 보일 이름. 순서·설명 덮어쓰기는 늘 원래 이름을 키로 쓴다. */
+  optionNames?: Record<string, string>;
 }
 export interface OptionJson { name: string; description: string; type: number; required?: boolean; [k: string]: unknown }
 export interface CommandJson { name: string; description: string; options?: OptionJson[]; [k: string]: unknown }
@@ -23,6 +28,8 @@ const KV_KEY = "command_overrides";
 let overrides: Record<string, CommandOverride> = {};
 /** 지금 디스코드에 올라가 있는 이름 → 명령 키 */
 let liveNames = new Map<string, string>();
+/** 명령 키 → (지금 디스코드에 올라가 있는 옵션 이름 → 원래 옵션 이름). 바꾼 옵션만. */
+let liveOptionNames = new Map<string, Map<string, string>>();
 /** 봇이 알려 준 명령 정의(기본값). 웹만 따로 띄우면 비어 있다. */
 let definitions: { key: string; json: CommandJson }[] = [];
 let syncHook: (() => Promise<void>) | null = null;
@@ -57,8 +64,19 @@ export async function syncCommandsNow(): Promise<boolean> {
   return true;
 }
 
+/** 디스코드에 올린 직후 부른다. 그때의 옵션 이름 덮어쓰기도 같이 기억한다(저장만 하고 아직 안 올린 이름으로 되돌리지 않게). */
 export function setLiveCommandNames(map: Map<string, string>): void {
   liveNames = map;
+  liveOptionNames = new Map(
+    Object.entries(overrides)
+      .filter(([, o]) => o.optionNames && Object.keys(o.optionNames).length)
+      .map(([key, o]) => [key, new Map(Object.entries(o.optionNames!).map(([orig, shown]) => [shown, orig]))]),
+  );
+}
+
+/** 명령 키 → (디스코드에 올라간 옵션 이름 → 원래 이름). 바꾼 옵션이 없으면 undefined. */
+export function canonicalOptionNames(key: string): Map<string, string> | undefined {
+  return liveOptionNames.get(key);
 }
 
 /** 들어온 상호작용의 명령 이름 → 명령 키(코드의 기본 이름). 모르면 그 이름 그대로. */
@@ -81,7 +99,9 @@ export function applyOverride(json: CommandJson, o: CommandOverride | undefined)
       };
       opts = opts.slice().sort((a, b) => rank(a.name) - rank(b.name));
     }
-    out.options = [...opts.filter((x) => x.required), ...opts.filter((x) => !x.required)];
+    opts = [...opts.filter((x) => x.required), ...opts.filter((x) => !x.required)];
+    // 이름은 순서를 정한 뒤에 바꾼다(순서는 원래 이름 기준).
+    out.options = opts.map((op) => (o.optionNames?.[op.name] ? { ...op, name: o.optionNames[op.name] } : op));
   }
   return out;
 }
@@ -105,6 +125,13 @@ export function validateOverride(key: string, o: CommandOverride): string | null
     if (!names.includes(n)) return `없는 옵션입니다: ${n}`;
     if (d.length < 1 || d.length > 100) return `옵션 설명은 1~100자여야 합니다: ${n}`;
   }
+  for (const [n, shown] of Object.entries(o.optionNames ?? {})) {
+    if (!names.includes(n)) return `없는 옵션입니다: ${n}`;
+    if (!NAME_RE.test(shown) || shown !== shown.toLowerCase()) return `옵션 이름은 1~32자, 공백 없이 글자·숫자·-·_ 만 쓸 수 있고 영문은 소문자여야 합니다: ${shown}`;
+  }
+  const finalNames = names.map((n) => o.optionNames?.[n] || n);
+  const dup = finalNames.find((n, k) => finalNames.indexOf(n) !== k);
+  if (dup) return `옵션 이름이 겹칩니다: ${dup}`;
   return null;
 }
 
@@ -121,6 +148,8 @@ export async function saveCommandOverride(key: string, o: CommandOverride | null
     if (o.order && o.order.join("\u0000") !== names.join("\u0000")) clean.order = o.order;
     const descs = Object.entries(o.optionDescriptions ?? {}).filter(([n, d]) => d && d !== def.json.options?.find((x) => x.name === n)?.description);
     if (descs.length) clean.optionDescriptions = Object.fromEntries(descs);
+    const renamed = Object.entries(o.optionNames ?? {}).filter(([n, shown]) => shown && shown !== n && names.includes(n));
+    if (renamed.length) clean.optionNames = Object.fromEntries(renamed);
     if (Object.keys(clean).length) overrides[key] = clean;
     else delete overrides[key];
   }

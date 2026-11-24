@@ -249,7 +249,7 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse): Prom
   ]));
   if (get && path === "/admin/commands") return html(res, commandsAdminPage(TOKEN, [
     { key: "search", defName: "검색", name: "검색", defDescription: "곡을 검색합니다", description: "곡을 검색합니다", changed: false, order: ["곡명", "난이도"],
-      options: [{ name: "곡명", type: "STRING", required: true, defDescription: "곡 이름이나 별명", description: "곡 이름이나 별명" }, { name: "난이도", type: "STRING", required: false, defDescription: "난이도", description: "" }] },
+      options: [{ name: "곡명", shownName: "검색어", type: "STRING", required: true, defDescription: "곡 이름이나 별명", description: "곡 이름이나 별명" }, { name: "난이도", shownName: "난이도", type: "STRING", required: false, defDescription: "난이도", description: "" }] },
     { key: "profile", defName: "프로필", name: "내프로필", defDescription: "프로필을 봅니다", description: "내 프로필 카드", changed: true, order: [], options: [] },
   ], true));
   if (get && path === "/admin/import") return html(res, importBookmarkletPage(BASE, TOKEN, TOKEN));

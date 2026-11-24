@@ -93,6 +93,7 @@ function commandRowVM(key: string, json: CommandJson): CommandRowVM {
     description: shown.description,
     options: (json.options ?? []).map((op) => ({
       name: op.name,
+      shownName: o?.optionNames?.[op.name] ?? op.name,
       type: OPTION_TYPE_LABEL[op.type] ?? String(op.type),
       required: !!op.required,
       defDescription: op.description,
@@ -536,6 +537,9 @@ export function startWebServer(port: number): void {
             order: Array.isArray(body.order) ? body.order.filter((n: unknown): n is string => typeof n === "string") : undefined,
             optionDescriptions: body.optionDescriptions && typeof body.optionDescriptions === "object"
               ? Object.fromEntries(Object.entries(body.optionDescriptions as Record<string, unknown>).filter(([, v]) => typeof v === "string").map(([k, v]) => [k, (v as string).trim()]))
+              : undefined,
+            optionNames: body.optionNames && typeof body.optionNames === "object"
+              ? Object.fromEntries(Object.entries(body.optionNames as Record<string, unknown>).filter(([, v]) => typeof v === "string" && v.trim()).map(([k, v]) => [k, (v as string).trim()]))
               : undefined,
           };
           const bad = validateCommandOverride(key, override);
