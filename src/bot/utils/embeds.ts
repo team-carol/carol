@@ -57,7 +57,7 @@ import { koreaPlayDayKey } from "../../achievements";
 import { buildMarkMap, buildKindResolver, chartKey } from "../../scraper";
 import type { PlayRecord, ChartMarks, MaimaiServer, MapArea } from "../../scraper";
 import { msg } from "../../messages";
-import { targetLine, NO_PING } from "./targetLine";
+import { NO_PING } from "./targetLine";
 import { versionPositionText } from "./versionPosition";
 
 // 곡 자켓 버퍼: DB 캐시 → maimai net(musicId) → 카탈로그 재킷(title) 순으로 확보하고 캐시
@@ -528,7 +528,7 @@ export async function searchResultEmbeds(
   flags: MessageFlags.IsComponentsV2;
   allowedMentions?: typeof NO_PING.allowedMentions;
 }> {
-  // Components V2: "@대상 님의 기록" 한 줄 → 곡마다 컨테이너(첫 카드 맨 위에 검색어 줄, 제목·재킷·지역/장르/버전, 코드 블록 점수표, 상세·외부 출력 버튼) → 페이지 버튼.
+  // Components V2: 머리말 한 줄("검색어" 에 대한 검색 결과 (@대상)) → 곡마다 컨테이너(제목·재킷·지역/장르/버전, 코드 블록 점수표, 상세·외부 출력 버튼) → 페이지 버튼.
   const records = getClearList(p);
   // 자동완성 목록에서 고른 곡이면 그 곡·종류만, 아니면 검색어로 찾는다(예전과 같이).
   const picked = resolveSongPick(query);
@@ -621,9 +621,8 @@ export async function searchResultEmbeds(
   const files: AttachmentBuilder[] = [];
 
   const DIFF_ORDER = ["BASIC", "ADVANCED", "EXPERT", "MASTER", "Re:MASTER"];
-  // 검색어 줄은 첫 카드 안 맨 위(예전 임베드 author 자리), "@대상 님의 기록"은 다른 명령처럼 메시지 맨 위(카드 밖).
-  const author = msg("searchResult.author", { query: shownQuery, type: typeLabel });
-  const target = targetLine(userId);
+  // 머리말: 카드 위 한 줄에 검색어와 기록 대상을 같이("검색어" 에 대한 검색 결과 (@대상)).
+  const author = msg("searchResult.author", { query: shownQuery, type: typeLabel, user: `<@${userId}>` });
 
   const built = await Promise.all(
     pageKeys.map(async (key, i) => {
@@ -720,7 +719,6 @@ export async function searchResultEmbeds(
         + (artist ? "\n" + msg("searchResult.artist", { artist: escapeMarkdown(artist) }) : "")
         + "\n" + regionLine.trimEnd();
       const container = new ContainerBuilder().setAccentColor(toInt(musicKind === "DX" ? MAI_KIND_COLOR.DX : musicKind === "ST" ? MAI_KIND_COLOR.ST : BRAND.dim));
-      if (i === 0) container.addTextDisplayComponents((t) => t.setContent(author));
       if (buf) {
         const name = `sjacket${i}.png`;
         files.push(new AttachmentBuilder(buf, { name }));
@@ -748,7 +746,7 @@ export async function searchResultEmbeds(
     }),
   );
   // 컴포넌트 메시지는 글이 모두 합쳐 4000자까지다(이모지는 코드 30자 남짓). 난이도 배지로 넘칠 것 같으면 이 페이지는 한 칸 약자로.
-  const badgeLength = target.length + author.length + built.reduce((n, b) => n + b.headingLength + b.badgeLines.join("\n-# \u2800\n").length, 0);
+  const badgeLength = author.length + built.reduce((n, b) => n + b.headingLength + b.badgeLines.join("\n-# \u2800\n").length, 0);
   const useBadge = badgeLength <= TEXT_LIMIT;
   for (const b of built) {
     // 난이도 사이에는 보이지 않는 작은 글씨 한 줄(-# U+2800)을 넣어 칸마다 구분한다(컴포넌트를 늘리지 않는다).
@@ -778,7 +776,7 @@ export async function searchResultEmbeds(
 
   return {
     components: [
-      new TextDisplayBuilder().setContent(target),
+      new TextDisplayBuilder().setContent(author),
       ...containers,
       new ActionRowBuilder<ButtonBuilder>().addComponents(prevBtn, countBtn, nextBtn),
     ],
