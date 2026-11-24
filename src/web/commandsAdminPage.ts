@@ -1,9 +1,10 @@
-// 슬래시 명령어 이름·설명·옵션 순서·옵션 설명 관리 페이지(/관리 → 명령어). 저장한 값은 "디스코드에 반영" 또는 봇 재시작 때 올라간다.
+// 슬래시 명령어 이름·설명·옵션 이름·옵션 순서·옵션 설명 관리 페이지(/관리 → 명령어). 저장한 값은 "디스코드에 반영" 또는 봇 재시작 때 올라간다.
 // 디자인 토큰은 theme.ts(캐롤봇 랜딩 디자인 시스템)를 따른다.
 
 import { BASE_CSS, ADMIN_CSS, ADMIN_BADGE, pageHead, topbar, adminTabs } from "./theme";
 
-export interface CommandOptionVM { name: string; type: string; required: boolean; defDescription: string; description: string }
+/** name: 코드의 원래 이름(키), shownName: 디스코드에 보일 이름(바꾸지 않았으면 name). */
+export interface CommandOptionVM { name: string; shownName: string; type: string; required: boolean; defDescription: string; description: string }
 export interface CommandRowVM {
   key: string;
   defName: string;
@@ -32,21 +33,21 @@ ${ADMIN_CSS}
 .field .crl-input{flex:1;min-width:0}
 .opts{margin-top:10px;border-top:1px solid var(--crl-border);padding-top:8px}
 .opt{display:flex;gap:6px;align-items:center;padding:4px 0}
-.opt .nm{width:96px;flex-shrink:0;font-size:13.5px;color:var(--crl-ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.opt .crl-input.onm{width:120px;flex:0 0 120px}
 .opt .ty{font-size:11px;color:var(--crl-faint);width:60px;flex-shrink:0}
 .opt .req{font-size:11px;color:var(--crl-accent)}
 .opt .crl-input{flex:1;min-width:0;padding:6px 9px;font-size:13px}
 .mv{background:var(--crl-surface-2);border:1px solid var(--crl-border);color:var(--crl-muted);border-radius:var(--crl-radius-small);width:28px;height:28px;cursor:pointer;flex-shrink:0}
 .mv:disabled{opacity:.35;cursor:default}
 .acts{display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap}
-@media (max-width:560px){.opt{flex-wrap:wrap}.opt .nm{width:auto}.opt input{flex-basis:100%}}
+@media (max-width:560px){.opt{flex-wrap:wrap}.opt .od{flex-basis:100%}}
 </style></head><body>
 ${topbar(ADMIN_BADGE)}
 <main class="page">
 ${adminTabs(token, "commands")}
 <h1 class="crl-heading-2 page-title">명령어</h1>
-<p class="admin-sub">슬래시 명령어의 이름·설명·옵션 순서·옵션 설명을 바꿉니다. 저장한 뒤 <b>디스코드에 반영</b>을 누르거나 봇을 다시 시작하면 디스코드에 올라갑니다.</p>
-<p class="note">· 디스코드 명령 목록은 이름 순으로 보여서 명령어끼리의 순서는 정할 수 없습니다. 이름을 바꾸면 목록 위치도 바뀝니다.<br>· 옵션 이름은 봇이 그 이름으로 값을 읽어서 바꿀 수 없습니다. 필수 옵션은 디스코드 규칙상 늘 앞에 옵니다.<br>· 다른 문구에 적힌 명령어 이름(예: <code>/마이시프트 연동</code>)은 <b>봇 문구</b> 탭에서 같이 고쳐 주세요.</p>
+<p class="admin-sub">슬래시 명령어의 이름·설명·옵션 이름·옵션 순서·옵션 설명을 바꿉니다. 저장한 뒤 <b>디스코드에 반영</b>을 누르거나 봇을 다시 시작하면 디스코드에 올라갑니다.</p>
+<p class="note">· 디스코드 명령 목록은 이름 순으로 보여서 명령어끼리의 순서는 정할 수 없습니다. 이름을 바꾸면 목록 위치도 바뀝니다.<br>· 옵션 이름을 바꿔도 봇은 원래 이름으로 알아듣습니다(하위 명령 안의 옵션 이름은 바꿀 수 없습니다). 필수 옵션은 디스코드 규칙상 늘 앞에 옵니다.<br>· 다른 문구에 적힌 명령어·옵션 이름(예: <code>/마이시프트 연동 아이디:</code>)은 <b>봇 문구</b> 탭에서 같이 고쳐 주세요.</p>
 <div class="bar">
 <input class="crl-input" id="q" placeholder="명령어 검색">
 <button class="crl-btn crl-btn--primary" id="sync"${botRunning ? "" : " disabled"}>디스코드에 반영</button>
@@ -62,7 +63,7 @@ function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;',
 function optRow(r,name,k,n){
   const o=r.options.find(x=>x.name===name);
   return '<div class="opt" data-n="'+esc(name)+'"><button class="mv up"'+(k===0?' disabled':'')+'>↑</button><button class="mv down"'+(k===n-1?' disabled':'')+'>↓</button>'
-    +'<span class="nm" title="'+esc(name)+'">'+esc(name)+'</span><span class="ty">'+esc(o.type)+(o.required?' <span class="req">필수</span>':'')+'</span>'
+    +'<input class="crl-input onm" maxlength="32" value="'+esc(o.shownName)+'" placeholder="'+esc(name)+'" title="원래 이름: '+esc(name)+'"><span class="ty">'+esc(o.type)+(o.required?' <span class="req">필수</span>':'')+'</span>'
     +'<input class="crl-input od" maxlength="100" value="'+esc(o.description)+'" placeholder="'+esc(o.defDescription)+'"></div>';
 }
 function card(r,i){
@@ -80,7 +81,7 @@ function readCard(el){
   const r=ROWS[+el.dataset.i];
   r.name=el.querySelector(".nmi").value.trim()||r.defName;
   r.description=el.querySelector(".dsi").value.trim()||r.defDescription;
-  for(const o of el.querySelectorAll(".opt")){ const x=r.options.find(y=>y.name===o.dataset.n); x.description=o.querySelector(".od").value.trim()||x.defDescription; }
+  for(const o of el.querySelectorAll(".opt")){ const x=r.options.find(y=>y.name===o.dataset.n); x.shownName=o.querySelector(".onm").value.trim()||x.name; x.description=o.querySelector(".od").value.trim()||x.defDescription; }
   return r;
 }
 async function post(path,body){
@@ -92,7 +93,7 @@ async function save(el,reset){
   st.className="st"; st.textContent="저장 중…";
   try{
     const d=reset?await post('/api/admin/commands',{key:r.key,reset:true})
-      :await post('/api/admin/commands',{key:r.key,name:r.name,description:r.description,order:r.order,optionDescriptions:Object.fromEntries(r.options.map(o=>[o.name,o.description]))});
+      :await post('/api/admin/commands',{key:r.key,name:r.name,description:r.description,order:r.order,optionDescriptions:Object.fromEntries(r.options.map(o=>[o.name,o.description])),optionNames:Object.fromEntries(r.options.map(o=>[o.name,o.shownName]))});
     if(!d.ok){ st.className="st err"; st.textContent=d.error||'오류'; return; }
     Object.assign(r,d.row); render();
     const again=document.querySelector('.card[data-i="'+el.dataset.i+'"] .st'); if(again){ again.className="st ok"; again.textContent=reset?"기본값으로 되돌림":"저장됨 · 디스코드에 반영을 눌러 주세요"; }
