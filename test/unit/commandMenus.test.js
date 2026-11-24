@@ -94,3 +94,13 @@ test("곡추천 레벨 다음 곡 기준 PLAYED(60% 이상): 조건 값 왕복, 
   assert.equal(songrec.meetsCriterion(r(60), "PLAYED"), true);
   assert.equal(songrec.meetsCriterion(r(59.99), "PLAYED"), false);
 });
+
+test("옵션 이름 덮어쓰기: 순서는 원래 이름 기준, 디스코드에는 바뀐 이름, 들어오면 원래 이름으로", () => {
+  co.setCommandDefinitions([{ key: "곡추천", json: DEF }], async () => {});
+  const out = co.applyOverride(DEF, { order: ["user", "레벨", "필수"], optionNames: { 레벨: "단계", user: "유저" } });
+  assert.deepEqual(out.options.map((o) => o.name), ["필수", "유저", "단계"]);
+  assert.equal(co.validateOverride("곡추천", { optionNames: { 레벨: "단계" } }), null);
+  assert.ok(co.validateOverride("곡추천", { optionNames: { 레벨: "Level" } })); // 대문자
+  assert.ok(co.validateOverride("곡추천", { optionNames: { 레벨: "필수" } })); // 다른 옵션과 겹침
+  assert.ok(co.validateOverride("곡추천", { optionNames: { 없는옵션: "x" } }));
+});

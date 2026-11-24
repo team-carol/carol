@@ -56,7 +56,7 @@ import { initMaishift } from "../maishift";
 import { guardSlowAck } from "./utils/slowAck";
 import { handleTrackButton } from "./utils/trackDetail";
 import { loadRankImages } from "../rankImages";
-import { loadCommandOverrides, getCommandOverride, applyOverride, setCommandDefinitions, setLiveCommandNames, keyForName, type CommandJson } from "../commandOverrides";
+import { loadCommandOverrides, getCommandOverride, applyOverride, setCommandDefinitions, setLiveCommandNames, keyForName, canonicalOptionNames, type CommandJson } from "../commandOverrides";
 
 type Command = { data: { toJSON(): object; name: string }; execute: (i: ChatInputCommandInteraction) => Promise<void>; autocomplete?: (i: AutocompleteInteraction) => Promise<void> };
 
@@ -112,6 +112,21 @@ async function syncCommands(): Promise<void> {
   const body = COMMANDS.map((cmd) => applyOverride(cmd.data.toJSON() as CommandJson, getCommandOverride(cmd.data.name)));
   await rest.put(route, { body: [...body, report.contextData.toJSON()] });
   setLiveCommandNames(new Map(body.map((b, k) => [b.name, COMMANDS[k].data.name])));
+}
+
+/**
+ * /관리에서 바꾼 옵션 이름(맨 위 옵션, 하위 명령이면 그 이름)을 코드의 원래 이름으로 되돌린다.
+ * 명령 코드는 늘 원래 이름으로 값을 읽는다(options.getString("검색어") 등). discord.js 옵션 해석기의 내부 값을 고치므로
+ * discord.js 를 올릴 때 _subcommand·_group 이름이 그대로인지 확인할 것.
+ */
+function restoreOptionNames(i: ChatInputCommandInteraction | AutocompleteInteraction, key: string): void {
+  const map = canonicalOptionNames(key);
+  if (!map?.size) return;
+  const r = i.options as unknown as { data: readonly { name: string }[]; _subcommand: string | null; _group: string | null };
+  // data 배열은 얼어 있지만 그 안의 옵션 객체는 해석기가 값을 찾는 것과 같은 객체라 이름만 바꾸면 된다.
+  for (const o of r.data) o.name = map.get(o.name) ?? o.name;
+  if (r._subcommand) r._subcommand = map.get(r._subcommand) ?? r._subcommand;
+  if (r._group) r._group = map.get(r._group) ?? r._group;
 }
 
 /** 들어온 명령 이름(바꾼 이름일 수 있다) → 명령. */
@@ -325,12 +340,14 @@ client.on(Events.InteractionCreate, async (i) => {
   if (i.isAutocomplete()) {
     const cmd = findCommand(i.commandName);
     if (!cmd?.autocomplete) { try { await i.respond([]); } catch { /* 이미 만료 */ } return; }
+    restoreOptionNames(i, cmd.data.name);
     try { await cmd.autocomplete(i); } catch (e) { console.error(`[autocomplete:${i.commandName}]`, e); }
     return;
   }
   if (i.isChatInputCommand()) {
     const cmd = findCommand(i.commandName);
     if (!cmd) return;
+    restoreOptionNames(i, cmd.data.name);
     // maishift 프로필을 처음 받을 때처럼 늦어지면 3초 한도 전에 대신 defer 한다. /문의 는 모달을 띄워야 해서 제외.
     if (cmd !== report) guardSlowAck(i);
     try {
