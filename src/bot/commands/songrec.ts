@@ -392,8 +392,6 @@ export interface RecState {
   mode: "r" | "l";
   level: string;
   criterion: ClearCriterion;
-  diff: string;
-  kind: "" | "ST" | "DX";
   category: "" | "new" | "others";
   play: "" | "played" | "unplayed";
   count: number;
@@ -403,14 +401,16 @@ export interface RecState {
 export function encodeRecState(s: RecState): string {
   const idx = (list: readonly string[], v: string) => (list.includes(v) ? String(list.indexOf(v)) : "");
   return [
-    s.mode, idx(LEVEL_CHOICES, s.level), idx(CLEAR_CRITERIA, s.criterion), idx(DIFFS, s.diff),
-    s.kind === "ST" ? "S" : s.kind === "DX" ? "D" : "", s.category === "new" ? "n" : s.category === "others" ? "o" : "",
+    // 4·5번째 칸은 예전 난이도·타입 자리(2.4.2 에서 뺐다). 예전 버튼·저장된 조건과 칸 순서를 맞추려고 비워 둔다.
+    s.mode, idx(LEVEL_CHOICES, s.level), idx(CLEAR_CRITERIA, s.criterion), "",
+    "", s.category === "new" ? "n" : s.category === "others" ? "o" : "",
     s.play === "played" ? "p" : s.play === "unplayed" ? "u" : "", String(s.count), s.target,
   ].join(".");
 }
 
 export function decodeRecState(raw: string): RecState | null {
-  const [mode, lv, cr, df, ty, ca, pl, n, target] = raw.split(".");
+  // df·ty(예전 난이도·타입)는 읽지 않는다.
+  const [mode, lv, cr, , , ca, pl, n, target] = raw.split(".");
   if ((mode !== "r" && mode !== "l") || !/^\d{5,25}$/.test(target ?? "")) return null;
   const at = <T>(list: readonly T[], v: string | undefined): T | undefined => (v ? list[Number(v)] : undefined);
   const level = at(LEVEL_CHOICES, lv) ?? "";
@@ -418,8 +418,6 @@ export function decodeRecState(raw: string): RecState | null {
     mode: mode === "l" && level ? "l" : "r",
     level,
     criterion: at(CLEAR_CRITERIA, cr) ?? "SSS",
-    diff: at(DIFFS, df) ?? "",
-    kind: ty === "S" ? "ST" : ty === "D" ? "DX" : "",
     category: ca === "n" ? "new" : ca === "o" ? "others" : "",
     play: pl === "p" ? "played" : pl === "u" ? "unplayed" : "",
     count: Math.min(MAX_COUNT, Math.max(1, Number(n) || 3)),
@@ -436,9 +434,7 @@ export async function buildRecommendation(state: RecState, ownerId: string): Pro
   const clearRecords = getClearList(cached);
   if (clearRecords.length === 0) return msg("songrec.noRecords");
   const opts: RecommendOptions = {
-    kind: state.kind || undefined,
     play: state.play || undefined,
-    diff: state.diff || undefined,
     category: state.category || undefined,
   };
   const translate = await getTranslateTitles(ownerId);
@@ -541,7 +537,7 @@ async function nextClearsPayload(
       separator,
     }, jackets[i]);
   });
-  const footer = `${msg("songrec.nextFooter", { from: band * 20, to: band * 20 + 20, players: stats.players.toLocaleString("en-US") })}  ✦  ${msg("maishift.credit")}`;
+  const footer = `${msg("songrec.nextFooter", { level, criterion: label, from: band * 20, to: band * 20 + 20, players: stats.players.toLocaleString("en-US") })}  ✦  ${msg("maishift.credit")}`;
   return {
     components: [
       new TextDisplayBuilder().setContent(headerWithTarget(msg("songrec.nextHeader", { level, criterion: label, cleared, total: levelCharts.length }), targetId)),
@@ -571,7 +567,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   const restored = saved ? decodeRecState(saved) : null;
   const state: RecState = restored
     ? { ...restored, target: interaction.user.id }
-    : { mode: "r", level: "", criterion: "SSS", diff: "", kind: "", category: "", play: "", count: 3, target: interaction.user.id };
+    : { mode: "r", level: "", criterion: "SSS", category: "", play: "", count: 3, target: interaction.user.id };
   await interaction.reply({ components: [buildRecMenu(state, interaction.user.id, "-")], flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral });
 }
 
@@ -582,8 +578,8 @@ function rememberRec(ownerId: string, state: RecState): void {
 
 // ─── 조건 바꾸기 메뉴(본인에게만 보임) ────────────────────────────────────────
 // customId — 선택 rec:s:<칸>:<주인>:<결과 메시지>:<조건>, 유저 rec:u:<주인>:<결과 메시지>:<조건>, 뽑기 rec:go:<주인>:<결과 메시지>:<조건>.
-// 결과 메시지는 뽑을 때 지울 예전 결과("-" 면 없음).
-type RecField = "m" | "lv" | "cr" | "df" | "ty" | "ca" | "pl" | "n";
+// 결과 메시지는 뽑을 때 고칠 예전 결과("-" 면 없음 — 새로 올림).
+type RecField = "m" | "lv" | "cr" | "ca" | "pl" | "n";
 
 function fieldSelect(field: RecField, ownerId: string, msgId: string, code: string, options: { label: string; value: string; on: boolean }[]): ActionRowBuilder<StringSelectMenuBuilder> {
   return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
@@ -614,12 +610,6 @@ export function buildRecMenu(state: RecState, ownerId: string, msgId: string): C
     );
   }
   rows.push(
-    fieldSelect("df", ownerId, msgId, code, [{ label: f("diff", all), value: "-", on: !state.diff }, ...DIFFS.map((d) => ({ label: f("diff", d), value: d, on: d === state.diff }))]),
-    fieldSelect("ty", ownerId, msgId, code, [
-      { label: f("kind", all), value: "-", on: !state.kind },
-      { label: f("kind", "STANDARD"), value: "ST", on: state.kind === "ST" },
-      { label: f("kind", "DX"), value: "DX", on: state.kind === "DX" },
-    ]),
     fieldSelect("ca", ownerId, msgId, code, [
       { label: f("category", all), value: "-", on: !state.category },
       { label: f("category", msg("songrec.newSong")), value: "new", on: state.category === "new" },
@@ -660,7 +650,7 @@ export async function handleComponent(i: ButtonInteraction | StringSelectMenuInt
       await rerollInPlace(i, ownerId, () => buildRecommendation(state, ownerId));
       return;
     }
-    // 메뉴는 누른 사람 것. 결과 주인이 열었을 때만 그 결과를 다음 뽑기 때 지운다.
+    // 메뉴는 누른 사람 것. 결과 주인이 열었을 때만 그 결과를 다음 뽑기 때 고친다.
     const msgId = i.user.id === ownerId ? i.message.id : "-";
     await i.reply({ components: [buildRecMenu(state, i.user.id, msgId)], flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral });
     return;
@@ -675,8 +665,6 @@ export async function handleComponent(i: ButtonInteraction | StringSelectMenuInt
       case "m": state.mode = v === "l" ? "l" : "r"; if (state.mode === "l" && !state.level) state.level = "14"; break;
       case "lv": state.level = v; break;
       case "cr": state.criterion = (CLEAR_CRITERIA as readonly string[]).includes(v) ? v as ClearCriterion : "SSS"; break;
-      case "df": state.diff = v; break;
-      case "ty": state.kind = v === "ST" || v === "DX" ? v : ""; break;
       case "ca": state.category = v === "new" || v === "others" ? v : ""; break;
       case "pl": state.play = v === "played" || v === "unplayed" ? v : ""; break;
       case "n": state.count = Math.min(MAX_COUNT, Math.max(1, Number(v) || 3)); break;
@@ -699,7 +687,7 @@ export async function handleComponent(i: ButtonInteraction | StringSelectMenuInt
     if (!state) { await i.reply({ content: msg("reroll.expired"), flags: MessageFlags.Ephemeral }); return; }
     rememberRec(ownerId, state);
     const sent = await postFromMenu(i, msgId, () => buildRecommendation(state, ownerId));
-    // 다음 뽑기 때는 방금 올린 결과를 지우도록 메뉴를 고친다.
+    // 다음 뽑기 때는 방금 고치거나 올린 결과를 다시 고치도록 메뉴를 바꾼다.
     if (sent) await i.editReply({ components: [buildRecMenu(state, ownerId, sent)], flags: MessageFlags.IsComponentsV2 }).catch(() => {});
   }
 }

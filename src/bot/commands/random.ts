@@ -263,7 +263,7 @@ function rememberRandom(ownerId: string, state: RandomState): void {
 // ─── 조건 창(본인에게만 보임) ─────────────────────────────────────────────────
 // customId — 선택 rnd:s:<칸>:<주인>:<결과 메시지>:<조건>, 유저 rnd:u:…, 뽑기 rnd:go:…,
 //            상수 직접 입력 창 rnd:mod:<주인>:<결과 메시지>:<조건>, 플레이리스트 번호 입력 창 rnd:pmod:….
-// 주인·결과 메시지 id 는 36진수(customId 100자 한도). 결과 메시지 "-" 는 지울 예전 결과가 없음.
+// 주인·결과 메시지 id 는 36진수(customId 100자 한도). 결과 메시지 "-" 는 고칠 예전 결과가 없음(새로 올림).
 type RandomField = "mn" | "mx" | "ty" | "df" | "gn" | "vr" | "py" | "n" | "pl";
 const CUSTOM = "custom";
 const ERA = "era";
