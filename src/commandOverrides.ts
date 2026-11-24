@@ -84,26 +84,45 @@ export function keyForName(name: string): string {
   return liveNames.get(name) ?? name;
 }
 
-/** 기본 정의에 덮어쓴 값을 입힌다. */
+/**
+ * 덮어쓴 순서·옵션 설명을 입힌 옵션 목록. 이름은 원래 이름 그대로다(순서·설명 덮어쓰기와 관리 페이지는 원래 이름을 키로 쓴다).
+ * 디스코드에 보일 이름까지 입히려면 applyOverride.
+ */
+export function orderedOptions(json: CommandJson, o: CommandOverride | undefined): OptionJson[] {
+  if (!json.options?.length) return [];
+  let opts = json.options.map((op) => (o?.optionDescriptions?.[op.name] ? { ...op, description: o.optionDescriptions[op.name] } : op));
+  if (o?.order?.length) {
+    const rank = (n: string) => {
+      const k = o.order!.indexOf(n);
+      return k >= 0 ? k : 1000 + json.options!.findIndex((x) => x.name === n);
+    };
+    opts = opts.slice().sort((a, b) => rank(a.name) - rank(b.name));
+  }
+  return [...opts.filter((x) => x.required), ...opts.filter((x) => !x.required)];
+}
+
+/** 기본 정의에 덮어쓴 값을 입힌다(디스코드에 올릴 모양). */
 export function applyOverride(json: CommandJson, o: CommandOverride | undefined): CommandJson {
   if (!o) return json;
   const out: CommandJson = { ...json };
   if (o.name) out.name = o.name;
   if (o.description) out.description = o.description;
   if (json.options?.length) {
-    let opts = json.options.map((op) => (o.optionDescriptions?.[op.name] ? { ...op, description: o.optionDescriptions[op.name] } : op));
-    if (o.order?.length) {
-      const rank = (n: string) => {
-        const k = o.order!.indexOf(n);
-        return k >= 0 ? k : 1000 + json.options!.findIndex((x) => x.name === n);
-      };
-      opts = opts.slice().sort((a, b) => rank(a.name) - rank(b.name));
-    }
-    opts = [...opts.filter((x) => x.required), ...opts.filter((x) => !x.required)];
     // 이름은 순서를 정한 뒤에 바꾼다(순서는 원래 이름 기준).
-    out.options = opts.map((op) => (o.optionNames?.[op.name] ? { ...op, name: o.optionNames[op.name] } : op));
+    out.options = orderedOptions(json, o).map((op) => (o.optionNames?.[op.name] ? { ...op, name: o.optionNames[op.name] } : op));
   }
   return out;
+}
+
+/**
+ * 관리 페이지가 보낸 옵션 순서를 원래 이름으로 맞춘다. 2.4.4 페이지는 옵션 이름을 바꾸고 저장하면 순서를 바뀐 이름으로 받아
+ * 그다음 저장에 그대로 보냈다(열어 둔 예전 탭도 저장되게). 원래 옵션 이름과 같은 값은 그대로 둔다(두 옵션 이름을 맞바꾼 경우).
+ */
+export function canonicalOrder(key: string, order: string[], o: CommandOverride | undefined = overrides[key]): string[] {
+  const def = definitions.find((d) => d.key === key);
+  const names = (def?.json.options ?? []).map((x) => x.name);
+  const back = new Map(Object.entries(o?.optionNames ?? {}).map(([orig, shown]) => [shown, orig]));
+  return order.map((n) => (names.includes(n) ? n : back.get(n) ?? n));
 }
 
 // 디스코드 명령 이름 규칙(소문자가 있는 글자는 소문자만).

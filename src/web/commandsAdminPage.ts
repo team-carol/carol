@@ -62,6 +62,7 @@ const $=id=>document.getElementById(id);
 function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function optRow(r,name,k,n){
   const o=r.options.find(x=>x.name===name);
+  if(!o)return ''; // 모르는 옵션 한 줄 때문에 목록 전체가 안 그려지지 않게
   return '<div class="opt" data-n="'+esc(name)+'"><button class="mv up"'+(k===0?' disabled':'')+'>↑</button><button class="mv down"'+(k===n-1?' disabled':'')+'>↓</button>'
     +'<input class="crl-input onm" maxlength="32" value="'+esc(o.shownName)+'" placeholder="'+esc(name)+'" title="원래 이름: '+esc(name)+'"><span class="ty">'+esc(o.type)+(o.required?' <span class="req">필수</span>':'')+'</span>'
     +'<input class="crl-input od" maxlength="100" value="'+esc(o.description)+'" placeholder="'+esc(o.defDescription)+'"></div>';
