@@ -35,12 +35,14 @@ test("validateOverride: 디스코드 이름 규칙·중복·옵션 순서를 검
 });
 
 test("곡추천 조건: customId 값으로 갔다가 그대로 돌아온다", () => {
-  const s = { mode: "l", level: "14+", criterion: "ALL_PERFECT", category: "new", play: "unplayed", count: 5, target: "123456789012345678" };
+  const s = { mode: "l", level: "14+", criterion: "ALL_PERFECT", category: "new", play: "unplayed", count: 3, target: "123456789012345678" };
   const code = songrec.encodeRecState(s);
   assert.deepEqual(songrec.decodeRecState(code), s);
   // 예전(2.4.1 까지) 조건 값의 난이도·타입 칸은 무시하고 나머지는 그대로 읽는다
   const old = code.split("."); old[3] = "3"; old[4] = "D"; // 예전 난이도(MASTER)·타입(DX) 칸을 채운 값
   assert.deepEqual(songrec.decodeRecState(old.join(".")), s);
+  // 곡 수는 최대 3(예전 4·5 는 3으로)
+  assert.equal(songrec.decodeRecState(code.replace(/.3.(d+)$/, ".5.$1")).count, 3);
   assert.ok(`rec:s:cr:${s.target}:${s.target}:${code}`.length <= 100);
   // 레벨이 없으면 레이팅 모드, 이상한 값은 버린다
   assert.equal(songrec.decodeRecState(`l........${s.target}`).mode, "r");
@@ -81,4 +83,14 @@ test("headerWithTarget: 제목 머리글 첫 줄 오른쪽에 @대상만", () =>
   assert.equal(headerWithTarget("## 곡 추천\n-# 설명", "7"), "## 곡 추천 <@7>\n-# 설명");
   assert.equal(headerWithTarget("## 랜덤", "7"), "## 랜덤 <@7>");
   assert.equal(headerWithTarget("## 랜덤", null), "## 랜덤");
+});
+
+test("곡추천 레벨 다음 곡 기준 PLAYED(60% 이상): 조건 값 왕복, 예전 기준 번호는 그대로", () => {
+  const s = { mode: "l", level: "13+", criterion: "PLAYED", category: "", play: "", count: 2, target: "123456789012345678" };
+  assert.deepEqual(songrec.decodeRecState(songrec.encodeRecState(s)), s);
+  // SSS 는 예전처럼 4번(PLAYED 를 끝에 붙여 번호가 밀리지 않는다)
+  assert.equal(songrec.encodeRecState({ ...s, criterion: "SSS" }).split(".")[2], "4");
+  const r = (ach) => ({ title: "x", musicKind: "DX", diff: "MASTER", achievementVal: ach, fc: "", sync: "" });
+  assert.equal(songrec.meetsCriterion(r(60), "PLAYED"), true);
+  assert.equal(songrec.meetsCriterion(r(59.99), "PLAYED"), false);
 });

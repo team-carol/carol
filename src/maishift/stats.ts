@@ -1,8 +1,8 @@
 /**
  * maishift 통계 API(레이팅 분포·레벨별 보면 분포·클리어 비율·플레이트 난이도·플레이트 보유)와 공개 플레이리스트.
  *
- * - 통계는 모든 사용자에게 같은 값이고 maishift 가 정해진 때에만 다시 계산하므로, 지역·조건별로 STATS_TTL_MS 동안 기억한다.
- *   지나면 가진 값을 먼저 쓰고 뒤에서 새로 받는다.
+ * - 통계는 모든 사용자에게 같은 값이고 maishift 가 정해진 때에만 다시 계산하므로, 지역·조건별로 STATS_TTL_MS(12시간) 동안 기억한다.
+ *   /곡추천 이 쓰는 레벨별 보면 분포·클리어 비율은 REC_STATS_TTL_MS(하루). 지나면 가진 값을 먼저 쓰고 뒤에서 새로 받는다.
  * - 사용자 기록 요청이 한도에 막히지 않도록, 남은 한도가 (비용 + RESERVE_UNITS) 보다 적으면 새로 받지 않는다.
  *   통계가 없으면 명령은 통계 없이 답한다.
  * - 플레이어 기록이 아니지만 다른 maishift 데이터처럼 메모리에만 둔다(재시작하면 다시 받는다).
@@ -12,11 +12,13 @@ import { MaishiftError } from "./serverFn";
 import type { MaimaiServer } from "../scraper";
 
 const STATS_TTL_MS = 12 * 60 * 60 * 1000;
+/** /곡추천 통계(레벨별 보면 분포·클리어 비율). 요청마다 15단위라 하루 기억한다. */
+const REC_STATS_TTL_MS = 24 * 60 * 60 * 1000;
 const PLAYLIST_TTL_MS = 10 * 60 * 1000;
 /** 실패한 요청은 이만큼 다시 보내지 않는다. */
 const FAIL_TTL_MS = 5 * 60 * 1000;
 /** 통계를 받은 뒤에도 사용자 기록 요청에 쓸 만큼 남겨 두는 한도. */
-const RESERVE_UNITS = 40;
+const RESERVE_UNITS = 30;
 const MAX_SLOTS = 400;
 
 type Query = Record<string, string | number>;
@@ -81,8 +83,18 @@ export function clearStatsCache(): void {
 }
 
 // ─── 레이팅 구간 ───────────────────────────────────────────────────────────
-// stats/level-charts·stats/plate-difficulty 가 받는 구간(14000 부터는 250 단위).
+// stats/level-charts·stats/plate-difficulty 가 받는 구간(14000 부터는 250 단위). level-charts 는 16000~17000 을 50 단위로도 받는다(fineRatingBandOf).
 const BAND_EDGES = [13000, 13500, 14000, 14250, 14500, 14750, 15000, 15250, 15500, 15750, 16000, 16250, 16500, 16750, 17000];
+
+/**
+ * /곡추천 레이팅 모드용(stats/level-charts) 구간: 16000 이상은 50 단위(예: "16250-16300", 17000 이상은 "16950-17000"),
+ * 그 아래는 ratingBandOf 와 같다. 50 단위는 비교 대상이 더 가깝지만 구간 인원이 적어 maishift 가 가리는 보면이 늘 수 있다.
+ */
+export function fineRatingBandOf(rating: number): string | null {
+  if (!(rating >= 16000)) return ratingBandOf(rating);
+  const from = Math.min(16950, Math.floor(rating / 50) * 50);
+  return `${from}-${from + 50}`;
+}
 
 /** 레이팅 → 통계 구간 이름(예: "14500-14750"). 13000 미만이면 null(통계 구간이 없다). */
 export function ratingBandOf(rating: number): string | null {
@@ -168,7 +180,7 @@ const levelMaps = new WeakMap<LevelChartsResult, Map<number, ChartStat>>();
  * allowFetch=false 면 기억한 것만(없으면 null).
  */
 export async function getLevelCharts(server: MaimaiServer, level: string, band: string, allowFetch = true): Promise<Map<number, ChartStat> | null> {
-  const res = await cached<LevelChartsResult>("/stats/level-charts", { region: regionOf(server), level, rating: band }, STATS_TTL_MS, allowFetch);
+  const res = await cached<LevelChartsResult>("/stats/level-charts", { region: regionOf(server), level, rating: band }, REC_STATS_TTL_MS, allowFetch);
   if (!res) return null;
   let m = levelMaps.get(res);
   if (!m) {
@@ -200,7 +212,9 @@ export function shareAtLeast(stat: ChartStat, ach: number): number | null {
 }
 
 // ─── 클리어 비율 ────────────────────────────────────────────────────────────
-export const CLEAR_CRITERIA = ["S", "S_PLUS", "SS", "SS_PLUS", "SSS", "SSS_PLUS", "FULL_COMBO", "FULL_COMBO_PLUS", "ALL_PERFECT", "ALL_PERFECT_PLUS"] as const;
+// PLAYED(60% 이상)는 2.4.3 에 더했다. /곡추천 조건 값이 이 배열의 순서 번호를 쓰므로 새 기준은 끝에 붙인다.
+// (maishift 는 이 밖에 AAA 도 받지만 쓰지 않는다. 80% "클리어" 기준은 없다.)
+export const CLEAR_CRITERIA = ["S", "S_PLUS", "SS", "SS_PLUS", "SSS", "SSS_PLUS", "FULL_COMBO", "FULL_COMBO_PLUS", "ALL_PERFECT", "ALL_PERFECT_PLUS", "PLAYED"] as const;
 export type ClearCriterion = (typeof CLEAR_CRITERIA)[number];
 export interface ClearRatios {
   players: number;
@@ -217,7 +231,7 @@ export function clearBandOf(cleared: number, total: number): number {
 
 /** 그 레벨을 기준까지 비슷하게(같은 20% 구간) 깬 플레이어들이 보면마다 얼마나 깼는지. */
 export function getClearRatios(server: MaimaiServer, level: string, criterion: ClearCriterion, band: number): Promise<ClearRatios | null> {
-  return cached<ClearRatios>("/stats/clear-ratios", { region: regionOf(server), level, criterion, band });
+  return cached<ClearRatios>("/stats/clear-ratios", { region: regionOf(server), level, criterion, band }, REC_STATS_TTL_MS);
 }
 
 // ─── 플레이트 ──────────────────────────────────────────────────────────────

@@ -443,6 +443,9 @@ export const MESSAGES = {
   "reroll.expired": "이 버튼은 더 쓸 수 없습니다. 명령어로 다시 실행해 주세요.",
   "songrec.nextHeader": "## {level} {criterion} 다음 곡\n-# 현재 {cleared}/{total}보면 달성 ✦ 비슷한 사람들이 많이 깬, 아직 못 깬 보면",
   "songrec.cardNow": "현재 {current}",
+  // 레벨 다음 곡 기준 PLAYED(maishift: 60% 이상 기록). 머리글·카드·기준 줄에는 앞의 것, 조건 창에는 뒤의 것.
+  "songrec.criterionPlayed": "플레이",
+  "songrec.criterionPlayedMenu": "플레이 (60% 이상)",
   "songrec.cardNextPeer": "비슷한 실력의 플레이어 {share}%가 {criterion}",
   // {criterion} 은 S~SSS+·FC·AP 라 모두 받침 없이 읽혀 "를".
   "songrec.nextFooter": "{level} {criterion}를 {from}~{to}% 달성한 {players}명 기준",
