@@ -31,7 +31,7 @@ import { getReadyVideo } from "../bot/utils/chartVideoQueue";
 import type { Chart } from "../simai/types";
 import { messagesAdminPage, type MessageRowVM } from "./messagesAdminPage";
 import { commandsAdminPage, type CommandRowVM } from "./commandsAdminPage";
-import { getCommandDefinitions, getCommandOverride, applyOverride, validateOverride as validateCommandOverride, saveCommandOverride, syncCommandsNow, type CommandJson } from "../commandOverrides";
+import { getCommandDefinitions, getCommandOverride, applyOverride, orderedOptions, canonicalOrder, validateOverride as validateCommandOverride, saveCommandOverride, syncCommandsNow, type CommandJson } from "../commandOverrides";
 import { BRAND_AVATAR_PATH } from "./theme";
 import { guidePage } from "./guidePage";
 import { ICON_PATH_PREFIX, handleIconRequest } from "./iconProxy";
@@ -99,7 +99,8 @@ function commandRowVM(key: string, json: CommandJson): CommandRowVM {
       defDescription: op.description,
       description: o?.optionDescriptions?.[op.name] ?? op.description,
     })),
-    order: (shown.options ?? []).map((op) => op.name),
+    // 원래 이름으로(shown.options 는 디스코드에 보일 이름이라 페이지가 옵션을 못 찾는다)
+    order: orderedOptions(json, o).map((op) => op.name),
     changed: !!o,
   };
 }
@@ -534,7 +535,7 @@ export function startWebServer(port: number): void {
           const override = {
             name: str(body.name),
             description: str(body.description),
-            order: Array.isArray(body.order) ? body.order.filter((n: unknown): n is string => typeof n === "string") : undefined,
+            order: Array.isArray(body.order) ? canonicalOrder(key, body.order.filter((n: unknown): n is string => typeof n === "string")) : undefined,
             optionDescriptions: body.optionDescriptions && typeof body.optionDescriptions === "object"
               ? Object.fromEntries(Object.entries(body.optionDescriptions as Record<string, unknown>).filter(([, v]) => typeof v === "string").map(([k, v]) => [k, (v as string).trim()]))
               : undefined,

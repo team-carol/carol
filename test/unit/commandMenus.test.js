@@ -104,3 +104,23 @@ test("옵션 이름 덮어쓰기: 순서는 원래 이름 기준, 디스코드�
   assert.ok(co.validateOverride("곡추천", { optionNames: { 레벨: "필수" } })); // 다른 옵션과 겹침
   assert.ok(co.validateOverride("곡추천", { optionNames: { 없는옵션: "x" } }));
 });
+
+test("옵션 이름을 바꿔 저장해도 관리 페이지 순서는 원래 이름이라 다음 저장이 통과한다", () => {
+  co.setCommandDefinitions([{ key: "곡추천", json: DEF }], async () => {});
+  const o = { optionNames: { user: "유저" } };
+  // 관리 페이지에 넘기는 순서(원래 이름)
+  const order = co.orderedOptions(DEF, o).map((x) => x.name);
+  assert.deepEqual(order, ["필수", "레벨", "user"]);
+  assert.equal(co.validateOverride("곡추천", { ...o, order }), null);
+  // 다시 원래 이름으로 돌려 저장해도 통과
+  assert.equal(co.validateOverride("곡추천", { order, optionNames: { user: "user" } }), null);
+});
+
+test("canonicalOrder: 예전 페이지가 바뀐 이름으로 보낸 순서를 원래 이름으로 되돌린다", () => {
+  co.setCommandDefinitions([{ key: "곡추천", json: DEF }], async () => {});
+  const o = { optionNames: { user: "유저" } };
+  assert.deepEqual(co.canonicalOrder("곡추천", ["필수", "레벨", "유저"], o), ["필수", "레벨", "user"]);
+  assert.deepEqual(co.canonicalOrder("곡추천", ["필수", "레벨", "user"], o), ["필수", "레벨", "user"]);
+  // 두 옵션 이름을 맞바꾼 경우: 원래 이름과 같은 값은 그대로
+  assert.deepEqual(co.canonicalOrder("곡추천", ["필수", "레벨", "user"], { optionNames: { 레벨: "user", user: "레벨" } }), ["필수", "레벨", "user"]);
+});
