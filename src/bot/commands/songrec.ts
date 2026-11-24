@@ -45,7 +45,7 @@ import { getScoreRank, MAI_CM_COLOR } from "../../games";
 import { rerollRow, rerollInPlace, postFromMenu, type V2Payload } from "../utils/reroll";
 import { headerWithTarget, NO_PING } from "../utils/targetLine";
 import {
-  ratingBandOf, getLevelCharts, shareAtLeast, getClearRatios, clearBandOf,
+  fineRatingBandOf, getLevelCharts, shareAtLeast, getClearRatios, clearBandOf,
   CLEAR_CRITERIA, type ChartStat, type ClearCriterion,
 } from "../../maishift/stats";
 
@@ -279,32 +279,27 @@ export function recommendCharts(
   return pickRecommendations(collectCandidates(clearRecords, opts, server), count, opts);
 }
 
-// 한 번에 새로 받는 레벨 분포 수(15단위씩). 나머지 레벨은 받아 둔 것만 쓴다.
-const MAX_LEVEL_FETCHES = 2;
-const MAX_LEVELS = 4;
-
 /**
- * 후보 보면이 많은 표시 레벨부터, 같은 레이팅 구간 보면 분포를 모아 peerShare 를 만든다.
+ * 후보 보면이 있는 표시 레벨마다 같은 레이팅 구간 보면 분포(레벨 하나에 15단위, 하루 기억)를 받아 peerShare 를 만든다.
+ * 받아 둔 게 없으면 늘 새로 받는다. 후보가 많은 레벨부터 하나씩 받아, 한도가 모자라면(stats.ts 안전장치) 앞쪽 레벨만 쓴다.
  * 레이팅이 통계 구간(13000 이상) 밖이거나 하나도 못 받았으면 null.
  */
 async function peerShareFor(server: MaimaiServer, rating: number, candidates: Candidate[]): Promise<{ share: (key: string, ach: number) => number | null; band: string } | null> {
-  const band = ratingBandOf(rating);
+  // 16000 이상은 50 단위 구간(2.4.3 부터).
+  const band = fineRatingBandOf(rating);
   if (!band) return null;
   const perLevel = new Map<string, number>();
   for (const c of candidates) {
     const rc = getRegionChartByKey(server, `${c.title}|${c.kind}|${c.diff}`);
     if (rc) perLevel.set(rc.level, (perLevel.get(rc.level) ?? 0) + 1);
   }
-  const levels = [...perLevel.entries()].sort((a, b) => b[1] - a[1]).slice(0, MAX_LEVELS).map(([l]) => l);
+  const levels = [...perLevel.entries()].sort((a, b) => b[1] - a[1]).map(([l]) => l);
   const maps = new Map<string, Map<number, ChartStat>>();
-  const missing: string[] = [];
+  // 차례로 받는다(한 번에 보내면 안전장치가 남은 한도를 줄기 전 값으로 본다).
   for (const level of levels) {
-    const m = await getLevelCharts(server, level, band, false);
+    const m = await getLevelCharts(server, level, band);
     if (m) maps.set(level, m);
-    else missing.push(level);
   }
-  const fetched = await Promise.all(missing.slice(0, MAX_LEVEL_FETCHES).map((level) => getLevelCharts(server, level, band).then((m) => [level, m] as const)));
-  for (const [level, m] of fetched) if (m) maps.set(level, m);
   if (maps.size === 0) return null;
   return {
     band,
@@ -323,11 +318,17 @@ function bandLabel(band: string): string {
 
 // ─── 다음에 깰 만한 곡(레벨·기준) ─────────────────────────────────────────────
 const LEVEL_CHOICES = ["7", "7+", "8", "8+", "9", "9+", "10", "10+", "11", "11+", "12", "12+", "13", "13+", "14", "14+", "15"];
-const CRITERION_LABEL: Record<ClearCriterion, string> = {
+const CRITERION_LABEL: Record<Exclude<ClearCriterion, "PLAYED">, string> = {
   S: "S", S_PLUS: "S+", SS: "SS", SS_PLUS: "SS+", SSS: "SSS", SSS_PLUS: "SSS+",
   FULL_COMBO: "FC", FULL_COMBO_PLUS: "FC+", ALL_PERFECT: "AP", ALL_PERFECT_PLUS: "AP+",
 };
-const ACH_OF: Partial<Record<ClearCriterion, number>> = { S: 97, S_PLUS: 98, SS: 99, SS_PLUS: 99.5, SSS: 100, SSS_PLUS: 100.5 };
+/** 기준 이름(머리글·카드·기준 줄). PLAYED(60% 이상)는 한국어 문구. */
+function criterionLabel(c: ClearCriterion): string {
+  return c === "PLAYED" ? msg("songrec.criterionPlayed") : CRITERION_LABEL[c];
+}
+/** 조건 창의 기준 순서(낮은 기준부터). 조건 값의 순서 번호는 CLEAR_CRITERIA 를 따른다. */
+const CRITERIA_MENU: ClearCriterion[] = ["PLAYED", ...CLEAR_CRITERIA.filter((c) => c !== "PLAYED")];
+const ACH_OF: Partial<Record<ClearCriterion, number>> = { PLAYED: 60, S: 97, S_PLUS: 98, SS: 99, SS_PLUS: 99.5, SSS: 100, SSS_PLUS: 100.5 };
 const COMBO_OF: Partial<Record<ClearCriterion, string[]>> = {
   FULL_COMBO: ["FC", "FC+", "AP", "AP+"],
   FULL_COMBO_PLUS: ["FC+", "AP", "AP+"],
@@ -379,7 +380,8 @@ export function nextClears(
 }
 
 const DIFFS = ["BASIC", "ADVANCED", "EXPERT", "MASTER", "Re:MASTER"];
-const MAX_COUNT = 5;
+// 최대 3곡(2.4.3 부터). 곡마다 통계를 보여 주고 컴포넌트 한도(40)도 넉넉하다.
+const MAX_COUNT = 3;
 
 // 옵션 없이 실행하면 조건 창(본인에게만 보임)이 먼저 뜬다. 고르고 "추천받기" 를 누르면 채널에 결과가 올라간다.
 export const data = new SlashCommandBuilder()
@@ -439,9 +441,10 @@ export async function buildRecommendation(state: RecState, ownerId: string): Pro
   };
   const translate = await getTranslateTitles(ownerId);
   const tail = rerollRow("rec", ownerId, encodeRecState(state));
-  // 곡 하나가 컴포넌트 8개(작은 글 위 구분선 포함)라 5곡이면 구분선을 빼야 한도(40) 안에 든다.
-  const separator = state.count < MAX_COUNT;
-  if (state.mode === "l") return nextClearsPayload(state.target, cached.server, clearRecords, state.level, state.criterion, opts, translate, state.count, separator, tail);
+  // 곡 하나가 컴포넌트 8개(작은 글 위 구분선 포함). 최대 3곡이라 늘 구분선을 넣어도 한도(40) 안이다.
+  const separator = true;
+  // 레벨 다음 곡은 플레이여부를 쓰지 않는다(조건 창에 없음 — 레이팅 모드에서 골라 둔 값이 숨은 필터가 되지 않게 뺀다).
+  if (state.mode === "l") return nextClearsPayload(state.target, cached.server, clearRecords, state.level, state.criterion, { ...opts, play: undefined }, translate, state.count, separator, tail);
 
   const pool = collectCandidates(clearRecords, opts, cached.server);
   // 같은 레이팅대 기록(maishift 통계)이 있으면 그 사람들이 흔히 달성한 보면을 더 자주 뽑는다.
@@ -501,7 +504,7 @@ async function nextClearsPayload(
   // 단계(0~4)는 그 레벨 전체 보면 중 기준을 넘은 비율로 정한다(필터와 상관없이).
   const cleared = levelCharts.filter((c) => meetsCriterion(clearMap.get(`${c.title}|${c.kind}|${c.diff}`), criterion)).length;
   const band = clearBandOf(cleared, levelCharts.length);
-  const label = CRITERION_LABEL[criterion];
+  const label = criterionLabel(criterion);
   if (cleared >= levelCharts.length) return msg("songrec.nextAllCleared", { level, criterion: label });
   const stats = await getClearRatios(server, level, criterion, band).catch(() => null);
   if (!stats) return msg("songrec.nextNoStats");
@@ -606,7 +609,7 @@ export function buildRecMenu(state: RecState, ownerId: string, msgId: string): C
   if (state.mode === "l") {
     rows.push(
       fieldSelect("lv", ownerId, msgId, code, [...LEVEL_CHOICES].reverse().map((l) => ({ label: f("level", l), value: l, on: l === state.level }))),
-      fieldSelect("cr", ownerId, msgId, code, CLEAR_CRITERIA.map((c) => ({ label: f("criterion", CRITERION_LABEL[c]), value: c, on: c === state.criterion }))),
+      fieldSelect("cr", ownerId, msgId, code, CRITERIA_MENU.map((c) => ({ label: f("criterion", c === "PLAYED" ? msg("songrec.criterionPlayedMenu") : criterionLabel(c)), value: c, on: c === state.criterion }))),
     );
   }
   rows.push(
@@ -615,11 +618,16 @@ export function buildRecMenu(state: RecState, ownerId: string, msgId: string): C
       { label: f("category", msg("songrec.newSong")), value: "new", on: state.category === "new" },
       { label: f("category", msg("songrec.oldSong")), value: "others", on: state.category === "others" },
     ]),
-    fieldSelect("pl", ownerId, msgId, code, [
+  );
+  // 플레이여부는 레이팅 올리기 모드에만(레벨 다음 곡은 아직 기준을 못 넘은 보면이 후보라 의미가 겹친다).
+  if (state.mode === "r") {
+    rows.push(fieldSelect("pl", ownerId, msgId, code, [
       { label: f("play", all), value: "-", on: !state.play },
       { label: f("play", msg("songrec.played")), value: "played", on: state.play === "played" },
       { label: f("play", msg("songrec.notPlayed")), value: "unplayed", on: state.play === "unplayed" },
-    ]),
+    ]));
+  }
+  rows.push(
     fieldSelect("n", ownerId, msgId, code, Array.from({ length: MAX_COUNT }, (_, k) => k + 1).map((n) => ({ label: f("count", msg("songrec.countValue", { count: n })), value: String(n), on: n === state.count }))),
   );
   for (const row of rows) container.addActionRowComponents(row);

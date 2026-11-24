@@ -11,6 +11,11 @@ test("ratingBandOf: 13000 미만은 없음, 14000 부터 250 단위, 17000 이�
     [null, "13000-13500", "13500-14000", "14000-14250", "14000-14250", "16250-16500", "16750-17000", "16750-17000"]);
 });
 
+test("fineRatingBandOf: 16000 이상은 50 단위(level-charts), 그 아래는 ratingBandOf 와 같음", () => {
+  assert.deepEqual([12999, 15999, 16000, 16049, 16380, 16999, 17500].map(stats.fineRatingBandOf),
+    [null, "15750-16000", "16000-16050", "16000-16050", "16350-16400", "16950-17000", "16950-17000"]);
+});
+
 test("topPercentOf: 내 레이팅 이상인 사람 비율, 구간 안은 고르게 퍼졌다고 본다", () => {
   const s = { activePlayers: 1000, histogram: { width: 100, bands: [
     { from: 15000, to: 15100, players: 600, suppressed: false },
