@@ -286,7 +286,8 @@ export const MESSAGES = {
 
   // ── 검색 결과 ───────────────────────────────────────────────────────────
   "searchResult.empty": "\"{query}\"{type} 검색 결과 없음",
-  "searchResult.author": "-# \"{query}\"{type} 에 대한 검색 결과",
+  // 카드 위 머리말 한 줄. {user} 는 기록 대상 멘션(알림은 가지 않음).
+  "searchResult.author": "-# \"{query}\"{type} 에 대한 검색 결과 ({user})",
   "searchResult.title": "### {title}{kind}",
   // 제목 아래 아티스트(작은 글씨). 아티스트를 모르면 이 줄은 빠진다.
   "searchResult.artist": "-# {artist}",
