@@ -35,9 +35,12 @@ test("validateOverride: 디스코드 이름 규칙·중복·옵션 순서를 검
 });
 
 test("곡추천 조건: customId 값으로 갔다가 그대로 돌아온다", () => {
-  const s = { mode: "l", level: "14+", criterion: "ALL_PERFECT", diff: "MASTER", kind: "DX", category: "new", play: "unplayed", count: 5, target: "123456789012345678" };
+  const s = { mode: "l", level: "14+", criterion: "ALL_PERFECT", category: "new", play: "unplayed", count: 5, target: "123456789012345678" };
   const code = songrec.encodeRecState(s);
   assert.deepEqual(songrec.decodeRecState(code), s);
+  // 예전(2.4.1 까지) 조건 값의 난이도·타입 칸은 무시하고 나머지는 그대로 읽는다
+  const old = code.split("."); old[3] = "3"; old[4] = "D"; // 예전 난이도(MASTER)·타입(DX) 칸을 채운 값
+  assert.deepEqual(songrec.decodeRecState(old.join(".")), s);
   assert.ok(`rec:s:cr:${s.target}:${s.target}:${code}`.length <= 100);
   // 레벨이 없으면 레이팅 모드, 이상한 값은 버린다
   assert.equal(songrec.decodeRecState(`l........${s.target}`).mode, "r");
