@@ -6,7 +6,9 @@ COPY package.json package-lock.json ./
 RUN npm ci
 COPY tsconfig.json ./
 COPY src/ ./src/
-RUN npx tsc
+# Activity 페이지용 Embedded App SDK 묶기(scripts/build-activity-sdk.js → dist/web/activity-sdk.js)
+COPY scripts/build-activity-sdk.js ./scripts/
+RUN npm run build
 
 # Stage 2: Production
 FROM node:22-slim AS production
@@ -22,6 +24,8 @@ RUN npm ci --omit=dev && apt-get purge -y python3 make g++ && apt-get autoremove
 COPY --from=build /app/dist/ ./dist/
 # 봇 애플리케이션 이모지 그림. 시작할 때 아직 없는 이모지를 올린다(src/bot/utils/emoji.ts).
 COPY assets/emoji/ ./assets/emoji/
+# 보면 플레이어·풀영상 타격음(src/web/chartSound.ts, CC0)
+COPY assets/sounds/ ./assets/sounds/
 VOLUME ["/app/data"]
 ENV NODE_ENV=production
 ENV DATA_DIR=/app/data

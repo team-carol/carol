@@ -1,16 +1,16 @@
 {
   "name": "carol",
-  "version": "2.4.5",
+  "version": "2.5.0",
   "description": "maimai DX net profile Discord bot",
   "main": "dist/bot/index.js",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node scripts/build-activity-sdk.js",
     "start": "node dist/bot/index.js",
     "dev": "ts-node src/bot/index.ts",
     "dev:web": "ts-node src/web/dev.ts",
     "preview": "ts-node src/web/preview.ts",
     "test": "npm run build && npm run test:unit && npm run test:integration",
-    "test:unit": "node --require ./test/setup.cjs --test test/unit/achievements.test.js test/unit/aliases.test.js test/unit/atwiki.test.js test/unit/bookmarklet.test.js test/unit/constants.test.js test/unit/crypto.test.js test/unit/games.test.js test/unit/goals.test.js test/unit/news.test.js test/unit/scraper.test.js test/unit/simai.test.js test/unit/chartgif.test.js test/unit/mainotes.test.js test/unit/optionPreset.test.js test/unit/version.test.js test/unit/messages.test.js test/unit/ratingHistory.test.js test/unit/maishift.test.js test/unit/slowAck.test.js test/unit/rankImages.test.js test/unit/nameTranslations.test.js test/unit/maishiftCache.test.js test/unit/circleShare.test.js test/unit/ratingGain.test.js test/unit/apRepeat.test.js test/unit/plates.test.js test/unit/maishiftStats.test.js test/unit/commandMenus.test.js",
+    "test:unit": "node --require ./test/setup.cjs --test test/unit/achievements.test.js test/unit/aliases.test.js test/unit/atwiki.test.js test/unit/bookmarklet.test.js test/unit/constants.test.js test/unit/crypto.test.js test/unit/games.test.js test/unit/goals.test.js test/unit/news.test.js test/unit/scraper.test.js test/unit/simai.test.js test/unit/chartgif.test.js test/unit/mainotes.test.js test/unit/optionPreset.test.js test/unit/version.test.js test/unit/messages.test.js test/unit/ratingHistory.test.js test/unit/maishift.test.js test/unit/slowAck.test.js test/unit/rankImages.test.js test/unit/nameTranslations.test.js test/unit/maishiftCache.test.js test/unit/circleShare.test.js test/unit/ratingGain.test.js test/unit/apRepeat.test.js test/unit/plates.test.js test/unit/maishiftStats.test.js test/unit/commandMenus.test.js test/unit/activity.test.js test/unit/chartSound.test.js",
     "pretest:integration": "node -e \"const fs=require('fs');fs.existsSync('config.json')||fs.copyFileSync('config.json.example','config.json')\"",
     "test:integration": "npm run build && node --test test/postgres.integration.test.js"
   },
@@ -33,9 +33,11 @@
     "satori": "^0.26.0"
   },
   "devDependencies": {
+    "@discord/embedded-app-sdk": "2.5.0",
     "@types/node": "^25.9.3",
     "@types/node-forge": "^1.3.14",
     "@types/pg": "^8.20.0",
+    "esbuild": "0.28.2",
     "ts-node": "^10.9.2",
     "typescript": "^6.0.3"
   }

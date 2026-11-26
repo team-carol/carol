@@ -69,6 +69,7 @@ src/bot/
 | `search:` | search pagination | `search:{userId}:{encodedQuery}:{pageIdx}` |
 | `goal:` | `commands/goal.ts` goal list pagination | `goal:{ownerId}:{pageIdx}` (`goal:{ownerId}:page` = inert page counter) |
 | `chartvid:` | `index.ts` 풀영상 버튼 | `chartvid:{chartId}` |
+| `chartact:` | `commands/chart.ts` 디스코드에서 보기(Activity) — `guardSlowAck` 앞에서 처리(첫 응답이 LAUNCH_ACTIVITY) | `chartact:{chartId}` |
 
 ## ANTI-PATTERNS
 

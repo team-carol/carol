@@ -17,6 +17,9 @@ src/web/
 ├── artistAliasAdminPage.ts # /admin/artists 아티스트 별명·한국어 번역 탭(artist_aliases)
 ├── chartPlayer.ts   # simai 채보 플레이어 페이지 껍데기 (HTML/CSS + 컨트롤)
 ├── chartRenderer.ts # 플레이어 그리기 코어를 담은 JS 문자열 (서버 GIF 생성과 공용)
+├── activityPage.ts  # 디스코드 Activity 보면 플레이어(/activity + /activity/*.js·css, 인라인 스크립트 없음)
+├── chartSound.ts    # 플레이어 타격음 JS 문자열(SOUND_JS) + 서버용 WAV 읽기·영상 가이드음 섞기(guideMix)
+├── soundLabPage.ts  # npm run preview → /sounds 효과음 후보 비교(미리보기 전용)
 ├── guidePage.ts     # /sync 추가 북마클릿 설치 안내
 ├── preview.ts       # npm run preview: 가짜 데이터로 모든 페이지·북마클릿 오버레이를 띄우는 디자인 미리보기 (운영 서버는 안 씀)
 └── dev.ts           # web-only local entrypoint
@@ -33,6 +36,7 @@ src/web/
 | Change bookmarklet payload | `bookmarklet.ts` | Huge embedded JS string plus injection marker. |
 | Web-only local preview | `dev.ts` | Starts server without Discord token/login. |
 | 채보 플레이어 껍데기 | `chartPlayer.ts` | HTML/CSS와 컨트롤. 그리기 코어는 `chartRenderer.ts` 를 인라인한다. |
+| 디스코드 Activity 플레이어 | `activityPage.ts`, `index.ts` 의 `/activity`·`/api/activity/*` | 루트에 `frame_id` 가 붙으면 `/activity` 로 보낸다. CSP 때문에 스크립트·CSS 는 모두 파일(`/activity/app.css`·`app.js`·`player.js`·`sdk.js`), 보면 데이터는 `<script type="application/json">`. 검색·열기는 `verifyInstance` 통과 뒤에만. |
 | 노트·슬라이드 그리기 | `chartRenderer.ts` | canvas 링 렌더러. **백틱과 `${` 를 쓰지 말 것** (템플릿 문자열로 보관). `/보면` 미리보기 GIF도 이 코드를 vm 에 올려 쓴다. |
 | Scrape sync pipeline | `POST /sync` in `index.ts` | (feat/maishift) 친구 코드·최근 플레이(상세 수집은 COLLECT_PLAY_DETAILS 로 꺼 둠)·지방·게임 설정·서클·단위/클래스 이미지(`ri`, `saveRankImages`)만 받아 `saveSyncExtras` 로 저장하고, 연동돼 있으면 30·90초 뒤 maishift 확인을 예약한다. 프로필·전체 기록·레이팅 대상·성과는 maishift 쪽(`src/maishift/sync.ts`). 서클(`ci`/`cm` → `parseCircle`)은 판단 불가(undefined)면 기존 `circle_json` 을 유지한다. |
 | Jacket/avatar endpoints | `GET /jacket`, `GET /avatar` in `index.ts` | Cache-first asset responses. |
