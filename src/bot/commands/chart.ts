@@ -21,6 +21,8 @@ import type { PlayRecord } from "../../scraper";
 import { getBaseUrl } from "../../web/bookmarklet";
 import { PORT } from "../../config";
 import { msg } from "../../messages";
+import { activityAvailable, setPendingChart, setInstanceChart } from "../../activity";
+import { NO_PING } from "../utils/targetLine";
 import type { Chart } from "../../simai/types";
 
 /** 첨부 파일 크기 상한. 공식 길이의 maidata.txt 도 수십 KB 라 넉넉하다. */
@@ -202,8 +204,8 @@ interface ReplyInput {
   key?: string;
 }
 
-/** 곡 이름으로 고른 채보(검색 키) → 응답 재료. 처음 보는 채보는 저장한다. 못 보여 주면 안내 문구. */
-async function chartFromKey(pick: string): Promise<ReplyInput | string> {
+/** 곡 이름으로 고른 채보(검색 키) → 응답 재료. 처음 보는 채보는 저장한다. 못 보여 주면 안내 문구. Activity 보면 고르기(웹)도 쓴다. */
+export async function chartFromKey(pick: string): Promise<ReplyInput | string> {
   try {
     const found = await resolveChart(pick);
     const parsed = parseMaidata(found.maidata);
@@ -284,6 +286,27 @@ export async function handleDifficultyButton(i: ButtonInteraction): Promise<void
   await i.editReply({ ...(await chartPayload(i.user.id, null, x)), attachments: [] });
 }
 
+/**
+ * "디스코드에서 보기"(chartact:<채보 id>): 보면 플레이어를 디스코드 Activity 로 띄운다(src/activity.ts, src/web/activityPage.ts).
+ * 응답에 보면을 실을 수 없어, 먼저 이 채널에 보면을 걸어 두고 응답으로 받은 인스턴스에도 묶는다. 누구나 누를 수 있다.
+ */
+export async function handleActivityButton(i: ButtonInteraction): Promise<void> {
+  const id = i.customId.slice("chartact:".length);
+  if (!activityAvailable()) {
+    await i.reply({ content: msg("chart.activityUnavailable"), flags: MessageFlags.Ephemeral });
+    return;
+  }
+  if (i.channelId) setPendingChart(i.channelId, id);
+  try {
+    const res = await i.launchActivity({ withResponse: true });
+    const instanceId = res.resource?.activityInstance?.id ?? res.interaction.activityInstanceId;
+    if (instanceId) setInstanceChart(instanceId, id);
+  } catch (e) {
+    console.error("[보면] Activity 띄우기 실패:", e);
+    if (!i.replied && !i.deferred) await i.reply({ content: msg("chart.activityFailed"), flags: MessageFlags.Ephemeral }).catch(() => {});
+  }
+}
+
 /** 보면 제작자(원본 페이지 링크). 출처 사이트는 아래 출처 줄에 링크로 걸리므로, 제작자를 모르면 줄을 뺀다. */
 function sourceCredit(url: string, designer: string): string {
   return designer ? msg("chart.sourceCredit", { url, designer }) : "";
@@ -315,17 +338,18 @@ function judgeLoss(s: Chart["stats"]): { tapGreat: number; break75: number; brea
   return { tapGreat: weight > 0 ? (0.2 / weight) * 100 : 0, break75: 0.25 * bonus, break50: 0.5 * bonus };
 }
 
-/** 실행한 사람의 이 보면 기록 한 줄. 연동하지 않았으면 null. */
+/** 실행한 사람의 이 보면 기록 한 줄("@대상 기록 …", 멘션 알림은 NO_PING 으로 끈다). 연동하지 않았으면 null. */
 async function myRecordLine(userId: string, title: string, kind: string, diff: string): Promise<string | null> {
   try {
     const fc = await getUserFriendCode(userId);
     const p = fc ? await getCachedProfile(fc) : null;
     if (!p) return null;
     const r = getClearList(p).find((c) => c.title === title && c.musicKind === kind && c.diff === diff);
-    if (!r || r.achievementVal <= 0) return msg("chart.myRecordNone");
+    const user = `<@${userId}>`;
+    if (!r || r.achievementVal <= 0) return msg("chart.myRecordNone", { user });
     const stars = r.dxScoreMax ? dxStars(((r.dxScore ?? 0) / r.dxScoreMax) * 100) : 0;
     const marks = [rankIcon(getScoreRank(r.achievementVal)), comboIcon(r.fc), syncIcon(r.sync), dxStarIcon(stars)];
-    return msg("chart.myRecord", { achievement: `${r.achievementVal.toFixed(4)}%`, marks: marks.filter(Boolean).join(" ") });
+    return msg("chart.myRecord", { user, achievement: `${r.achievementVal.toFixed(4)}%`, marks: marks.filter(Boolean).join(" ") });
   } catch (e) {
     console.error("[보면] 내 기록 조회 실패:", e);
     return null;
@@ -336,7 +360,7 @@ async function myRecordLine(userId: string, title: string, kind: string, diff: s
  * 곡 정보·노트 수·내 기록·미리보기 GIF 를 Components V2 컨테이너로 만든다. 파일/곡 어느 쪽으로 왔든 같다.
  * userId: 보는 사람(번역 설정·내 기록·난이도 버튼 주인). asked: 미리보기 시작 시각(초).
  */
-async function chartPayload(userId: string, asked: number | null, x: ReplyInput): Promise<{ components: ContainerBuilder[]; files: AttachmentBuilder[]; flags: MessageFlags.IsComponentsV2 }> {
+async function chartPayload(userId: string, asked: number | null, x: ReplyInput): Promise<{ components: ContainerBuilder[]; files: AttachmentBuilder[]; flags: MessageFlags.IsComponentsV2 } & typeof NO_PING> {
   const url = `${getBaseUrl(PORT)}/chart?id=${x.id}`;
   const s = x.chart.stats;
   // 곡명 한국어 번역: 실행 유저의 표시 설정(translate_titles)이 켜져 있고 번역 별명이
@@ -433,6 +457,10 @@ async function chartPayload(userId: string, asked: number | null, x: ReplyInput)
   if (linkButton) {
     row.addComponents(new ButtonBuilder().setStyle(ButtonStyle.Link).setURL(url).setLabel(msg("chart.playButton")));
   }
+  // 디스코드 안에서 보기(Activity). 개발자 포털에서 Activity 를 켠 애플리케이션만.
+  if (activityAvailable()) {
+    row.addComponents(new ButtonBuilder().setStyle(ButtonStyle.Primary).setCustomId(`chartact:${x.id}`).setLabel(msg("chart.activityButton")));
+  }
   if (inCatalog) {
     const q = encodeURIComponent(`maimai ${x.title} ${kind} ${diffName ?? ""} 外部出力`.replace(/\s+/g, " ").trim());
     row.addComponents(new ButtonBuilder().setStyle(ButtonStyle.Link)
@@ -445,5 +473,5 @@ async function chartPayload(userId: string, asked: number | null, x: ReplyInput)
   const diffs = difficultyRow(userId, x);
   if (diffs) container.addActionRowComponents(diffs);
 
-  return { components: [container], files, flags: MessageFlags.IsComponentsV2 };
+  return { components: [container], files, flags: MessageFlags.IsComponentsV2, ...NO_PING };
 }

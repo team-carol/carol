@@ -13,7 +13,12 @@ const RENDER_DIR = path.join(DATA_DIR, "renders");
 const CONCURRENCY = Number(process.env.VIDEO_RENDER_CONCURRENCY) || 1;
 const RENDER_TIMEOUT_MS = 10 * 60 * 1000;   // 한 곡 10분 넘으면 뭔가 잘못된 것
 
-export function videoPath(id: string): string { return path.join(RENDER_DIR, id + ".mp4"); }
+/**
+ * 영상 모양·소리를 바꾸면 올린다. 완료본 경로에 붙어, 예전 버전으로 만든 영상은 다음 요청 때 새로 만든다(예전 파일은 그때 지운다).
+ * 2: 가이드음을 비프에서 타격음(chartSound.ts, 2026-11)으로.
+ */
+const RENDER_VERSION = 2;
+export function videoPath(id: string): string { return path.join(RENDER_DIR, `${id}.v${RENDER_VERSION}.mp4`); }
 
 export interface VideoResult { path: string; bytes: number; }
 
@@ -51,10 +56,10 @@ function renderInWorker(data: ChartVideoData, outPath: string, onProgress?: (p: 
   });
 }
 
-/** 이미 완료된 캐시가 있으면 즉시 돌려준다. 없으면 null(요청은 requestVideo 로). */
+/** 이미 완료된 캐시(지금 버전)가 있으면 즉시 돌려준다. 없으면 null(요청은 requestVideo 로). */
 export async function getReadyVideo(id: string): Promise<VideoResult | null> {
   const row = (await getChartVideo(id)) as { status: string; path: string; bytes: number } | null;
-  if (row && row.status === "done" && row.path && fs.existsSync(row.path)) return { path: row.path, bytes: row.bytes };
+  if (row && row.status === "done" && row.path && row.path === videoPath(id) && fs.existsSync(row.path)) return { path: row.path, bytes: row.bytes };
   return null;
 }
 
@@ -69,6 +74,8 @@ export function requestVideo(data: ChartVideoData, onProgress?: (p: number) => v
   const job = (async (): Promise<VideoResult> => {
     const ready = await getReadyVideo(id);
     if (ready) return ready;
+    // 예전 버전으로 만든 완료본(있으면 새로 만든 뒤 지운다)
+    const old = ((await getChartVideo(id)) as { path?: string } | null)?.path;
     fs.mkdirSync(RENDER_DIR, { recursive: true });
     await claimChartVideo(id);
     const out = videoPath(id);
@@ -78,6 +85,7 @@ export function requestVideo(data: ChartVideoData, onProgress?: (p: number) => v
     } finally { release(); }
     const bytes = fs.statSync(out).size;
     await setChartVideoDone(id, out, bytes);
+    if (old && old !== out) { try { fs.unlinkSync(old); } catch { /* 이미 없음 */ } }
     return { path: out, bytes };
   })();
   const guarded = job.catch(async (e) => {
