@@ -1,4 +1,5 @@
 // 디스코드 Activity 로 띄우는 보면 플레이어(/activity). 웹 플레이어(chartPlayer.ts)와 같은 그리기 코어(RENDERER_JS)를 쓴다.
+// 음원 고르기는 없다(타격음만).
 //
 // - 디스코드는 개발자 포털 URL 매핑의 루트(/ → 이 서버)를 iframe 으로 연다(주소에 frame_id·instance_id·channel_id 등이 붙는다).
 //   루트에 frame_id 가 붙어 오면 /activity 로 보낸다(web/index.ts).
@@ -13,6 +14,7 @@ import path from "path";
 import { maimaiDifficulty } from "@team-carol/design-system/game";
 import { BASE_CSS } from "./theme";
 import { RENDERER_JS } from "./chartRenderer";
+import { SOUND_JS } from "./chartSound";
 import type { ChartPlayerData } from "./chartPlayer";
 
 const DIFF_LABEL: Record<number, keyof typeof maimaiDifficulty> = {
@@ -76,15 +78,13 @@ ${scripts}
     <div class="row"><label for="spd">노트 속도</label><input type="range" id="spd" min="1" max="12" step="0.25" value="6.5"><span class="val" id="spdv">6.50</span></div>
     <div class="row"><label for="rate">재생 배속</label><input type="range" id="rate" min="0.25" max="2" step="0.05" value="1"><span class="val" id="ratev">1.00x</span></div>
     <div class="row"><label for="off">표시 오프셋</label><input type="range" id="off" min="-100" max="100" step="5" value="0"><span class="val" id="offv">0ms</span></div>
+    <div class="row"><label for="hvol">타격음 크기</label><input type="range" id="hvol" min="0" max="150" step="5" value="100"><span class="val" id="hvolv">100%</span></div>
     <div class="row"><span class="lbl">표시</span>
       <div class="chips">
         <button class="crl-chip chip on" id="tSound" type="button">타격음</button>
         <button class="crl-chip chip on" id="tGuide" type="button">슬라이드 가이드</button>
         <button class="crl-chip chip" id="tMirror" type="button">미러</button>
       </div>
-    </div>
-    <div class="row"><span class="lbl">음원</span>
-      <div class="file"><label><span id="pickLabel">내 음원 파일 고르기</span><input type="file" id="audio" accept="audio/*"></label> — 기기 안에서만 재생됩니다.</div>
     </div>
   </div>
 </main>
@@ -126,10 +126,6 @@ ${Object.entries(DIFF_LABEL).map(([n, name]) => `.badge.d${n}{background:${maima
 .chips{display:flex;gap:6px;flex-wrap:wrap}
 .chip{border:0;color:var(--crl-muted);font-size:13px;cursor:pointer}
 .chip.on{background:color-mix(in srgb,var(--crl-accent) 14%,transparent);color:var(--crl-accent-soft);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--crl-accent) 45%,transparent)}
-.file{font-size:12.5px;color:var(--crl-dim)}
-.file input{display:none}
-.file span{color:var(--crl-accent-soft);cursor:pointer;text-decoration:underline}
-.file label{flex:none;font-size:inherit;font-weight:inherit;color:inherit}
 .empty{flex:1;display:flex;align-items:center;justify-content:center;color:var(--crl-dim);font-size:14px;text-align:center}
 .picker{position:fixed;inset:0;z-index:10;background:var(--crl-canvas);display:flex;flex-direction:column;gap:8px;padding:calc(${SAFE("top")} + 10px) calc(${SAFE("right")} + 12px) calc(${SAFE("bottom")} + 10px) calc(${SAFE("left")} + 12px)}
 .picker[hidden]{display:none}
@@ -260,8 +256,9 @@ if (!hasChart){
 })();
 `;
 
-/** /activity/player.js — 페이지에 실린 보면 데이터를 읽고 웹 플레이어와 같은 그리기 코어를 돌린다. */
+/** /activity/player.js — 페이지에 실린 보면 데이터를 읽고 웹 플레이어와 같은 타격음·그리기 코어를 돌린다(타격음 파일은 /chart/sounds/hit.wav). */
 export const ACTIVITY_PLAYER_JS = `var DATA = JSON.parse(document.getElementById('chart-data').textContent);
+${SOUND_JS}
 ${RENDERER_JS}`;
 
 let sdkCache: string | null | undefined;

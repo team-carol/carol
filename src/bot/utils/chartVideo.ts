@@ -14,6 +14,7 @@ import * as os from "os";
 import * as path from "path";
 import * as vm from "vm";
 import { RENDERER_JS } from "../../web/chartRenderer";
+import { guideMix } from "../../web/chartSound";
 import type { Chart, ChartNote } from "../../simai/types";
 
 const SRC = 920;              // 렌더러 내부 좌표계
@@ -50,12 +51,18 @@ function makeSandbox(ctx: unknown, data: unknown): Sandbox {
 }
 
 /**
- * 가이드 비프를 오프라인 PCM(mono 16bit)으로 합성한다. click() 과 같은 주파수·감쇠.
- * leadMs 만큼 앞에 무음을 두어 영상의 리드인(노트가 판정선에 붙지 않게 앞에서 시작)과
- * 오디오를 맞춘다.
+ * 가이드음을 오프라인 PCM(mono 16bit) WAV 로 만든다. 브라우저 플레이어와 같은 타격음(chartSound.ts guideMix:
+ * TOUCH 는 박수 합성음, 나머지는 assets/sounds/hit.wav). 효과음 파일을 못 읽으면 예전 비프(click() 의 대체음).
+ * leadMs 만큼 앞에 무음을 두어 영상의 리드인(노트가 판정선에 붙지 않게 앞에서 시작)과 오디오를 맞춘다.
  */
 function synthGuideWav(notes: ChartNote[], spanMs: number, leadMs: number): Buffer {
   const n = Math.ceil((spanMs / 1000 + 0.3) * SAMPLE_RATE);
+  const pcm = guideMix(notes, n, SAMPLE_RATE, leadMs) ?? beepGuide(notes, n, leadMs);
+  return wavBytes(pcm);
+}
+
+/** 예전 가이드 비프(사각파). 효과음 파일이 없을 때만. */
+function beepGuide(notes: ChartNote[], n: number, leadMs: number): Float32Array {
   const pcm = new Float32Array(n);
   const dur = 0.055;                       // click() 의 o.stop(+0.055)
   const durN = Math.floor(dur * SAMPLE_RATE);
@@ -73,7 +80,12 @@ function synthGuideWav(notes: ChartNote[], spanMs: number, leadMs: number): Buff
       pcm[idx] += env * sq;
     }
   }
-  // Float → 16bit PCM (클리핑 방지 클램프) + WAV 헤더.
+  return pcm;
+}
+
+/** Float(-1..1) → 16bit PCM (클리핑 방지 클램프) + WAV 헤더. */
+function wavBytes(pcm: Float32Array): Buffer {
+  const n = pcm.length;
   const data = Buffer.alloc(n * 2);
   for (let i = 0; i < n; i++) {
     let v = pcm[i]; if (v > 1) v = 1; else if (v < -1) v = -1;

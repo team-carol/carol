@@ -22,6 +22,7 @@ import { getBaseUrl } from "../../web/bookmarklet";
 import { PORT } from "../../config";
 import { msg } from "../../messages";
 import { activityAvailable, setPendingChart, setInstanceChart } from "../../activity";
+import { NO_PING } from "../utils/targetLine";
 import type { Chart } from "../../simai/types";
 
 /** 첨부 파일 크기 상한. 공식 길이의 maidata.txt 도 수십 KB 라 넉넉하다. */
@@ -337,17 +338,18 @@ function judgeLoss(s: Chart["stats"]): { tapGreat: number; break75: number; brea
   return { tapGreat: weight > 0 ? (0.2 / weight) * 100 : 0, break75: 0.25 * bonus, break50: 0.5 * bonus };
 }
 
-/** 실행한 사람의 이 보면 기록 한 줄. 연동하지 않았으면 null. */
+/** 실행한 사람의 이 보면 기록 한 줄("@대상 기록 …", 멘션 알림은 NO_PING 으로 끈다). 연동하지 않았으면 null. */
 async function myRecordLine(userId: string, title: string, kind: string, diff: string): Promise<string | null> {
   try {
     const fc = await getUserFriendCode(userId);
     const p = fc ? await getCachedProfile(fc) : null;
     if (!p) return null;
     const r = getClearList(p).find((c) => c.title === title && c.musicKind === kind && c.diff === diff);
-    if (!r || r.achievementVal <= 0) return msg("chart.myRecordNone");
+    const user = `<@${userId}>`;
+    if (!r || r.achievementVal <= 0) return msg("chart.myRecordNone", { user });
     const stars = r.dxScoreMax ? dxStars(((r.dxScore ?? 0) / r.dxScoreMax) * 100) : 0;
     const marks = [rankIcon(getScoreRank(r.achievementVal)), comboIcon(r.fc), syncIcon(r.sync), dxStarIcon(stars)];
-    return msg("chart.myRecord", { achievement: `${r.achievementVal.toFixed(4)}%`, marks: marks.filter(Boolean).join(" ") });
+    return msg("chart.myRecord", { user, achievement: `${r.achievementVal.toFixed(4)}%`, marks: marks.filter(Boolean).join(" ") });
   } catch (e) {
     console.error("[보면] 내 기록 조회 실패:", e);
     return null;
@@ -358,7 +360,7 @@ async function myRecordLine(userId: string, title: string, kind: string, diff: s
  * 곡 정보·노트 수·내 기록·미리보기 GIF 를 Components V2 컨테이너로 만든다. 파일/곡 어느 쪽으로 왔든 같다.
  * userId: 보는 사람(번역 설정·내 기록·난이도 버튼 주인). asked: 미리보기 시작 시각(초).
  */
-async function chartPayload(userId: string, asked: number | null, x: ReplyInput): Promise<{ components: ContainerBuilder[]; files: AttachmentBuilder[]; flags: MessageFlags.IsComponentsV2 }> {
+async function chartPayload(userId: string, asked: number | null, x: ReplyInput): Promise<{ components: ContainerBuilder[]; files: AttachmentBuilder[]; flags: MessageFlags.IsComponentsV2 } & typeof NO_PING> {
   const url = `${getBaseUrl(PORT)}/chart?id=${x.id}`;
   const s = x.chart.stats;
   // 곡명 한국어 번역: 실행 유저의 표시 설정(translate_titles)이 켜져 있고 번역 별명이
@@ -471,5 +473,5 @@ async function chartPayload(userId: string, asked: number | null, x: ReplyInput)
   const diffs = difficultyRow(userId, x);
   if (diffs) container.addActionRowComponents(diffs);
 
-  return { components: [container], files, flags: MessageFlags.IsComponentsV2 };
+  return { components: [container], files, flags: MessageFlags.IsComponentsV2, ...NO_PING };
 }

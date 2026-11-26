@@ -36,6 +36,7 @@ carol/
 | simai 채보 파싱 | `src/simai/parse.ts` | maidata.txt -> 타임라인. 순수 함수, 유닛 테스트 있음. |
 | 채보 플레이어 페이지 | `src/web/chartPlayer.ts` | 페이지 껍데기. 그리기 코어는 `chartRenderer.ts`. |
 | 노트 그리기 코어 | `src/web/chartRenderer.ts` | 브라우저와 서버(GIF)가 공용. 템플릿 문자열이라 백틱 금지. |
+| 플레이어 타격음 | `src/web/chartSound.ts`, `assets/sounds/` | 웹·Activity·풀영상 공용(`SOUND_JS`·`guideMix`). 파일은 CC0 만. 영상 소리를 바꾸면 `chartVideoQueue.ts` `RENDER_VERSION` 을 올린다. |
 | 디스코드 Activity 플레이어 | `src/web/activityPage.ts`, `src/activity.ts` | `/보면` "디스코드에서 보기"(`chartact:`). 인라인 스크립트 금지(CSP), SDK 는 빌드 때 묶음(`scripts/build-activity-sdk.js`). |
 | 채보 공급원 추상화 | `src/simai/source.ts` | `registry:` / `mainotes:` 키로 채보를 찾는다. 공급원 추가·제거는 여기만 건드린다. |
 | mai-notes 메타데이터 | `src/mainotes/` | manifest.json 사본(곡·난이도·정수). **채보 본문은 받지 않는다** — 아래 제약 참고. |

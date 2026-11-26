@@ -18,6 +18,8 @@ src/web/
 ├── chartPlayer.ts   # simai 채보 플레이어 페이지 껍데기 (HTML/CSS + 컨트롤)
 ├── chartRenderer.ts # 플레이어 그리기 코어를 담은 JS 문자열 (서버 GIF 생성과 공용)
 ├── activityPage.ts  # 디스코드 Activity 보면 플레이어(/activity + /activity/*.js·css, 인라인 스크립트 없음)
+├── chartSound.ts    # 플레이어 타격음 JS 문자열(SOUND_JS) + 서버용 WAV 읽기·영상 가이드음 섞기(guideMix)
+├── soundLabPage.ts  # npm run preview → /sounds 효과음 후보 비교(미리보기 전용)
 ├── guidePage.ts     # /sync 추가 북마클릿 설치 안내
 ├── preview.ts       # npm run preview: 가짜 데이터로 모든 페이지·북마클릿 오버레이를 띄우는 디자인 미리보기 (운영 서버는 안 씀)
 └── dev.ts           # web-only local entrypoint

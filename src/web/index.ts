@@ -22,6 +22,7 @@ import { aliasAdminPage } from "./aliasAdminPage";
 import { artistAliasAdminPage } from "./artistAliasAdminPage";
 import { chartPlayerPage, chartNotFoundPage, type ChartPlayerData } from "./chartPlayer";
 import { activityPage, activityAsset } from "./activityPage";
+import { HIT_SOUND_PATH, hitSoundWav } from "./chartSound";
 import { chartForInstance, setInstanceChart, verifyInstance, allowOpen, isActivityId } from "../activity";
 import { searchAllCharts } from "../simai/chartSearch";
 import { chartFromKey } from "../bot/commands/chart";
@@ -269,6 +270,15 @@ export function startWebServer(port: number): void {
         return;
       }
       res.writeHead(405); res.end();
+      return;
+    }
+
+    // 보면 플레이어 타격음(웹 플레이어·Activity, assets/sounds/hit.wav — CC0)
+    if (req.method === "GET" && url.pathname === HIT_SOUND_PATH) {
+      const wav = hitSoundWav();
+      if (!wav) { res.writeHead(404); res.end(); return; }
+      res.writeHead(200, { "content-type": "audio/wav", "content-length": wav.length, "cache-control": "public, max-age=86400" });
+      res.end(wav);
       return;
     }
 

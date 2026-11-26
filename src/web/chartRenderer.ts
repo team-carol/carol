@@ -895,6 +895,8 @@ var actx = null, audioEl = null, audioReady = false, audioWarm = false;
 function ensureAudio(){
   if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
   if (actx.state === 'suspended') actx.resume();
+  // 타격음 파일을 미리 받아 둔다(chartSound.ts SOUND_JS 가 같이 실려 있을 때).
+  if (typeof carolLoadHits === 'function') carolLoadHits(actx);
   if (!audioWarm){
     var wg = actx.createGain(); wg.gain.value = 0.0001;
     var wo = actx.createOscillator(); wo.connect(wg); wg.connect(actx.destination);
@@ -903,15 +905,19 @@ function ensureAudio(){
   }
   return actx;
 }
-function click(kind, isEx){
+function click(kind, isEx, note){
   if (!sound) return;
   ensureAudio();
+  // 타격음(chartSound.ts SOUND_JS: TOUCH 는 박수 합성음, 나머지는 hit.wav). 파일을 아직 못 받았으면 아래 비프로 대신한다.
+  if (typeof carolPlayHit === 'function' && carolPlayHit(actx, kind, isEx, note)) return;
+  var hv = typeof CAROL_HIT !== 'undefined' ? CAROL_HIT.volume : 1;
+  if (!(hv > 0)) return;
   var o = actx.createOscillator(), g = actx.createGain();
   var f = kind === 'break' ? 1500 : kind === 'slide' ? 720 : 1050;
   if (isEx) f *= 1.5;   // EX 노트는 가이드음을 한 옥타브 반 높게
   o.frequency.value = f;
   o.type = 'square';
-  g.gain.setValueAtTime(0.14, actx.currentTime);
+  g.gain.setValueAtTime(0.14 * hv, actx.currentTime);
   g.gain.exponentialRampToValueAtTime(0.0008, actx.currentTime + 0.05);
   o.connect(g); g.connect(actx.destination);
   o.start(); o.stop(actx.currentTime + 0.055);
@@ -930,7 +936,8 @@ function frame(now){
     if (t < prev) soundIdx = firstAtOrAfter(t);
     while (soundIdx < NOTES.length && NOTES[soundIdx].timeMs <= t){
       var sn = NOTES[soundIdx];
-      if (sn.timeMs > prev) click(sn.isBreak ? 'break' : sn.type === 'slide' ? 'slide' : 'tap', sn.isEx);
+      // 세 번째 인자(노트)는 효과음을 노트 종류별로 고르는 쪽(효과음 비교 페이지 등)이 쓴다.
+      if (sn.timeMs > prev) click(sn.isBreak ? 'break' : sn.type === 'slide' ? 'slide' : 'tap', sn.isEx, sn);
       soundIdx++;
     }
     if (t >= END) { t = END; pause(); }
@@ -1196,7 +1203,28 @@ toggle(document.getElementById('tSound'), function(){ return sound; }, function(
 toggle(document.getElementById('tGuide'), function(){ return guide; }, function(v){ guide = v; });
 toggle(document.getElementById('tMirror'), function(){ return mirror; }, function(v){ mirror = v; cache = {}; });
 
-document.getElementById('audio').onchange = function(e){
+// 타격음 크기(웹 플레이어·Activity 설정, 0~150%). 이 브라우저에 기억한다. 타격음 코드(chartSound.ts)가 실린 페이지만.
+var hvolEl = document.getElementById('hvol'), hvolv = document.getElementById('hvolv');
+if (hvolEl && typeof carolSetHitVolume === 'function'){
+  try {
+    var savedHv = window.localStorage ? window.localStorage.getItem('carol-hit-volume') : null;
+    if (savedHv !== null && !isNaN(parseFloat(savedHv))) hvolEl.value = savedHv;
+  } catch (e) {}
+  var applyHv = function(){
+    var hp = parseFloat(hvolEl.value);
+    carolSetHitVolume(hp / 100);
+    if (hvolv) hvolv.textContent = Math.round(hp) + '%';
+  };
+  applyHv();
+  hvolEl.oninput = function(){
+    applyHv();
+    try { window.localStorage.setItem('carol-hit-volume', hvolEl.value); } catch (e) {}
+  };
+}
+
+// 음원 고르기는 웹 플레이어에만 있다(디스코드 Activity 화면에는 없음).
+var audioInput = document.getElementById('audio');
+if (audioInput) audioInput.onchange = function(e){
   var f = e.target.files && e.target.files[0];
   if (!f) return;
   if (!audioEl) audioEl = new Audio();
