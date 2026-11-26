@@ -57,6 +57,7 @@ import { guardSlowAck } from "./utils/slowAck";
 import { handleTrackButton } from "./utils/trackDetail";
 import { loadRankImages } from "../rankImages";
 import { loadCommandOverrides, getCommandOverride, applyOverride, setCommandDefinitions, setLiveCommandNames, keyForName, canonicalOptionNames, type CommandJson } from "../commandOverrides";
+import { setActivityAvailable, entryPointCommands, APPLICATION_FLAG_EMBEDDED } from "../activity";
 
 type Command = { data: { toJSON(): object; name: string }; execute: (i: ChatInputCommandInteraction) => Promise<void>; autocomplete?: (i: AutocompleteInteraction) => Promise<void> };
 
@@ -103,14 +104,23 @@ client.on(Events.ShardError, (error) => console.error("[discord] shard error:", 
 /**
  * 슬래시 명령을 디스코드에 등록한다. /관리 → 명령어 탭에서 바꾼 이름·설명·옵션 순서를 입혀 올리고(src/commandOverrides.ts),
  * 올린 이름 → 명령 키 표를 라우팅에 쓴다. 관리 페이지의 "디스코드에 반영" 도 이 함수를 부른다.
+ * 개발자 포털에서 Activity 를 켰는지도 여기서 본다(켜져 있으면 /보면 에 "디스코드에서 보기" 버튼, src/activity.ts).
  */
 async function syncCommands(): Promise<void> {
   const rest = new REST({ version: "10" }).setToken(CONFIG.token);
+  try {
+    const app = (await rest.get(Routes.currentApplication())) as { flags?: number };
+    setActivityAvailable(((app.flags ?? 0) & APPLICATION_FLAG_EMBEDDED) !== 0);
+  } catch (e) {
+    console.warn("[activity] 애플리케이션 정보 조회 실패:", (e as Error).message);
+  }
   const route = CONFIG.guildId
     ? Routes.applicationGuildCommands(CONFIG.clientId, CONFIG.guildId)
     : Routes.applicationCommands(CONFIG.clientId);
   const body = COMMANDS.map((cmd) => applyOverride(cmd.data.toJSON() as CommandJson, getCommandOverride(cmd.data.name)));
-  await rest.put(route, { body: [...body, report.contextData.toJSON()] });
+  // 전역 덮어쓰기는 모든 종류의 명령을 덮어쓴다. Activity 를 켜면 디스코드가 만드는 Entry Point(Launch) 명령을 같이 올린다(길드 명령은 Entry Point 가 없다).
+  const keep = CONFIG.guildId ? [] : entryPointCommands((await rest.get(route)) as Record<string, unknown>[]);
+  await rest.put(route, { body: [...body, report.contextData.toJSON(), ...keep] });
   setLiveCommandNames(new Map(body.map((b, k) => [b.name, COMMANDS[k].data.name])));
 }
 
@@ -404,6 +414,11 @@ client.on(Events.InteractionCreate, async (i) => {
   if (i.isButton()) {
     if (i.customId.startsWith("report:")) {
       try { await report.handleButton(i); } catch (e) { console.error("[report-btn]", e); }
+      return;
+    }
+    // /보면 "디스코드에서 보기": 첫 응답이 Activity 띄우기여야 해서 대신 defer(guardSlowAck) 하기 전에 처리한다.
+    if (i.customId.startsWith("chartact:")) {
+      try { await chart.handleActivityButton(i); } catch (e) { console.error("[chart-activity-btn]", e); }
       return;
     }
     // 프로필을 읽는 버튼도 늦어지면 대신 defer 한다. 원래 메시지를 고치는 버튼은 deferUpdate.

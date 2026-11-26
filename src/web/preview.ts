@@ -23,6 +23,7 @@ import { importBookmarkletPage } from "./importPage";
 import { patchNotesAdminPage } from "./patchNotesAdminPage";
 import { privacyPage, termsPage } from "./legalPages";
 import { chartPlayerPage, chartNotFoundPage } from "./chartPlayer";
+import { activityPage, activityAsset } from "./activityPage";
 import { buildBookmarklet, buildBookmarkletJs, setBaseUrl } from "./bookmarklet";
 import { OPTION_CLIENT_JS, buildOptionBookmarklet } from "./optionPreset";
 import { IMPORT_CLIENT_JS } from "./importClient";
@@ -188,7 +189,7 @@ function indexPage(): string {
   const groups: [string, [string, string][]][] = [
     ["사용자 페이지", [["/sync", "추가 북마클릿 설치 안내"], ["/settings", "설정"], ["/options", "게임 설정"]]],
     ["관리 페이지", [["/admin/aliases", "곡 별명"], ["/admin/artists", "아티스트 별명"], ["/admin/names", "이름 번역"], ["/admin/messages", "봇 문구"], ["/admin/commands", "명령어"], ["/admin/import", "채보 등록"], ["/admin/patch-notes", "패치노트"]]],
-    ["공개 페이지", [["/chart", "채보 플레이어"], ["/chart/missing", "채보 없음"], ["/terms", "이용약관"], ["/privacy", "개인정보처리방침"]]],
+    ["공개 페이지", [["/chart", "채보 플레이어"], ["/chart/missing", "채보 없음"], ["/activity", "Activity 플레이어"], ["/activity?pick=1", "Activity 보면 고르기"], ["/terms", "이용약관"], ["/privacy", "개인정보처리방침"]]],
     ["북마클릿 오버레이", [["/maimai-mobile/", "가짜 DX NET — 추가 북마클릿·옵션 프리셋"], ["/maimai-mobile/home/userOption/updateUserOption/", "가짜 DX NET 옵션 페이지"], ["/simai/pages/32.html", "가짜 simai wiki — 채보 등록"]]],
   ];
   return `<!DOCTYPE html><html lang="ko"><head>${pageHead("디자인 미리보기 · 캐롤봇")}
@@ -256,6 +257,26 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse): Prom
   if (get && path === "/admin/patch-notes") return html(res, patchNotesAdminPage(TOKEN, patchNotes, "2.2.0"));
   if (get && path === "/terms") return html(res, termsPage());
   if (get && path === "/privacy") return html(res, privacyPage());
+  // 디스코드 Activity 플레이어. 디스코드 밖이라 SDK 없이 돌고, 보면 고르기는 가짜 검색 결과를 쓴다.
+  if (get && path === "/activity") {
+    const data = url.searchParams.get("pick") && !url.searchParams.get("chart") ? null : { id: "preview", title: "Preview Song", artist: "team carol", designer: "carol", level: "13+", difficulty: 4, chart: sampleChart };
+    return html(res, activityPage({ clientId: "0", data, loadedAt: Date.now() }));
+  }
+  if (get && path.startsWith("/activity/")) {
+    const asset = activityAsset(path);
+    return asset ? send(res, 200, asset.type, asset.body) : send(res, 404, "text/plain", "");
+  }
+  if (get && path === "/api/activity/state") return json(res, { chart: null, at: null });
+  if (get && path === "/api/activity/search") {
+    const q = (url.searchParams.get("q") || "").trim();
+    const all = [
+      { key: "p:1", title: "Preview Song", artist: "team carol", difficulty: 4, level: "13+", type: "deluxe" },
+      { key: "p:2", title: "Preview Song", artist: "team carol", difficulty: 3, level: "11", type: "deluxe" },
+      { key: "p:3", title: "아주 긴 제목의 곡 이름이 여기에 들어가면 어떻게 보이는지 확인하는 곡", artist: "아티스트 이름도 길게 길게 길게", difficulty: 5, level: "14+", type: "standard" },
+    ];
+    return json(res, { ok: true, items: q ? all : [] });
+  }
+  if (post && path === "/api/activity/open") return json(res, { ok: true, id: "preview" });
   if (get && path === "/chart") return html(res, chartPlayerPage({ id: "preview", title: "Preview Song", artist: "team carol", designer: "carol", level: "13+", difficulty: 4, chart: sampleChart }));
   if (get && path === "/chart/missing") return html(res, chartNotFoundPage("채보를 찾을 수 없습니다", "링크가 잘못됐거나, 업로드된 채보의 보관 기간이 지났습니다."), 404);
 

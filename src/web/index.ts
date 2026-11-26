@@ -20,7 +20,11 @@ import { getAllSongTitles, getAllArtists } from "../constants";
 import { settingsPage } from "./settingsPage";
 import { aliasAdminPage } from "./aliasAdminPage";
 import { artistAliasAdminPage } from "./artistAliasAdminPage";
-import { chartPlayerPage, chartNotFoundPage } from "./chartPlayer";
+import { chartPlayerPage, chartNotFoundPage, type ChartPlayerData } from "./chartPlayer";
+import { activityPage, activityAsset } from "./activityPage";
+import { chartForInstance, setInstanceChart, verifyInstance, allowOpen, isActivityId } from "../activity";
+import { searchAllCharts } from "../simai/chartSearch";
+import { chartFromKey } from "../bot/commands/chart";
 import { parseMaidata } from "../simai/parse";
 import { sanitizeSong, buildMaidata, atwikiChartId, parseAtwikiId } from "../simai/atwiki";
 import { loadRegistryIndex } from "../simai/registryIndex";
@@ -200,6 +204,71 @@ export function startWebServer(port: number): void {
         id: row.id, title: row.title, artist: row.artist, designer: row.designer,
         level: row.level, difficulty: row.difficulty, chart,
       }));
+      return;
+    }
+
+    // ─── 디스코드 Activity 보면 플레이어 (activityPage.ts, src/activity.ts) ─────────
+    // 개발자 포털 URL 매핑의 루트(/ → 이 서버)로 열리면 주소에 frame_id 가 붙어 온다. /activity 로 보낸다(쿼리 그대로).
+    if (req.method === "GET" && url.pathname === "/" && url.searchParams.has("frame_id")) {
+      res.writeHead(302, { Location: `/activity${url.search}`, "cache-control": "no-store" });
+      res.end();
+      return;
+    }
+    if (req.method === "GET" && url.pathname === "/activity") {
+      const instanceId = url.searchParams.get("instance_id") || "";
+      const channelId = url.searchParams.get("channel_id") || "";
+      const wanted = (url.searchParams.get("chart") || "").trim();
+      const loadedAt = Date.now();
+      const id = wanted || chartForInstance(isActivityId(instanceId) ? instanceId : "", isActivityId(channelId) ? channelId : "", loadedAt)?.chartId || "";
+      let data: ChartPlayerData | null = null;
+      if (id) {
+        try {
+          const loaded = await loadChart(id);
+          if (loaded) data = { id: loaded.row.id, title: loaded.row.title, artist: loaded.row.artist, designer: loaded.row.designer, level: loaded.row.level, difficulty: loaded.row.difficulty, chart: loaded.chart };
+        } catch (e) {
+          console.error("[activity] 채보 불러오기 실패:", e);
+        }
+      }
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
+      res.end(activityPage({ clientId: CONFIG.clientId, data, loadedAt }));
+      return;
+    }
+    if (req.method === "GET" && url.pathname.startsWith("/activity/")) {
+      const asset = activityAsset(url.pathname);
+      if (!asset) { res.writeHead(404); res.end(); return; }
+      res.writeHead(200, { "content-type": asset.type, "cache-control": url.pathname === "/activity/sdk.js" ? "public, max-age=3600" : "no-cache" });
+      res.end(asset.body);
+      return;
+    }
+    if (url.pathname === "/api/activity/state" || url.pathname === "/api/activity/search" || url.pathname === "/api/activity/open") {
+      const json = (status: number, body: unknown) => { res.writeHead(status, { "content-type": "application/json", "cache-control": "no-store" }); res.end(JSON.stringify(body)); };
+      const instanceId = url.searchParams.get("instance_id") || "";
+      const channelId = url.searchParams.get("channel_id") || "";
+      if (req.method === "GET" && url.pathname === "/api/activity/state") {
+        const hit = chartForInstance(isActivityId(instanceId) ? instanceId : "", isActivityId(channelId) ? channelId : "");
+        json(200, { chart: hit?.chartId ?? null, at: hit?.at ?? null });
+        return;
+      }
+      // 검색·열기는 진짜 Activity 인스턴스에서만(mai-notes 본문을 처음 받는 요청이 섞여 있다).
+      if (!(await verifyInstance(instanceId))) { json(403, { ok: false, error: "디스코드 Activity 안에서만 쓸 수 있습니다." }); return; }
+      if (req.method === "GET" && url.pathname === "/api/activity/search") {
+        const q = (url.searchParams.get("q") || "").trim().slice(0, 100);
+        const items = q ? searchAllCharts(q, 30).map((h) => ({ key: h.key, title: h.title, artist: h.artist, difficulty: h.difficulty, level: h.level, type: h.type })) : [];
+        json(200, { ok: true, items });
+        return;
+      }
+      if (req.method === "POST" && url.pathname === "/api/activity/open") {
+        let key = "";
+        try { key = String((JSON.parse(await readBody(req, 4096)) as { key?: unknown }).key ?? ""); } catch { /* 아래에서 거절 */ }
+        if (!key || key.length > 200) { json(400, { ok: false, error: "보면을 다시 골라 주세요." }); return; }
+        if (!allowOpen(instanceId)) { json(429, { ok: false, error: "잠시 뒤 다시 골라 주세요." }); return; }
+        const x = await chartFromKey(key);
+        if (typeof x === "string") { json(200, { ok: false, error: x }); return; }
+        setInstanceChart(instanceId, x.id);
+        json(200, { ok: true, id: x.id });
+        return;
+      }
+      res.writeHead(405); res.end();
       return;
     }
 

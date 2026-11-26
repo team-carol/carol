@@ -21,6 +21,7 @@ import type { PlayRecord } from "../../scraper";
 import { getBaseUrl } from "../../web/bookmarklet";
 import { PORT } from "../../config";
 import { msg } from "../../messages";
+import { activityAvailable, setPendingChart, setInstanceChart } from "../../activity";
 import type { Chart } from "../../simai/types";
 
 /** 첨부 파일 크기 상한. 공식 길이의 maidata.txt 도 수십 KB 라 넉넉하다. */
@@ -202,8 +203,8 @@ interface ReplyInput {
   key?: string;
 }
 
-/** 곡 이름으로 고른 채보(검색 키) → 응답 재료. 처음 보는 채보는 저장한다. 못 보여 주면 안내 문구. */
-async function chartFromKey(pick: string): Promise<ReplyInput | string> {
+/** 곡 이름으로 고른 채보(검색 키) → 응답 재료. 처음 보는 채보는 저장한다. 못 보여 주면 안내 문구. Activity 보면 고르기(웹)도 쓴다. */
+export async function chartFromKey(pick: string): Promise<ReplyInput | string> {
   try {
     const found = await resolveChart(pick);
     const parsed = parseMaidata(found.maidata);
@@ -282,6 +283,27 @@ export async function handleDifficultyButton(i: ButtonInteraction): Promise<void
     return;
   }
   await i.editReply({ ...(await chartPayload(i.user.id, null, x)), attachments: [] });
+}
+
+/**
+ * "디스코드에서 보기"(chartact:<채보 id>): 보면 플레이어를 디스코드 Activity 로 띄운다(src/activity.ts, src/web/activityPage.ts).
+ * 응답에 보면을 실을 수 없어, 먼저 이 채널에 보면을 걸어 두고 응답으로 받은 인스턴스에도 묶는다. 누구나 누를 수 있다.
+ */
+export async function handleActivityButton(i: ButtonInteraction): Promise<void> {
+  const id = i.customId.slice("chartact:".length);
+  if (!activityAvailable()) {
+    await i.reply({ content: msg("chart.activityUnavailable"), flags: MessageFlags.Ephemeral });
+    return;
+  }
+  if (i.channelId) setPendingChart(i.channelId, id);
+  try {
+    const res = await i.launchActivity({ withResponse: true });
+    const instanceId = res.resource?.activityInstance?.id ?? res.interaction.activityInstanceId;
+    if (instanceId) setInstanceChart(instanceId, id);
+  } catch (e) {
+    console.error("[보면] Activity 띄우기 실패:", e);
+    if (!i.replied && !i.deferred) await i.reply({ content: msg("chart.activityFailed"), flags: MessageFlags.Ephemeral }).catch(() => {});
+  }
 }
 
 /** 보면 제작자(원본 페이지 링크). 출처 사이트는 아래 출처 줄에 링크로 걸리므로, 제작자를 모르면 줄을 뺀다. */
@@ -432,6 +454,10 @@ async function chartPayload(userId: string, asked: number | null, x: ReplyInput)
   );
   if (linkButton) {
     row.addComponents(new ButtonBuilder().setStyle(ButtonStyle.Link).setURL(url).setLabel(msg("chart.playButton")));
+  }
+  // 디스코드 안에서 보기(Activity). 개발자 포털에서 Activity 를 켠 애플리케이션만.
+  if (activityAvailable()) {
+    row.addComponents(new ButtonBuilder().setStyle(ButtonStyle.Primary).setCustomId(`chartact:${x.id}`).setLabel(msg("chart.activityButton")));
   }
   if (inCatalog) {
     const q = encodeURIComponent(`maimai ${x.title} ${kind} ${diffName ?? ""} 外部出力`.replace(/\s+/g, " ").trim());

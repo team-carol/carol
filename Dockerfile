@@ -6,7 +6,9 @@ COPY package.json package-lock.json ./
 RUN npm ci
 COPY tsconfig.json ./
 COPY src/ ./src/
-RUN npx tsc
+# Activity 페이지용 Embedded App SDK 묶기(scripts/build-activity-sdk.js → dist/web/activity-sdk.js)
+COPY scripts/build-activity-sdk.js ./scripts/
+RUN npm run build
 
 # Stage 2: Production
 FROM node:22-slim AS production
