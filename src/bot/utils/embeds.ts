@@ -59,6 +59,9 @@ import type { PlayRecord, ChartMarks, MaimaiServer, MapArea } from "../../scrape
 import { msg } from "../../messages";
 import { NO_PING } from "./targetLine";
 import { versionPositionText } from "./versionPosition";
+import { activityAvailable, activityLink } from "../../activity";
+import { songCharts, songChartId } from "../../simai/songChart";
+import { CONFIG } from "../../config";
 
 // 곡 자켓 버퍼: DB 캐시 → maimai net(musicId) → 카탈로그 재킷(title) 순으로 확보하고 캐시
 export async function jacketBuffer(r: PlayRecord): Promise<Buffer | null> {
@@ -508,6 +511,10 @@ export function getSearchCtx(token: string): SearchCtx | undefined {
 // 긴 쪽 값은 늘 1 로 시작하므로(상수 10~15, 달성률 100~101%) 모자란 첫 자리는 "1" 폭에 가까운 공백으로 채운다.
 const PAD_ONE = "\u2004"; // 1/3em
 const PAD_ONE_BOLD = "\u2005\u2006"; // 1/4em + 1/6em
+// 배지 모양 상수 칸과 "채보 보기" 링크 사이(2em). 링크 끝이 아래 달성률·마크 줄 끝 언저리에 온다.
+const LINK_GAP = "\u2003\u2003";
+// 배지 모양 점수표에서 난이도 사이에 넣는 보이지 않는 작은 글씨 한 줄(컴포넌트를 늘리지 않는다).
+const ROW_SEP = "\n-# \u2800\n";
 
 /** 점수표 숫자 칸 맞춤: 정수부가 width 자리보다 짧으면 앞을 채운다(첫 자리는 one, 나머지는 숫자 폭 공백 U+2007). 숫자로 시작하지 않으면 그대로. */
 function padDigits(text: string, width: number, one: string): string {
@@ -652,26 +659,39 @@ export async function searchResultEmbeds(
       const lvs = padColumn(rows.map((x) => x.lv)) ?? rows.map((x) => padDigits(x.lv, 2, PAD_ONE));
       const played = rows.flatMap((x) => (x.achievement !== undefined ? [x.achievement] : []));
       const achs = padColumn(played, 700) ?? played.map((a) => padDigits(a, 3, PAD_ONE_BOLD));
+      // "채보 보기": 그 난이도의 채보(mai-notes·운영자 등록분)가 있으면 디스코드 Activity 링크(보면 플레이어)를 상수 줄 끝에 단다.
+      // 링크의 custom_id 로 Activity 페이지가 곡·난이도를 안다(src/simai/songChart.ts). 미리보기 카드는 <> 로 끈다(메시지 문구).
+      const charts = activityAvailable() && (musicKind === "ST" || musicKind === "DX") ? songCharts(title, musicKind) : null;
+      const links = rows.map((x) => {
+        const n = DIFF_ORDER.indexOf(x.d) + 1;
+        return charts?.has(n) ? msg("searchResult.chartLink", { url: activityLink(CONFIG.clientId, songChartId(title, musicKind, n)) }) : "";
+      });
       // 배지 모양: 상수는 굵게 왼쪽 정렬(배지가 4칸으로 같아 한 열에서 시작한다), 달성률은 굵게 왼쪽 정렬하고 뒤를 채워
       // 마크가 줄마다 같은 자리에 오게 한다.
       const bold = (c: string) => `**${c}**`;
-      const badgeLvs = rows.map((x) => bold(x.lv));
+      // 링크가 있으면 상수 칸 뒤를 채워 링크가 줄마다 같은 자리(달성률 줄 끝 언저리)에 오게 한다.
+      const badgeLvs = (links.some(Boolean) ? padColumn(rows.map((x) => x.lv), 700, { align: "left", wrap: bold }) : null) ?? rows.map((x) => bold(x.lv));
       const badgeAchs = padColumn(played, 700, { align: "left", wrap: bold }) ?? played.map(bold);
       let k = 0;
       // 난이도·랭크·FC/AP·FS/FDX·DX ✦ 는 이모지로. 모바일에서 한 줄에 들어가게 코드 블록·인라인 코드는 쓰지 않는다.
       // 난이도는 DX NET 난이도 그림 배지(여러 칸)와 상수를 한 줄에 두고 달성률·마크를 다음 줄에 쓴다(배지 뒤에 다 이으면
       // 모바일에서 기록이 줄바꿈된다). 배지는 모두 4칸으로 맞춰(모자라면 투명 빈칸) 상수가 한 열에 온다. 메시지 글자 수
-      // 한도를 넘을 페이지는 아래에서 한 칸 약자 이모지(한 줄)로 돌아간다.
+      // 한도를 넘을 페이지는 아래에서 한 칸 약자 이모지(한 줄)로, 그래도 넘치면 링크 없이 돌아간다.
       const badgeLines: string[] = [];
       const shortLines: string[] = [];
+      const plainLines: string[] = [];
       rows.forEach((x, i) => {
         const badge = diffBadgeEmoji(x.d, BADGE_WIDTH);
+        const badgeLink = links[i] ? LINK_GAP + links[i] : "";
+        const shortLink = links[i] ? " " + links[i] : "";
         if (x.achievement === undefined) {
-          badgeLines.push(msg("searchResult.badgeRowNotPlayed", { diff: badge, constant: badgeLvs[i] }));
-          shortLines.push(msg("searchResult.rowNotPlayed", { diff: diffEmoji(x.d), constant: lvs[i] }));
+          badgeLines.push(msg("searchResult.badgeRowNotPlayed", { diff: badge, constant: badgeLvs[i], link: badgeLink }));
+          shortLines.push(msg("searchResult.rowNotPlayed", { diff: diffEmoji(x.d), constant: lvs[i], link: shortLink }));
+          plainLines.push(msg("searchResult.rowNotPlayed", { diff: diffEmoji(x.d), constant: lvs[i], link: "" }));
         } else {
-          badgeLines.push(msg("searchResult.badgeRow", { diff: badge, constant: badgeLvs[i], achievement: badgeAchs[k], marks: x.icons }));
-          shortLines.push(msg("searchResult.row", { diff: diffEmoji(x.d), constant: lvs[i], achievement: achs[k], marks: x.marks }));
+          badgeLines.push(msg("searchResult.badgeRow", { diff: badge, constant: badgeLvs[i], achievement: badgeAchs[k], marks: x.icons, link: badgeLink }));
+          shortLines.push(msg("searchResult.row", { diff: diffEmoji(x.d), constant: lvs[i], achievement: achs[k], marks: x.marks, link: shortLink }));
+          plainLines.push(msg("searchResult.row", { diff: diffEmoji(x.d), constant: lvs[i], achievement: achs[k], marks: x.marks, link: "" }));
           k++;
         }
       });
@@ -742,17 +762,17 @@ export async function searchResultEmbeds(
           .setLabel(msg("searchResult.externalButton"))
           .setStyle(ButtonStyle.Link),
       );
-      return { container, actions, headingLength: heading.length, badgeLines, short: shortLines.join("\n") };
+      return { container, actions, headingLength: heading.length, badge: badgeLines.join(ROW_SEP), short: shortLines.join("\n"), plain: plainLines.join("\n") };
     }),
   );
-  // 컴포넌트 메시지는 글이 모두 합쳐 4000자까지다(이모지는 코드 30자 남짓). 난이도 배지로 넘칠 것 같으면 이 페이지는 한 칸 약자로.
-  const badgeLength = author.length + built.reduce((n, b) => n + b.headingLength + b.badgeLines.join("\n-# \u2800\n").length, 0);
-  const useBadge = badgeLength <= TEXT_LIMIT;
+  // 컴포넌트 메시지는 글이 모두 합쳐 4000자까지다(이모지는 코드 30자 남짓, 채보 보기 링크는 90자 남짓).
+  // 난이도 배지로 넘칠 것 같으면 이 페이지는 한 칸 약자로, 그래도 넘치면 링크를 뺀다.
+  const pageLength = (pick: (b: (typeof built)[number]) => string) => author.length + built.reduce((n, b) => n + b.headingLength + pick(b).length, 0);
+  const layout: "badge" | "short" | "plain" = pageLength((b) => b.badge) <= TEXT_LIMIT ? "badge" : pageLength((b) => b.short) <= TEXT_LIMIT ? "short" : "plain";
   for (const b of built) {
-    // 난이도 사이에는 보이지 않는 작은 글씨 한 줄(-# U+2800)을 넣어 칸마다 구분한다(컴포넌트를 늘리지 않는다).
     b.container
       .addSeparatorComponents((s) => s.setSpacing(SeparatorSpacingSize.Small))
-      .addTextDisplayComponents((t) => t.setContent(useBadge ? b.badgeLines.join("\n-# \u2800\n") : b.short))
+      .addTextDisplayComponents((t) => t.setContent(b[layout]))
       .addSeparatorComponents((s) => s.setSpacing(SeparatorSpacingSize.Small))
       .addActionRowComponents(b.actions);
   }

@@ -295,12 +295,15 @@ export const MESSAGES = {
   // 제목 아래 아티스트(작은 글씨). 아티스트를 모르면 이 줄은 빠진다.
   "searchResult.artist": "-# {artist}",
   "searchResult.regionExclusive": "{version} 전용",
-  // 검색 결과 점수표 한 줄. {diff} 난이도 이모지, {constant} 상수, {achievement} 달성률, {marks} 랭크·FC/AP·FS/FDX·DX ✦ 이모지
-  "searchResult.row": "{diff} {constant} ✦ **{achievement}** {marks}",
+  // 검색 결과 점수표 한 줄. {diff} 난이도 이모지, {constant} 상수, {achievement} 달성률, {marks} 랭크·FC/AP·FS/FDX·DX ✦ 이모지,
+  // {link} 그 난이도의 "채보 보기" 링크(searchResult.chartLink, 채보가 없으면 빈 값)
+  "searchResult.row": "{diff} {constant} ✦ **{achievement}** {marks}{link}",
   // 플레이하지 않은 난이도
-  "searchResult.rowNotPlayed": "{diff} {constant} ✦ —",
-  "searchResult.badgeRow": "{diff} {constant}\n{achievement} {marks}",
-  "searchResult.badgeRowNotPlayed": "{diff} {constant}\n—",
+  "searchResult.rowNotPlayed": "{diff} {constant} ✦ —{link}",
+  "searchResult.badgeRow": "{diff} {constant}{link}\n{achievement} {marks}",
+  "searchResult.badgeRowNotPlayed": "{diff} {constant}{link}\n—",
+  // 점수표 난이도 줄 끝의 보면 플레이어(디스코드 Activity) 링크. 주소를 <> 로 감싸 링크 미리보기 카드를 끈다.
+  "searchResult.chartLink": "[채보 보기](<{url}>)",
   "searchResult.externalButton": "▶ 외부출력",
   // 지역 뒤에 붙는 버전·장르. 버전은 지역과 같은 줄, 장르는 다음 줄(글 높이를 재킷 썸네일에 맞춘 줄 수)
   "searchResult.genreSuffix": "\n{genre}",

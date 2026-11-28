@@ -70,6 +70,7 @@ src/bot/
 | `goal:` | `commands/goal.ts` goal list pagination | `goal:{ownerId}:{pageIdx}` (`goal:{ownerId}:page` = inert page counter) |
 | `chartvid:` | `index.ts` 풀영상 버튼 | `chartvid:{chartId}` |
 | `chartact:` | `commands/chart.ts` 디스코드에서 보기(Activity) — `guardSlowAck` 앞에서 처리(첫 응답이 LAUNCH_ACTIVITY) | `chartact:{chartId}` |
+| (Entry Point 명령) | `index.ts` — 앱 실행 메뉴·Activity 링크(/검색 "채보 보기")로 띄우면 오는 type 4 명령. `launchActivity()` 로 답한다(handler 1, `activity.ts`) | — |
 
 ## ANTI-PATTERNS
 

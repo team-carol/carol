@@ -57,7 +57,7 @@ import { guardSlowAck } from "./utils/slowAck";
 import { handleTrackButton } from "./utils/trackDetail";
 import { loadRankImages } from "../rankImages";
 import { loadCommandOverrides, getCommandOverride, applyOverride, setCommandDefinitions, setLiveCommandNames, keyForName, canonicalOptionNames, type CommandJson } from "../commandOverrides";
-import { setActivityAvailable, entryPointCommands, APPLICATION_FLAG_EMBEDDED } from "../activity";
+import { setActivityAvailable, entryPointCommands, APPLICATION_FLAG_EMBEDDED, ENTRY_POINT_APP_HANDLER } from "../activity";
 
 type Command = { data: { toJSON(): object; name: string }; execute: (i: ChatInputCommandInteraction) => Promise<void>; autocomplete?: (i: AutocompleteInteraction) => Promise<void> };
 
@@ -119,9 +119,22 @@ async function syncCommands(): Promise<void> {
     : Routes.applicationCommands(CONFIG.clientId);
   const body = COMMANDS.map((cmd) => applyOverride(cmd.data.toJSON() as CommandJson, getCommandOverride(cmd.data.name)));
   // 전역 덮어쓰기는 모든 종류의 명령을 덮어쓴다. Activity 를 켜면 디스코드가 만드는 Entry Point(Launch) 명령을 같이 올린다(길드 명령은 Entry Point 가 없다).
-  const keep = CONFIG.guildId ? [] : entryPointCommands((await rest.get(route)) as Record<string, unknown>[]);
+  // Entry Point 는 봇이 처리하게 바꿔 올린다(채널에 "게임 초대" 메시지가 남지 않게, src/activity.ts ENTRY_POINT_APP_HANDLER).
+  const globalCommands = (await rest.get(Routes.applicationCommands(CONFIG.clientId))) as Record<string, unknown>[];
+  const keep = CONFIG.guildId ? [] : entryPointCommands(globalCommands);
   await rest.put(route, { body: [...body, report.contextData.toJSON(), ...keep] });
   setLiveCommandNames(new Map(body.map((b, k) => [b.name, COMMANDS[k].data.name])));
+  // 길드 명령으로 올리면(개발 봇) 전역 Entry Point 를 덮어쓰지 않으므로 처리 방식만 고친다.
+  if (CONFIG.guildId) {
+    for (const c of globalCommands) {
+      if (c.type !== 4 || c.handler === ENTRY_POINT_APP_HANDLER) continue;
+      try {
+        await rest.patch(Routes.applicationCommand(CONFIG.clientId, String(c.id)), { body: { handler: ENTRY_POINT_APP_HANDLER } });
+      } catch (e) {
+        console.warn("[activity] Entry Point 처리 방식 변경 실패:", (e as Error).message);
+      }
+    }
+  }
 }
 
 /**
@@ -352,6 +365,17 @@ client.on(Events.InteractionCreate, async (i) => {
     if (!cmd?.autocomplete) { try { await i.respond([]); } catch { /* 이미 만료 */ } return; }
     restoreOptionNames(i, cmd.data.name);
     try { await cmd.autocomplete(i); } catch (e) { console.error(`[autocomplete:${i.commandName}]`, e); }
+    return;
+  }
+  // Activity 실행(앱 실행 메뉴, /검색 "채보 보기" 같은 Activity 링크). Entry Point 를 봇이 처리하게 해 두었다(src/activity.ts).
+  // 어떤 보면인지는 Activity 페이지가 링크의 custom_id·인스턴스로 정한다.
+  if (i.isPrimaryEntryPointCommand()) {
+    try {
+      await i.launchActivity();
+    } catch (e) {
+      console.error("[activity] Activity 실행 실패:", e);
+      if (!i.replied && !i.deferred) await i.reply({ content: msg("chart.activityFailed"), flags: MessageFlags.Ephemeral }).catch(() => {});
+    }
     return;
   }
   if (i.isChatInputCommand()) {
