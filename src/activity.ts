@@ -113,13 +113,33 @@ const ENTRY_POINT_FIELDS = [
 ] as const;
 
 /**
+ * Entry Point 명령의 처리 방식. 1(APP_HANDLER) = 봇이 상호작용을 받아 Activity 를 띄운다(src/bot/index.ts).
+ * 2(DISCORD_LAUNCH_ACTIVITY, 디스코드가 만들 때 기본값)면 디스코드가 띄우면서 채널에 "게임 초대" 메시지를 남긴다.
+ * 앱 실행 메뉴와 Activity 링크(/검색 "채보 보기")가 이 명령을 거치므로 초대 메시지가 쌓이지 않게 봇이 처리한다.
+ * 대신 봇이 꺼져 있으면 열리지 않는다.
+ */
+export const ENTRY_POINT_APP_HANDLER = 1;
+
+/**
  * 전역 명령 덮어쓰기(PUT) 때 같이 올릴 Entry Point(PRIMARY_ENTRY_POINT, type 4 — 디스코드 이름 "Launch") 명령.
- * Activity 를 켜면 디스코드가 만든다. 덮어쓰기는 모든 종류의 명령을 덮어쓰므로 지금 것을 그대로 다시 싣는다.
+ * Activity 를 켜면 디스코드가 만든다. 덮어쓰기는 모든 종류의 명령을 덮어쓰므로 지금 것을 다시 싣고, 처리 방식만 봇으로 바꾼다.
  */
 export function entryPointCommands(existing: Record<string, unknown>[]): Record<string, unknown>[] {
   return existing
     .filter((c) => c.type === 4)
-    .map((c) => Object.fromEntries(ENTRY_POINT_FIELDS.filter((k) => c[k] !== undefined && c[k] !== null).map((k) => [k, c[k]])));
+    .map((c) => ({
+      ...Object.fromEntries(ENTRY_POINT_FIELDS.filter((k) => c[k] !== undefined && c[k] !== null).map((k) => [k, c[k]])),
+      handler: ENTRY_POINT_APP_HANDLER,
+    }));
+}
+
+/**
+ * 디스코드 Activity 링크. 채팅에서 누르면 그 자리에서 Activity 가 열리고(Entry Point 명령을 거친다),
+ * customId 는 Activity 페이지 주소의 custom_id 로 온다(src/web/index.ts /activity).
+ * 글씨에 걸 때는 주소를 <> 로 감싸 링크 미리보기 카드를 끈다.
+ */
+export function activityLink(appId: string, customId: string): string {
+  return `https://discord.com/activities/${appId}?custom_id=${encodeURIComponent(customId)}`;
 }
 
 /** 테스트용 */

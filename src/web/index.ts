@@ -25,6 +25,7 @@ import { activityPage, activityAsset } from "./activityPage";
 import { HIT_SOUND_PATH, hitSoundWav } from "./chartSound";
 import { chartForInstance, setInstanceChart, verifyInstance, allowOpen, isActivityId } from "../activity";
 import { searchAllCharts } from "../simai/chartSearch";
+import { resolveSongChartId } from "../simai/songChart";
 import { chartFromKey } from "../bot/commands/chart";
 import { parseMaidata } from "../simai/parse";
 import { sanitizeSong, buildMaidata, atwikiChartId, parseAtwikiId } from "../simai/atwiki";
@@ -219,9 +220,20 @@ export function startWebServer(port: number): void {
       const instanceId = url.searchParams.get("instance_id") || "";
       const channelId = url.searchParams.get("channel_id") || "";
       const wanted = (url.searchParams.get("chart") || "").trim();
+      const customId = (url.searchParams.get("custom_id") || "").trim();
       const loadedAt = Date.now();
-      const id = wanted || chartForInstance(isActivityId(instanceId) ? instanceId : "", isActivityId(channelId) ? channelId : "", loadedAt)?.chartId || "";
       let data: ChartPlayerData | null = null;
+      // Activity 링크(/검색 "채보 보기")로 열면 custom_id 에 곡·난이도가 온다(src/simai/songChart.ts). 처음 여는 mai-notes 보면은
+      // 본문을 받으므로 /api/activity/open 처럼 진짜 인스턴스에서, 인스턴스마다 3초에 한 번만 받는다. 연 보면은 인스턴스에 묶는다.
+      if (!wanted && customId && isActivityId(instanceId) && (await verifyInstance(instanceId)) && allowOpen(instanceId, loadedAt)) {
+        const hit = resolveSongChartId(customId);
+        const x = hit ? await chartFromKey(hit.key) : null;
+        if (x && typeof x !== "string") {
+          setInstanceChart(instanceId, x.id, loadedAt);
+          data = { id: x.id, title: x.title, artist: x.artist, designer: x.designer, level: x.level, difficulty: x.diff, chart: x.chart };
+        }
+      }
+      const id = data ? "" : wanted || chartForInstance(isActivityId(instanceId) ? instanceId : "", isActivityId(channelId) ? channelId : "", loadedAt)?.chartId || "";
       if (id) {
         try {
           const loaded = await loadChart(id);

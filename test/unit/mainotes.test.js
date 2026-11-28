@@ -216,3 +216,30 @@ test("searchAllCharts: 같은 곡·종류·난이도는 mai-notes 를 쓰고, ma
   assert.deepEqual(keys, ["mainotes:c1", "mainotes:c3", "registry:r2", "registry:r4"]);
   setRegistryIndex([]);
 });
+
+// ── /검색 "채보 보기": 곡·난이도 → 채보, Activity 링크의 custom_id ─────────────────────
+const { songCharts, songChartId, resolveSongChartId } = require("../../dist/simai/songChart");
+
+test("songCharts: 같은 곡(이름이 같은 것만)·같은 종류의 난이도별 채보, 종류를 모르는 등록분도 쓴다", () => {
+  seed(); // c1 Alpha DX MASTER(데이터 있음), c2 Alpha DX BASIC(없음), c3 Beta ST Re:MASTER(있음)
+  setRegistryIndex([
+    { id: "r2", title: "Alpha", artist: "A", designer: "", difficulty: 1, level: "4", type: "deluxe" },
+    { id: "r4", title: "Alpha", artist: "A", designer: "", difficulty: 3, level: "10", type: "standard" },
+    { id: "r5", title: "alpha", artist: "A", designer: "", difficulty: 2, level: "7", type: "" },
+    { id: "r6", title: "Alpha Prime", artist: "A", designer: "", difficulty: 2, level: "7", type: "deluxe" },
+  ]);
+  const keys = (m) => [...m.entries()].map(([d, h]) => [d, h.key]).sort((a, b) => a[0] - b[0]);
+  assert.deepEqual(keys(songCharts("Alpha", "DX")), [[1, "registry:r2"], [2, "registry:r5"], [4, "mainotes:c1"]]);
+  assert.deepEqual(keys(songCharts("Alpha", "ST")), [[2, "registry:r5"], [3, "registry:r4"]]);
+  assert.equal(songCharts("Gamma", "DX").size, 0);
+  setRegistryIndex([]);
+});
+
+test("songChartId: s + 곡 해시 10자 + 난이도. 모양이 다르면 풀지 않는다", () => {
+  const id = songChartId("Alpha", "DX", 4);
+  assert.match(id, /^s[0-9a-f]{10}4$/);
+  assert.notEqual(id, songChartId("Alpha", "ST", 4));
+  for (const bad of ["", "x", id.slice(0, -1) + "6", "S" + id.slice(1), id + "1", id.slice(0, -1) + "0"]) {
+    assert.equal(resolveSongChartId(bad), null, bad);
+  }
+});
