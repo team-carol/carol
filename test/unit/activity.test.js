@@ -34,15 +34,21 @@ test("보면 열기는 인스턴스마다 3초에 한 번", () => {
   assert.equal(activity.allowOpen("inst1", 3500), true);
 });
 
-test("명령 덮어쓰기에 Entry Point(type 4) 명령만 읽기 전용 필드를 빼고 다시 싣는다", () => {
+test("명령 덮어쓰기에 Entry Point(type 4) 명령만 읽기 전용 필드를 빼고 다시 싣고, 처리는 봇이 한다(초대 메시지 없음)", () => {
   const existing = [
     { id: "1", application_id: "9", version: "5", type: 1, name: "보면", description: "d" },
     { id: "2", application_id: "9", version: "7", type: 4, name: "launch", description: "Launch", handler: 2, integration_types: [0, 1], contexts: [0, 1, 2], default_member_permissions: null, nsfw: false },
   ];
   assert.deepEqual(activity.entryPointCommands(existing), [
-    { id: "2", name: "launch", description: "Launch", type: 4, handler: 2, nsfw: false, integration_types: [0, 1], contexts: [0, 1, 2] },
+    { id: "2", name: "launch", description: "Launch", type: 4, handler: 1, nsfw: false, integration_types: [0, 1], contexts: [0, 1, 2] },
   ]);
+  assert.equal(activity.ENTRY_POINT_APP_HANDLER, 1);
   assert.deepEqual(activity.entryPointCommands([]), []);
+});
+
+test("Activity 링크: 앱 ID 와 custom_id", () => {
+  assert.equal(activity.activityLink("123", "sabcdef01234"), "https://discord.com/activities/123?custom_id=sabcdef01234");
+  assert.equal(activity.activityLink("1", "a b&c"), "https://discord.com/activities/1?custom_id=a%20b%26c");
 });
 
 test("Activity 페이지는 인라인 스크립트·style 속성 없이 같은 서버 파일만 불러온다(CSP)", () => {

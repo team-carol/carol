@@ -22,7 +22,7 @@ the retired tunnel and its old-domain DNS record in Cloudflare. Keep
 Optional. Without it the bot works as before and `/보면` shows no "디스코드에서 보기" button.
 In the Discord Developer Portal, for each application (dev and production bots are separate):
 
-1. **Activities → Settings**: enable Activities. Discord creates the Entry Point command ("Launch"); `syncCommands` keeps it on every global command sync.
+1. **Activities → Settings**: enable Activities. Discord creates the Entry Point command ("Launch"); `syncCommands` keeps it on every global command sync and switches it to app-handled (handler 1) so launches don't post a "game invite" message. Launching from the App Launcher or an Activity link (`/검색` "채보 보기") then needs the bot online.
 2. **Activities → URL Mappings**: root mapping `/` → the bot's public host without protocol (production: `maimai.team-carol.com`). The page lives at `/activity`; a root request carrying `frame_id` is redirected there.
 3. **Activities → Settings → Supported Platforms**: tick iOS and Android to allow mobile.
 
